@@ -4,11 +4,23 @@ namespace App\Http\Controllers;
 
 use App\Models\Genre;
 use App\Models\Series;
+use App\Services\Metadata\ArtworkDownloadService;
+use App\Services\Metadata\MetadataAggregator;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class SeriesController extends Controller
 {
+    protected MetadataAggregator $metadata;
+    protected ArtworkDownloadService $artwork;
+
+    public function __construct(MetadataAggregator $metadata, ArtworkDownloadService $artwork)
+    {
+        $this->metadata = $metadata;
+        $this->artwork = $artwork;
+    }
+
     public function index(Request $request)
     {
         $query = Series::query()->with(['genres', 'seasons.episodes', 'actors']);
@@ -76,6 +88,85 @@ class SeriesController extends Controller
         return response()->json([
             'status' => 'success',
             'is_favorite' => $series->is_favorite,
+        ]);
+    }
+
+    public function searchMetadata(Request $request): JsonResponse
+    {
+        $query = $request->input('query');
+        $year = $request->input('year') ? (int) $request->input('year') : null;
+
+        if (empty($query)) {
+            return response()->json(['results' => []]);
+        }
+
+        $results = $this->metadata->searchSeries($query, $year);
+        return response()->json(['results' => $results]);
+    }
+
+    public function fixMatch(Request $request, Series $series): JsonResponse
+    {
+        $validated = $request->validate([
+            'title' => 'required|string',
+            'provider' => 'nullable|string',
+            'id' => 'nullable|string',
+            'year' => 'nullable|numeric',
+            'overview' => 'nullable|string',
+            'overview_ar' => 'nullable|string',
+            'poster_path' => 'nullable|string',
+            'backdrop_path' => 'nullable|string',
+            'rating' => 'nullable|numeric',
+        ]);
+
+        $posterUrl = $this->artwork->downloadPoster($validated['poster_path'] ?? null);
+        $backdropUrl = $this->artwork->downloadBackdrop($validated['backdrop_path'] ?? null);
+
+        $series->update([
+            'title' => $validated['title'],
+            'release_year' => $validated['year'] ?? $series->release_year,
+            'overview' => $validated['overview'] ?? $series->overview,
+            'overview_ar' => $validated['overview_ar'] ?? $series->overview_ar,
+            'poster_path' => $posterUrl ?? $series->poster_path,
+            'backdrop_path' => $backdropUrl ?? $series->backdrop_path,
+            'rating' => $validated['rating'] ?? $series->rating,
+        ]);
+
+        $series->load(['genres', 'seasons.episodes.subtitles']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'TV Series metadata successfully matched and saved!',
+            'series' => $series,
+        ]);
+    }
+
+    public function updateMetadata(Request $request, Series $series): JsonResponse
+    {
+        $validated = $request->validate([
+            'title' => 'required|string',
+            'title_ar' => 'nullable|string',
+            'release_year' => 'nullable|numeric',
+            'rating' => 'nullable|numeric',
+            'overview' => 'nullable|string',
+            'overview_ar' => 'nullable|string',
+            'poster_path' => 'nullable|string',
+            'backdrop_path' => 'nullable|string',
+        ]);
+
+        if (!empty($validated['poster_path']) && filter_var($validated['poster_path'], FILTER_VALIDATE_URL)) {
+            $validated['poster_path'] = $this->artwork->downloadPoster($validated['poster_path']);
+        }
+        if (!empty($validated['backdrop_path']) && filter_var($validated['backdrop_path'], FILTER_VALIDATE_URL)) {
+            $validated['backdrop_path'] = $this->artwork->downloadBackdrop($validated['backdrop_path']);
+        }
+
+        $series->update($validated);
+        $series->load(['genres', 'seasons.episodes.subtitles']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Series metadata manually updated.',
+            'series' => $series,
         ]);
     }
 }

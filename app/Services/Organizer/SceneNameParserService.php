@@ -162,9 +162,11 @@ class SceneNameParserService
 
     protected function cleanTitleString(string $raw): string
     {
-        // Strip bracket tags like [YTS.MX], [1080p], (2024)
+        // Strip bracket tags like [YTS.MX], [1080p], (2024), {rarbg}
         $s = preg_replace('/\[[^\]]*\]/', ' ', $raw);
         $s = preg_replace('/\([^\)]*\)/', ' ', $s);
+        $s = preg_replace('/\{[^\}]*\}/', ' ', $s);
+        $s = preg_replace('/[\[\]\(\)\{\}]/', ' ', $s);
         $s = preg_replace('/[._\-]/', ' ', $s);
         $s = trim(preg_replace('/\s+/', ' ', $s));
         return ucwords(strtolower($s));

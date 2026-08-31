@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Services\Metadata\AniListProvider;
+use App\Services\Metadata\ArtworkDownloadService;
 use App\Services\Metadata\LocalNfoProvider;
 use App\Services\Metadata\MetadataAggregator;
 use App\Services\Metadata\OmdbProvider;
@@ -31,7 +32,8 @@ class MetadataAggregatorTest extends TestCase
             new OmdbProvider('invalid_key'),
             new AniListProvider(),
             new WikipediaProvider(),
-            new LocalNfoProvider()
+            new LocalNfoProvider(),
+            new ArtworkDownloadService()
         );
 
         $providers = $aggregator->getProvidersList();

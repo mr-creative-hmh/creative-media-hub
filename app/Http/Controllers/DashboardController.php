@@ -15,7 +15,7 @@ class DashboardController extends Controller
 {
     public function index(Request $request): Response
     {
-        // 1. Featured Spotlight Media for Hero Banner (Movies + Series with backdrop)
+        // 1. Featured Spotlight Media for Hero Banner (Movies + Series with backdrop/poster)
         $featuredMovies = MediaItem::with('genres')
             ->whereNotNull('backdrop_path')
             ->orWhereNotNull('poster_path')
@@ -33,7 +33,7 @@ class DashboardController extends Controller
         $featuredMedia = $featuredMovies->concat($featuredSeries)->shuffle()->values();
 
         // 2. Continue Watching items (polymorphic watchable)
-        $continueWatching = WatchHistory::with('watchable')
+        $continueWatching = WatchHistory::with(['watchable'])
             ->where('is_completed', false)
             ->orderByDesc('last_watched_at')
             ->limit(6)
@@ -41,26 +41,32 @@ class DashboardController extends Controller
             ->map(function ($h) {
                 $item = $h->watchable;
                 if ($item instanceof MediaItem) {
+                    $item->loadMissing('subtitles');
                     return [
                         'id' => $item->id,
                         'title' => $item->title,
                         'title_ar' => $item->title_ar,
                         'type' => 'movie',
-                        'poster_url' => $item->poster_url,
-                        'backdrop_url' => $item->backdrop_url,
+                        'poster_path' => $item->poster_path,
+                        'backdrop_path' => $item->backdrop_path,
+                        'subtitles' => $item->subtitles,
                         'progress_percent' => $h->progress_percentage,
                         'current_time_formatted' => gmdate('H:i:s', $h->progress_seconds),
                         'stream_url' => route('stream.movie', $item->id),
                     ];
                 } elseif ($item instanceof Episode) {
+                    $item->loadMissing(['subtitles', 'season.series']);
                     $series = $item->season->series ?? null;
                     return [
                         'id' => $item->id,
+                        'watchable_id' => $item->id,
+                        'watchable_type' => 'episode',
                         'title' => ($series ? $series->title . ' - ' : '') . 'S' . ($item->season->season_number ?? 1) . 'E' . $item->episode_number . ' ' . $item->title,
                         'title_ar' => ($series ? $series->title_ar . ' - ' : '') . $item->title_ar,
                         'type' => 'episode',
-                        'poster_url' => $series->poster_url ?? null,
-                        'backdrop_url' => $item->still_url ?? ($series->backdrop_url ?? null),
+                        'poster_path' => $series->poster_path ?? null,
+                        'backdrop_path' => $item->still_path ?? ($series->backdrop_path ?? null),
+                        'subtitles' => $item->subtitles,
                         'progress_percent' => $h->progress_percentage,
                         'current_time_formatted' => gmdate('H:i:s', $h->progress_seconds),
                         'stream_url' => route('stream.episode', $item->id),
@@ -103,11 +109,11 @@ class DashboardController extends Controller
 
         // 6. Curated AI Mood Vibes
         $vibes = [
-            ['id' => 'mind-bending', 'label_en' => 'Mind-Bending Sci-Fi', 'label_ar' => 'خيال علمي عميق', 'icon' => 'Sparkles', 'genre' => 'Sci-Fi'],
-            ['id' => 'adrenaline', 'label_en' => 'Adrenaline Rush', 'label_ar' => 'أكشن وحماس', 'icon' => 'Zap', 'genre' => 'Action'],
-            ['id' => 'thriller-noir', 'label_en' => 'Late-Night Noir', 'label_ar' => 'جريمة وغموض', 'icon' => 'Eye', 'genre' => 'Crime'],
-            ['id' => 'drama-deep', 'label_en' => 'Emotional Resonance', 'label_ar' => 'دراما إنسانية مؤثرة', 'icon' => 'Heart', 'genre' => 'Drama'],
-            ['id' => 'fantasy-epic', 'label_en' => 'Epic Worlds', 'label_ar' => 'عوالم وفانتازيا', 'icon' => 'Compass', 'genre' => 'Adventure'],
+            ['id' => 'mind-bending', 'label_en' => 'Mind-Bending Sci-Fi', 'label_ar' => 'خيال علمي مشوق', 'icon' => 'Sparkles', 'genre' => 'Sci-Fi'],
+            ['id' => 'adrenaline', 'label_en' => 'Adrenaline Rush', 'label_ar' => 'أكشن وإثارة', 'icon' => 'Zap', 'genre' => 'Action'],
+            ['id' => 'thriller-noir', 'label_en' => 'Late-Night Noir', 'label_ar' => 'غموض وجريمة', 'icon' => 'Eye', 'genre' => 'Crime'],
+            ['id' => 'drama-deep', 'label_en' => 'Emotional Resonance', 'label_ar' => 'دراما مؤثرة', 'icon' => 'Heart', 'genre' => 'Drama'],
+            ['id' => 'fantasy-epic', 'label_en' => 'Epic Worlds', 'label_ar' => 'مغامرة وفانتازيا', 'icon' => 'Compass', 'genre' => 'Adventure'],
         ];
 
         return Inertia::render('Dashboard/Index', [

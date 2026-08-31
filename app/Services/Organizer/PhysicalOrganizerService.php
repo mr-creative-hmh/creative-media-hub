@@ -3,6 +3,9 @@
 namespace App\Services\Organizer;
 
 use App\Models\AppSetting;
+use App\Models\Episode;
+use App\Models\MediaItem;
+use App\Models\Subtitle;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 
@@ -136,6 +139,15 @@ class PhysicalOrganizerService
                 if ($mode === 'move') {
                     File::move($source, $dest);
                     $journal['operations'][] = ['action' => 'move', 'from' => $source, 'to' => $dest];
+
+                    // 🔄 Synchronize Virtual Library Database
+                    MediaItem::where('file_path', $source)->update([
+                        'file_path' => $dest,
+                        'folder_path' => $destDir,
+                    ]);
+                    Episode::where('file_path', $source)->update([
+                        'file_path' => $dest,
+                    ]);
                 } elseif ($mode === 'copy') {
                     File::copy($source, $dest);
                     $journal['operations'][] = ['action' => 'copy', 'from' => $source, 'to' => $dest];
@@ -147,6 +159,10 @@ class PhysicalOrganizerService
                         if ($mode === 'move') {
                             File::move($sub['source'], $sub['destination']);
                             $journal['operations'][] = ['action' => 'move', 'from' => $sub['source'], 'to' => $sub['destination']];
+
+                            Subtitle::where('file_path', $sub['source'])->update([
+                                'file_path' => $sub['destination'],
+                            ]);
                         } else {
                             File::copy($sub['source'], $sub['destination']);
                         }

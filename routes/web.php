@@ -16,28 +16,36 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', [DashboardController::class, 'index'])->name('home');
 Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
-// Virtual Movies Hub
+// Virtual Movies Hub & Metadata Management
 Route::get('/movies', [MediaController::class, 'index'])->name('movies.index');
 Route::get('/movies/{mediaItem}', [MediaController::class, 'show'])->name('movies.show');
 Route::post('/movies/{mediaItem}/favorite', [MediaController::class, 'toggleFavorite'])->name('movies.favorite');
+Route::get('/api/media/search-metadata', [MediaController::class, 'searchMetadata'])->name('api.media.search-metadata');
+Route::post('/api/media/{mediaItem}/fix-match', [MediaController::class, 'fixMatch'])->name('api.media.fix-match');
+Route::post('/api/media/{mediaItem}/update-metadata', [MediaController::class, 'updateMetadata'])->name('api.media.update-metadata');
 Route::get('/api/vibes', [MediaController::class, 'getVibes'])->name('api.vibes');
 Route::get('/api/person/{person}', [MediaController::class, 'getCastExplorer'])->name('api.person');
 
-// Virtual TV Series Hub
+// Virtual TV Series Hub & Metadata Management
 Route::get('/series', [SeriesController::class, 'index'])->name('series.index');
 Route::get('/series/{series}', [SeriesController::class, 'show'])->name('series.show');
 Route::post('/series/{series}/favorite', [SeriesController::class, 'toggleFavorite'])->name('series.favorite');
+Route::get('/api/series/search-metadata', [SeriesController::class, 'searchMetadata'])->name('api.series.search-metadata');
+Route::post('/api/series/{series}/fix-match', [SeriesController::class, 'fixMatch'])->name('api.series.fix-match');
+Route::post('/api/series/{series}/update-metadata', [SeriesController::class, 'updateMetadata'])->name('api.series.update-metadata');
 
 // Virtual Media Scanner & Background Job Control Center
 Route::get('/scanner', [ScannerController::class, 'index'])->name('scanner.index');
 Route::post('/api/scanner/directories', [ScannerController::class, 'addDirectory'])->name('api.scanner.directories.add');
 Route::delete('/api/scanner/directories', [ScannerController::class, 'removeDirectory'])->name('api.scanner.directories.remove');
 Route::post('/api/scanner/start', [ScannerController::class, 'startScan'])->name('api.scanner.start');
+Route::post('/api/scanner/scan-folder', [ScannerController::class, 'scanFolder'])->name('api.scanner.scan-folder');
 Route::post('/api/scanner/process-batch', [ScannerController::class, 'processBatch'])->name('api.scanner.process-batch');
 Route::post('/api/scanner/pause', [ScannerController::class, 'pauseScan'])->name('api.scanner.pause');
 Route::post('/api/scanner/resume', [ScannerController::class, 'resumeScan'])->name('api.scanner.resume');
 Route::post('/api/scanner/cancel', [ScannerController::class, 'cancelScan'])->name('api.scanner.cancel');
 Route::get('/api/scanner/status', [ScannerController::class, 'getStatus'])->name('api.scanner.status');
+Route::post('/api/library/enrich-missing', [ScannerController::class, 'enrichMissing'])->name('api.library.enrich-missing');
 Route::post('/api/library/clear-demo', [ScannerController::class, 'clearDemoCatalog'])->name('api.library.clear-demo');
 
 // Physical Disk Organizer Studio & Dry-Run

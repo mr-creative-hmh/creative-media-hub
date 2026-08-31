@@ -174,7 +174,7 @@ const openDetail = (item: any) => {
                 >
                     <div class="aspect-[16/9] w-full bg-slate-900 overflow-hidden relative">
                         <img
-                            :src="item.backdrop_url || item.poster_url || '/placeholder.jpg'"
+                            :src="item.backdrop_path || item.poster_path || item.backdrop_url || item.poster_url || '/placeholder.jpg'"
                             :alt="item.title"
                             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         />

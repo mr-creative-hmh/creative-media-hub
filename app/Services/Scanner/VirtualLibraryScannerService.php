@@ -41,6 +41,7 @@ class VirtualLibraryScannerService
             'processed_files' => 0,
             'current_file' => '',
             'scanned_items' => [],
+            'logs' => [],
             'started_at' => null,
             'finished_at' => null,
             'errors' => [],
@@ -53,14 +54,29 @@ class VirtualLibraryScannerService
         Cache::put('virtual_scan_job', array_merge($current, $data), 3600);
     }
 
+    public function addLog(string $message, string $level = 'info'): void
+    {
+        $status = $this->getScanStatus();
+        $logs = $status['logs'] ?? [];
+        $logs[] = [
+            'time' => now()->format('H:i:s'),
+            'level' => $level,
+            'message' => $message,
+        ];
+        // Keep last 150 log lines
+        $this->updateScanStatus(['logs' => array_slice($logs, -150)]);
+    }
+
     public function pauseScan(): void
     {
         $this->updateScanStatus(['status' => 'paused']);
+        $this->addLog('Scan paused by user.', 'warning');
     }
 
     public function resumeScan(): void
     {
         $this->updateScanStatus(['status' => 'running']);
+        $this->addLog('Scan resumed.', 'info');
     }
 
     public function cancelScan(): void
@@ -72,20 +88,37 @@ class VirtualLibraryScannerService
             'current_file' => 'Scan cancelled by user.',
             'finished_at' => now()->toIso8601String(),
         ]);
+        $this->addLog('Scan cancelled.', 'error');
     }
 
     public function initScan(array $directories): array
     {
         $allFiles = [];
+        $this->updateScanStatus([
+            'status' => 'running',
+            'progress_percent' => 0,
+            'total_files' => 0,
+            'processed_files' => 0,
+            'started_at' => now()->toIso8601String(),
+            'current_file' => 'Discovering files across monitored directories...',
+            'errors' => [],
+            'scanned_items' => [],
+            'logs' => [],
+        ]);
+
+        $this->addLog("Scanning " . count($directories) . " monitored directories...", 'info');
+
         foreach ($directories as $dir) {
             $rawPath = is_array($dir) ? ($dir['path'] ?? '') : (string) $dir;
             if (!empty($rawPath)) {
+                $this->addLog("Reading directory: {$rawPath}", 'info');
                 $scanned = $this->fsScanner->scanDirectory($rawPath, true);
                 $expectedType = is_array($dir) ? ($dir['type'] ?? 'mixed') : 'mixed';
                 foreach ($scanned as $f) {
                     $f['expected_type'] = $expectedType;
                     $allFiles[] = $f;
                 }
+                $this->addLog("Found " . count($scanned) . " media files in {$rawPath}", 'success');
             }
         }
 
@@ -100,6 +133,7 @@ class VirtualLibraryScannerService
                 'finished_at' => now()->toIso8601String(),
                 'scanned_items' => [],
             ]);
+            $this->addLog('No media files found.', 'warning');
             Cache::forget('virtual_scan_queue');
             return ['success' => true, 'total' => 0, 'status' => $this->getScanStatus()];
         }
@@ -112,12 +146,19 @@ class VirtualLibraryScannerService
             'total_files' => $total,
             'processed_files' => 0,
             'started_at' => now()->toIso8601String(),
-            'current_file' => 'Initializing virtual scanner...',
-            'errors' => [],
-            'scanned_items' => [],
+            'current_file' => "Queued {$total} files for indexing...",
         ]);
 
+        $this->addLog("Starting indexing worker for {$total} files...", 'info');
+
         return ['success' => true, 'total' => $total, 'status' => $this->getScanStatus()];
+    }
+
+    public function initScanForFolder(string $path, string $type = 'mixed'): array
+    {
+        return $this->initScan([
+            ['path' => $path, 'type' => $type]
+        ]);
     }
 
     public function processNextBatch(int $batchSize = 3): array
@@ -136,6 +177,7 @@ class VirtualLibraryScannerService
                 'progress_percent' => 100,
                 'finished_at' => now()->toIso8601String(),
             ]);
+            $this->addLog("All library files processed and indexed successfully!", 'success');
             return ['status' => $this->getScanStatus(), 'has_more' => false];
         }
 
@@ -158,14 +200,21 @@ class VirtualLibraryScannerService
             $processed++;
 
             try {
+                $cleanTitle = $parsed['clean_title'] ?? ($parsed['title'] ?? $file['filename']);
+
                 if ($isSeries) {
                     $item = $this->indexSeriesEpisode($file, $parsed);
+                    $this->addLog("Indexed TV Episode: {$cleanTitle} S{$parsed['season']}E{$parsed['episode']}", 'info');
                 } else {
                     $item = $this->indexMovie($file, $parsed);
+                    $this->addLog("Indexed Movie: {$cleanTitle} ({$parsed['year']})", 'info');
+                }
+
+                if (!empty($file['subtitles'])) {
+                    $this->addLog("Linked " . count($file['subtitles']) . " subtitle(s) to {$cleanTitle}", 'info');
                 }
 
                 if ($item) {
-                    $cleanTitle = $parsed['clean_title'] ?? ($parsed['title'] ?? $file['filename']);
                     $recentItems[] = [
                         'title' => $cleanTitle,
                         'type' => $isSeries ? 'series' : 'movie',
@@ -176,6 +225,7 @@ class VirtualLibraryScannerService
                 }
             } catch (\Throwable $e) {
                 Log::error("Scanner error on file {$file['path']}: " . $e->getMessage());
+                $this->addLog("Error indexing {$file['filename']}: " . $e->getMessage(), 'error');
             }
 
             $this->updateScanStatus([
@@ -193,6 +243,7 @@ class VirtualLibraryScannerService
                 'progress_percent' => 100,
                 'finished_at' => now()->toIso8601String(),
             ]);
+            $this->addLog("Scan job finished. Total processed: {$processed} files.", 'success');
         }
 
         return [
@@ -277,62 +328,82 @@ class VirtualLibraryScannerService
 
     protected function indexSeriesEpisode(array $file, array $parsed): Episode
     {
-        $seriesTitle = $parsed['clean_title'] ?? ($parsed['title'] ?? pathinfo($file['filename'], PATHINFO_FILENAME));
-        $seasonNum = (int) ($parsed['season'] ?? 1);
-        $episodeNum = (int) ($parsed['episode'] ?? 1);
-        $year = $parsed['year'] ?? null;
+        $showTitle = $parsed['series_title'] ?? ($parsed['clean_title'] ?? 'Unknown Series');
+        $seasonNum = $parsed['season'] ?? 1;
+        $epNum = $parsed['episode'] ?? 1;
 
-        $seriesMeta = $this->metadata->aggregateSeriesMetadata($seriesTitle, $year);
-        $posterUrl = $file['local_poster'] ?? ($seriesMeta['poster_path'] ?? null);
-
-        // 1. Unified Show Grouping
+        // 1. Group under parent Series
         $series = Series::firstOrCreate(
-            ['title' => $seriesMeta['title'] ?? $seriesTitle],
+            ['title' => $showTitle],
             [
-                'title_ar' => $seriesMeta['title_ar'] ?? null,
-                'release_year' => $seriesMeta['year'] ?? $year,
-                'tmdb_id' => $seriesMeta['tmdb_id'] ?? null,
-                'tvmaze_id' => $seriesMeta['tvmaze_id'] ?? null,
-                'overview' => $seriesMeta['overview'] ?? "Experience {$seriesTitle}.",
-                'overview_ar' => $seriesMeta['overview_ar'] ?? null,
-                'poster_path' => $posterUrl,
-                'backdrop_path' => $seriesMeta['backdrop_path'] ?? null,
-                'rating' => $seriesMeta['rating'] ?? 8.0,
-                'folder_path' => dirname($file['path']),
+                'original_title' => $showTitle,
+                'release_year' => $parsed['year'] ?? null,
+                'overview' => "Experience the complete series of {$showTitle}.",
+                'rating' => 8.0,
+                'status' => 'Continuing',
             ]
         );
 
-        // If poster or overview wasn't set earlier, enrich it now
-        if (!$series->poster_path && $posterUrl) {
-            $series->update(['poster_path' => $posterUrl]);
-        }
-        if (!$series->backdrop_path && !empty($seriesMeta['backdrop_path'])) {
-            $series->update(['backdrop_path' => $seriesMeta['backdrop_path']]);
+        // Enrich Series metadata if missing poster/overview
+        if (!$series->poster_path || !$series->overview || $series->overview === "Experience the complete series of {$showTitle}.") {
+            $meta = $this->metadata->aggregateSeriesMetadata($showTitle, $parsed['year'] ?? null);
+            $series->update([
+                'title_ar' => $meta['title_ar'] ?? $series->title_ar,
+                'overview' => $meta['overview'] ?? $series->overview,
+                'overview_ar' => $meta['overview_ar'] ?? $series->overview_ar,
+                'poster_path' => $file['local_poster'] ?? ($meta['poster_path'] ?? $series->poster_path),
+                'backdrop_path' => $meta['backdrop_path'] ?? $series->backdrop_path,
+                'rating' => $meta['rating'] ?? $series->rating,
+                'release_year' => $meta['year'] ?? $series->release_year,
+            ]);
+
+            if (!empty($meta['genres'])) {
+                $genreIds = [];
+                foreach ($meta['genres'] as $gName) {
+                    $genre = Genre::firstOrCreate(
+                        ['slug' => Str::slug($gName)],
+                        ['name_en' => $gName, 'name_ar' => $gName]
+                    );
+                    $genreIds[] = $genre->id;
+                }
+                $series->genres()->sync($genreIds);
+            }
         }
 
-        // 2. Unified Season Grouping
+        // 2. Group under Season
         $season = Season::firstOrCreate(
-            ['series_id' => $series->id, 'season_number' => $seasonNum],
-            ['title' => "Season {$seasonNum}"]
-        );
-
-        // 3. Unique Episode Record
-        $episode = Episode::updateOrCreate(
-            ['file_path' => $file['path']],
             [
                 'series_id' => $series->id,
+                'season_number' => $seasonNum,
+            ],
+            [
+                'title' => "Season {$seasonNum}",
+                'overview' => "Season {$seasonNum} of {$showTitle}",
+                'poster_path' => $series->poster_path,
+            ]
+        );
+
+        // 3. Create or update Episode
+        $episode = Episode::updateOrCreate(
+            [
                 'season_id' => $season->id,
-                'episode_number' => $episodeNum,
-                'title' => "Episode {$episodeNum}",
-                'overview' => "Season {$seasonNum} Episode {$episodeNum}",
+                'episode_number' => $epNum,
+            ],
+            [
+                'series_id' => $series->id,
+                'title' => "Episode {$epNum}",
+                'file_path' => $file['path'],
+                'file_size_bytes' => $file['size_bytes'] ?? 0,
+                'overview' => "Episode {$epNum} of Season {$seasonNum}",
+                'still_path' => $series->backdrop_path ?? $series->poster_path,
+                'runtime_minutes' => 45,
                 'resolution' => $parsed['resolution'] ?? '1080p',
                 'video_codec' => $parsed['codec'] ?? 'HEVC',
                 'audio_codec' => $parsed['audio'] ?? 'AAC 5.1',
-                'file_size_bytes' => $file['size_bytes'] ?? 0,
             ]
         );
 
-        // 4. Attach Subtitles directly to the Episode
+        // Attach Subtitles to Episode
         if (!empty($file['subtitles'])) {
             foreach ($file['subtitles'] as $sub) {
                 $lang = $sub['language'] ?? 'und';
@@ -361,5 +432,58 @@ class VirtualLibraryScannerService
         }
 
         return $episode;
+    }
+
+    public function enrichMissingMetadata(int $limit = 20): array
+    {
+        $moviesEnriched = 0;
+        $seriesEnriched = 0;
+
+        // 1. Enrich Movies without posters
+        $movies = MediaItem::whereNull('poster_path')
+            ->orWhere('overview', 'like', 'Enjoy watching%')
+            ->limit($limit)
+            ->get();
+
+        foreach ($movies as $m) {
+            $meta = $this->metadata->aggregateMovieMetadata($m->title, $m->release_year);
+            if (!empty($meta['poster_path']) || !empty($meta['overview'])) {
+                $m->update([
+                    'poster_path' => $meta['poster_path'] ?? $m->poster_path,
+                    'backdrop_path' => $meta['backdrop_path'] ?? $m->backdrop_path,
+                    'overview' => $meta['overview'] ?? $m->overview,
+                    'overview_ar' => $meta['overview_ar'] ?? $m->overview_ar,
+                    'rating' => $meta['rating'] ?? $m->rating,
+                    'runtime_minutes' => $meta['runtime_minutes'] ?? $m->runtime_minutes,
+                ]);
+                $moviesEnriched++;
+            }
+        }
+
+        // 2. Enrich Series without posters
+        $seriesList = Series::whereNull('poster_path')
+            ->orWhere('overview', 'like', 'Experience the complete%')
+            ->limit($limit)
+            ->get();
+
+        foreach ($seriesList as $s) {
+            $meta = $this->metadata->aggregateSeriesMetadata($s->title, $s->release_year);
+            if (!empty($meta['poster_path']) || !empty($meta['overview'])) {
+                $s->update([
+                    'poster_path' => $meta['poster_path'] ?? $s->poster_path,
+                    'backdrop_path' => $meta['backdrop_path'] ?? $s->backdrop_path,
+                    'overview' => $meta['overview'] ?? $s->overview,
+                    'overview_ar' => $meta['overview_ar'] ?? $s->overview_ar,
+                    'rating' => $meta['rating'] ?? $s->rating,
+                ]);
+                $seriesEnriched++;
+            }
+        }
+
+        return [
+            'movies_enriched' => $moviesEnriched,
+            'series_enriched' => $seriesEnriched,
+            'total' => $moviesEnriched + $seriesEnriched,
+        ];
     }
 }

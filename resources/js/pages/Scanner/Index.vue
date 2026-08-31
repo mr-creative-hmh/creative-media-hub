@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import {
     ScanLine, FolderPlus, Play, Pause, Square, Trash2,
     CheckCircle2, AlertTriangle, RefreshCw, Film, Tv,
-    HardDrive, Layers, ArrowRight, ArrowLeft
+    HardDrive, Layers, ArrowRight, ArrowLeft, Terminal,
+    Sparkles, Image, Check, ChevronRight, X
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -31,23 +32,29 @@ const scanStatus = ref({ ...props.initialScanStatus });
 const isProcessing = ref(false);
 let isLoopRunning = false;
 
+// Terminal Log auto-scroll
+const terminalRef = ref<HTMLDivElement | null>(null);
+
 // New folder modal state
 const showAddModal = ref(false);
 const newPath = ref('C:/Media/Movies');
 const newType = ref<'movies' | 'series' | 'mixed'>('movies');
 
-// Clear Demo state
-const isClearingDemo = ref(false);
-const clearSuccessMessage = ref('');
+// Batch Enrich state
+const isEnriching = ref(false);
+const enrichMessage = ref('');
 
-const fetchStatus = async () => {
-    try {
-        const res = await fetch('/api/scanner/status');
-        if (res.ok) {
-            scanStatus.value = await res.json();
+const scrollToBottom = () => {
+    nextTick(() => {
+        if (terminalRef.value) {
+            terminalRef.value.scrollTop = terminalRef.value.scrollHeight;
         }
-    } catch (e) {}
+    });
 };
+
+watch(() => scanStatus.value?.logs?.length, () => {
+    scrollToBottom();
+});
 
 const runBatchLoop = async () => {
     if (isLoopRunning) return;
@@ -73,8 +80,7 @@ const runBatchLoop = async () => {
             } else {
                 break;
             }
-            // Small micro-delay for smooth rendering
-            await new Promise((r) => setTimeout(r, 100));
+            await new Promise((r) => setTimeout(r, 120));
         }
     } finally {
         isLoopRunning = false;
@@ -103,6 +109,54 @@ const handleStartScan = async () => {
         }
     } catch (e) {
         scanStatus.value.status = 'idle';
+    }
+};
+
+const handleScanSingleFolder = async (dir: any) => {
+    try {
+        scanStatus.value.status = 'running';
+        const res = await fetch('/api/scanner/scan-folder', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+            body: JSON.stringify({ path: dir.path, type: dir.type }),
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            scanStatus.value = data.status;
+            if (scanStatus.value.status === 'running' && (scanStatus.value.total_files > 0)) {
+                runBatchLoop();
+            }
+        }
+    } catch (e) {
+        scanStatus.value.status = 'idle';
+    }
+};
+
+const handleEnrichMissing = async () => {
+    isEnriching.value = true;
+    enrichMessage.value = '';
+
+    try {
+        const res = await fetch('/api/library/enrich-missing', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            enrichMessage.value = isRTL.value
+                ? `تم تحديث وتحميل بيانات وبوسترات ${data.result?.total || 0} عنصر بنجاح!`
+                : `Successfully enriched ${data.result?.total || 0} items with posters & metadata!`;
+        }
+    } finally {
+        isEnriching.value = false;
     }
 };
 
@@ -174,34 +228,11 @@ const handleRemoveDirectory = async (id: string) => {
     }
 };
 
-const handleClearDemoCatalog = async () => {
-    if (!confirm(isRTL.value ? 'هل أنت متأكد من رغبتك في مسح كافة الوسائط التجريبية للبدء بفهرسة مجلداتك من الصفر؟' : 'Are you sure you want to clear all sample demo media and start with a fresh clean library?')) {
-        return;
-    }
-
-    isClearingDemo.value = true;
-    try {
-        const res = await fetch('/api/library/clear-demo', {
-            method: 'POST',
-            headers: { 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '' },
-        });
-
-        if (res.ok) {
-            const data = await res.json();
-            clearSuccessMessage.value = data.message;
-            setTimeout(() => {
-                router.reload();
-            }, 1000);
-        }
-    } finally {
-        isClearingDemo.value = false;
-    }
-};
-
 onMounted(() => {
     if (scanStatus.value.status === 'running') {
         runBatchLoop();
     }
+    scrollToBottom();
 });
 
 onUnmounted(() => {
@@ -225,20 +256,44 @@ onUnmounted(() => {
                             {{ t('scanner.title') }}
                         </h1>
                         <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-0.5">
-                            {{ t('scanner.subtitle') }}
+                            {{ isRTL ? 'محرك الفهرسة الافتراضية السريع ومطابقة البيانات والترجمات' : 'High-Speed Virtual Library Scanner & Metadata Engine' }}
                         </p>
                     </div>
                 </div>
 
-                <!-- Add Directory Button -->
-                <button
-                    @click="showAddModal = true"
-                    class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
-                >
-                    <FolderPlus class="w-4 h-4" />
-                    <span>{{ t('scanner.add_directory') }}</span>
-                </button>
+                <!-- Header Actions -->
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button
+                        @click="handleEnrichMissing"
+                        :disabled="isEnriching"
+                        class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-white/10 transition-all cursor-pointer shadow-sm"
+                        title="Search and download missing posters and overviews"
+                    >
+                        <RefreshCw v-if="isEnriching" class="w-4 h-4 text-cyan-500 animate-spin" />
+                        <Image v-else class="w-4 h-4 text-cyan-500" />
+                        <span>{{ isRTL ? 'جلب الأغلفة الناقصة' : 'Fetch Missing Posters' }}</span>
+                    </button>
+
+                    <button
+                        @click="showAddModal = true"
+                        class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
+                    >
+                        <FolderPlus class="w-4 h-4" />
+                        <span>{{ t('scanner.add_directory') }}</span>
+                    </button>
+                </div>
             </div>
+        </div>
+
+        <!-- Success Toast for Enrich Missing -->
+        <div v-if="enrichMessage" class="mb-6 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <CheckCircle2 class="w-4 h-4 shrink-0" />
+                <span>{{ enrichMessage }}</span>
+            </div>
+            <button @click="enrichMessage = ''" class="cursor-pointer text-emerald-400 hover:text-emerald-300">
+                <X class="w-4 h-4" />
+            </button>
         </div>
 
         <!-- 1. Background Scanner Status & Live Control Center -->
@@ -285,7 +340,7 @@ onUnmounted(() => {
                         class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs shadow-md shadow-cyan-500/30 active:scale-95 transition-all cursor-pointer"
                     >
                         <Play class="w-3.5 h-3.5 fill-current" />
-                        <span>{{ t('scanner.start_scan') }}</span>
+                        <span>{{ isRTL ? 'فهرسة كافة المجلدات' : 'Scan All Folders' }}</span>
                     </button>
 
                     <button
@@ -321,7 +376,7 @@ onUnmounted(() => {
             <div class="space-y-2">
                 <div class="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
                     <span class="truncate max-w-lg font-mono text-[11px] text-slate-600 dark:text-slate-400">
-                        {{ scanStatus.current_file || (isRTL ? 'جاهز للفحص الافتراضي' : 'Ready for virtual indexing') }}
+                        {{ scanStatus.current_file || (isRTL ? 'جاهز للفهرسة الافتراضية' : 'Ready for virtual indexing') }}
                     </span>
                     <span>{{ scanStatus.progress_percent || 0 }}% ({{ scanStatus.processed_files || 0 }}/{{ scanStatus.total_files || 0 }})</span>
                 </div>
@@ -333,35 +388,69 @@ onUnmounted(() => {
                 </div>
             </div>
 
-            <!-- Live Streaming Feed of Indexed Items -->
-            <div v-if="scanStatus.scanned_items && scanStatus.scanned_items.length > 0" class="pt-2 border-t border-slate-200 dark:border-white/10 space-y-2">
-                <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    {{ isRTL ? 'أحدث العناصر المفهرسة في المكتبة:' : 'Recently Indexed Media Items:' }}
-                </span>
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            <!-- 3. Live Interactive Terminal Log Feed (Creative-Fileflow Style) -->
+            <div class="space-y-2 pt-2 border-t border-slate-200 dark:border-white/10">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                        <Terminal class="w-3.5 h-3.5 text-cyan-500" />
+                        <span>{{ isRTL ? 'سجل أحداث الفهرسة المباشر (Live Scanner Logs)' : 'Live Scanner Terminal Logs' }}</span>
+                    </span>
+                    <span class="text-[10px] font-mono text-slate-400">
+                        {{ (scanStatus.logs?.length || 0) }} {{ isRTL ? 'سجلات' : 'entries' }}
+                    </span>
+                </div>
+
+                <div
+                    ref="terminalRef"
+                    class="h-44 bg-slate-950 rounded-2xl p-3.5 font-mono text-[11px] overflow-y-auto border border-slate-800 shadow-inner space-y-1 select-text"
+                >
+                    <div v-if="!scanStatus.logs || scanStatus.logs.length === 0" class="text-slate-500 italic py-4 text-center">
+                        {{ isRTL ? 'السجل فارغ. ابدأ الفهرسة لمشاهدة العمليات المباشرة...' : 'Log is idle. Start a scan to view real-time operations...' }}
+                    </div>
+
                     <div
-                        v-for="(item, idx) in scanStatus.scanned_items"
-                        :key="`scanned-${idx}`"
-                        class="p-2.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-between text-xs"
+                        v-for="(log, idx) in scanStatus.logs"
+                        :key="`log-${idx}`"
+                        class="flex items-start gap-2 leading-relaxed"
                     >
-                        <div class="truncate mr-2">
-                            <p class="font-bold text-slate-900 dark:text-white truncate">{{ item.title }}</p>
-                            <span class="text-[10px] text-slate-500 dark:text-slate-400 uppercase">{{ item.type }}</span>
-                        </div>
-                        <span class="cinema-badge bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20 text-[10px] shrink-0">
-                            {{ item.resolution || '1080p' }}
+                        <span class="text-slate-500 shrink-0 select-none">[{{ log.time }}]</span>
+                        <span
+                            class="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase shrink-0 select-none"
+                            :class="{
+                                'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30': log.level === 'info',
+                                'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30': log.level === 'success',
+                                'bg-amber-500/20 text-amber-400 border border-amber-500/30': log.level === 'warning',
+                                'bg-rose-500/20 text-rose-400 border border-rose-500/30': log.level === 'error',
+                            }"
+                        >
+                            {{ log.level }}
+                        </span>
+                        <span
+                            class="text-slate-300 break-all"
+                            :class="{
+                                'text-emerald-300 font-bold': log.level === 'success',
+                                'text-rose-300 font-bold': log.level === 'error',
+                                'text-amber-300': log.level === 'warning',
+                            }"
+                        >
+                            {{ log.message }}
                         </span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 2. Monitored Media Folders List -->
+        <!-- 2. Monitored Media Folders List with Per-Folder Scan -->
         <div class="glass-panel rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-white/10 mb-8 space-y-4 shadow-sm">
             <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
-                <h3 class="font-bold text-base text-slate-900 dark:text-white">
-                    {{ t('scanner.monitored_directories') }}
-                </h3>
+                <div>
+                    <h3 class="font-bold text-base text-slate-900 dark:text-white">
+                        {{ t('scanner.monitored_directories') }}
+                    </h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        {{ isRTL ? 'يمكنك فحص كل مجلد على حدة أو فحص كافة المجلدات معاً' : 'Scan individual folders on demand or index the entire collection.' }}
+                    </p>
+                </div>
                 <span class="cinema-badge bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30">
                     {{ monitoredDirs.length }} {{ isRTL ? 'مجلدات' : 'folders' }}
                 </span>
@@ -371,62 +460,45 @@ onUnmounted(() => {
                 <div
                     v-for="dir in monitoredDirs"
                     :key="dir.id"
-                    class="py-3.5 flex items-center justify-between flex-wrap gap-4 hover:bg-slate-50 dark:hover:bg-white/[0.02] px-2 rounded-xl transition-colors"
+                    class="py-3.5 flex items-center justify-between flex-wrap gap-4 hover:bg-slate-50 dark:hover:bg-white/[0.02] px-3 rounded-2xl transition-colors"
                 >
                     <div class="flex items-center gap-3">
-                        <HardDrive class="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                        <div class="w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
+                            <HardDrive class="w-4 h-4" />
+                        </div>
                         <div>
                             <p class="font-mono text-xs font-bold text-slate-800 dark:text-slate-200">{{ dir.path }}</p>
-                            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mt-0.5">
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mt-0.5 block">
                                 {{ dir.type === 'movies' ? t('scanner.movies_type') : (dir.type === 'series' ? t('scanner.series_type') : t('scanner.mixed_type')) }}
                             </span>
                         </div>
                     </div>
 
-                    <button
-                        @click="handleRemoveDirectory(dir.id)"
-                        class="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 transition-colors cursor-pointer"
-                        :title="t('common.remove')"
-                    >
-                        <Trash2 class="w-4 h-4" />
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <!-- Per-Folder Scan Trigger -->
+                        <button
+                            @click="handleScanSingleFolder(dir)"
+                            :disabled="scanStatus.status === 'running'"
+                            class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 text-xs font-bold transition-all cursor-pointer"
+                            title="Scan only this directory"
+                        >
+                            <Play class="w-3.5 h-3.5 fill-current" />
+                            <span>{{ isRTL ? 'فحص هذا المجلد' : 'Scan Folder' }}</span>
+                        </button>
+
+                        <button
+                            @click="handleRemoveDirectory(dir.id)"
+                            class="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 transition-colors cursor-pointer"
+                            :title="t('common.remove')"
+                        >
+                            <Trash2 class="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
             </div>
 
             <div v-else class="text-center py-8 text-slate-500 dark:text-slate-400 text-xs">
-                {{ isRTL ? 'لا توجد مجلدات مضافة حالياً. انقر على إضافة مجلد جديد.' : 'No monitored folders added yet. Click "Add Media Folder" above.' }}
-            </div>
-        </div>
-
-        <!-- 3. Clean Slate & Reset Demo Catalog -->
-        <div class="glass-panel rounded-3xl p-6 sm:p-8 border border-rose-500/30 bg-rose-500/5 dark:bg-rose-950/10 space-y-4 shadow-sm">
-            <div class="flex items-start justify-between flex-wrap gap-4">
-                <div class="flex items-start gap-3.5 max-w-2xl">
-                    <div class="w-10 h-10 rounded-2xl bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 flex items-center justify-center shrink-0 mt-0.5">
-                        <AlertTriangle class="w-5 h-5" />
-                    </div>
-                    <div>
-                        <h4 class="font-extrabold text-sm text-rose-700 dark:text-rose-300">
-                            {{ t('scanner.clear_demo_title') }}
-                        </h4>
-                        <p class="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                            {{ t('scanner.clear_demo_desc') }}
-                        </p>
-                    </div>
-                </div>
-
-                <button
-                    @click="handleClearDemoCatalog"
-                    :disabled="isClearingDemo"
-                    class="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs shadow-lg shadow-rose-600/30 active:scale-95 transition-all cursor-pointer"
-                >
-                    <span v-if="!isClearingDemo">{{ t('scanner.clear_demo_button') }}</span>
-                    <span v-else>{{ isRTL ? 'جاري المسح...' : 'Clearing...' }}</span>
-                </button>
-            </div>
-
-            <div v-if="clearSuccessMessage" class="p-3 rounded-xl bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-xs font-bold">
-                {{ clearSuccessMessage }}
+                {{ isRTL ? 'لا توجد مجلدات مراقبة حالياً. أضف مجلداً لبدء الفهرسة.' : 'No monitored folders added yet. Click "Add Media Folder" above.' }}
             </div>
         </div>
 
@@ -460,7 +532,7 @@ onUnmounted(() => {
                         </label>
                         <select
                             v-model="newType"
-                            class="w-full h-11 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-white/15 px-3 text-sm text-slate-900 dark:text-slate-100 focus:border-cyan-500 outline-none"
+                            class="w-full h-11 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-white/15 px-4 text-sm text-slate-900 dark:text-slate-100 focus:border-cyan-500 outline-none"
                         >
                             <option value="movies">{{ t('scanner.movies_type') }}</option>
                             <option value="series">{{ t('scanner.series_type') }}</option>
@@ -469,16 +541,16 @@ onUnmounted(() => {
                     </div>
                 </div>
 
-                <div class="flex items-center justify-end gap-3 pt-3">
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-white/10">
                     <button
                         @click="showAddModal = false"
-                        class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+                        class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
                     >
                         {{ t('common.cancel') }}
                     </button>
                     <button
                         @click="handleAddDirectory"
-                        class="px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-black cursor-pointer"
+                        class="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
                     >
                         {{ t('common.save') }}
                     </button>

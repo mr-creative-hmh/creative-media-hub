@@ -3,7 +3,8 @@ import { ref } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
-import { Play, Star, ArrowLeft, ArrowRight, Layers, Users, Subtitles, Film, CheckCircle2 } from 'lucide-vue-next';
+import FixMatchModal from '@/components/media/FixMatchModal.vue';
+import { Play, Star, ArrowLeft, ArrowRight, Layers, Users, Subtitles, Film, CheckCircle2, Sparkles } from 'lucide-vue-next';
 
 const props = defineProps<{
     series: any;
@@ -11,10 +12,15 @@ const props = defineProps<{
 
 const { t, isRTL } = useI18n();
 
+const showFixMatch = ref(false);
 const selectedSeasonId = ref<number>(props.series.seasons?.[0]?.id || 1);
 
 const selectedSeason = () => {
     return props.series.seasons?.find((s: any) => s.id === selectedSeasonId.value) || props.series.seasons?.[0];
+};
+
+const handleMetadataUpdated = (updatedItem: any) => {
+    Object.assign(props.series, updatedItem);
 };
 </script>
 
@@ -22,12 +28,20 @@ const selectedSeason = () => {
     <Head :title="series.title" />
 
     <AppLayout v-slot="{ play }">
-        <!-- Back navigation -->
-        <div class="mb-4">
+        <!-- Back navigation & Actions Bar -->
+        <div class="mb-4 flex items-center justify-between">
             <Link href="/series" class="inline-flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">
                 <component :is="isRTL ? ArrowRight : ArrowLeft" class="w-4 h-4" />
                 <span>{{ isRTL ? 'العودة للمسلسلات' : 'Back to TV Series' }}</span>
             </Link>
+
+            <button
+                @click="showFixMatch = true"
+                class="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-white/10 transition-all cursor-pointer shadow-sm"
+            >
+                <Sparkles class="w-3.5 h-3.5 text-cyan-500" />
+                <span>{{ isRTL ? 'تعديل البيانات والغلاف (Fix Match)' : 'Fix Match & Metadata' }}</span>
+            </button>
         </div>
 
         <!-- Series Backdrop Hero -->
@@ -99,7 +113,7 @@ const selectedSeason = () => {
             <div
                 v-for="ep in selectedSeason()?.episodes"
                 :key="ep.id"
-                @click="play({ ...ep, watchable_id: ep.id, watchable_type: 'episode', title: `${series.title} - S${selectedSeason().season_number}E${ep.episode_number} - ${ep.title}` })"
+                @click="play({ ...ep, watchable_id: ep.id, watchable_type: 'episode', subtitles: ep.subtitles || [], title: `${series.title} - S${selectedSeason().season_number}E${ep.episode_number} - ${ep.title}` })"
                 class="glass-panel group rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 hover:border-cyan-500/50 transition-all flex flex-col shadow-sm bg-white dark:bg-[#121622]"
             >
                 <div class="relative aspect-video w-full overflow-hidden bg-slate-900">
@@ -155,5 +169,14 @@ const selectedSeason = () => {
         <div v-else class="glass-panel rounded-3xl p-12 text-center text-slate-500 dark:text-slate-400 text-sm my-8">
             {{ isRTL ? 'لا توجد حلقات مفهرسة لهذا الموسم حالياً.' : 'No episodes indexed for this season yet.' }}
         </div>
+
+        <!-- Fix Match Modal -->
+        <FixMatchModal
+            :show="showFixMatch"
+            :item="series"
+            type="series"
+            @close="showFixMatch = false"
+            @updated="handleMetadataUpdated"
+        />
     </AppLayout>
 </template>

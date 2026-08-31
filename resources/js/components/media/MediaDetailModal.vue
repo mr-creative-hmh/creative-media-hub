@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
-import { X, Play, Star, Film, Clock, Heart, Users, Subtitles, Download, Check, HardDrive, Cpu, Video } from 'lucide-vue-next';
+import { X, Play, Star, Film, Clock, Heart, Users, Subtitles, Download, Check, HardDrive, Cpu, Video, Sparkles, SlidersHorizontal } from 'lucide-vue-next';
+import FixMatchModal from './FixMatchModal.vue';
 
 const props = defineProps<{
     item: any;
 }>();
 
-const emit = defineEmits(['close', 'play', 'downloadSub']);
+const emit = defineEmits(['close', 'play', 'downloadSub', 'updated']);
 
 const { t, isRTL } = useI18n();
 
+const showFixMatch = ref(false);
 const isDownloadingAr = ref(false);
 const isDownloadingEn = ref(false);
 
@@ -41,6 +43,11 @@ const handleDownloadSub = async (lang: string) => {
         if (lang === 'ar') isDownloadingAr.value = false;
         if (lang === 'en') isDownloadingEn.value = false;
     }
+};
+
+const handleMetadataUpdated = (updatedItem: any) => {
+    Object.assign(props.item, updatedItem);
+    emit('updated', updatedItem);
 };
 </script>
 
@@ -101,13 +108,21 @@ const handleDownloadSub = async (lang: string) => {
                         </h2>
 
                         <!-- Action Buttons -->
-                        <div class="flex items-center gap-3 pt-2">
+                        <div class="flex items-center gap-3 pt-2 flex-wrap">
                             <button
                                 @click="emit('play', item)"
                                 class="flex items-center gap-2 px-6 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/30 active:scale-95 transition-all cursor-pointer"
                             >
                                 <Play class="w-4 h-4 fill-current" />
                                 <span>{{ t('common.play_now') }}</span>
+                            </button>
+
+                            <button
+                                @click="showFixMatch = true"
+                                class="flex items-center gap-2 px-4 py-3 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-white/10 transition-all cursor-pointer"
+                            >
+                                <Sparkles class="w-4 h-4 text-cyan-500" />
+                                <span>{{ isRTL ? 'تعديل البيانات والغلاف (Fix Match)' : 'Fix Match & Metadata' }}</span>
                             </button>
                         </div>
                     </div>
@@ -138,11 +153,20 @@ const handleDownloadSub = async (lang: string) => {
                         <span class="font-mono font-bold text-slate-900 dark:text-white">{{ item.audio_codec || 'AAC 5.1' }}</span>
                     </div>
                     <div>
-                        <span class="block text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">{{ isRTL ? 'مسار الملف' : 'Local Path' }}</span>
+                        <span class="block text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">{{ isRTL ? 'المسار المحلي' : 'Local Path' }}</span>
                         <span class="font-mono text-[10px] text-slate-600 dark:text-slate-400 truncate block">{{ item.file_path || 'Indexed' }}</span>
                     </div>
                 </div>
             </div>
         </div>
+
+        <!-- Fix Match Modal -->
+        <FixMatchModal
+            :show="showFixMatch"
+            :item="item"
+            type="movie"
+            @close="showFixMatch = false"
+            @updated="handleMetadataUpdated"
+        />
     </div>
 </template>

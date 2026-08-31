@@ -102,10 +102,35 @@ class ScannerController extends Controller
         ]);
     }
 
+    public function scanFolder(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'path' => 'required|string',
+            'type' => 'nullable|string|in:movies,series,mixed',
+        ]);
+
+        $initResult = $this->scannerService->initScanForFolder($validated['path'], $validated['type'] ?? 'mixed');
+
+        return response()->json([
+            'success' => true,
+            'init' => $initResult,
+            'status' => $this->scannerService->getScanStatus(),
+        ]);
+    }
+
     public function processBatch(): JsonResponse
     {
         $result = $this->scannerService->processNextBatch(4);
         return response()->json($result);
+    }
+
+    public function enrichMissing(): JsonResponse
+    {
+        $result = $this->scannerService->enrichMissingMetadata(25);
+        return response()->json([
+            'success' => true,
+            'result' => $result,
+        ]);
     }
 
     public function pauseScan(): JsonResponse
@@ -142,7 +167,7 @@ class ScannerController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Demo catalog successfully cleared. Library is ready for fresh real folder scanning!',
+            'message' => 'Catalog cleared.',
         ]);
     }
 }

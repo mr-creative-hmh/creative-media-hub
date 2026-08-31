@@ -10,6 +10,7 @@ class MetadataAggregator
 {
     /** @var MetadataProviderInterface[] */
     protected array $providers = [];
+    protected ArtworkDownloadService $artwork;
 
     public function __construct(
         TmdbProvider $tmdb,
@@ -17,7 +18,8 @@ class MetadataAggregator
         OmdbProvider $omdb,
         AniListProvider $anilist,
         WikipediaProvider $wikipedia,
-        LocalNfoProvider $local
+        LocalNfoProvider $local,
+        ArtworkDownloadService $artwork
     ) {
         $this->providers = [
             'tmdb' => $tmdb,
@@ -27,6 +29,7 @@ class MetadataAggregator
             'wikipedia' => $wikipedia,
             'local' => $local,
         ];
+        $this->artwork = $artwork;
     }
 
     public function aggregateMovieMetadata(string $title, ?int $year = null, string $lang = 'en'): array
@@ -58,14 +61,24 @@ class MetadataAggregator
             $providerKey = strtolower($first['provider'] ?? 'tmdb');
             $id = $first['id'] ?? ($first['tmdb_id'] ?? null);
 
+            $merged = array_merge($default, $first);
+
             if ($id) {
                 $details = $this->getMovieDetails($id, $providerKey, $lang);
                 if ($details) {
-                    return array_merge($default, $first, $details);
+                    $merged = array_merge($merged, $details);
                 }
             }
 
-            return array_merge($default, $first);
+            // Download & cache poster locally
+            if (!empty($merged['poster_path'])) {
+                $merged['poster_path'] = $this->artwork->downloadPoster($merged['poster_path']);
+            }
+            if (!empty($merged['backdrop_path'])) {
+                $merged['backdrop_path'] = $this->artwork->downloadBackdrop($merged['backdrop_path']);
+            }
+
+            return $merged;
         }
 
         return $default;
@@ -92,7 +105,7 @@ class MetadataAggregator
             'seasons' => [],
         ];
 
-        // 1. Search across metadata chain (TVMaze is 100% free with no API key needed, TMDb if configured)
+        // 1. Search across metadata chain
         $searchResults = $this->searchSeries($title, $year, $lang);
 
         if (!empty($searchResults)) {
@@ -100,14 +113,24 @@ class MetadataAggregator
             $providerKey = strtolower($first['provider'] ?? 'tvmaze');
             $id = $first['id'] ?? ($first['tvmaze_id'] ?? ($first['tmdb_id'] ?? null));
 
+            $merged = array_merge($default, $first);
+
             if ($id) {
                 $details = $this->getSeriesDetails($id, $providerKey, $lang);
                 if ($details) {
-                    return array_merge($default, $first, $details);
+                    $merged = array_merge($merged, $details);
                 }
             }
 
-            return array_merge($default, $first);
+            // Download & cache poster locally
+            if (!empty($merged['poster_path'])) {
+                $merged['poster_path'] = $this->artwork->downloadPoster($merged['poster_path']);
+            }
+            if (!empty($merged['backdrop_path'])) {
+                $merged['backdrop_path'] = $this->artwork->downloadBackdrop($merged['backdrop_path']);
+            }
+
+            return $merged;
         }
 
         return $default;
@@ -224,6 +247,11 @@ class MetadataAggregator
         }
 
         return [];
+    }
+
+    public function getArtworkService(): ArtworkDownloadService
+    {
+        return $this->artwork;
     }
 
     public function getProvidersList(): array
