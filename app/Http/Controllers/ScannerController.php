@@ -93,14 +93,19 @@ class ScannerController extends Controller
             $directories = $setting ? json_decode($setting->value, true) : [];
         }
 
-        // Run scanner service
-        $result = $this->scannerService->scanDirectories($directories ?: []);
+        $initResult = $this->scannerService->initScan($directories ?: []);
 
         return response()->json([
             'success' => true,
-            'result' => $result,
+            'init' => $initResult,
             'status' => $this->scannerService->getScanStatus(),
         ]);
+    }
+
+    public function processBatch(): JsonResponse
+    {
+        $result = $this->scannerService->processNextBatch(4);
+        return response()->json($result);
     }
 
     public function pauseScan(): JsonResponse

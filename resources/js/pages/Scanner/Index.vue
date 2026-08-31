@@ -28,8 +28,8 @@ const { t, isRTL } = useI18n();
 
 const monitoredDirs = ref([...props.directories]);
 const scanStatus = ref({ ...props.initialScanStatus });
-const isPolling = ref(false);
-let pollInterval: any = null;
+const isProcessing = ref(false);
+let isLoopRunning = false;
 
 // New folder modal state
 const showAddModal = ref(false);
@@ -45,34 +45,47 @@ const fetchStatus = async () => {
         const res = await fetch('/api/scanner/status');
         if (res.ok) {
             scanStatus.value = await res.json();
-            if (scanStatus.value.status === 'completed' || scanStatus.value.status === 'cancelled') {
-                stopPolling();
-            }
         }
-    } catch (e) {
-        // silent catch
-    }
+    } catch (e) {}
 };
 
-const startPolling = () => {
-    isPolling.value = true;
-    if (pollInterval) clearInterval(pollInterval);
-    pollInterval = setInterval(fetchStatus, 1500);
-};
+const runBatchLoop = async () => {
+    if (isLoopRunning) return;
+    isLoopRunning = true;
+    isProcessing.value = true;
 
-const stopPolling = () => {
-    isPolling.value = false;
-    if (pollInterval) {
-        clearInterval(pollInterval);
-        pollInterval = null;
+    try {
+        while (isLoopRunning && scanStatus.value.status === 'running') {
+            const res = await fetch('/api/scanner/process-batch', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                },
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                scanStatus.value = data.status;
+                if (!data.has_more || scanStatus.value.status !== 'running') {
+                    break;
+                }
+            } else {
+                break;
+            }
+            // Small micro-delay for smooth rendering
+            await new Promise((r) => setTimeout(r, 100));
+        }
+    } finally {
+        isLoopRunning = false;
+        isProcessing.value = false;
     }
 };
 
 const handleStartScan = async () => {
     try {
         scanStatus.value.status = 'running';
-        startPolling();
-        await fetch('/api/scanner/start', {
+        const res = await fetch('/api/scanner/start', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -80,13 +93,21 @@ const handleStartScan = async () => {
             },
             body: JSON.stringify({ directories: monitoredDirs.value }),
         });
-        await fetchStatus();
+
+        if (res.ok) {
+            const data = await res.json();
+            scanStatus.value = data.status;
+            if (scanStatus.value.status === 'running' && (scanStatus.value.total_files > 0)) {
+                runBatchLoop();
+            }
+        }
     } catch (e) {
-        // error
+        scanStatus.value.status = 'idle';
     }
 };
 
 const handlePauseScan = async () => {
+    isLoopRunning = false;
     await fetch('/api/scanner/pause', {
         method: 'POST',
         headers: { 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '' }
@@ -100,15 +121,15 @@ const handleResumeScan = async () => {
         headers: { 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '' }
     });
     scanStatus.value.status = 'running';
-    startPolling();
+    runBatchLoop();
 };
 
 const handleCancelScan = async () => {
+    isLoopRunning = false;
     await fetch('/api/scanner/cancel', {
         method: 'POST',
         headers: { 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '' }
     });
-    stopPolling();
     scanStatus.value.status = 'cancelled';
 };
 
@@ -179,12 +200,12 @@ const handleClearDemoCatalog = async () => {
 
 onMounted(() => {
     if (scanStatus.value.status === 'running') {
-        startPolling();
+        runBatchLoop();
     }
 });
 
 onUnmounted(() => {
-    stopPolling();
+    isLoopRunning = false;
 });
 </script>
 
@@ -309,6 +330,28 @@ onUnmounted(() => {
                         class="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 rounded-full transition-all duration-300"
                         :style="{ width: `${scanStatus.progress_percent || 0}%` }"
                     ></div>
+                </div>
+            </div>
+
+            <!-- Live Streaming Feed of Indexed Items -->
+            <div v-if="scanStatus.scanned_items && scanStatus.scanned_items.length > 0" class="pt-2 border-t border-slate-200 dark:border-white/10 space-y-2">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    {{ isRTL ? 'أحدث العناصر المفهرسة في المكتبة:' : 'Recently Indexed Media Items:' }}
+                </span>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    <div
+                        v-for="(item, idx) in scanStatus.scanned_items"
+                        :key="`scanned-${idx}`"
+                        class="p-2.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-between text-xs"
+                    >
+                        <div class="truncate mr-2">
+                            <p class="font-bold text-slate-900 dark:text-white truncate">{{ item.title }}</p>
+                            <span class="text-[10px] text-slate-500 dark:text-slate-400 uppercase">{{ item.type }}</span>
+                        </div>
+                        <span class="cinema-badge bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20 text-[10px] shrink-0">
+                            {{ item.resolution || '1080p' }}
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>

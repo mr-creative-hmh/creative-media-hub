@@ -33,6 +33,7 @@ Route::get('/scanner', [ScannerController::class, 'index'])->name('scanner.index
 Route::post('/api/scanner/directories', [ScannerController::class, 'addDirectory'])->name('api.scanner.directories.add');
 Route::delete('/api/scanner/directories', [ScannerController::class, 'removeDirectory'])->name('api.scanner.directories.remove');
 Route::post('/api/scanner/start', [ScannerController::class, 'startScan'])->name('api.scanner.start');
+Route::post('/api/scanner/process-batch', [ScannerController::class, 'processBatch'])->name('api.scanner.process-batch');
 Route::post('/api/scanner/pause', [ScannerController::class, 'pauseScan'])->name('api.scanner.pause');
 Route::post('/api/scanner/resume', [ScannerController::class, 'resumeScan'])->name('api.scanner.resume');
 Route::post('/api/scanner/cancel', [ScannerController::class, 'cancelScan'])->name('api.scanner.cancel');

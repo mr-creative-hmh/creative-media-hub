@@ -65,6 +65,7 @@ class VirtualLibraryScannerService
 
     public function cancelScan(): void
     {
+        Cache::forget('virtual_scan_queue');
         $this->updateScanStatus([
             'status' => 'cancelled',
             'progress_percent' => 0,
@@ -73,7 +74,7 @@ class VirtualLibraryScannerService
         ]);
     }
 
-    public function scanDirectories(array $directories): array
+    public function initScan(array $directories): array
     {
         $allFiles = [];
         foreach ($directories as $dir) {
@@ -97,9 +98,13 @@ class VirtualLibraryScannerService
                 'processed_files' => 0,
                 'current_file' => 'No media files found in selected directories.',
                 'finished_at' => now()->toIso8601String(),
+                'scanned_items' => [],
             ]);
-            return ['success' => true, 'total' => 0, 'processed' => 0];
+            Cache::forget('virtual_scan_queue');
+            return ['success' => true, 'total' => 0, 'status' => $this->getScanStatus()];
         }
+
+        Cache::put('virtual_scan_queue', $allFiles, 3600);
 
         $this->updateScanStatus([
             'status' => 'running',
@@ -107,31 +112,50 @@ class VirtualLibraryScannerService
             'total_files' => $total,
             'processed_files' => 0,
             'started_at' => now()->toIso8601String(),
+            'current_file' => 'Initializing virtual scanner...',
             'errors' => [],
             'scanned_items' => [],
         ]);
 
-        $processed = 0;
-        $recentItems = [];
+        return ['success' => true, 'total' => $total, 'status' => $this->getScanStatus()];
+    }
 
-        foreach ($allFiles as $file) {
+    public function processNextBatch(int $batchSize = 3): array
+    {
+        $status = $this->getScanStatus();
+
+        if ($status['status'] !== 'running') {
+            return ['status' => $status, 'has_more' => false];
+        }
+
+        $queue = Cache::get('virtual_scan_queue', []);
+
+        if (empty($queue)) {
+            $this->updateScanStatus([
+                'status' => 'completed',
+                'progress_percent' => 100,
+                'finished_at' => now()->toIso8601String(),
+            ]);
+            return ['status' => $this->getScanStatus(), 'has_more' => false];
+        }
+
+        $batch = array_splice($queue, 0, $batchSize);
+        Cache::put('virtual_scan_queue', $queue, 3600);
+
+        $processed = $status['processed_files'];
+        $total = max(1, $status['total_files']);
+        $recentItems = $status['scanned_items'] ?? [];
+
+        foreach ($batch as $file) {
             $currentStatus = $this->getScanStatus();
             if ($currentStatus['status'] === 'cancelled') {
-                break;
-            }
-
-            while ($this->getScanStatus()['status'] === 'paused') {
-                sleep(1);
+                return ['status' => $currentStatus, 'has_more' => false];
             }
 
             $parsed = $file['parsed'] ?? $this->parser->parse($file['filename']);
             $isSeries = ($file['expected_type'] === 'series') || ($parsed['type'] === 'series');
 
-            $this->updateScanStatus([
-                'current_file' => $file['filename'],
-                'processed_files' => $processed + 1,
-                'progress_percent' => (int) round((($processed + 1) / $total) * 100),
-            ]);
+            $processed++;
 
             try {
                 if ($isSeries) {
@@ -149,25 +173,29 @@ class VirtualLibraryScannerService
                     ];
                 }
             } catch (\Throwable $e) {
-                Log::error("VirtualScanner error processing {$file['path']}: " . $e->getMessage());
+                Log::error("Scanner error on file {$file['path']}: " . $e->getMessage());
             }
 
-            $processed++;
+            $this->updateScanStatus([
+                'current_file' => $file['filename'],
+                'processed_files' => $processed,
+                'progress_percent' => (int) min(100, round(($processed / $total) * 100)),
+                'scanned_items' => array_slice($recentItems, -15),
+            ]);
         }
 
-        $this->updateScanStatus([
-            'status' => 'completed',
-            'progress_percent' => 100,
-            'processed_files' => $processed,
-            'scanned_items' => array_slice($recentItems, -15),
-            'finished_at' => now()->toIso8601String(),
-        ]);
+        $hasMore = !empty($queue);
+        if (!$hasMore) {
+            $this->updateScanStatus([
+                'status' => 'completed',
+                'progress_percent' => 100,
+                'finished_at' => now()->toIso8601String(),
+            ]);
+        }
 
         return [
-            'success' => true,
-            'total' => $total,
-            'processed' => $processed,
-            'items' => $recentItems,
+            'status' => $this->getScanStatus(),
+            'has_more' => $hasMore,
         ];
     }
 
@@ -176,9 +204,7 @@ class VirtualLibraryScannerService
         $cleanTitle = $parsed['title'] ?? pathinfo($file['filename'], PATHINFO_FILENAME);
         $year = $parsed['year'] ?? null;
 
-        // Fetch rich metadata
         $meta = $this->metadata->aggregateMovieMetadata($cleanTitle, $year);
-
         $posterUrl = $file['local_poster'] ?? ($meta['poster_url'] ?? null);
 
         $movie = MediaItem::updateOrCreate(
@@ -205,7 +231,6 @@ class VirtualLibraryScannerService
             ]
         );
 
-        // Attach genres
         $genres = !empty($meta['genres']) ? $meta['genres'] : ['Action', 'Drama'];
         $genreIds = [];
         foreach ($genres as $gName) {
@@ -217,16 +242,18 @@ class VirtualLibraryScannerService
         }
         $movie->genres()->sync($genreIds);
 
-        // Link local subtitles if found
         if (!empty($file['subtitles'])) {
             foreach ($file['subtitles'] as $sub) {
                 Subtitle::updateOrCreate(
-                    ['file_path' => $sub['path']],
                     [
-                        'media_item_id' => $movie->id,
+                        'subtitlable_id' => $movie->id,
+                        'subtitlable_type' => MediaItem::class,
+                        'file_path' => $sub['path'],
+                    ],
+                    [
                         'language' => str_contains(strtolower($sub['filename']), 'ar') ? 'ar' : 'en',
+                        'language_name' => str_contains(strtolower($sub['filename']), 'ar') ? 'Arabic' : 'English',
                         'format' => $sub['extension'] ?? 'srt',
-                        'source' => 'local_scan',
                     ]
                 );
             }
@@ -242,7 +269,6 @@ class VirtualLibraryScannerService
         $episodeNum = $parsed['episode'] ?? 1;
         $year = $parsed['year'] ?? null;
 
-        // 1. Series
         $seriesMeta = $this->metadata->aggregateSeriesMetadata($seriesTitle, $year);
         $posterUrl = $file['local_poster'] ?? ($seriesMeta['poster_url'] ?? null);
 
@@ -262,13 +288,11 @@ class VirtualLibraryScannerService
             ]
         );
 
-        // 2. Season
         $season = Season::firstOrCreate(
             ['series_id' => $series->id, 'season_number' => $seasonNum],
             ['title' => "Season {$seasonNum}"]
         );
 
-        // 3. Episode
         $episode = Episode::updateOrCreate(
             ['file_path' => $file['path']],
             [
@@ -284,16 +308,18 @@ class VirtualLibraryScannerService
             ]
         );
 
-        // Link local subtitles for episode
         if (!empty($file['subtitles'])) {
             foreach ($file['subtitles'] as $sub) {
                 Subtitle::updateOrCreate(
-                    ['file_path' => $sub['path']],
                     [
-                        'episode_id' => $episode->id,
+                        'subtitlable_id' => $episode->id,
+                        'subtitlable_type' => Episode::class,
+                        'file_path' => $sub['path'],
+                    ],
+                    [
                         'language' => str_contains(strtolower($sub['filename']), 'ar') ? 'ar' : 'en',
+                        'language_name' => str_contains(strtolower($sub['filename']), 'ar') ? 'Arabic' : 'English',
                         'format' => $sub['extension'] ?? 'srt',
-                        'source' => 'local_scan',
                     ]
                 );
             }
