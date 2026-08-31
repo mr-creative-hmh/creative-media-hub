@@ -10,25 +10,26 @@ use Illuminate\Validation\Rules\Password;
 
 class AppServiceProvider extends ServiceProvider
 {
-    /**
-     * Register any application services.
-     */
     public function register(): void
     {
         //
     }
 
-    /**
-     * Bootstrap any application services.
-     */
     public function boot(): void
     {
         $this->configureDefaults();
+
+        // High-Performance SQLite Tuning (WAL Mode, in-memory temp store, 64MB cache)
+        if (config('database.default') === 'sqlite') {
+            try {
+                DB::statement('PRAGMA journal_mode=WAL;');
+                DB::statement('PRAGMA synchronous=NORMAL;');
+                DB::statement('PRAGMA cache_size=-64000;');
+                DB::statement('PRAGMA temp_store=MEMORY;');
+            } catch (\Throwable $e) {}
+        }
     }
 
-    /**
-     * Configure default behaviors for production-ready applications.
-     */
     protected function configureDefaults(): void
     {
         Date::use(CarbonImmutable::class);

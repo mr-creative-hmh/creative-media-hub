@@ -5,7 +5,8 @@ import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import {
     Subtitles, Download, Check, AlertCircle, Sparkles,
-    Search, Cpu, CheckCircle2, Globe, ArrowDownToLine, RefreshCw
+    Search, Cpu, CheckCircle2, Globe, ArrowDownToLine, RefreshCw,
+    Film, Tv, HardDrive, FileText, CheckCheck
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -15,17 +16,15 @@ const props = defineProps<{
 const { t, isRTL } = useI18n();
 
 const downloadingId = ref<string | null>(null);
+const searchQuery = ref('Inception');
+const searchLang = ref('ar');
+const isSearching = ref(false);
+const searchResults = ref<any[] | null>(null);
+const toastMessage = ref('');
 
-// Interactive Verifier State
-const testQuery = ref('Inception');
-const testLang = ref('ar');
-const isTesting = ref(false);
-const testResults = ref<any[] | null>(null);
-const engineStatus = ref<any | null>(null);
-
-const runEngineVerification = async () => {
-    if (!testQuery.value.trim()) return;
-    isTesting.value = true;
+const performSearch = async () => {
+    if (!searchQuery.value.trim()) return;
+    isSearching.value = true;
     try {
         const res = await fetch('/api/subtitles/verify-engine', {
             method: 'POST',
@@ -34,18 +33,17 @@ const runEngineVerification = async () => {
                 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
             },
             body: JSON.stringify({
-                query: testQuery.value,
-                language: testLang.value,
+                query: searchQuery.value.trim(),
+                language: searchLang.value,
             }),
         });
 
         if (res.ok) {
             const data = await res.json();
-            testResults.value = data.results;
-            engineStatus.value = data.engine_status;
+            searchResults.value = data.results || [];
         }
     } finally {
-        isTesting.value = false;
+        isSearching.value = false;
     }
 };
 
@@ -68,6 +66,9 @@ const downloadSub = async (item: any, lang: string) => {
         if (res.ok) {
             if (lang === 'ar') item.missing_ar = false;
             if (lang === 'en') item.missing_en = false;
+            toastMessage.value = isRTL.value
+                ? `تم تحميل وربط ترجمة (${lang === 'ar' ? 'العربية' : 'English'}) بملف ${item.title} بنجاح!`
+                : `Successfully downloaded and linked ${lang.toUpperCase()} subtitle for ${item.title}!`;
         }
     } finally {
         downloadingId.value = null;
@@ -81,175 +82,212 @@ const downloadSub = async (item: any, lang: string) => {
     <AppLayout v-slot="{ play }">
         <!-- Header -->
         <div class="mb-8">
-            <div class="flex items-center gap-3 mb-2">
-                <div class="w-10 h-10 rounded-2xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 flex items-center justify-center">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 flex items-center justify-center">
                     <Subtitles class="w-5 h-5" />
                 </div>
                 <div>
-                    <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
+                    <h1 class="text-2xl sm:text-3xl font-extrabold text-white">
                         {{ t('subtitles_view.title') }}
                     </h1>
-                    <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-0.5">
+                    <p class="text-xs sm:text-sm text-slate-400 mt-0.5">
                         {{ t('subtitles_view.subtitle') }}
                     </p>
                 </div>
             </div>
         </div>
 
-        <!-- 1. Interactive Free Subtitle Engine Tester & Verifier -->
-        <div class="glass-panel rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-white/10 mb-8 space-y-6 shadow-sm">
-            <div class="flex items-center justify-between flex-wrap gap-4 pb-3 border-b border-slate-200 dark:border-white/10">
+        <!-- Toast Notice -->
+        <div v-if="toastMessage" class="mb-6 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <CheckCircle2 class="w-4 h-4 shrink-0" />
+                <span>{{ toastMessage }}</span>
+            </div>
+            <button @click="toastMessage = ''" class="cursor-pointer text-emerald-400 hover:text-emerald-300">
+                ✕
+            </button>
+        </div>
+
+        <!-- 1. Live Free Subtitles Multi-Engine Search Studio -->
+        <div class="glass-panel rounded-3xl p-6 sm:p-8 border border-white/10 mb-8 space-y-6 shadow-sm">
+            <div class="flex items-center justify-between flex-wrap gap-4 pb-4 border-b border-white/10">
                 <div class="flex items-center gap-2.5">
-                    <Cpu class="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    <Cpu class="w-5 h-5 text-cyan-400" />
                     <div>
-                        <h3 class="font-bold text-base text-slate-900 dark:text-white">
-                            {{ isRTL ? 'أداة اختبار وفحص محرك الترجمات المجاني (Live Engine Verifier)' : 'Live Free Subtitle Engine Verifier' }}
+                        <h3 class="font-bold text-base text-white">
+                            {{ isRTL ? 'محرك البحث المباشر عن الترجمات (SubDL + OpenSubtitles)' : 'Live Free Subtitle Search Engine' }}
                         </h3>
-                        <p class="text-xs text-slate-500 dark:text-slate-400">
-                            {{ isRTL ? 'ابحث في محركات SubDL و OpenSubtitles مباشرة وتحقق من دقة النتائج' : 'Query live SubDL & OpenSubtitles scrapers to verify free subtitles retrieval' }}
+                        <p class="text-xs text-slate-400">
+                            {{ isRTL ? 'البحث في سحابة SubDL و OpenSubtitles لجلب وتحميل ملفات الترجمة فورياً' : 'Query live SubDL & OpenSubtitles scrapers to verify free subtitles retrieval.' }}
                         </p>
                     </div>
                 </div>
 
-                <!-- Engine Health Pills -->
                 <div class="flex items-center gap-2 flex-wrap text-[11px] font-bold">
-                    <span class="cinema-badge bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                        SubDL Scraper: Online
+                    <span class="cinema-badge bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+                        SubDL Free Cloud: Online
                     </span>
-                    <span class="cinema-badge bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30">
+                    <span class="cinema-badge bg-cyan-500/20 text-cyan-300 border-cyan-500/30">
                         OpenSubtitles REST: Ready
                     </span>
                 </div>
             </div>
 
-            <!-- Search Bar for Engine Verification -->
-            <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                <div class="sm:col-span-8">
+            <!-- Search Inputs Bar -->
+            <form @submit.prevent="performSearch" class="flex flex-col sm:flex-row gap-3">
+                <div class="relative flex-1">
                     <input
+                        v-model="searchQuery"
                         type="text"
-                        v-model="testQuery"
-                        placeholder="Search movie or series title (e.g. Inception, Dune, Breaking Bad)..."
-                        class="w-full h-11 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-300 dark:border-white/15 px-4 text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-cyan-500 outline-none"
+                        :placeholder="isRTL ? 'اكتب اسم الفيلم أو المسلسل...' : 'Search movie or episode title...'"
+                        class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                     />
+                    <Search class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 </div>
 
-                <div class="sm:col-span-2">
-                    <select
-                        v-model="testLang"
-                        class="w-full h-11 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-white/15 px-3 text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:border-cyan-500 outline-none"
-                    >
-                        <option value="ar">العربية (Arabic)</option>
-                        <option value="en">English (English)</option>
-                    </select>
-                </div>
+                <select
+                    v-model="searchLang"
+                    class="w-full sm:w-44 px-3.5 py-2.5 rounded-xl bg-[#0E121E] border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500 font-bold"
+                >
+                    <option value="ar">العربية (Arabic)</option>
+                    <option value="en">English</option>
+                    <option value="fr">Français (French)</option>
+                    <option value="es">Español (Spanish)</option>
+                    <option value="de">Deutsch (German)</option>
+                </select>
 
-                <div class="sm:col-span-2">
-                    <button
-                        @click="runEngineVerification"
-                        :disabled="isTesting"
-                        class="w-full h-11 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                        <RefreshCw v-if="isTesting" class="w-4 h-4 animate-spin" />
-                        <Search v-else class="w-4 h-4" />
-                        <span>{{ isTesting ? (isRTL ? 'جاري البحث...' : 'Searching...') : (isRTL ? 'فحص المحرك' : 'Test Scraper') }}</span>
-                    </button>
-                </div>
-            </div>
+                <button
+                    type="submit"
+                    :disabled="isSearching"
+                    class="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer shadow-lg shadow-cyan-500/20 shrink-0"
+                >
+                    <RefreshCw v-if="isSearching" class="w-4 h-4 animate-spin" />
+                    <Search v-else class="w-4 h-4" />
+                    <span>{{ isRTL ? 'بحث عن الترجمات' : 'Search Subtitles' }}</span>
+                </button>
+            </form>
 
-            <!-- Search Results Display -->
-            <div v-if="testResults" class="space-y-3 pt-2">
-                <div class="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-400">
-                    <span>{{ isRTL ? 'النتائج المتطابقة:' : 'Live Scraped Subtitles:' }} ({{ testResults.length }})</span>
-                </div>
+            <!-- Search Result Cards -->
+            <div v-if="searchResults && searchResults.length > 0" class="space-y-3 pt-2">
+                <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    {{ isRTL ? 'نتائج البحث المكتشفة:' : 'Discovered Subtitle Matches:' }}
+                </h4>
 
-                <div class="divide-y divide-slate-100 dark:divide-white/5 max-h-80 overflow-y-auto">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div
-                        v-for="(sub, idx) in testResults"
-                        :key="`test-sub-${idx}`"
-                        class="py-3 flex items-center justify-between flex-wrap gap-3 hover:bg-slate-50 dark:hover:bg-white/[0.02] px-2 rounded-xl"
+                        v-for="(sub, idx) in searchResults"
+                        :key="idx"
+                        class="p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-cyan-500/40 transition-all flex flex-col justify-between space-y-3 group"
                     >
-                        <div>
-                            <div class="flex items-center gap-2">
-                                <span class="font-bold text-xs text-slate-900 dark:text-slate-100">{{ sub.release || sub.file_name }}</span>
-                                <span class="cinema-badge bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 text-[10px]">
-                                    {{ sub.provider }}
-                                </span>
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap mb-1">
+                                    <span class="cinema-badge bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[10px]">
+                                        {{ sub.provider || 'SubDL Free' }}
+                                    </span>
+                                    <span class="cinema-badge bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[10px] uppercase font-mono font-bold">
+                                        {{ sub.language }}
+                                    </span>
+                                    <span v-if="sub.downloads" class="cinema-badge bg-white/10 text-slate-300 border-white/10 text-[10px]">
+                                        {{ sub.downloads }} dl
+                                    </span>
+                                </div>
+                                <h5 class="font-bold text-xs text-white truncate max-w-sm" :title="sub.release || sub.file_name">
+                                    {{ sub.release || sub.file_name }}
+                                </h5>
+                                <p class="text-[11px] font-mono text-slate-400 truncate mt-0.5">
+                                    {{ sub.file_name }}
+                                </p>
                             </div>
-                            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                {{ isRTL ? 'اللغة' : 'Lang' }}: <span class="uppercase font-bold text-cyan-600 dark:text-cyan-400">{{ sub.language }}</span> • {{ isRTL ? 'التنزيلات' : 'Downloads' }}: {{ sub.downloads || 120 }}
-                            </p>
                         </div>
 
-                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-xs font-bold">
-                            <CheckCircle2 class="w-3.5 h-3.5" />
-                            <span>{{ isRTL ? 'متوفر وجاهز' : 'Verified Ready' }}</span>
-                        </span>
+                        <div class="pt-2 border-t border-white/5 flex items-center justify-between">
+                            <span class="text-[11px] text-slate-500 font-mono">SRT Format (UTF-8)</span>
+                            <a
+                                :href="sub.download_url"
+                                target="_blank"
+                                class="px-3.5 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500 text-cyan-300 hover:text-slate-950 border border-cyan-500/30 text-xs font-bold transition-all flex items-center gap-1.5"
+                            >
+                                <ArrowDownToLine class="w-3.5 h-3.5" />
+                                <span>{{ isRTL ? 'تحميل مباشر' : 'Download .SRT' }}</span>
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 2. Library Missing Subtitles Manager -->
-        <div class="glass-panel rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-white/10 shadow-sm space-y-4">
-            <h3 class="font-bold text-base text-slate-900 dark:text-white pb-3 border-b border-slate-200 dark:border-white/10">
-                {{ isRTL ? 'الوسائط التي ينقصها ملفات ترجمة في مكتبتك' : 'Library Media Missing Subtitles' }}
-            </h3>
+        <!-- 2. Library Missing Subtitles Batch Table -->
+        <div class="space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-base text-white flex items-center gap-2">
+                    <FileText class="w-4 h-4 text-cyan-400" />
+                    <span>{{ isRTL ? 'عناصر المكتبة التي تنقصها ترجمات' : 'Library Media Missing Subtitles' }}</span>
+                </h3>
+            </div>
 
-            <div v-if="missingSubtitles && missingSubtitles.length > 0" class="divide-y divide-slate-100 dark:divide-white/5">
+            <div v-if="missingSubtitles && missingSubtitles.length > 0" class="space-y-3">
                 <div
                     v-for="item in missingSubtitles"
                     :key="`${item.type}-${item.id}`"
-                    class="py-4 flex items-center justify-between flex-wrap gap-4"
+                    class="glass-panel p-4 rounded-2xl border border-white/10 hover:border-cyan-500/40 transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
                 >
-                    <div class="flex items-center gap-4">
-                        <img
-                            :src="item.poster_url || '/placeholder.jpg'"
-                            class="w-12 h-16 rounded-xl object-cover shadow-sm bg-slate-200 dark:bg-slate-800"
-                        />
-                        <div>
-                            <h4 class="font-bold text-sm text-slate-900 dark:text-white">
-                                {{ isRTL && item.title_ar ? item.title_ar : item.title }}
-                            </h4>
-                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                {{ item.year }} • {{ item.resolution || '1080p' }}
-                            </p>
+                    <div class="flex items-center gap-3.5 min-w-0">
+                        <div class="w-10 h-10 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                            <Film v-if="item.type === 'movie'" class="w-5 h-5 text-cyan-400" />
+                            <Tv v-else class="w-5 h-5 text-indigo-400" />
+                        </div>
+
+                        <div class="min-w-0 space-y-0.5">
+                            <div class="flex items-center gap-2">
+                                <span class="cinema-badge bg-white/10 text-slate-300 border-white/10 text-[9px]">
+                                    {{ item.type === 'movie' ? (isRTL ? 'فيلم' : 'MOVIE') : (isRTL ? 'حلقة مسلسل' : 'EPISODE') }}
+                                </span>
+                                <h4 class="font-bold text-xs text-white truncate max-w-sm">{{ item.title }}</h4>
+                            </div>
+                            <p class="text-[11px] font-mono text-slate-400 truncate max-w-lg">{{ item.file_path }}</p>
                         </div>
                     </div>
 
-                    <!-- Download Buttons -->
-                    <div class="flex items-center gap-2">
+                    <!-- Download Action Buttons -->
+                    <div class="flex items-center gap-2 shrink-0 self-end sm:self-center">
                         <button
                             v-if="item.missing_ar"
                             @click="downloadSub(item, 'ar')"
                             :disabled="downloadingId === `${item.id}-ar`"
-                            class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30 text-xs font-bold cursor-pointer"
+                            class="px-3.5 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                         >
-                            <Download class="w-3.5 h-3.5" />
-                            <span>{{ isRTL ? 'تحميل العربية' : 'Download AR' }}</span>
+                            <RefreshCw v-if="downloadingId === `${item.id}-ar`" class="w-3.5 h-3.5 animate-spin" />
+                            <Download v-else class="w-3.5 h-3.5" />
+                            <span>{{ isRTL ? 'تحميل ترجمة عربي' : 'Fetch Arabic' }}</span>
                         </button>
-                        <span v-else class="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                            <Check class="w-3.5 h-3.5" /> AR
+                        <span v-else class="cinema-badge bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[10px] flex items-center gap-1">
+                            <CheckCheck class="w-3 h-3" />
+                            <span>AR OK</span>
                         </span>
 
                         <button
                             v-if="item.missing_en"
                             @click="downloadSub(item, 'en')"
                             :disabled="downloadingId === `${item.id}-en`"
-                            class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 text-xs font-bold cursor-pointer"
+                            class="px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                         >
-                            <Download class="w-3.5 h-3.5" />
-                            <span>{{ isRTL ? 'تحميل الإنجليزية' : 'Download EN' }}</span>
+                            <RefreshCw v-if="downloadingId === `${item.id}-en`" class="w-3.5 h-3.5 animate-spin" />
+                            <Download v-else class="w-3.5 h-3.5" />
+                            <span>{{ isRTL ? 'تحميل ترجمة إنجليزي' : 'Fetch English' }}</span>
                         </button>
-                        <span v-else class="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                            <Check class="w-3.5 h-3.5" /> EN
+                        <span v-else class="cinema-badge bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[10px] flex items-center gap-1">
+                            <CheckCheck class="w-3 h-3" />
+                            <span>EN OK</span>
                         </span>
                     </div>
                 </div>
             </div>
 
-            <div v-else class="text-center py-12 text-slate-500 dark:text-slate-400 text-xs">
-                <CheckCircle2 class="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                <p>{{ isRTL ? 'كافة الوسائط المفهرسة في مكتبتك تحتوي على ترجمات مكتملة!' : 'All indexed media in your library have complete subtitles!' }}</p>
+            <div v-else class="glass-panel rounded-3xl p-12 text-center text-slate-400 space-y-2">
+                <CheckCircle2 class="w-8 h-8 text-emerald-400 mx-auto" />
+                <p class="font-bold text-white">{{ isRTL ? 'كافة الأفلام والحلقات مربوطة بترجماتها بنجاح!' : 'All media items have linked subtitles!' }}</p>
+                <p class="text-xs text-slate-500">{{ isRTL ? 'لا توجد ملفات ناقصة للترجمة العربية أو الإنجليزية.' : 'No missing Arabic or English subtitles found.' }}</p>
             </div>
         </div>
     </AppLayout>

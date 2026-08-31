@@ -10,7 +10,6 @@ return new class extends Migration
     {
         Schema::create('media_items', function (Blueprint $table) {
             $table->id();
-            $table->string('type')->default('movie');
             $table->string('title');
             $table->string('original_title')->nullable();
             $table->string('title_ar')->nullable();
@@ -19,8 +18,6 @@ return new class extends Migration
             $table->string('imdb_id')->nullable()->index();
             $table->text('overview')->nullable();
             $table->text('overview_ar')->nullable();
-            $table->string('tagline')->nullable();
-            $table->string('tagline_ar')->nullable();
             $table->string('poster_path')->nullable();
             $table->string('backdrop_path')->nullable();
             $table->string('trailer_url')->nullable();
@@ -32,10 +29,12 @@ return new class extends Migration
             $table->string('audio_codec')->nullable(); // Dolby Atmos, DTS-HD, AAC 5.1
             $table->string('file_path')->nullable();
             $table->unsignedBigInteger('file_size_bytes')->nullable();
-            $table->string('folder_path')->nullable();
+            $table->string('folder_path')->nullable()->index();
             $table->json('mood_tags')->nullable();
             $table->boolean('is_favorite')->default(false)->index();
             $table->timestamps();
+
+            $table->index(['release_year', 'rating'], 'idx_media_year_rating');
         });
 
         Schema::create('series', function (Blueprint $table) {
@@ -60,6 +59,8 @@ return new class extends Migration
             $table->json('mood_tags')->nullable();
             $table->boolean('is_favorite')->default(false)->index();
             $table->timestamps();
+
+            $table->index(['release_year', 'rating'], 'idx_series_year_rating');
         });
 
         Schema::create('seasons', function (Blueprint $table) {

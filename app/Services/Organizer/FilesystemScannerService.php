@@ -73,6 +73,7 @@ class FilesystemScannerService
             $videoDir = pathinfo($v['path'], PATHINFO_DIRNAME);
             $v['subtitles'] = [];
             $v['local_poster'] = null;
+            $v['local_backdrop'] = null;
 
             $parsedV = $v['parsed'];
             $isSeries = $parsedV['type'] === 'series';
@@ -108,14 +109,23 @@ class FilesystemScannerService
                 }
             }
 
-            // Match poster
+            // Match local poster & backdrop in current or parent folder
             foreach ($imageFiles as $img) {
                 $imgDir = pathinfo($img['path'], PATHINFO_DIRNAME);
                 $imgName = strtolower($img['filename']);
-                if ($imgDir === $videoDir || pathinfo($imgDir, PATHINFO_DIRNAME) === $videoDir) {
-                    if (str_contains($imgName, 'poster') || str_contains($imgName, 'cover') || str_contains($imgName, 'folder') || str_starts_with(pathinfo($img['filename'], PATHINFO_FILENAME), $videoBase)) {
-                        $v['local_poster'] = $img['path'];
-                        break;
+
+                if ($imgDir === $videoDir || pathinfo($imgDir, PATHINFO_DIRNAME) === $videoDir || $imgDir === pathinfo($videoDir, PATHINFO_DIRNAME)) {
+                    // Match Poster
+                    if (!$v['local_poster']) {
+                        if (str_contains($imgName, 'poster') || str_contains($imgName, 'cover') || str_contains($imgName, 'folder') || str_starts_with(pathinfo($img['filename'], PATHINFO_FILENAME), $videoBase)) {
+                            $v['local_poster'] = $img['path'];
+                        }
+                    }
+                    // Match Backdrop / Fanart
+                    if (!$v['local_backdrop']) {
+                        if (str_contains($imgName, 'backdrop') || str_contains($imgName, 'fanart') || str_contains($imgName, 'background') || str_contains($imgName, 'banner')) {
+                            $v['local_backdrop'] = $img['path'];
+                        }
                     }
                 }
             }
@@ -127,7 +137,7 @@ class FilesystemScannerService
     public function detectSubtitleLanguage(string $filename): string
     {
         $lower = strtolower($filename);
-        if (preg_match('/\b(ar|ara|arabic|عربي)\b/i', $lower) || str_contains($lower, '.ar.') || str_ends_with($lower, '.ar.srt')) {
+        if (preg_match('/\b(ar|ara|arabic|العربية)\b/i', $lower) || str_contains($lower, '.ar.') || str_ends_with($lower, '.ar.srt')) {
             return 'ar';
         }
         if (preg_match('/\b(en|eng|english|انجليزي)\b/i', $lower) || str_contains($lower, '.en.') || str_ends_with($lower, '.en.srt')) {

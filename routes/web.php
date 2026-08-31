@@ -5,6 +5,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DiskOrganizerController;
 use App\Http\Controllers\DownloadManagerController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\MetadataManagementController;
 use App\Http\Controllers\ScannerController;
 use App\Http\Controllers\SeriesController;
 use App\Http\Controllers\SettingsController;
@@ -15,6 +16,10 @@ use Illuminate\Support\Facades\Route;
 // Cinema Dashboard & Overview Hub
 Route::get('/', [DashboardController::class, 'index'])->name('home');
 Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+// Standalone Library Metadata Management Studio
+Route::get('/metadata', [MetadataManagementController::class, 'index'])->name('metadata.index');
+Route::post('/api/metadata/batch-enrich', [MetadataManagementController::class, 'batchEnrich'])->name('api.metadata.batch-enrich');
 
 // Virtual Movies Hub & Metadata Management
 Route::get('/movies', [MediaController::class, 'index'])->name('movies.index');
@@ -37,7 +42,7 @@ Route::post('/api/series/{series}/update-metadata', [SeriesController::class, 'u
 // Virtual Media Scanner & Background Job Control Center
 Route::get('/scanner', [ScannerController::class, 'index'])->name('scanner.index');
 Route::post('/api/scanner/directories', [ScannerController::class, 'addDirectory'])->name('api.scanner.directories.add');
-Route::delete('/api/scanner/directories', [ScannerController::class, 'removeDirectory'])->name('api.scanner.directories.remove');
+Route::delete('/api/scanner/directories/{index?}', [ScannerController::class, 'removeDirectory'])->name('api.scanner.directories.remove');
 Route::post('/api/scanner/start', [ScannerController::class, 'startScan'])->name('api.scanner.start');
 Route::post('/api/scanner/scan-folder', [ScannerController::class, 'scanFolder'])->name('api.scanner.scan-folder');
 Route::post('/api/scanner/process-batch', [ScannerController::class, 'processBatch'])->name('api.scanner.process-batch');
@@ -50,6 +55,7 @@ Route::post('/api/library/clear-demo', [ScannerController::class, 'clearDemoCata
 
 // Physical Disk Organizer Studio & Dry-Run
 Route::get('/organizer', [DiskOrganizerController::class, 'index'])->name('organizer.index');
+Route::get('/api/organizer/load-virtual', [DiskOrganizerController::class, 'loadFromVirtualLibrary'])->name('api.organizer.load-virtual');
 Route::post('/api/organizer/scan', [DiskOrganizerController::class, 'scan'])->name('api.organizer.scan');
 Route::post('/api/organizer/dry-run', [DiskOrganizerController::class, 'dryRun'])->name('api.organizer.dry-run');
 Route::post('/api/organizer/execute', [DiskOrganizerController::class, 'execute'])->name('api.organizer.execute');
@@ -60,7 +66,7 @@ Route::get('/api/subtitles/search', [SubtitleController::class, 'search'])->name
 Route::post('/api/subtitles/download', [SubtitleController::class, 'downloadForMedia'])->name('api.subtitles.download');
 Route::post('/api/subtitles/verify-engine', [SubtitleController::class, 'verifyEngine'])->name('api.subtitles.verify-engine');
 
-// Cinema Video & Subtitle Streaming Engine (HTTP 206 Partial Content)
+// Cinema Video & Subtitle Streaming Engine (HTTP 206 Partial Content + Audio Transcoding)
 Route::get('/stream/movie/{mediaItem}', [StreamController::class, 'streamMovie'])->name('stream.movie');
 Route::get('/stream/episode/{episode}', [StreamController::class, 'streamEpisode'])->name('stream.episode');
 Route::get('/stream/subtitles/{subtitle}', [StreamController::class, 'streamSubtitle'])->name('stream.subtitle');
@@ -77,3 +83,4 @@ Route::post('/api/downloads', [DownloadManagerController::class, 'store'])->name
 // System Settings & API Providers
 Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
 Route::post('/api/settings', [SettingsController::class, 'update'])->name('api.settings.update');
+Route::post('/api/settings/test-provider', [SettingsController::class, 'testProvider'])->name('api.settings.test-provider');

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
-    X, Search, Sparkles, Check, Image, Star, Calendar,
+    X, Search, Sparkles, Check, Image as ImageIcon, Star, Calendar,
     Film, Tv, RefreshCw, AlertCircle, Save, SlidersHorizontal
 } from 'lucide-vue-next';
 
@@ -36,6 +36,26 @@ const form = ref({
     poster_path: '',
     backdrop_path: '',
 });
+
+const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && props.show) {
+        closeModal();
+    }
+};
+
+onMounted(() => {
+    window.addEventListener('keydown', handleKeyDown);
+});
+
+onUnmounted(() => {
+    window.removeEventListener('keydown', handleKeyDown);
+});
+
+const closeModal = () => {
+    searchError.value = '';
+    successMessage.value = '';
+    emit('close');
+};
 
 watch(() => props.item, (newItem) => {
     if (newItem) {
@@ -73,7 +93,7 @@ const performSearch = async () => {
         const data = await res.json();
         searchResults.value = data.results || [];
         if (searchResults.value.length === 0) {
-            searchError.value = isRTL.value ? 'لم يتم العثور على نتائج. جرب تغيير كلمة البحث أو سنة الإصدار.' : 'No results found. Try adjusting the search query or year.';
+            searchError.value = isRTL.value ? 'لم يتم العثور على نتائج. جرب تغيير نص البحث أو السنة.' : 'No results found. Try adjusting the search query or year.';
         }
     } catch (e: any) {
         searchError.value = e.message || 'Search request failed.';
@@ -114,11 +134,11 @@ const applyMatch = async (result: any) => {
 
         const data = await res.json();
         if (data.success) {
-            successMessage.value = isRTL.value ? 'تم تثبيت وتحديث البيانات والغلاف بنجاح!' : 'Metadata & artwork successfully matched!';
+            successMessage.value = isRTL.value ? 'تم حفظ ومطابقة البيانات بنجاح!' : 'Metadata & artwork successfully matched!';
             emit('updated', data.media || data.series);
             setTimeout(() => {
-                emit('close');
-            }, 1200);
+                closeModal();
+            }, 800);
         }
     } catch (e: any) {
         searchError.value = e.message || 'Failed to apply match.';
@@ -161,8 +181,8 @@ const saveManualEdit = async () => {
             successMessage.value = isRTL.value ? 'تم حفظ التعديلات اليدوية بنجاح!' : 'Manual metadata saved successfully!';
             emit('updated', data.media || data.series);
             setTimeout(() => {
-                emit('close');
-            }, 1200);
+                closeModal();
+            }, 800);
         }
     } catch (e: any) {
         searchError.value = e.message || 'Failed to save edits.';
@@ -175,84 +195,88 @@ const saveManualEdit = async () => {
 <template>
     <div
         v-if="show"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+        @click.self="closeModal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
     >
         <div
-            class="glass-panel w-full max-w-2xl max-h-[90vh] rounded-3xl border border-slate-200 dark:border-white/15 bg-white dark:bg-[#0E121E] shadow-2xl flex flex-col overflow-hidden text-slate-900 dark:text-white font-sans"
+            class="glass-panel w-full max-w-2xl max-h-[90vh] rounded-3xl border border-white/15 bg-[#0E121E] shadow-2xl flex flex-col overflow-hidden text-white font-sans"
             :dir="isRTL ? 'rtl' : 'ltr'"
         >
             <!-- Header -->
-            <div class="p-6 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
+            <div class="p-6 border-b border-white/10 flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-2xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
+                    <div class="w-10 h-10 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center">
                         <Sparkles class="w-5 h-5" />
                     </div>
                     <div>
-                        <h3 class="text-lg font-black tracking-tight">
-                            {{ isRTL ? 'إدارة البيانات وتغيير الغلاف (Fix Match)' : 'Fix Match & Metadata Studio' }}
+                        <h3 class="text-lg font-black tracking-tight text-white">
+                            {{ isRTL ? 'مطابقة وتعديل البيانات والغلاف' : 'Fix Match & Metadata Studio' }}
                         </h3>
-                        <p class="text-xs text-slate-500 dark:text-slate-400 truncate max-w-sm">
+                        <p class="text-xs text-slate-400 truncate max-w-sm">
                             {{ item?.title }}
                         </p>
                     </div>
                 </div>
                 <button
-                    @click="emit('close')"
-                    class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 flex items-center justify-center text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+                    type="button"
+                    @click.stop="closeModal"
+                    class="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 transition-colors cursor-pointer"
                 >
                     <X class="w-4 h-4" />
                 </button>
             </div>
 
             <!-- Tab Switcher -->
-            <div class="px-6 pt-4 flex gap-2 border-b border-slate-200 dark:border-white/10">
+            <div class="px-6 pt-4 flex gap-2 border-b border-white/10">
                 <button
+                    type="button"
                     @click="activeTab = 'search'"
                     class="pb-3 px-4 text-xs font-bold transition-all relative cursor-pointer"
-                    :class="activeTab === 'search' ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
+                    :class="activeTab === 'search' ? 'text-cyan-400' : 'text-slate-400 hover:text-slate-200'"
                 >
                     <span class="flex items-center gap-1.5">
                         <Search class="w-3.5 h-3.5" />
-                        <span>{{ isRTL ? 'البحث التلقائي (TMDb / TVMaze)' : 'Search Online Providers' }}</span>
+                        <span>{{ isRTL ? 'بحث إلكتروني (TMDb / TVMaze)' : 'Search Online Providers' }}</span>
                     </span>
                     <span v-if="activeTab === 'search'" class="absolute bottom-0 inset-x-0 h-0.5 bg-cyan-500 rounded-full"></span>
                 </button>
                 <button
+                    type="button"
                     @click="activeTab = 'manual'"
                     class="pb-3 px-4 text-xs font-bold transition-all relative cursor-pointer"
-                    :class="activeTab === 'manual' ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
+                    :class="activeTab === 'manual' ? 'text-cyan-400' : 'text-slate-400 hover:text-slate-200'"
                 >
                     <span class="flex items-center gap-1.5">
                         <SlidersHorizontal class="w-3.5 h-3.5" />
-                        <span>{{ isRTL ? 'التعديل اليدوي الكامل' : 'Manual Field Editor' }}</span>
+                        <span>{{ isRTL ? 'تعديل الحقول يدوياً' : 'Manual Field Editor' }}</span>
                     </span>
                     <span v-if="activeTab === 'manual'" class="absolute bottom-0 inset-x-0 h-0.5 bg-cyan-500 rounded-full"></span>
                 </button>
             </div>
 
-            <!-- Success Alert -->
-            <div v-if="successMessage" class="m-6 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-2">
-                <Check class="w-4 h-4 shrink-0" />
-                <span>{{ successMessage }}</span>
-            </div>
+            <!-- Modal Content Body -->
+            <div class="p-6 overflow-y-auto space-y-6 max-h-[60vh]">
+                <!-- Success Notice -->
+                <div v-if="successMessage" class="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-2">
+                    <Check class="w-4 h-4 shrink-0" />
+                    <span>{{ successMessage }}</span>
+                </div>
 
-            <!-- Error Alert -->
-            <div v-if="searchError" class="m-6 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center gap-2">
-                <AlertCircle class="w-4 h-4 shrink-0" />
-                <span>{{ searchError }}</span>
-            </div>
+                <!-- Error Notice -->
+                <div v-if="searchError" class="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold flex items-center gap-2">
+                    <AlertCircle class="w-4 h-4 shrink-0" />
+                    <span>{{ searchError }}</span>
+                </div>
 
-            <!-- Body -->
-            <div class="flex-1 overflow-y-auto p-6 space-y-6">
-                <!-- TAB 1: Search Online -->
+                <!-- 1. Search Online Tab -->
                 <div v-if="activeTab === 'search'" class="space-y-4">
                     <form @submit.prevent="performSearch" class="flex gap-2">
                         <div class="relative flex-1">
                             <input
                                 v-model="searchQuery"
                                 type="text"
-                                :placeholder="isRTL ? 'اسم الفيلم أو المسلسل...' : 'Movie or TV Series Title...'"
-                                class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-slate-900/50 text-sm focus:outline-none focus:border-cyan-500"
+                                :placeholder="isRTL ? 'عنوان الفيلم أو المسلسل...' : 'Movie or show title...'"
+                                class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                             />
                             <Search class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         </div>
@@ -260,12 +284,12 @@ const saveManualEdit = async () => {
                             v-model="searchYear"
                             type="text"
                             placeholder="Year"
-                            class="w-24 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-slate-900/50 text-sm text-center focus:outline-none focus:border-cyan-500"
+                            class="w-24 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white text-center placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                         />
                         <button
                             type="submit"
                             :disabled="isSearching"
-                            class="btn-cinema bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
+                            class="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
                         >
                             <RefreshCw v-if="isSearching" class="w-3.5 h-3.5 animate-spin" />
                             <Search v-else class="w-3.5 h-3.5" />
@@ -273,122 +297,125 @@ const saveManualEdit = async () => {
                         </button>
                     </form>
 
-                    <!-- Results List -->
-                    <div v-if="searchResults.length > 0" class="space-y-3 pt-2">
+                    <!-- Search Results Cards -->
+                    <div v-if="searchResults.length > 0" class="space-y-2.5 pt-2">
                         <div
                             v-for="res in searchResults"
-                            :key="res.id || res.tmdb_id"
-                            class="p-3.5 rounded-2xl glass-panel border border-slate-200 dark:border-white/10 hover:border-cyan-500/50 transition-all flex gap-4 items-center justify-between group"
+                            :key="res.id"
+                            class="p-3.5 rounded-2xl bg-white/5 border border-white/10 hover:border-cyan-500/50 transition-all flex items-center justify-between gap-4 group"
                         >
                             <div class="flex items-center gap-3.5 min-w-0">
                                 <img
                                     :src="res.poster_path || '/placeholder.jpg'"
                                     :alt="res.title"
-                                    class="w-12 h-16 rounded-xl object-cover bg-slate-800 shrink-0 border border-slate-200 dark:border-white/10"
+                                    class="w-12 h-16 rounded-xl object-cover bg-slate-900 border border-white/10 shrink-0 shadow-md"
                                 />
-                                <div class="min-w-0">
-                                    <div class="flex items-center gap-2">
-                                        <h4 class="font-bold text-sm truncate">{{ res.title }}</h4>
-                                        <span v-if="res.year" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400">
+                                <div class="min-w-0 space-y-1">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="cinema-badge bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[10px]">
+                                            {{ res.provider?.toUpperCase() || 'TMDB' }}
+                                        </span>
+                                        <span v-if="res.year" class="cinema-badge bg-white/10 text-slate-300 border-white/10 text-[10px]">
                                             {{ res.year }}
                                         </span>
+                                        <span v-if="res.rating" class="cinema-badge bg-amber-500/20 text-amber-300 border-amber-500/30 text-[10px] flex items-center gap-0.5">
+                                            <Star class="w-3 h-3 fill-current" />
+                                            {{ res.rating }}
+                                        </span>
                                     </div>
-                                    <p class="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mt-0.5 leading-relaxed">
-                                        {{ res.overview || 'No overview available.' }}
-                                    </p>
-                                    <div class="flex items-center gap-2 mt-1 text-[10px] text-cyan-600 dark:text-cyan-400 font-mono">
-                                        <span>Provider: {{ res.provider?.toUpperCase() || 'TMDB' }}</span>
-                                        <span v-if="res.rating">★ {{ res.rating }}</span>
-                                    </div>
+                                    <h4 class="font-bold text-xs text-white truncate max-w-sm">{{ res.title }}</h4>
+                                    <p class="text-[11px] text-slate-400 line-clamp-1 max-w-md">{{ res.overview || 'No overview provided.' }}</p>
                                 </div>
                             </div>
 
                             <button
+                                type="button"
                                 @click="applyMatch(res)"
                                 :disabled="isSaving"
-                                class="btn-cinema bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-4 py-2 rounded-xl text-xs font-bold shrink-0 cursor-pointer shadow-sm hover:scale-105 transition-transform"
+                                class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shrink-0 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-md shadow-cyan-500/20"
                             >
                                 <Check class="w-3.5 h-3.5" />
-                                <span>{{ isRTL ? 'اختيار ومطابقة' : 'Apply Match' }}</span>
+                                <span>{{ isRTL ? 'تطبيق هذا المطابقة' : 'Apply Match' }}</span>
                             </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- TAB 2: Manual Field Editor -->
+                <!-- 2. Manual Field Editor Tab -->
                 <div v-else class="space-y-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div class="space-y-1">
-                            <label class="text-xs font-bold text-slate-600 dark:text-slate-400">{{ isRTL ? 'العنوان الرئيسي (English)' : 'Title (English)' }}</label>
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-bold text-slate-400">{{ isRTL ? 'العنوان الأصلي (English)' : 'Title (English)' }}</label>
                             <input
                                 v-model="form.title"
                                 type="text"
-                                class="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-slate-900/50 text-sm focus:outline-none focus:border-cyan-500"
+                                class="w-full px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500"
                             />
                         </div>
-                        <div class="space-y-1">
-                            <label class="text-xs font-bold text-slate-600 dark:text-slate-400">{{ isRTL ? 'العنوان بالعربية' : 'Arabic Title' }}</label>
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-bold text-slate-400">{{ isRTL ? 'العنوان العربي (Arabic Title)' : 'Arabic Title' }}</label>
                             <input
                                 v-model="form.title_ar"
                                 type="text"
-                                class="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-slate-900/50 text-sm focus:outline-none focus:border-cyan-500"
+                                class="w-full px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500"
                             />
                         </div>
                     </div>
 
                     <div class="grid grid-cols-2 gap-4">
-                        <div class="space-y-1">
-                            <label class="text-xs font-bold text-slate-600 dark:text-slate-400">{{ isRTL ? 'سنة الإصدار' : 'Release Year' }}</label>
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-bold text-slate-400">{{ isRTL ? 'سنة الإنتاج' : 'Release Year' }}</label>
                             <input
                                 v-model="form.release_year"
                                 type="number"
-                                class="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-slate-900/50 text-sm focus:outline-none focus:border-cyan-500"
+                                class="w-full px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500"
                             />
                         </div>
-                        <div class="space-y-1">
-                            <label class="text-xs font-bold text-slate-600 dark:text-slate-400">{{ isRTL ? 'التقييم (من 10)' : 'Rating (out of 10)' }}</label>
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-bold text-slate-400">{{ isRTL ? 'التقييم (1-10)' : 'Rating (1-10)' }}</label>
                             <input
                                 v-model="form.rating"
-                                type="text"
-                                class="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-slate-900/50 text-sm focus:outline-none focus:border-cyan-500"
+                                type="number"
+                                step="0.1"
+                                class="w-full px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500"
                             />
                         </div>
                     </div>
 
-                    <div class="space-y-1">
-                        <label class="text-xs font-bold text-slate-600 dark:text-slate-400">{{ isRTL ? 'رابط أو مسار صورة البوستر (Poster Image URL)' : 'Poster Image URL / Path' }}</label>
+                    <div class="space-y-1.5">
+                        <label class="text-[11px] font-bold text-slate-400">{{ isRTL ? 'رابط البوستر (Poster Image URL)' : 'Poster Image URL' }}</label>
                         <input
                             v-model="form.poster_path"
                             type="text"
-                            placeholder="https://... or /storage/posters/..."
-                            class="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-slate-900/50 text-sm focus:outline-none focus:border-cyan-500"
+                            placeholder="https://image.tmdb.org/t/p/original/... or /storage/posters/..."
+                            class="w-full px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500"
                         />
                     </div>
 
-                    <div class="space-y-1">
-                        <label class="text-xs font-bold text-slate-600 dark:text-slate-400">{{ isRTL ? 'رابط أو مسار خلفية العرض (Backdrop Image URL)' : 'Backdrop Image URL / Path' }}</label>
-                        <input
-                            v-model="form.backdrop_path"
-                            type="text"
-                            placeholder="https://... or /storage/backdrops/..."
-                            class="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-slate-900/50 text-sm focus:outline-none focus:border-cyan-500"
-                        />
-                    </div>
-
-                    <div class="space-y-1">
-                        <label class="text-xs font-bold text-slate-600 dark:text-slate-400">{{ isRTL ? 'نبذة عن القصة (Overview)' : 'Overview / Synopsis' }}</label>
+                    <div class="space-y-1.5">
+                        <label class="text-[11px] font-bold text-slate-400">{{ isRTL ? 'النبذة والقصة (English)' : 'Overview (English)' }}</label>
                         <textarea
                             v-model="form.overview"
-                            rows="3"
-                            class="w-full p-3 rounded-xl border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-slate-900/50 text-sm focus:outline-none focus:border-cyan-500"
+                            rows="2"
+                            class="w-full px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500"
                         ></textarea>
                     </div>
 
-                    <div class="flex justify-end pt-2">
+                    <div class="space-y-1.5">
+                        <label class="text-[11px] font-bold text-slate-400">{{ isRTL ? 'النبذة والقصة بالعربية' : 'Overview (Arabic)' }}</label>
+                        <textarea
+                            v-model="form.overview_ar"
+                            rows="2"
+                            class="w-full px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500"
+                        ></textarea>
+                    </div>
+
+                    <div class="pt-2 flex justify-end">
                         <button
+                            type="button"
                             @click="saveManualEdit"
                             :disabled="isSaving"
-                            class="btn-cinema bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-6 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg shadow-cyan-500/20"
+                            class="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-2 active:scale-95 transition-all cursor-pointer shadow-lg shadow-cyan-500/20"
                         >
                             <Save class="w-4 h-4" />
                             <span>{{ isRTL ? 'حفظ التعديلات' : 'Save Changes' }}</span>

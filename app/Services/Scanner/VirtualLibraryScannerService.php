@@ -9,7 +9,9 @@ use App\Models\MediaItem;
 use App\Models\Season;
 use App\Models\Series;
 use App\Models\Subtitle;
+use App\Services\Metadata\ArtworkDownloadService;
 use App\Services\Metadata\MetadataAggregator;
+use App\Services\Metadata\WebArtworkSearchService;
 use App\Services\Organizer\FilesystemScannerService;
 use App\Services\Organizer\SceneNameParserService;
 use Illuminate\Support\Facades\Cache;
@@ -21,15 +23,21 @@ class VirtualLibraryScannerService
     protected SceneNameParserService $parser;
     protected FilesystemScannerService $fsScanner;
     protected MetadataAggregator $metadata;
+    protected WebArtworkSearchService $webArtwork;
+    protected ArtworkDownloadService $artwork;
 
     public function __construct(
         SceneNameParserService $parser,
         FilesystemScannerService $fsScanner,
-        MetadataAggregator $metadata
+        MetadataAggregator $metadata,
+        WebArtworkSearchService $webArtwork,
+        ArtworkDownloadService $artwork
     ) {
         $this->parser = $parser;
         $this->fsScanner = $fsScanner;
         $this->metadata = $metadata;
+        $this->webArtwork = $webArtwork;
+        $this->artwork = $artwork;
     }
 
     public function getScanStatus(): array
@@ -63,7 +71,6 @@ class VirtualLibraryScannerService
             'level' => $level,
             'message' => $message,
         ];
-        // Keep last 150 log lines
         $this->updateScanStatus(['logs' => array_slice($logs, -150)]);
     }
 
@@ -161,7 +168,7 @@ class VirtualLibraryScannerService
         ]);
     }
 
-    public function processNextBatch(int $batchSize = 3): array
+    public function processNextBatch(int $batchSize = 4): array
     {
         $status = $this->getScanStatus();
 
@@ -258,7 +265,14 @@ class VirtualLibraryScannerService
         $year = $parsed['year'] ?? null;
 
         $meta = $this->metadata->aggregateMovieMetadata($cleanTitle, $year);
-        $posterUrl = $file['local_poster'] ?? ($meta['poster_path'] ?? null);
+
+        // Check poster precedence: 1. Discovered in metadata chain, 2. Local folder poster, 3. Web artwork fallback
+        $posterUrl = $meta['poster_path'] ?? ($file['local_poster'] ?? null);
+        if (empty($posterUrl)) {
+            $posterUrl = $this->webArtwork->searchAndDownloadArtwork($cleanTitle, $year, 'movie');
+        }
+
+        $backdropUrl = $meta['backdrop_path'] ?? ($file['local_backdrop'] ?? null);
 
         $movie = MediaItem::updateOrCreate(
             ['file_path' => $file['path']],
@@ -272,7 +286,7 @@ class VirtualLibraryScannerService
                 'overview' => $meta['overview'] ?? "Enjoy watching {$cleanTitle}.",
                 'overview_ar' => $meta['overview_ar'] ?? null,
                 'poster_path' => $posterUrl,
-                'backdrop_path' => $meta['backdrop_path'] ?? null,
+                'backdrop_path' => $backdropUrl,
                 'trailer_url' => $meta['trailer_url'] ?? null,
                 'rating' => $meta['rating'] ?? 7.5,
                 'runtime_minutes' => $meta['runtime_minutes'] ?? 115,
@@ -347,12 +361,19 @@ class VirtualLibraryScannerService
         // Enrich Series metadata if missing poster/overview
         if (!$series->poster_path || !$series->overview || $series->overview === "Experience the complete series of {$showTitle}.") {
             $meta = $this->metadata->aggregateSeriesMetadata($showTitle, $parsed['year'] ?? null);
+            $posterUrl = $meta['poster_path'] ?? ($file['local_poster'] ?? null);
+            if (empty($posterUrl)) {
+                $posterUrl = $this->webArtwork->searchAndDownloadArtwork($showTitle, $parsed['year'] ?? null, 'series');
+            }
+
+            $backdropUrl = $meta['backdrop_path'] ?? ($file['local_backdrop'] ?? null);
+
             $series->update([
                 'title_ar' => $meta['title_ar'] ?? $series->title_ar,
                 'overview' => $meta['overview'] ?? $series->overview,
                 'overview_ar' => $meta['overview_ar'] ?? $series->overview_ar,
-                'poster_path' => $file['local_poster'] ?? ($meta['poster_path'] ?? $series->poster_path),
-                'backdrop_path' => $meta['backdrop_path'] ?? $series->backdrop_path,
+                'poster_path' => $posterUrl ?? $series->poster_path,
+                'backdrop_path' => $backdropUrl ?? $series->backdrop_path,
                 'rating' => $meta['rating'] ?? $series->rating,
                 'release_year' => $meta['year'] ?? $series->release_year,
             ]);
@@ -434,7 +455,7 @@ class VirtualLibraryScannerService
         return $episode;
     }
 
-    public function enrichMissingMetadata(int $limit = 20): array
+    public function enrichMissingMetadata(int $limit = 25): array
     {
         $moviesEnriched = 0;
         $seriesEnriched = 0;
@@ -447,9 +468,14 @@ class VirtualLibraryScannerService
 
         foreach ($movies as $m) {
             $meta = $this->metadata->aggregateMovieMetadata($m->title, $m->release_year);
-            if (!empty($meta['poster_path']) || !empty($meta['overview'])) {
+            $poster = $meta['poster_path'] ?? null;
+            if (empty($poster)) {
+                $poster = $this->webArtwork->searchAndDownloadArtwork($m->title, $m->release_year, 'movie');
+            }
+
+            if (!empty($poster) || !empty($meta['overview'])) {
                 $m->update([
-                    'poster_path' => $meta['poster_path'] ?? $m->poster_path,
+                    'poster_path' => $poster ?? $m->poster_path,
                     'backdrop_path' => $meta['backdrop_path'] ?? $m->backdrop_path,
                     'overview' => $meta['overview'] ?? $m->overview,
                     'overview_ar' => $meta['overview_ar'] ?? $m->overview_ar,
@@ -468,9 +494,14 @@ class VirtualLibraryScannerService
 
         foreach ($seriesList as $s) {
             $meta = $this->metadata->aggregateSeriesMetadata($s->title, $s->release_year);
-            if (!empty($meta['poster_path']) || !empty($meta['overview'])) {
+            $poster = $meta['poster_path'] ?? null;
+            if (empty($poster)) {
+                $poster = $this->webArtwork->searchAndDownloadArtwork($s->title, $s->release_year, 'series');
+            }
+
+            if (!empty($poster) || !empty($meta['overview'])) {
                 $s->update([
-                    'poster_path' => $meta['poster_path'] ?? $s->poster_path,
+                    'poster_path' => $poster ?? $s->poster_path,
                     'backdrop_path' => $meta['backdrop_path'] ?? $s->backdrop_path,
                     'overview' => $meta['overview'] ?? $s->overview,
                     'overview_ar' => $meta['overview_ar'] ?? $s->overview_ar,

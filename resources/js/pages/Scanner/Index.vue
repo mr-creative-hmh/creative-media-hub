@@ -1,194 +1,60 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import {
-    ScanLine, FolderPlus, Play, Pause, Square, Trash2,
-    CheckCircle2, AlertTriangle, RefreshCw, Film, Tv,
-    HardDrive, Layers, ArrowRight, ArrowLeft, Terminal,
-    Sparkles, Image, Check, ChevronRight, X
+    ScanLine, FolderPlus, Play, Pause, XCircle, RotateCcw,
+    CheckCircle2, AlertCircle, FileVideo, HardDrive, Terminal,
+    Layers, Cpu, RefreshCw, Trash2, Folder, Film, Tv, Sparkles,
+    Check, Filter, Clock, Info, ShieldAlert, ArrowRight, Image as ImageIcon
 } from 'lucide-vue-next';
 
 const props = defineProps<{
-    directories: Array<{
-        id: string;
-        path: string;
-        type: 'movies' | 'series' | 'mixed';
-        auto_scan: boolean;
-    }>;
-    initialScanStatus: any;
+    directories: Array<{ path: string; type: string; count?: number }>;
+    scanStatus: any;
     stats: {
         total_movies: number;
         total_series: number;
         total_episodes: number;
+        total_subtitles: number;
+        storage_size_formatted: string;
     };
 }>();
 
 const { t, isRTL } = useI18n();
 
 const monitoredDirs = ref([...props.directories]);
-const scanStatus = ref({ ...props.initialScanStatus });
-const isProcessing = ref(false);
-let isLoopRunning = false;
+const newDirPath = ref('');
+const newDirType = ref('mixed');
+const isAddingDir = ref(false);
 
-// Terminal Log auto-scroll
-const terminalRef = ref<HTMLDivElement | null>(null);
-
-// New folder modal state
-const showAddModal = ref(false);
-const newPath = ref('C:/Media/Movies');
-const newType = ref<'movies' | 'series' | 'mixed'>('movies');
-
-// Batch Enrich state
-const isEnriching = ref(false);
-const enrichMessage = ref('');
-
-const scrollToBottom = () => {
-    nextTick(() => {
-        if (terminalRef.value) {
-            terminalRef.value.scrollTop = terminalRef.value.scrollHeight;
-        }
-    });
-};
-
-watch(() => scanStatus.value?.logs?.length, () => {
-    scrollToBottom();
+const isScanning = ref(props.scanStatus?.status === 'running');
+const scanJob = ref(props.scanStatus || {
+    status: 'idle',
+    progress_percent: 0,
+    total_files: 0,
+    processed_files: 0,
+    current_file: '',
+    scanned_items: [],
+    logs: [],
 });
 
-const runBatchLoop = async () => {
-    if (isLoopRunning) return;
-    isLoopRunning = true;
-    isProcessing.value = true;
+const isBatchEnriching = ref(false);
+const toastMessage = ref('');
+const terminalFilter = ref<'all' | 'success' | 'info' | 'error'>('all');
 
-    try {
-        while (isLoopRunning && scanStatus.value.status === 'running') {
-            const res = await fetch('/api/scanner/process-batch', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
-                },
-            });
+let pollTimer: any = null;
 
-            if (res.ok) {
-                const data = await res.json();
-                scanStatus.value = data.status;
-                if (!data.has_more || scanStatus.value.status !== 'running') {
-                    break;
-                }
-            } else {
-                break;
-            }
-            await new Promise((r) => setTimeout(r, 120));
-        }
-    } finally {
-        isLoopRunning = false;
-        isProcessing.value = false;
-    }
-};
+const filteredLogs = computed(() => {
+    const logs = scanJob.value.logs || [];
+    if (terminalFilter.value === 'all') return logs;
+    return logs.filter((l: any) => l.level === terminalFilter.value);
+});
 
-const handleStartScan = async () => {
-    try {
-        scanStatus.value.status = 'running';
-        const res = await fetch('/api/scanner/start', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
-            },
-            body: JSON.stringify({ directories: monitoredDirs.value }),
-        });
-
-        if (res.ok) {
-            const data = await res.json();
-            scanStatus.value = data.status;
-            if (scanStatus.value.status === 'running' && (scanStatus.value.total_files > 0)) {
-                runBatchLoop();
-            }
-        }
-    } catch (e) {
-        scanStatus.value.status = 'idle';
-    }
-};
-
-const handleScanSingleFolder = async (dir: any) => {
-    try {
-        scanStatus.value.status = 'running';
-        const res = await fetch('/api/scanner/scan-folder', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
-            },
-            body: JSON.stringify({ path: dir.path, type: dir.type }),
-        });
-
-        if (res.ok) {
-            const data = await res.json();
-            scanStatus.value = data.status;
-            if (scanStatus.value.status === 'running' && (scanStatus.value.total_files > 0)) {
-                runBatchLoop();
-            }
-        }
-    } catch (e) {
-        scanStatus.value.status = 'idle';
-    }
-};
-
-const handleEnrichMissing = async () => {
-    isEnriching.value = true;
-    enrichMessage.value = '';
-
-    try {
-        const res = await fetch('/api/library/enrich-missing', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
-            },
-        });
-
-        if (res.ok) {
-            const data = await res.json();
-            enrichMessage.value = isRTL.value
-                ? `تم تحديث وتحميل بيانات وبوسترات ${data.result?.total || 0} عنصر بنجاح!`
-                : `Successfully enriched ${data.result?.total || 0} items with posters & metadata!`;
-        }
-    } finally {
-        isEnriching.value = false;
-    }
-};
-
-const handlePauseScan = async () => {
-    isLoopRunning = false;
-    await fetch('/api/scanner/pause', {
-        method: 'POST',
-        headers: { 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '' }
-    });
-    scanStatus.value.status = 'paused';
-};
-
-const handleResumeScan = async () => {
-    await fetch('/api/scanner/resume', {
-        method: 'POST',
-        headers: { 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '' }
-    });
-    scanStatus.value.status = 'running';
-    runBatchLoop();
-};
-
-const handleCancelScan = async () => {
-    isLoopRunning = false;
-    await fetch('/api/scanner/cancel', {
-        method: 'POST',
-        headers: { 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '' }
-    });
-    scanStatus.value.status = 'cancelled';
-};
-
-const handleAddDirectory = async () => {
-    if (!newPath.value) return;
+const addDirectory = async () => {
+    if (!newDirPath.value.trim()) return;
+    isAddingDir.value = true;
     try {
         const res = await fetch('/api/scanner/directories', {
             method: 'POST',
@@ -197,363 +63,516 @@ const handleAddDirectory = async () => {
                 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
             },
             body: JSON.stringify({
-                path: newPath.value,
-                type: newType.value,
+                path: newDirPath.value.trim(),
+                type: newDirType.value,
             }),
         });
 
         if (res.ok) {
             const data = await res.json();
             monitoredDirs.value = data.directories;
-            showAddModal.value = false;
+            newDirPath.value = '';
+            toastMessage.value = isRTL.value ? 'تم إضافة المجلد بنجاح!' : 'Directory added successfully!';
         }
     } finally {
-        showAddModal.value = false;
+        isAddingDir.value = false;
     }
 };
 
-const handleRemoveDirectory = async (id: string) => {
-    const res = await fetch('/api/scanner/directories', {
-        method: 'DELETE',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
-        },
-        body: JSON.stringify({ id }),
-    });
+const removeDirectory = async (index: number) => {
+    try {
+        const res = await fetch(`/api/scanner/directories/${index}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+        });
+        if (res.ok) {
+            const data = await res.json();
+            monitoredDirs.value = data.directories;
+        }
+    } catch (e) {}
+};
 
-    if (res.ok) {
+const startScan = async () => {
+    isScanning.value = true;
+    try {
+        const res = await fetch('/api/scanner/start', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+            body: JSON.stringify({
+                directories: monitoredDirs.value,
+            }),
+        });
         const data = await res.json();
-        monitoredDirs.value = data.directories;
+        scanJob.value = data.status;
+        startBatchWorkerLoop();
+    } catch (e) {
+        isScanning.value = false;
+    }
+};
+
+const scanSingleFolder = async (dir: { path: string; type: string }) => {
+    isScanning.value = true;
+    try {
+        const res = await fetch('/api/scanner/scan-folder', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+            body: JSON.stringify({
+                path: dir.path,
+                type: dir.type,
+            }),
+        });
+        const data = await res.json();
+        scanJob.value = data.status;
+        startBatchWorkerLoop();
+    } catch (e) {
+        isScanning.value = false;
+    }
+};
+
+const startBatchWorkerLoop = async () => {
+    while (isScanning.value) {
+        try {
+            const res = await fetch('/api/scanner/process-batch', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                },
+                body: JSON.stringify({ batch_size: 4 }),
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                scanJob.value = data.status;
+
+                // Auto-scroll terminal
+                const term = document.getElementById('terminal-feed');
+                if (term) term.scrollTop = term.scrollHeight;
+
+                if (!data.has_more || data.status.status === 'completed' || data.status.status === 'cancelled') {
+                    isScanning.value = false;
+                    break;
+                }
+            } else {
+                break;
+            }
+        } catch (e) {
+            break;
+        }
+        await new Promise((r) => setTimeout(r, 400));
+    }
+};
+
+const pauseScan = async () => {
+    await fetch('/api/scanner/pause', { method: 'POST', headers: { 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '' } });
+    scanJob.value.status = 'paused';
+    isScanning.value = false;
+};
+
+const resumeScan = async () => {
+    await fetch('/api/scanner/resume', { method: 'POST', headers: { 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '' } });
+    scanJob.value.status = 'running';
+    isScanning.value = true;
+    startBatchWorkerLoop();
+};
+
+const cancelScan = async () => {
+    await fetch('/api/scanner/cancel', { method: 'POST', headers: { 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '' } });
+    scanJob.value.status = 'cancelled';
+    isScanning.value = false;
+};
+
+const enrichMissingPosters = async () => {
+    isBatchEnriching.value = true;
+    try {
+        const res = await fetch('/api/library/enrich-missing', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+        });
+        if (res.ok) {
+            const data = await res.json();
+            toastMessage.value = isRTL.value
+                ? `تم تحديث وتحميل بيانات ${data.result?.total || 0} عنصر بنجاح!`
+                : `Successfully downloaded posters & metadata for ${data.result?.total || 0} items!`;
+            setTimeout(() => { router.reload(); }, 1200);
+        }
+    } finally {
+        isBatchEnriching.value = false;
     }
 };
 
 onMounted(() => {
-    if (scanStatus.value.status === 'running') {
-        runBatchLoop();
+    if (scanJob.value.status === 'running') {
+        isScanning.value = true;
+        startBatchWorkerLoop();
     }
-    scrollToBottom();
 });
 
 onUnmounted(() => {
-    isLoopRunning = false;
+    if (pollTimer) clearInterval(pollTimer);
 });
 </script>
 
 <template>
-    <Head :title="t('scanner.title')" />
+    <Head :title="t('scanner_view.title')" />
 
     <AppLayout v-slot="{ play }">
         <!-- Header -->
         <div class="mb-8">
             <div class="flex items-center justify-between flex-wrap gap-4">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-2xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 flex items-center justify-center">
+                    <div class="w-10 h-10 rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 flex items-center justify-center">
                         <ScanLine class="w-5 h-5" />
                     </div>
                     <div>
-                        <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-                            {{ t('scanner.title') }}
+                        <h1 class="text-2xl sm:text-3xl font-extrabold text-white">
+                            {{ t('scanner_view.title') }}
                         </h1>
-                        <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-0.5">
-                            {{ isRTL ? 'محرك الفهرسة الافتراضية السريع ومطابقة البيانات والترجمات' : 'High-Speed Virtual Library Scanner & Metadata Engine' }}
+                        <p class="text-xs sm:text-sm text-slate-400 mt-0.5">
+                            {{ t('scanner_view.subtitle') }}
                         </p>
                     </div>
                 </div>
 
-                <!-- Header Actions -->
-                <div class="flex items-center gap-3 flex-wrap">
+                <div class="flex items-center gap-3">
                     <button
-                        @click="handleEnrichMissing"
-                        :disabled="isEnriching"
-                        class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-white/10 transition-all cursor-pointer shadow-sm"
-                        title="Search and download missing posters and overviews"
+                        @click="enrichMissingPosters"
+                        :disabled="isBatchEnriching"
+                        class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-xs font-bold transition-all cursor-pointer"
                     >
-                        <RefreshCw v-if="isEnriching" class="w-4 h-4 text-cyan-500 animate-spin" />
-                        <Image v-else class="w-4 h-4 text-cyan-500" />
+                        <RefreshCw v-if="isBatchEnriching" class="w-4 h-4 animate-spin text-cyan-400" />
+                        <ImageIcon v-else class="w-4 h-4 text-cyan-400" />
                         <span>{{ isRTL ? 'جلب الأغلفة الناقصة' : 'Fetch Missing Posters' }}</span>
                     </button>
 
                     <button
-                        @click="showAddModal = true"
-                        class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
+                        v-if="!isScanning && scanJob.status !== 'running'"
+                        @click="startScan"
+                        class="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs shadow-lg shadow-cyan-500/25 active:scale-95 transition-all cursor-pointer"
                     >
-                        <FolderPlus class="w-4 h-4" />
-                        <span>{{ t('scanner.add_directory') }}</span>
+                        <Play class="w-4 h-4 fill-current" />
+                        <span>{{ isRTL ? 'بدء فحص كافة المجلدات' : 'Start Full Library Scan' }}</span>
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- Success Toast for Enrich Missing -->
-        <div v-if="enrichMessage" class="mb-6 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center justify-between">
+        <!-- Toast Notice -->
+        <div v-if="toastMessage" class="mb-6 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-between">
             <div class="flex items-center gap-2">
                 <CheckCircle2 class="w-4 h-4 shrink-0" />
-                <span>{{ enrichMessage }}</span>
+                <span>{{ toastMessage }}</span>
             </div>
-            <button @click="enrichMessage = ''" class="cursor-pointer text-emerald-400 hover:text-emerald-300">
-                <X class="w-4 h-4" />
+            <button @click="toastMessage = ''" class="cursor-pointer text-emerald-400 hover:text-emerald-300">
+                <XCircle class="w-4 h-4" />
             </button>
         </div>
 
-        <!-- 1. Background Scanner Status & Live Control Center -->
-        <div class="glass-panel rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-white/10 mb-8 space-y-6 shadow-sm">
-            <div class="flex items-center justify-between flex-wrap gap-4">
+        <!-- 1. Stats Row (Creative-FileFlow Architecture) -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+            <div class="glass-panel p-4 rounded-2xl border border-white/10">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ isRTL ? 'الأفلام المفهرسة' : 'Indexed Movies' }}</span>
+                    <Film class="w-4 h-4 text-cyan-400" />
+                </div>
+                <div class="text-2xl font-black text-white mt-2">{{ stats.total_movies }}</div>
+            </div>
+
+            <div class="glass-panel p-4 rounded-2xl border border-white/10">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ isRTL ? 'المسلسلات' : 'TV Series' }}</span>
+                    <Tv class="w-4 h-4 text-indigo-400" />
+                </div>
+                <div class="text-2xl font-black text-white mt-2">{{ stats.total_series }}</div>
+            </div>
+
+            <div class="glass-panel p-4 rounded-2xl border border-white/10">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ isRTL ? 'الحلقات المكتشفة' : 'Total Episodes' }}</span>
+                    <FileVideo class="w-4 h-4 text-emerald-400" />
+                </div>
+                <div class="text-2xl font-black text-white mt-2">{{ stats.total_episodes }}</div>
+            </div>
+
+            <div class="glass-panel p-4 rounded-2xl border border-white/10">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ isRTL ? 'الحجم الكلي' : 'Indexed Size' }}</span>
+                    <HardDrive class="w-4 h-4 text-amber-400" />
+                </div>
+                <div class="text-2xl font-black text-white mt-2">{{ stats.storage_size_formatted || '0 GB' }}</div>
+            </div>
+        </div>
+
+        <!-- 2. Active Scan Progress & Control Bar -->
+        <div v-if="isScanning || scanJob.status === 'running' || scanJob.status === 'paused'" class="glass-panel rounded-3xl p-6 border border-cyan-500/30 mb-8 space-y-4 shadow-lg shadow-cyan-500/5 relative overflow-hidden">
+            <div class="ambient-glow bg-cyan-500/20 w-80 h-80 -top-20 -right-20 pointer-events-none"></div>
+
+            <div class="flex items-center justify-between flex-wrap gap-4 relative z-10">
                 <div class="flex items-center gap-3">
-                    <span class="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                        {{ t('scanner.job_status') }}:
-                    </span>
-                    <span
-                        v-if="scanStatus.status === 'running'"
-                        class="cinema-badge bg-cyan-500/20 text-cyan-600 dark:text-cyan-300 border border-cyan-500/40 animate-pulse"
-                    >
-                        <RefreshCw class="w-3.5 h-3.5 animate-spin" />
-                        {{ t('scanner.status_running') }}
-                    </span>
-                    <span
-                        v-else-if="scanStatus.status === 'paused'"
-                        class="cinema-badge bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40"
-                    >
-                        <Pause class="w-3.5 h-3.5" />
-                        {{ t('scanner.status_paused') }}
-                    </span>
-                    <span
-                        v-else-if="scanStatus.status === 'completed'"
-                        class="cinema-badge bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40"
-                    >
-                        <CheckCircle2 class="w-3.5 h-3.5" />
-                        {{ t('scanner.status_completed') }}
-                    </span>
-                    <span
-                        v-else
-                        class="cinema-badge bg-slate-500/20 text-slate-600 dark:text-slate-400 border border-slate-500/40"
-                    >
-                        {{ t('scanner.status_idle') }}
-                    </span>
+                    <div class="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+                        <RefreshCw class="w-5 h-5 animate-spin" />
+                    </div>
+                    <div>
+                        <h3 class="font-extrabold text-sm text-white flex items-center gap-2">
+                            <span>{{ isRTL ? 'جاري فهرسة المكتبة وتحميل الأغلفة...' : 'Virtual Scanner Active & Indexing...' }}</span>
+                            <span class="cinema-badge bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[10px]">
+                                {{ scanJob.processed_files }} / {{ scanJob.total_files }}
+                            </span>
+                        </h3>
+                        <p class="text-xs text-slate-400 truncate max-w-lg mt-0.5">
+                            {{ scanJob.current_file || (isRTL ? 'جاري قراءة الملفات...' : 'Processing media streams...') }}
+                        </p>
+                    </div>
                 </div>
 
-                <!-- Action Controls: Start / Pause / Resume / Cancel -->
-                <div class="flex items-center gap-3">
+                <!-- Control Buttons -->
+                <div class="flex items-center gap-2">
                     <button
-                        v-if="scanStatus.status === 'idle' || scanStatus.status === 'completed' || scanStatus.status === 'cancelled'"
-                        @click="handleStartScan"
-                        class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs shadow-md shadow-cyan-500/30 active:scale-95 transition-all cursor-pointer"
-                    >
-                        <Play class="w-3.5 h-3.5 fill-current" />
-                        <span>{{ isRTL ? 'فهرسة كافة المجلدات' : 'Scan All Folders' }}</span>
-                    </button>
-
-                    <button
-                        v-if="scanStatus.status === 'running'"
-                        @click="handlePauseScan"
-                        class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-600 dark:text-amber-300 border border-amber-500/40 font-bold text-xs active:scale-95 transition-all cursor-pointer"
+                        v-if="scanJob.status === 'running'"
+                        @click="pauseScan"
+                        class="px-3.5 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1.5 cursor-pointer hover:bg-amber-500/30"
                     >
                         <Pause class="w-3.5 h-3.5" />
-                        <span>{{ t('scanner.pause_scan') }}</span>
+                        <span>{{ isRTL ? 'إيقاف مؤقت' : 'Pause' }}</span>
                     </button>
-
                     <button
-                        v-if="scanStatus.status === 'paused'"
-                        @click="handleResumeScan"
-                        class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40 font-bold text-xs active:scale-95 transition-all cursor-pointer"
+                        v-if="scanJob.status === 'paused'"
+                        @click="resumeScan"
+                        class="px-3.5 py-1.5 rounded-xl bg-cyan-500 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer hover:bg-cyan-400"
                     >
                         <Play class="w-3.5 h-3.5 fill-current" />
-                        <span>{{ t('scanner.resume_scan') }}</span>
+                        <span>{{ isRTL ? 'استئناف' : 'Resume' }}</span>
                     </button>
-
                     <button
-                        v-if="scanStatus.status === 'running' || scanStatus.status === 'paused'"
-                        @click="handleCancelScan"
-                        class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-600 dark:text-rose-300 border border-rose-500/40 font-bold text-xs active:scale-95 transition-all cursor-pointer"
+                        @click="cancelScan"
+                        class="px-3.5 py-1.5 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center gap-1.5 cursor-pointer hover:bg-rose-500/30"
                     >
-                        <Square class="w-3.5 h-3.5 fill-current" />
-                        <span>{{ t('scanner.cancel_scan') }}</span>
+                        <XCircle class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'إلغاء' : 'Cancel' }}</span>
                     </button>
                 </div>
             </div>
 
             <!-- Progress Bar -->
-            <div class="space-y-2">
-                <div class="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
-                    <span class="truncate max-w-lg font-mono text-[11px] text-slate-600 dark:text-slate-400">
-                        {{ scanStatus.current_file || (isRTL ? 'جاهز للفهرسة الافتراضية' : 'Ready for virtual indexing') }}
-                    </span>
-                    <span>{{ scanStatus.progress_percent || 0 }}% ({{ scanStatus.processed_files || 0 }}/{{ scanStatus.total_files || 0 }})</span>
-                </div>
-                <div class="w-full h-3 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
+            <div class="space-y-1 relative z-10">
+                <div class="w-full h-3 rounded-full bg-white/5 border border-white/10 overflow-hidden">
                     <div
-                        class="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 rounded-full transition-all duration-300"
-                        :style="{ width: `${scanStatus.progress_percent || 0}%` }"
+                        class="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 transition-all duration-300 relative"
+                        :style="{ width: `${scanJob.progress_percent || 0}%` }"
                     ></div>
                 </div>
-            </div>
-
-            <!-- 3. Live Interactive Terminal Log Feed (Creative-Fileflow Style) -->
-            <div class="space-y-2 pt-2 border-t border-slate-200 dark:border-white/10">
-                <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                        <Terminal class="w-3.5 h-3.5 text-cyan-500" />
-                        <span>{{ isRTL ? 'سجل أحداث الفهرسة المباشر (Live Scanner Logs)' : 'Live Scanner Terminal Logs' }}</span>
-                    </span>
-                    <span class="text-[10px] font-mono text-slate-400">
-                        {{ (scanStatus.logs?.length || 0) }} {{ isRTL ? 'سجلات' : 'entries' }}
-                    </span>
-                </div>
-
-                <div
-                    ref="terminalRef"
-                    class="h-44 bg-slate-950 rounded-2xl p-3.5 font-mono text-[11px] overflow-y-auto border border-slate-800 shadow-inner space-y-1 select-text"
-                >
-                    <div v-if="!scanStatus.logs || scanStatus.logs.length === 0" class="text-slate-500 italic py-4 text-center">
-                        {{ isRTL ? 'السجل فارغ. ابدأ الفهرسة لمشاهدة العمليات المباشرة...' : 'Log is idle. Start a scan to view real-time operations...' }}
-                    </div>
-
-                    <div
-                        v-for="(log, idx) in scanStatus.logs"
-                        :key="`log-${idx}`"
-                        class="flex items-start gap-2 leading-relaxed"
-                    >
-                        <span class="text-slate-500 shrink-0 select-none">[{{ log.time }}]</span>
-                        <span
-                            class="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase shrink-0 select-none"
-                            :class="{
-                                'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30': log.level === 'info',
-                                'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30': log.level === 'success',
-                                'bg-amber-500/20 text-amber-400 border border-amber-500/30': log.level === 'warning',
-                                'bg-rose-500/20 text-rose-400 border border-rose-500/30': log.level === 'error',
-                            }"
-                        >
-                            {{ log.level }}
-                        </span>
-                        <span
-                            class="text-slate-300 break-all"
-                            :class="{
-                                'text-emerald-300 font-bold': log.level === 'success',
-                                'text-rose-300 font-bold': log.level === 'error',
-                                'text-amber-300': log.level === 'warning',
-                            }"
-                        >
-                            {{ log.message }}
-                        </span>
-                    </div>
+                <div class="flex justify-between text-[11px] font-bold text-slate-400">
+                    <span>{{ isRTL ? 'نسبة الإنجاز' : 'Progress' }}: {{ scanJob.progress_percent || 0 }}%</span>
+                    <span>{{ scanJob.processed_files }} / {{ scanJob.total_files }} {{ isRTL ? 'ملف' : 'files' }}</span>
                 </div>
             </div>
         </div>
 
-        <!-- 2. Monitored Media Folders List with Per-Folder Scan -->
-        <div class="glass-panel rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-white/10 mb-8 space-y-4 shadow-sm">
-            <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
-                <div>
-                    <h3 class="font-bold text-base text-slate-900 dark:text-white">
-                        {{ t('scanner.monitored_directories') }}
-                    </h3>
-                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        {{ isRTL ? 'يمكنك فحص كل مجلد على حدة أو فحص كافة المجلدات معاً' : 'Scan individual folders on demand or index the entire collection.' }}
-                    </p>
-                </div>
-                <span class="cinema-badge bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30">
-                    {{ monitoredDirs.length }} {{ isRTL ? 'مجلدات' : 'folders' }}
-                </span>
+        <!-- 3. Monitored Folders Grid (Creative-FileFlow Style) -->
+        <div class="space-y-4 mb-8">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-base text-white flex items-center gap-2">
+                    <Folder class="w-4 h-4 text-cyan-400" />
+                    <span>{{ isRTL ? 'المجلدات المراقبة والمفهرسة' : 'Monitored Library Directories' }}</span>
+                </h3>
             </div>
 
-            <div v-if="monitoredDirs.length > 0" class="divide-y divide-slate-100 dark:divide-white/5">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div
-                    v-for="dir in monitoredDirs"
-                    :key="dir.id"
-                    class="py-3.5 flex items-center justify-between flex-wrap gap-4 hover:bg-slate-50 dark:hover:bg-white/[0.02] px-3 rounded-2xl transition-colors"
+                    v-for="(dir, idx) in monitoredDirs"
+                    :key="dir.path"
+                    class="glass-panel p-5 rounded-2xl border border-white/10 hover:border-cyan-500/40 transition-all flex flex-col justify-between space-y-4 group"
                 >
-                    <div class="flex items-center gap-3">
-                        <div class="w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
-                            <HardDrive class="w-4 h-4" />
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex items-start gap-3 min-w-0">
+                            <div class="w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center shrink-0 mt-0.5">
+                                <Folder class="w-4 h-4" />
+                            </div>
+                            <div class="min-w-0">
+                                <h4 class="font-bold text-xs text-white truncate font-mono" :title="dir.path">
+                                    {{ dir.path }}
+                                </h4>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <span class="cinema-badge bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[10px]">
+                                        {{ dir.type === 'movies' ? (isRTL ? 'أفلام' : 'Movies') : dir.type === 'series' ? (isRTL ? 'مسلسلات' : 'TV Series') : (isRTL ? 'مختلط' : 'Mixed') }}
+                                    </span>
+                                    <span class="text-[11px] text-slate-400">
+                                        {{ isRTL ? 'فهرسة مستمرة' : 'Active Index' }}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <p class="font-mono text-xs font-bold text-slate-800 dark:text-slate-200">{{ dir.path }}</p>
-                            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mt-0.5 block">
-                                {{ dir.type === 'movies' ? t('scanner.movies_type') : (dir.type === 'series' ? t('scanner.series_type') : t('scanner.mixed_type')) }}
-                            </span>
-                        </div>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <!-- Per-Folder Scan Trigger -->
-                        <button
-                            @click="handleScanSingleFolder(dir)"
-                            :disabled="scanStatus.status === 'running'"
-                            class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 text-xs font-bold transition-all cursor-pointer"
-                            title="Scan only this directory"
-                        >
-                            <Play class="w-3.5 h-3.5 fill-current" />
-                            <span>{{ isRTL ? 'فحص هذا المجلد' : 'Scan Folder' }}</span>
-                        </button>
 
                         <button
-                            @click="handleRemoveDirectory(dir.id)"
-                            class="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 transition-colors cursor-pointer"
-                            :title="t('common.remove')"
+                            @click="removeDirectory(idx)"
+                            class="text-slate-500 hover:text-rose-400 transition-colors p-1 cursor-pointer"
+                            title="Remove folder"
                         >
                             <Trash2 class="w-4 h-4" />
                         </button>
                     </div>
+
+                    <div class="pt-2 border-t border-white/5 flex items-center justify-between">
+                        <span class="text-[11px] text-slate-400 flex items-center gap-1">
+                            <CheckCircle2 class="w-3.5 h-3.5 text-emerald-400" />
+                            <span>{{ isRTL ? 'جاهز للفحص' : 'Ready to scan' }}</span>
+                        </span>
+                        <button
+                            @click="scanSingleFolder(dir)"
+                            :disabled="isScanning"
+                            class="px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                            <Play class="w-3 h-3 fill-current" />
+                            <span>{{ isRTL ? 'فحص هذا المجلد' : 'Scan Folder' }}</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <div v-else class="text-center py-8 text-slate-500 dark:text-slate-400 text-xs">
-                {{ isRTL ? 'لا توجد مجلدات مراقبة حالياً. أضف مجلداً لبدء الفهرسة.' : 'No monitored folders added yet. Click "Add Media Folder" above.' }}
+            <!-- Add Folder Form -->
+            <form @submit.prevent="addDirectory" class="glass-panel p-4 rounded-2xl border border-white/10 flex flex-col sm:flex-row items-center gap-3">
+                <div class="relative flex-1 w-full">
+                    <input
+                        v-model="newDirPath"
+                        type="text"
+                        :placeholder="isRTL ? 'مثال: D:/Movies أو /Volumes/Media/TV' : 'e.g. D:/Movies or C:/Users/hasan/Videos'"
+                        class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                    />
+                    <FolderPlus class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                </div>
+                <select
+                    v-model="newDirType"
+                    class="w-full sm:w-36 px-3 py-2.5 rounded-xl bg-[#0E121E] border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500"
+                >
+                    <option value="mixed">{{ isRTL ? 'مختلط (Mixed)' : 'Mixed Content' }}</option>
+                    <option value="movies">{{ isRTL ? 'أفلام فقط' : 'Movies Only' }}</option>
+                    <option value="series">{{ isRTL ? 'مسلسلات فقط' : 'Series Only' }}</option>
+                </select>
+                <button
+                    type="submit"
+                    :disabled="isAddingDir || !newDirPath.trim()"
+                    class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer shrink-0"
+                >
+                    <FolderPlus class="w-4 h-4" />
+                    <span>{{ isRTL ? 'إضافة مجلد' : 'Add Folder' }}</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- 4. Interactive Live Diagnostic Terminal Feed (Creative-FileFlow Style) -->
+        <div class="glass-panel rounded-3xl p-6 border border-white/10 space-y-4 mb-8">
+            <div class="flex items-center justify-between flex-wrap gap-4 pb-3 border-b border-white/10">
+                <div class="flex items-center gap-2.5">
+                    <Terminal class="w-5 h-5 text-cyan-400" />
+                    <div>
+                        <h3 class="font-bold text-sm text-white">
+                            {{ isRTL ? 'سجل العمليات المباشر (Scanner Live Terminal)' : 'Scanner Live Terminal' }}
+                        </h3>
+                        <p class="text-xs text-slate-400">
+                            {{ isRTL ? 'تتبع فوري لاكتشاف الملفات ومطابقة الأغلفة والترجمات' : 'Real-time feed of file discovery, metadata matching, and subtitle linking.' }}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Log Filter Buttons -->
+                <div class="flex items-center gap-1.5 bg-white/5 p-1 rounded-xl border border-white/10">
+                    <button
+                        v-for="flt in [
+                            { id: 'all', label: isRTL ? 'الكل' : 'All' },
+                            { id: 'success', label: isRTL ? 'نجاح' : 'Success' },
+                            { id: 'info', label: isRTL ? 'معلومات' : 'Info' },
+                            { id: 'error', label: isRTL ? 'أخطاء' : 'Errors' },
+                        ]"
+                        :key="flt.id"
+                        @click="terminalFilter = flt.id as any"
+                        class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                        :class="terminalFilter === flt.id ? 'bg-cyan-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'"
+                    >
+                        {{ flt.label }}
+                    </button>
+                </div>
+            </div>
+
+            <!-- Terminal Window -->
+            <div
+                id="terminal-feed"
+                class="bg-[#05070B] rounded-2xl p-4 font-mono text-[11px] h-56 overflow-y-auto space-y-1.5 border border-white/5 scroll-smooth"
+            >
+                <div v-if="filteredLogs.length === 0" class="text-slate-500 py-6 text-center">
+                    {{ isRTL ? 'لا توجد سجلات حالياً. ابدأ الفحص لعرض العمليات.' : 'No terminal events logged yet. Start a scan to view real-time operations.' }}
+                </div>
+
+                <div
+                    v-for="(log, lIdx) in filteredLogs"
+                    :key="lIdx"
+                    class="flex items-start gap-2.5 leading-relaxed"
+                >
+                    <span class="text-slate-500 shrink-0 select-none">[{{ log.time }}]</span>
+                    <span
+                        class="font-bold shrink-0 select-none uppercase text-[10px] px-1 rounded"
+                        :class="{
+                            'bg-emerald-500/20 text-emerald-400': log.level === 'success',
+                            'bg-cyan-500/20 text-cyan-400': log.level === 'info',
+                            'bg-amber-500/20 text-amber-400': log.level === 'warning',
+                            'bg-rose-500/20 text-rose-400': log.level === 'error',
+                        }"
+                    >
+                        {{ log.level }}
+                    </span>
+                    <span
+                        class="break-all"
+                        :class="{
+                            'text-emerald-300': log.level === 'success',
+                            'text-slate-300': log.level === 'info',
+                            'text-amber-300': log.level === 'warning',
+                            'text-rose-300': log.level === 'error',
+                        }"
+                    >
+                        {{ log.message }}
+                    </span>
+                </div>
             </div>
         </div>
 
-        <!-- Add Directory Modal -->
-        <div
-            v-if="showAddModal"
-            class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
-            @click.self="showAddModal = false"
-        >
-            <div class="glass-panel rounded-3xl p-6 sm:p-8 max-w-md w-full border border-slate-200 dark:border-white/15 shadow-2xl space-y-4 bg-white dark:bg-slate-900">
-                <h3 class="font-bold text-lg text-slate-900 dark:text-white">
-                    {{ t('scanner.add_directory') }}
-                </h3>
+        <!-- 5. Recent Scanned Items Grid -->
+        <div v-if="scanJob.scanned_items?.length" class="space-y-4">
+            <h3 class="font-bold text-sm text-white flex items-center gap-2">
+                <CheckCircle2 class="w-4 h-4 text-emerald-400" />
+                <span>{{ isRTL ? 'آخر الملفات المفهرسة حديثاً' : 'Recently Indexed Media' }}</span>
+            </h3>
 
-                <div class="space-y-3">
-                    <div>
-                        <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                            {{ t('scanner.folder_path') }}
-                        </label>
-                        <input
-                            type="text"
-                            v-model="newPath"
-                            placeholder="e.g. C:/Movies or D:/Series"
-                            class="w-full h-11 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-300 dark:border-white/15 px-4 text-sm text-slate-900 dark:text-slate-100 font-mono focus:border-cyan-500 outline-none"
-                        />
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div
+                    v-for="item in scanJob.scanned_items"
+                    :key="item.file_path"
+                    class="glass-panel p-3.5 rounded-2xl border border-white/10 flex items-center justify-between gap-3"
+                >
+                    <div class="min-w-0 space-y-1">
+                        <div class="flex items-center gap-1.5">
+                            <span class="cinema-badge bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[9px]">
+                                {{ item.type === 'series' ? 'TV' : 'MOVIE' }}
+                            </span>
+                            <span class="cinema-badge bg-white/10 text-slate-300 border-white/10 text-[9px]">
+                                {{ item.resolution }}
+                            </span>
+                            <span v-if="item.subtitles_count > 0" class="cinema-badge bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[9px]">
+                                +{{ item.subtitles_count }} SUB
+                            </span>
+                        </div>
+                        <h4 class="font-bold text-xs text-white truncate max-w-xs">{{ item.title }}</h4>
                     </div>
-
-                    <div>
-                        <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                            {{ t('scanner.media_type') }}
-                        </label>
-                        <select
-                            v-model="newType"
-                            class="w-full h-11 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-white/15 px-4 text-sm text-slate-900 dark:text-slate-100 focus:border-cyan-500 outline-none"
-                        >
-                            <option value="movies">{{ t('scanner.movies_type') }}</option>
-                            <option value="series">{{ t('scanner.series_type') }}</option>
-                            <option value="mixed">{{ t('scanner.mixed_type') }}</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-white/10">
-                    <button
-                        @click="showAddModal = false"
-                        class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
-                    >
-                        {{ t('common.cancel') }}
-                    </button>
-                    <button
-                        @click="handleAddDirectory"
-                        class="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
-                    >
-                        {{ t('common.save') }}
-                    </button>
+                    <CheckCircle2 class="w-4 h-4 text-emerald-400 shrink-0" />
                 </div>
             </div>
         </div>

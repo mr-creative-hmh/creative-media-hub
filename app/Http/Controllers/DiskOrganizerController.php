@@ -3,10 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\AppSetting;
+use App\Models\Episode;
+use App\Models\MediaItem;
 use App\Services\Organizer\FilesystemScannerService;
 use App\Services\Organizer\PhysicalOrganizerService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Inertia\Response;
 
 class DiskOrganizerController extends Controller
 {
@@ -19,15 +23,61 @@ class DiskOrganizerController extends Controller
         $this->organizer = $organizer;
     }
 
-    public function index()
+    public function index(): Response
     {
         return Inertia::render('Organizer/Index', [
             'defaultMovieTemplate' => AppSetting::get('movie_naming_template', '{Type}/{Title} ({Year})/{Title} ({Year}) [{Resolution}].{ext}'),
-            'defaultSeriesTemplate' => AppSetting::get('series_naming_template', '{Type}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} - {EpisodeTitle} [{Resolution}].{ext}'),
+            'defaultSeriesTemplate' => AppSetting::get('series_naming_template', '{Type}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} [{Resolution}].{ext}'),
         ]);
     }
 
-    public function scan(Request $request)
+    public function loadFromVirtualLibrary(): JsonResponse
+    {
+        $movies = MediaItem::with('subtitles')->get()->map(function ($m) {
+            return [
+                'path' => $m->file_path,
+                'filename' => basename($m->file_path),
+                'size_bytes' => $m->file_size_bytes,
+                'size_formatted' => $m->file_size_bytes ? round($m->file_size_bytes / (1024 * 1024 * 1024), 2) . ' GB' : '1.4 GB',
+                'parsed' => [
+                    'type' => 'movie',
+                    'title' => $m->title,
+                    'clean_title' => $m->title,
+                    'year' => $m->release_year,
+                    'resolution' => $m->resolution ?? '1080p',
+                    'codec' => $m->video_codec ?? 'HEVC',
+                ],
+                'subtitles' => $m->subtitles->map(fn ($s) => ['path' => $s->file_path, 'language' => $s->language])->toArray(),
+            ];
+        });
+
+        $episodes = Episode::with(['season.series', 'subtitles'])->get()->map(function ($ep) {
+            return [
+                'path' => $ep->file_path,
+                'filename' => basename($ep->file_path),
+                'size_bytes' => $ep->file_size_bytes,
+                'size_formatted' => $ep->file_size_bytes ? round($ep->file_size_bytes / (1024 * 1024), 1) . ' MB' : '450 MB',
+                'parsed' => [
+                    'type' => 'series',
+                    'series_title' => $ep->season?->series?->title ?? 'TV Show',
+                    'season' => $ep->season?->season_number ?? 1,
+                    'episode' => $ep->episode_number,
+                    'resolution' => $ep->resolution ?? '1080p',
+                    'codec' => $ep->video_codec ?? 'HEVC',
+                ],
+                'subtitles' => $ep->subtitles->map(fn ($s) => ['path' => $s->file_path, 'language' => $s->language])->toArray(),
+            ];
+        });
+
+        $all = $movies->concat($episodes)->values()->filter(fn ($f) => !empty($f['path']) && file_exists($f['path']))->values();
+
+        return response()->json([
+            'count' => $all->count(),
+            'files' => $all,
+        ]);
+    }
+
+    public function scan(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'source_path' => 'required|string',
@@ -42,7 +92,7 @@ class DiskOrganizerController extends Controller
         ]);
     }
 
-    public function dryRun(Request $request)
+    public function dryRun(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'files' => 'required|array',
@@ -61,11 +111,11 @@ class DiskOrganizerController extends Controller
         return response()->json([
             'plan' => $plan,
             'total_items' => count($plan),
-            'ready_count' => count(array_filter($plan, fn($i) => $i['status'] === 'ready')),
+            'ready_count' => count(array_filter($plan, fn ($i) => $i['status'] === 'ready')),
         ]);
     }
 
-    public function execute(Request $request)
+    public function execute(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'plan' => 'required|array',

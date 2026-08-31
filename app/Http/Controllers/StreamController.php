@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AppSetting;
 use App\Models\Episode;
 use App\Models\MediaItem;
 use App\Models\Subtitle;
@@ -10,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StreamController extends Controller
@@ -19,10 +21,13 @@ class StreamController extends Controller
         $filePath = $mediaItem->file_path;
 
         if ($filePath && File::exists($filePath)) {
+            if ($request->input('audio_mode') === 'aac' || $request->has('transcode')) {
+                return $this->streamWithAacTranscode($filePath, $request);
+            }
             return $this->streamFileRange($filePath, $request);
         }
 
-        // High quality fallback sample stream if physical file not on current machine
+        // High quality fallback sample stream
         $sampleUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
         return redirect()->away($sampleUrl);
     }
@@ -32,6 +37,9 @@ class StreamController extends Controller
         $filePath = $episode->file_path;
 
         if ($filePath && File::exists($filePath)) {
+            if ($request->input('audio_mode') === 'aac' || $request->has('transcode')) {
+                return $this->streamWithAacTranscode($filePath, $request);
+            }
             return $this->streamFileRange($filePath, $request);
         }
 
@@ -45,13 +53,11 @@ class StreamController extends Controller
         $path = $subtitle->file_path;
 
         if (!$path || !File::exists($path)) {
-            // Return empty WebVTT
             return response("WEBVTT\n\n", 200, ['Content-Type' => 'text/vtt; charset=utf-8']);
         }
 
         $content = File::get($path);
 
-        // Convert SRT to WebVTT format if needed
         if ($subtitle->format === 'srt' || !str_starts_with(trim($content), 'WEBVTT')) {
             $content = "WEBVTT\n\n" . preg_replace('/(\d{2}:\d{2}:\d{2}),(\d{3})/', '$1.$2', $content);
         }
@@ -179,5 +185,48 @@ class StreamController extends Controller
         }, $status, $headers);
 
         return $response;
+    }
+
+    protected function streamWithAacTranscode(string $path, Request $request)
+    {
+        $ffmpegBin = AppSetting::where('key', 'ffmpeg_path')->value('value') ?: 'ffmpeg';
+        $start = (int) $request->input('start', 0);
+
+        // FFmpeg on-the-fly fast audio transcode to AAC with zero video re-encoding
+        $escapedPath = escapeshellarg($path);
+        $seekFlag = $start > 0 ? "-ss {$start}" : "";
+        $cmd = "{$ffmpegBin} {$seekFlag} -i {$escapedPath} -c:v copy -c:a aac -b:a 192k -ac 2 -f mp4 -movflags frag_keyframe+empty_moov pipe:1";
+
+        $descriptors = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+
+        $process = @proc_open($cmd, $descriptors, $pipes);
+
+        if (!is_resource($process)) {
+            // Fallback to direct range stream if FFmpeg process cannot be spawned
+            return $this->streamFileRange($path, $request);
+        }
+
+        fclose($pipes[0]);
+
+        return new StreamedResponse(function () use ($pipes, $process) {
+            while (!feof($pipes[1]) && (connection_status() === CONNECTION_NORMAL)) {
+                $chunk = fread($pipes[1], 1024 * 64);
+                if ($chunk !== false && strlen($chunk) > 0) {
+                    echo $chunk;
+                    flush();
+                }
+            }
+            fclose($pipes[1]);
+            fclose($pipes[2]);
+            proc_close($process);
+        }, 200, [
+            'Content-Type' => 'video/mp4',
+            'Cache-Control' => 'no-cache',
+            'Connection' => 'keep-alive',
+        ]);
     }
 }
