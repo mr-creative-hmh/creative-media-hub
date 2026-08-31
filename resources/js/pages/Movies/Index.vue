@@ -8,13 +8,18 @@ import ContinueWatchingBar from '@/components/layout/ContinueWatchingBar.vue';
 import FilterBar from '@/components/media/FilterBar.vue';
 import MediaCard from '@/components/media/MediaCard.vue';
 import MediaDetailModal from '@/components/media/MediaDetailModal.vue';
+import Pagination from '@/components/common/Pagination.vue';
 import { Film, ScanLine, Plus } from 'lucide-vue-next';
 
 const props = defineProps<{
     movies: {
         data: any[];
         links: any[];
+        from?: number;
+        to?: number;
         total: number;
+        current_page?: number;
+        last_page?: number;
     };
     genres: any[];
     heroItem: any;
@@ -54,7 +59,7 @@ const handleToggleFavorite = async (item: any) => {
     <AppLayout v-slot="{ play }">
         <!-- Spotlight Hero Banner -->
         <HeroBanner
-            v-if="heroItem && !filters.search && !filters.genre"
+            v-if="heroItem && !filters.search && !filters.genre && !filters.vibe"
             :item="heroItem"
             @play="play"
             @details="handleDetails"
@@ -63,8 +68,8 @@ const handleToggleFavorite = async (item: any) => {
         <!-- In-Progress Continue Watching Bar -->
         <ContinueWatchingBar @play="play" />
 
-        <!-- Filter & Search Studio -->
-        <FilterBar :genres="genres" :filters="filters" />
+        <!-- Filter & Search Studio (Zero Dropdowns) -->
+        <FilterBar :genres="genres" :filters="filters" :show-vibes="true" />
 
         <!-- Media Grid Header -->
         <div class="flex items-center justify-between mb-4">
@@ -80,15 +85,27 @@ const handleToggleFavorite = async (item: any) => {
         </div>
 
         <!-- Movies Grid -->
-        <div v-if="movies.data.length > 0" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6 mb-8">
-            <MediaCard
-                v-for="movie in movies.data"
-                :key="movie.id"
-                :item="movie"
-                type="movie"
-                @play="play"
-                @details="handleDetails"
-                @toggleFavorite="handleToggleFavorite"
+        <div v-if="movies.data.length > 0" class="space-y-8">
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
+                <MediaCard
+                    v-for="movie in movies.data"
+                    :key="movie.id"
+                    :item="movie"
+                    type="movie"
+                    @play="play"
+                    @details="handleDetails"
+                    @toggleFavorite="handleToggleFavorite"
+                />
+            </div>
+
+            <!-- Pagination Bar -->
+            <Pagination
+                :links="movies.links"
+                :from="movies.from"
+                :to="movies.to"
+                :total="movies.total"
+                :current-page="movies.current_page"
+                :last-page="movies.last_page"
             />
         </div>
 
@@ -105,14 +122,14 @@ const handleToggleFavorite = async (item: any) => {
             </p>
             <Link
                 href="/scanner"
-                class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-cyan-500 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 hover:bg-cyan-400 transition-all"
+                class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-cyan-500 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 hover:bg-cyan-400 transition-all cursor-pointer"
             >
                 <Plus class="w-4 h-4" />
                 <span>{{ isRTL ? 'إضافة مجلد وفحص الأفلام' : 'Scan Movies Folder' }}</span>
             </Link>
         </div>
 
-        <!-- Modal -->
+        <!-- Detail Modal -->
         <MediaDetailModal
             v-if="selectedDetailItem"
             :item="selectedDetailItem"

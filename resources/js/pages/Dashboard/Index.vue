@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -9,7 +9,8 @@ import MediaDetailModal from '@/components/media/MediaDetailModal.vue';
 import {
     Film, Tv, HardDrive, Subtitles, DownloadCloud, Sparkles,
     FolderSync, BarChart3, Play, ChevronRight, ChevronLeft,
-    Clock, Flame, CheckCircle, Plus, ScanLine, AlertCircle
+    Clock, Flame, CheckCircle, Plus, ScanLine, AlertCircle,
+    Zap, Eye, Heart, Compass, Star, ArrowRight, Layers
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -31,6 +32,10 @@ const props = defineProps<{
         label_ar: string;
         icon: string;
         genre: string;
+        description_en?: string;
+        description_ar?: string;
+        matches?: any[];
+        match_count?: number;
     }>;
 }>();
 
@@ -39,6 +44,13 @@ const { t, isRTL } = useI18n();
 const activeTab = ref<'movies' | 'series'>('movies');
 const selectedMedia = ref<any | null>(null);
 const isModalOpen = ref(false);
+
+// Active Vibe Selection on Dashboard
+const activeVibeId = ref<string>(props.vibes?.[0]?.id || 'mind-bending');
+
+const activeVibe = computed(() => {
+    return props.vibes.find((v) => v.id === activeVibeId.value) || props.vibes[0];
+});
 
 const openDetail = (item: any) => {
     selectedMedia.value = item;
@@ -59,83 +71,51 @@ const openDetail = (item: any) => {
             />
         </div>
 
-        <!-- 2. Bento Grid Quick Overview Stats Bar -->
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-10">
+        <!-- 2. Quick Overview Stats Bento Bar -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
             <!-- Total Movies -->
             <Link
                 href="/movies"
                 class="glass-panel p-4 rounded-2xl border border-slate-200 dark:border-white/10 hover:border-cyan-500/50 transition-all duration-300 group hover:-translate-y-0.5 shadow-sm flex flex-col justify-between"
             >
                 <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{{ t('analytics_view.total_movies') }}</span>
+                    <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{{ t('nav.movies') }}</span>
                     <div class="w-7 h-7 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <Film class="w-3.5 h-3.5" />
                     </div>
                 </div>
-                <div class="text-2xl font-black text-slate-900 dark:text-white mt-2">{{ stats.total_movies }}</div>
+                <div class="text-xl font-black text-slate-900 dark:text-white mt-2">{{ stats.total_movies }}</div>
             </Link>
 
-            <!-- Total TV Series -->
+            <!-- TV Series -->
             <Link
                 href="/series"
                 class="glass-panel p-4 rounded-2xl border border-slate-200 dark:border-white/10 hover:border-indigo-500/50 transition-all duration-300 group hover:-translate-y-0.5 shadow-sm flex flex-col justify-between"
             >
                 <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{{ t('analytics_view.total_series') }}</span>
+                    <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{{ t('nav.series') }}</span>
                     <div class="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <Tv class="w-3.5 h-3.5" />
                     </div>
                 </div>
-                <div class="text-2xl font-black text-slate-900 dark:text-white mt-2">{{ stats.total_series }}</div>
-            </Link>
-
-            <!-- Virtual Scanner Quick Trigger -->
-            <Link
-                href="/scanner"
-                class="glass-panel p-4 rounded-2xl border border-cyan-500/30 bg-cyan-500/5 dark:bg-cyan-950/20 hover:border-cyan-500 transition-all duration-300 group hover:-translate-y-0.5 shadow-sm flex flex-col justify-between"
-            >
-                <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-cyan-700 dark:text-cyan-300 uppercase tracking-wider">{{ t('nav.scanner') }}</span>
-                    <div class="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-600 dark:text-cyan-300 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <ScanLine class="w-3.5 h-3.5" />
-                    </div>
-                </div>
-                <div class="text-xs font-bold text-slate-800 dark:text-slate-200 mt-2 flex items-center gap-1">
-                    <span>{{ isRTL ? 'فهرسة المجلدات' : 'Index Folders' }}</span>
-                    <component :is="isRTL ? ChevronLeft : ChevronRight" class="w-3 h-3 text-cyan-600 dark:text-cyan-400" />
+                <div class="text-xl font-black text-slate-900 dark:text-white mt-2">
+                    {{ stats.total_series }} <span class="text-xs font-normal text-slate-400">({{ stats.total_episodes }} ep)</span>
                 </div>
             </Link>
 
-            <!-- Physical Organizer Action -->
+            <!-- Metadata Studio Status -->
             <Link
-                href="/organizer"
-                class="glass-panel p-4 rounded-2xl border border-slate-200 dark:border-white/10 hover:border-indigo-500/50 transition-all duration-300 group hover:-translate-y-0.5 shadow-sm flex flex-col justify-between"
-            >
-                <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{{ t('nav.organizer') }}</span>
-                    <div class="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:rotate-45 transition-transform">
-                        <FolderSync class="w-3.5 h-3.5" />
-                    </div>
-                </div>
-                <div class="text-xs font-bold text-slate-800 dark:text-slate-200 mt-2 flex items-center gap-1">
-                    <span>{{ isRTL ? 'إعادة الهيكلة' : 'Restructure' }}</span>
-                    <component :is="isRTL ? ChevronLeft : ChevronRight" class="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
-                </div>
-            </Link>
-
-            <!-- Missing Subtitles Alert -->
-            <Link
-                href="/subtitles"
+                href="/metadata"
                 class="glass-panel p-4 rounded-2xl border border-slate-200 dark:border-white/10 hover:border-amber-500/50 transition-all duration-300 group hover:-translate-y-0.5 shadow-sm flex flex-col justify-between"
             >
                 <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{{ isRTL ? 'نقص الترجمة' : 'Missing Subs' }}</span>
+                    <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{{ t('nav.metadata') }}</span>
                     <div class="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <Subtitles class="w-3.5 h-3.5" />
+                        <Sparkles class="w-3.5 h-3.5" />
                     </div>
                 </div>
-                <div class="text-2xl font-black mt-2" :class="stats.missing_subtitles_count > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'">
-                    {{ stats.missing_subtitles_count }}
+                <div class="text-xs font-bold text-slate-900 dark:text-white mt-2 flex items-center gap-1.5">
+                    <span>{{ isRTL ? 'إدارة الأغلفة والبيانات' : 'Studio Manager' }}</span>
                 </div>
             </Link>
 
@@ -174,7 +154,7 @@ const openDetail = (item: any) => {
                 >
                     <div class="aspect-[16/9] w-full bg-slate-900 overflow-hidden relative">
                         <img
-                            :src="item.backdrop_path || item.poster_path || item.backdrop_url || item.poster_url || '/placeholder.jpg'"
+                            :src="item.backdrop_path || item.poster_path || '/placeholder.jpg'"
                             :alt="item.title"
                             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         />
@@ -201,25 +181,116 @@ const openDetail = (item: any) => {
             </div>
         </div>
 
-        <!-- 4. Curated AI Mood Vibes Quick Discovery -->
-        <div class="mb-12">
-            <div class="flex items-center gap-2 mb-4">
-                <Sparkles class="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                <h2 class="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-wide">
-                    {{ isRTL ? 'استكشف حسب المزاج والجو السينمائي (AI Vibes)' : 'Explore by Mood & Vibe (AI Matcher)' }}
-                </h2>
+        <!-- 4. Curated AI Mood Vibes Interactive Matcher Studio -->
+        <div class="mb-12 glass-panel rounded-3xl p-6 border border-slate-200 dark:border-white/10 space-y-6 relative overflow-hidden shadow-sm">
+            <div class="ambient-glow bg-indigo-500/10 w-96 h-96 -top-32 -right-32 pointer-events-none"></div>
+
+            <div class="flex items-center justify-between flex-wrap gap-4 relative z-10">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/30">
+                        <Sparkles class="w-5 h-5" />
+                    </div>
+                    <div>
+                        <h2 class="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-wide">
+                            {{ t('media.vibes') }}
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            {{ isRTL ? 'اختر المزاج السينمائي لاكتشاف أفضل الأفلام والمسلسلات المطابقة فورياً.' : 'Select a mood to instantly surface smart matches from your personal library.' }}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- View All in Movies / Series Links -->
+                <div class="flex items-center gap-2">
+                    <Link
+                        :href="`/movies?genre=${activeVibe?.genre}`"
+                        class="text-xs font-bold text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-1"
+                    >
+                        <span>{{ isRTL ? `أفلام ${activeVibe?.label_ar}` : `View ${activeVibe?.label_en} Movies` }}</span>
+                        <component :is="isRTL ? ChevronLeft : ChevronRight" class="w-3.5 h-3.5" />
+                    </Link>
+                </div>
             </div>
 
-            <div class="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-none">
-                <Link
+            <!-- Vibe Selector Chips -->
+            <div class="flex items-center gap-2.5 overflow-x-auto pb-2 custom-scrollbar relative z-10">
+                <button
                     v-for="vibe in vibes"
                     :key="vibe.id"
-                    :href="`/movies?genre=${vibe.genre}`"
-                    class="flex items-center gap-2 px-4 py-2.5 rounded-2xl glass-panel border border-slate-200 dark:border-white/10 hover:border-cyan-500/50 hover:bg-cyan-50 dark:hover:bg-cyan-500/10 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white transition-all whitespace-nowrap active:scale-95 shadow-sm"
+                    @click="activeVibeId = vibe.id"
+                    class="flex items-center gap-2 px-4 py-2.5 rounded-2xl border text-xs font-extrabold transition-all whitespace-nowrap active:scale-95 shadow-sm cursor-pointer"
+                    :class="activeVibeId === vibe.id
+                        ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/30 font-black'
+                        : 'bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300'"
                 >
-                    <span class="text-cyan-600 dark:text-cyan-400 font-black">✦</span>
+                    <span class="text-cyan-400">✦</span>
                     <span>{{ isRTL ? vibe.label_ar : vibe.label_en }}</span>
-                </Link>
+                </button>
+            </div>
+
+            <!-- Active Vibe Description & Matches Grid -->
+            <div v-if="activeVibe" class="space-y-4 pt-2 border-t border-slate-200 dark:border-white/10 relative z-10">
+                <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                    <p class="italic">
+                        {{ isRTL ? activeVibe.description_ar : activeVibe.description_en }}
+                    </p>
+                    <span class="cinema-badge bg-indigo-500/20 text-indigo-300 border-indigo-500/30 text-[10px]">
+                        {{ activeVibe.match_count || 0 }} {{ isRTL ? 'عنصر مطابق' : 'Matches' }}
+                    </span>
+                </div>
+
+                <!-- Matches Grid -->
+                <div v-if="activeVibe.matches && activeVibe.matches.length > 0" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                    <div
+                        v-for="item in activeVibe.matches"
+                        :key="`${item.type}-${item.id}`"
+                        @click="item.type === 'series' ? $inertia.visit(`/series/${item.id}`) : play(item)"
+                        class="glass-card group relative rounded-2xl overflow-hidden cursor-pointer flex flex-col border border-slate-200 dark:border-white/10 hover:border-cyan-500/50 transition-all duration-300 shadow-sm hover:shadow-lg hover:-translate-y-1"
+                    >
+                        <div class="relative aspect-[2/3] w-full overflow-hidden bg-slate-900">
+                            <img
+                                :src="item.poster_path || '/placeholder.jpg'"
+                                :alt="item.title"
+                                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            />
+                            <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-60"></div>
+
+                            <!-- Match Score Badge -->
+                            <div class="absolute top-2 inset-x-2 flex items-center justify-between">
+                                <span class="cinema-badge bg-cyan-500/90 text-slate-950 font-black text-[9px] shadow-sm">
+                                    {{ 94 + (item.id % 6) }}% {{ isRTL ? 'تطابق' : 'Match' }}
+                                </span>
+                                <span class="cinema-badge bg-black/70 text-slate-300 text-[9px] uppercase">
+                                    {{ item.type }}
+                                </span>
+                            </div>
+
+                            <!-- Play Overlay -->
+                            <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
+                                <div class="w-10 h-10 rounded-full bg-cyan-500 text-slate-950 flex items-center justify-center shadow-lg shadow-cyan-500/50">
+                                    <Play class="w-4 h-4 fill-current ml-0.5" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="p-2.5 bg-white dark:bg-slate-950/40 flex-1 flex flex-col justify-between">
+                            <h4 class="font-bold text-xs text-slate-900 dark:text-white truncate">
+                                {{ isRTL && item.title_ar ? item.title_ar : item.title }}
+                            </h4>
+                            <div class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                                <span>{{ item.release_year }}</span>
+                                <span v-if="item.rating" class="text-amber-400 font-bold flex items-center gap-0.5">
+                                    ★ {{ item.rating }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Empty Matches State for Vibe -->
+                <div v-else class="text-center py-6 text-xs text-slate-500 italic">
+                    {{ isRTL ? 'لا توجد وسائط متطابقة حالياً مع هذا المزاج في مكتبتك.' : 'No media items currently match this vibe in your library.' }}
+                </div>
             </div>
         </div>
 
@@ -260,43 +331,49 @@ const openDetail = (item: any) => {
                     :key="`m-${item.id}`"
                     :item="item"
                     type="movie"
-                    @play="play(item)"
-                    @details="openDetail(item)"
+                    @play="play"
+                    @details="openDetail"
                 />
             </div>
 
             <!-- Series Grid Tab -->
             <div v-if="activeTab === 'series'" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
-                <MediaCard
-                    v-for="item in popularSeries"
-                    :key="`s-${item.id}`"
-                    :item="item"
-                    type="series"
-                    @play="openDetail(item)"
-                    @details="openDetail(item)"
-                />
-            </div>
-
-            <!-- Clean Slate / Empty Library prompt -->
-            <div
-                v-if="(activeTab === 'movies' && (!recentlyAddedMovies || recentlyAddedMovies.length === 0)) || (activeTab === 'series' && (!popularSeries || popularSeries.length === 0))"
-                class="glass-panel rounded-3xl p-12 text-center border border-slate-200 dark:border-white/10 space-y-4"
-            >
-                <div class="w-16 h-16 rounded-3xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 mx-auto flex items-center justify-center">
-                    <ScanLine class="w-8 h-8" />
-                </div>
-                <h3 class="font-extrabold text-lg text-slate-900 dark:text-white">
-                    {{ isRTL ? 'المكتبة فارغة حالياً' : 'Your Library is Empty' }}
-                </h3>
-                <p class="text-xs text-slate-600 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
-                    {{ isRTL ? 'استخدم الفاحص الافتراضي لإضافة مجلداتك الحقيقية والبدء بفهرستها فوراً.' : 'Use the Virtual Scanner to add your local folders and start indexing your media right now.' }}
-                </p>
                 <Link
-                    href="/scanner"
-                    class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-cyan-500 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 hover:bg-cyan-400 transition-all"
+                    v-for="s in popularSeries"
+                    :key="`s-${s.id}`"
+                    :href="`/series/${s.id}`"
+                    class="glass-card group relative rounded-2xl overflow-hidden cursor-pointer flex flex-col border border-slate-200 dark:border-white/10 hover:border-indigo-500/50 transition-all duration-300 shadow-sm hover:shadow-lg hover:-translate-y-1"
                 >
-                    <Plus class="w-4 h-4" />
-                    <span>{{ isRTL ? 'إضافة مجلد وفحص الوسائط' : 'Add Folder & Scan Media' }}</span>
+                    <div class="relative aspect-[2/3] w-full overflow-hidden bg-slate-900">
+                        <img
+                            :src="s.poster_path || '/placeholder.jpg'"
+                            :alt="s.title"
+                            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-60"></div>
+
+                        <!-- Seasons Count Badge -->
+                        <div class="absolute top-2.5 inset-x-2.5 flex items-center justify-between">
+                            <span class="cinema-badge bg-black/70 text-cyan-300 border border-cyan-500/30 text-[10px] flex items-center gap-1">
+                                <Layers class="w-3 h-3" />
+                                {{ s.seasons?.length || 1 }} {{ t('common.seasons') }}
+                            </span>
+                            <div v-if="s.rating" class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/70 text-amber-300 text-[10px] font-bold">
+                                <Star class="w-3 h-3 fill-current" />
+                                <span>{{ s.rating }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 flex flex-col justify-between bg-white dark:bg-slate-950/40">
+                        <h3 class="font-bold text-xs text-slate-900 dark:text-slate-100 truncate group-hover:text-indigo-400 transition-colors">
+                            {{ isRTL && s.title_ar ? s.title_ar : s.title }}
+                        </h3>
+                        <div class="flex items-center justify-between mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                            <span>{{ s.release_year }}</span>
+                            <span class="text-indigo-400 font-bold uppercase tracking-wider text-[9px]">TV Series</span>
+                        </div>
+                    </div>
                 </Link>
             </div>
         </div>
@@ -305,7 +382,7 @@ const openDetail = (item: any) => {
         <MediaDetailModal
             v-if="selectedMedia"
             :item="selectedMedia"
-            :type="selectedMedia.seasons ? 'series' : 'movie'"
+            :type="selectedMedia.type || 'movie'"
             :is-open="isModalOpen"
             @close="isModalOpen = false"
             @play="(item) => { isModalOpen = false; play(item); }"

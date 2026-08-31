@@ -23,10 +23,20 @@
     "cast": "Cast & Crew",
     "audio": "Audio",
     "resolution": "Resolution",
+    "quality": "Quality",
+    "all_qualities": "All Qualities",
     "codec": "Codec",
     "year": "Year",
     "rating": "Rating",
     "genres": "Genres",
+    "all_genres": "All Genres",
+    "all_years": "All Years",
+    "all_types": "All Types",
+    "sort_by": "Sort By",
+    "sort_recent": "Recently Added",
+    "sort_rating": "Highest Rating",
+    "sort_year": "Release Year",
+    "sort_title": "Title (A-Z)",
     "favorite": "Favorite",
     "favorited": "Favorited",
     "download": "Download",
@@ -35,7 +45,20 @@
     "minutes": "min",
     "save": "Save Changes",
     "cancel": "Cancel",
-    "remove": "Remove"
+    "remove": "Remove",
+    "page": "Page",
+    "previous": "Previous",
+    "next": "Next",
+    "showing_results": "Showing {from} to {to} of {total} titles",
+    "clear_filters": "Reset Filters",
+    "vibe": "Mood & Vibe",
+    "all_vibes": "All Vibes",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "refresh": "Refresh",
+    "status": "Status",
+    "ready": "Ready"
   },
   "media": {
     "trending": "Trending Now",
@@ -52,7 +75,10 @@
     "sort_recent": "Recently Added",
     "sort_rating": "Highest Rating",
     "sort_year": "Release Year",
-    "sort_title": "Alphabetical (A-Z)"
+    "sort_title": "Alphabetical (A-Z)",
+    "no_movies_found": "No movies found matching your filters.",
+    "no_series_found": "No TV series found matching your filters.",
+    "match_score": "AI Match Score"
   },
   "scanner_view": {
     "title": "Virtual Media Scanner",
@@ -63,22 +89,22 @@
     "subtitle": "Scan incoming folders, parse release scene names, and physically restructure files."
   },
   "subtitles_view": {
-    "title": "Free Subtitle Engine",
-    "subtitle": "Hash-sync audio matching with OpenSubtitles & SubDL in Arabic and English."
+    "title": "Free Subtitles Engine",
+    "subtitle": "Audio fingerprint matching with SubDL and OpenSubtitles in Arabic & English."
   },
   "settings_view": {
-    "title": "Settings & Metadata Providers",
-    "subtitle": "Configure API keys, scrapers fallback priorities, and subtitle accounts.",
-    "save": "Save Preferences"
+    "title": "Settings & Providers",
+    "subtitle": "Configure metadata provider priority, optional API keys, and language defaults.",
+    "save": "Save Settings"
   },
   "analytics_view": {
-    "title": "Storage & Codec Analytics",
+    "title": "Storage & Streaming Quality Analytics",
     "total_movies": "Total Movies",
     "total_series": "TV Series",
     "total_episodes": "Episodes",
-    "storage_used": "Total Media Storage",
-    "watch_hours": "Time Watched",
-    "resolution_ratio": "4K UHD vs 1080p Breakdown",
-    "codec_ratio": "Codec Efficiency (HEVC vs H264 vs AV1)"
+    "storage_used": "Storage Used",
+    "watch_hours": "Watch Time",
+    "resolution_ratio": "4K to 1080p Ratio",
+    "codec_ratio": "Codec Efficiency (HEVC vs H.264)"
   }
 }
