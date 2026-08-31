@@ -1,29 +1,16 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title inertia>{{ config('app.name', 'Creative Media Streaming Library') }}</title>
+        <title inertia>{{ config('app.name', 'Creative Media Library Organizer') }}</title>
 
-        <!-- Inline script to set theme before paint to prevent theme flash -->
-        <script>
-            (function() {
-                const saved = localStorage.getItem('appearance');
-                if (saved === 'light') {
-                    document.documentElement.classList.remove('dark');
-                } else if (saved === 'dark') {
-                    document.documentElement.classList.add('dark');
-                } else {
-                    if (window.matchMedia('(prefers-color-scheme: light)').matches) {
-                        document.documentElement.classList.remove('dark');
-                    } else {
-                        document.documentElement.classList.add('dark');
-                    }
-                }
-            })();
-        </script>
+        <!-- Brand Favicon & Icons -->
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+        <link rel="alternate icon" href="/favicon.ico">
+        <meta name="theme-color" content="#07090E">
 
         <!-- Google Fonts: Outfit & Plus Jakarta Sans for EN, Cairo & Tajawal for AR -->
         <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -34,7 +21,7 @@
         @vite(['resources/css/app.css', 'resources/js/app.ts'])
         @inertiaHead
     </head>
-    <body class="font-sans antialiased selection:bg-cyan-500 selection:text-white min-h-screen overflow-x-hidden">
+    <body class="font-sans antialiased bg-[#07090E] text-slate-100 selection:bg-cyan-500 selection:text-white min-h-screen overflow-x-hidden">
         @inertia
     </body>
 </html>

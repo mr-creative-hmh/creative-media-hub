@@ -12,6 +12,8 @@ use App\Models\WatchHistory;
 use App\Services\Scanner\VirtualLibraryScannerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -109,6 +111,26 @@ class ScannerController extends Controller
         ]);
     }
 
+    public function rescanFresh(Request $request): JsonResponse
+    {
+        // 1. Wipe previous scanned items
+        $this->wipeAllScannedMedia();
+
+        // 2. Load directories
+        $setting = AppSetting::where('key', 'monitored_directories')->first();
+        $directories = $setting ? json_decode($setting->value, true) : [];
+
+        // 3. Initialize fresh scan
+        $initResult = $this->scannerService->initScan($directories ?: []);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Previous library wiped. Fresh scan started!',
+            'init' => $initResult,
+            'status' => $this->scannerService->getScanStatus(),
+        ]);
+    }
+
     public function scanFolder(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -165,16 +187,71 @@ class ScannerController extends Controller
 
     public function clearDemoCatalog(): JsonResponse
     {
+        $this->wipeAllScannedMedia();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Library catalog and scanned media cleared successfully.',
+            'status' => $this->scannerService->getScanStatus(),
+        ]);
+    }
+
+    public function deleteSingleMedia(Request $request, $id): JsonResponse
+    {
+        $type = $request->input('type', 'movie');
+
+        if ($type === 'series') {
+            $series = Series::find($id);
+            if ($series) {
+                $seasonIds = $series->seasons()->pluck('id');
+                $episodes = Episode::whereIn('season_id', $seasonIds)->get();
+                foreach ($episodes as $ep) {
+                    Subtitle::where('subtitlable_type', Episode::class)->where('subtitlable_id', $ep->id)->delete();
+                    $ep->delete();
+                }
+                Season::whereIn('id', $seasonIds)->delete();
+                $series->delete();
+                return response()->json(['success' => true, 'message' => "Series '{$series->title}' removed from library."]);
+            }
+        } else {
+            $movie = MediaItem::find($id);
+            if ($movie) {
+                Subtitle::where('subtitlable_type', MediaItem::class)->where('subtitlable_id', $movie->id)->delete();
+                WatchHistory::where('media_item_id', $movie->id)->delete();
+                $movie->delete();
+                return response()->json(['success' => true, 'message' => "Movie '{$movie->title}' removed from library."]);
+            }
+        }
+
+        return response()->json(['success' => false, 'message' => 'Media item not found.'], 404);
+    }
+
+    protected function wipeAllScannedMedia(): void
+    {
+        DB::statement('PRAGMA foreign_keys = OFF;');
         WatchHistory::truncate();
         Subtitle::truncate();
         Episode::truncate();
         Season::truncate();
         Series::truncate();
         MediaItem::truncate();
+        DB::statement('PRAGMA foreign_keys = ON;');
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Catalog cleared.',
-        ]);
+        Cache::put('virtual_scan_job', [
+            'status' => 'idle',
+            'total_files' => 0,
+            'processed_files' => 0,
+            'progress_percent' => 0,
+            'current_file' => '',
+            'queue' => [],
+            'scanned_items' => [],
+            'logs' => [
+                [
+                    'time' => now()->format('H:i:s'),
+                    'level' => 'info',
+                    'message' => 'Library catalog reset and cleared by user.',
+                ],
+            ],
+        ], 86400);
     }
 }

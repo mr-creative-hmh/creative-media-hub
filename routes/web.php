@@ -28,6 +28,7 @@ Route::post('/movies/{mediaItem}/favorite', [MediaController::class, 'toggleFavo
 Route::get('/api/media/search-metadata', [MediaController::class, 'searchMetadata'])->name('api.media.search-metadata');
 Route::post('/api/media/{mediaItem}/fix-match', [MediaController::class, 'fixMatch'])->name('api.media.fix-match');
 Route::post('/api/media/{mediaItem}/update-metadata', [MediaController::class, 'updateMetadata'])->name('api.media.update-metadata');
+Route::delete('/api/media/{id}', [ScannerController::class, 'deleteSingleMedia'])->name('api.media.delete');
 Route::get('/api/vibes', [MediaController::class, 'getVibes'])->name('api.vibes');
 Route::get('/api/person/{person}', [MediaController::class, 'getCastExplorer'])->name('api.person');
 
@@ -44,6 +45,7 @@ Route::get('/scanner', [ScannerController::class, 'index'])->name('scanner.index
 Route::post('/api/scanner/directories', [ScannerController::class, 'addDirectory'])->name('api.scanner.directories.add');
 Route::delete('/api/scanner/directories/{index?}', [ScannerController::class, 'removeDirectory'])->name('api.scanner.directories.remove');
 Route::post('/api/scanner/start', [ScannerController::class, 'startScan'])->name('api.scanner.start');
+Route::post('/api/scanner/rescan-fresh', [ScannerController::class, 'rescanFresh'])->name('api.scanner.rescan-fresh');
 Route::post('/api/scanner/scan-folder', [ScannerController::class, 'scanFolder'])->name('api.scanner.scan-folder');
 Route::post('/api/scanner/process-batch', [ScannerController::class, 'processBatch'])->name('api.scanner.process-batch');
 Route::post('/api/scanner/pause', [ScannerController::class, 'pauseScan'])->name('api.scanner.pause');
@@ -52,6 +54,7 @@ Route::post('/api/scanner/cancel', [ScannerController::class, 'cancelScan'])->na
 Route::get('/api/scanner/status', [ScannerController::class, 'getStatus'])->name('api.scanner.status');
 Route::post('/api/library/enrich-missing', [ScannerController::class, 'enrichMissing'])->name('api.library.enrich-missing');
 Route::post('/api/library/clear-demo', [ScannerController::class, 'clearDemoCatalog'])->name('api.library.clear-demo');
+Route::post('/api/scanner/clear-catalog', [ScannerController::class, 'clearDemoCatalog'])->name('api.scanner.clear-catalog');
 
 // Physical Disk Organizer Studio & Dry-Run
 Route::get('/organizer', [DiskOrganizerController::class, 'index'])->name('organizer.index');

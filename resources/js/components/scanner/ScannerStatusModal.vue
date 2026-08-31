@@ -4,8 +4,8 @@ import { router } from '@inertiajs/vue3';
 import { useScanner } from '@/composables/useScanner';
 import { useI18n } from '@/i18n/useI18n';
 import {
-    ScanLine, Play, Pause, XCircle, X, Terminal,
-    RefreshCw, CheckCircle2, AlertCircle, ExternalLink, HardDrive
+    ScanLine, Play, Pause, XCircle, X, Terminal, RotateCcw,
+    RefreshCw, CheckCircle2, AlertCircle, ExternalLink, HardDrive, Trash2
 } from 'lucide-vue-next';
 
 const {
@@ -15,6 +15,8 @@ const {
     isPaused,
     closeScanModal,
     startFullScan,
+    rescanFresh,
+    clearCatalog,
     pauseScan,
     resumeScan,
     cancelScan
@@ -33,6 +35,19 @@ const filteredLogs = computed(() => {
 const navigateToFullScanner = () => {
     closeScanModal();
     router.visit('/scanner');
+};
+
+const handleRescanFresh = async () => {
+    if (confirm(isRTL.value ? 'هل أنت متأكد من رغبتك في إعادة فحص المكتبة بالكامل ومسح الفهارس السابقة؟' : 'Are you sure you want to wipe the previous scan and start a fresh library indexing?')) {
+        await rescanFresh();
+    }
+};
+
+const handleClearCatalog = async () => {
+    if (confirm(isRTL.value ? 'تحذير: سيتم حذف كافة عناصر المكتبة المفهرسة من قاعدة البيانات (لن يتم حذف الملفات من القرص الصلب). هل تريد المتابعة؟' : 'Warning: This will remove all indexed movies and series from your library database (files on disk will NOT be deleted). Continue?')) {
+        await clearCatalog();
+        router.reload();
+    }
 };
 
 watch(() => scanStatus.value.logs?.length, async () => {
@@ -118,7 +133,7 @@ watch(() => scanStatus.value.logs?.length, async () => {
 
                 <!-- Action Controls -->
                 <div class="flex items-center justify-between flex-wrap gap-2 pt-2">
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center flex-wrap gap-2">
                         <button
                             v-if="isScanning"
                             @click="pauseScan"
@@ -150,6 +165,26 @@ watch(() => scanStatus.value.logs?.length, async () => {
                         >
                             <Play class="w-3.5 h-3.5 fill-current" />
                             <span>{{ isRTL ? 'بدء فحص شامل' : 'Start Full Scan' }}</span>
+                        </button>
+
+                        <button
+                            @click="handleRescanFresh"
+                            :disabled="isScanning"
+                            class="px-3 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold flex items-center gap-1.5 cursor-pointer active:scale-95"
+                            :title="isRTL ? 'إعادة الفحص من الصفر ومسح الفهارس السابقة' : 'Wipe previous scan and rescan'"
+                        >
+                            <RotateCcw class="w-3.5 h-3.5 text-indigo-400" />
+                            <span>{{ isRTL ? 'إعادة الفحص' : 'Rescan Fresh' }}</span>
+                        </button>
+
+                        <button
+                            @click="handleClearCatalog"
+                            :disabled="isScanning"
+                            class="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center gap-1.5 cursor-pointer active:scale-95"
+                            :title="isRTL ? 'تفريغ الفهارس من قاعدة البيانات' : 'Clear library catalog'"
+                        >
+                            <Trash2 class="w-3.5 h-3.5 text-rose-400" />
+                            <span>{{ isRTL ? 'تفريغ' : 'Clear' }}</span>
                         </button>
                     </div>
 

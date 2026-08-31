@@ -33,8 +33,6 @@ const scanStatus = ref<ScanJobStatus>({
     logs: [],
 });
 
-let workerTimeout: any = null;
-
 export function useScanner() {
     const isScanning = computed(() => scanStatus.value.status === 'running');
     const isPaused = computed(() => scanStatus.value.status === 'paused');
@@ -113,6 +111,42 @@ export function useScanner() {
         } catch (e) {}
     };
 
+    const rescanFresh = async () => {
+        try {
+            const res = await fetch('/api/scanner/rescan-fresh', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                },
+                body: JSON.stringify({}),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                scanStatus.value = data.status;
+                runBackgroundWorker();
+            }
+        } catch (e) {}
+    };
+
+    const clearCatalog = async () => {
+        try {
+            const res = await fetch('/api/scanner/clear-catalog', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                },
+            });
+            if (res.ok) {
+                const data = await res.json();
+                scanStatus.value = data.status;
+                return true;
+            }
+        } catch (e) {}
+        return false;
+    };
+
     const pauseScan = async () => {
         try {
             const res = await fetch('/api/scanner/pause', {
@@ -168,6 +202,8 @@ export function useScanner() {
         closeScanModal,
         fetchStatus,
         startFullScan,
+        rescanFresh,
+        clearCatalog,
         pauseScan,
         resumeScan,
         cancelScan,

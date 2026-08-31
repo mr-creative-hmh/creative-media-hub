@@ -15,6 +15,11 @@ class AniListProvider implements MetadataProviderInterface
         return 'AniList (100% Free Anime Specialist)';
     }
 
+    public function searchAnime(string $title, ?int $year = null): array
+    {
+        return $this->searchSeries($title, $year);
+    }
+
     public function searchMovie(string $title, ?int $year = null, string $lang = 'en'): array
     {
         return $this->searchMedia($title, 'MOVIE', $year);

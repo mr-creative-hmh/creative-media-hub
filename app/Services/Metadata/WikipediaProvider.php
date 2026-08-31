@@ -25,17 +25,34 @@ class WikipediaProvider implements MetadataProviderInterface
 
     public function getMovieDetails(string|int $id, string $lang = 'en'): ?array
     {
-        return $this->fetchWikiSummary($id, $lang);
+        return $this->fetchWikiSummary((string) $id, $lang);
     }
 
     public function getSeriesDetails(string|int $id, string $lang = 'en'): ?array
     {
-        return $this->fetchWikiSummary($id, $lang);
+        return $this->fetchWikiSummary((string) $id, $lang);
     }
 
     public function getSeasonEpisodes(string|int $seriesId, int $seasonNumber, string $lang = 'en'): array
     {
         return [];
+    }
+
+    public function getPlotSummary(string $title, string $lang = 'ar'): ?string
+    {
+        $details = $this->fetchWikiSummary($title, $lang);
+        if (!empty($details['overview'])) {
+            return $details['overview'];
+        }
+
+        // If not found in requested lang, search first
+        $searchResults = $this->searchWiki($title, $lang === 'ar' ? 'فيلم' : 'film', $lang);
+        if (!empty($searchResults[0]['id'])) {
+            $details = $this->fetchWikiSummary($searchResults[0]['id'], $lang);
+            return $details['overview'] ?? null;
+        }
+
+        return null;
     }
 
     protected function searchWiki(string $title, string $tag, string $lang): array

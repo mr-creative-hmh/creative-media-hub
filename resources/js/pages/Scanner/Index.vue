@@ -31,6 +31,8 @@ const {
     pauseScan,
     resumeScan,
     cancelScan,
+    rescanFresh,
+    clearCatalog,
     runBackgroundWorker,
     fetchStatus
 } = useScanner();
@@ -40,6 +42,7 @@ const newDirPath = ref('');
 const newDirType = ref('mixed');
 const isAddingDir = ref(false);
 const isBatchEnriching = ref(false);
+const isClearing = ref(false);
 const toastMessage = ref('');
 const terminalFilter = ref<'all' | 'success' | 'info' | 'error'>('all');
 
@@ -115,6 +118,26 @@ const startScan = async () => {
     } catch (e) {}
 };
 
+const handleRescanFresh = async () => {
+    if (confirm(isRTL.value ? 'هل أنت متأكد من رغبتك في إعادة فحص المكتبة بالكامل ومسح الفهارس السابقة؟' : 'Are you sure you want to wipe the previous scan and start a fresh library indexing?')) {
+        await rescanFresh();
+        toastMessage.value = isRTL.value ? 'تم تصفير الفهارس وبدء فحص جديد شامل!' : 'Previous index wiped. Fresh scan started!';
+    }
+};
+
+const handleClearCatalog = async () => {
+    if (confirm(isRTL.value ? 'تحذير: سيتم حذف كافة عناصر المكتبة المفهرسة من قاعدة البيانات (لن يتم حذف الملفات من القرص الصلب). هل تريد المتابعة؟' : 'Warning: This will remove all indexed movies and series from your library database (files on disk will NOT be deleted). Continue?')) {
+        isClearing.value = true;
+        try {
+            await clearCatalog();
+            toastMessage.value = isRTL.value ? 'تم تفريغ فهارس المكتبة بنجاح.' : 'Library catalog cleared.';
+            setTimeout(() => { router.reload(); }, 800);
+        } finally {
+            isClearing.value = false;
+        }
+    }
+};
+
 const scanSingleFolder = async (dir: { path: string; type: string }) => {
     try {
         const res = await fetch('/api/scanner/scan-folder', {
@@ -188,24 +211,44 @@ onMounted(() => {
                     </div>
                 </div>
 
-                <div class="flex items-center gap-3">
+                <div class="flex items-center flex-wrap gap-2.5">
                     <button
                         @click="enrichMissingPosters"
                         :disabled="isBatchEnriching"
-                        class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-xs font-bold transition-all cursor-pointer"
+                        class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-xs font-bold transition-all cursor-pointer"
                     >
                         <RefreshCw v-if="isBatchEnriching" class="w-4 h-4 animate-spin text-cyan-400" />
                         <ImageIcon v-else class="w-4 h-4 text-cyan-400" />
-                        <span>{{ isRTL ? 'جلب الأغلفة الناقصة' : 'Fetch Missing Posters' }}</span>
+                        <span>{{ isRTL ? 'جلب الأغلفة الناقصة' : 'Fetch Posters' }}</span>
+                    </button>
+
+                    <button
+                        @click="handleRescanFresh"
+                        :disabled="isScanning"
+                        class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold transition-all cursor-pointer"
+                        :title="isRTL ? 'مسح الفهرس السابق وبدء فحص شامل جديد' : 'Wipe previous scan and initialize a fresh library index'"
+                    >
+                        <RotateCcw class="w-4 h-4 text-indigo-400" />
+                        <span>{{ isRTL ? 'إعادة الفحص من الصفر' : 'Fresh Rescan' }}</span>
+                    </button>
+
+                    <button
+                        @click="handleClearCatalog"
+                        :disabled="isClearing || isScanning"
+                        class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer"
+                        :title="isRTL ? 'تفريغ فهارس المكتبة من قاعدة البيانات' : 'Wipe all scanned items from database'"
+                    >
+                        <Trash2 class="w-4 h-4 text-rose-400" />
+                        <span>{{ isRTL ? 'تفريغ الفهارس' : 'Clear Library' }}</span>
                     </button>
 
                     <button
                         v-if="!isScanning"
                         @click="startScan"
-                        class="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs shadow-lg shadow-cyan-500/25 active:scale-95 transition-all cursor-pointer"
+                        class="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs shadow-lg shadow-cyan-500/25 active:scale-95 transition-all cursor-pointer"
                     >
                         <Play class="w-4 h-4 fill-current" />
-                        <span>{{ isRTL ? 'بدء فحص كافة المجلدات' : 'Start Full Library Scan' }}</span>
+                        <span>{{ isRTL ? 'بدء الفحص' : 'Start Scan' }}</span>
                     </button>
                 </div>
             </div>
