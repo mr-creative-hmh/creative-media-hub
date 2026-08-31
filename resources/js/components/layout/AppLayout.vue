@@ -19,10 +19,13 @@ const closePlayer = () => {
 </script>
 
 <template>
-    <div class="min-h-screen bg-[#07090E] text-slate-100 flex flex-col font-sans relative" :dir="isRTL ? 'rtl' : 'ltr'">
+    <div
+        class="min-h-screen bg-slate-50 dark:bg-[#07090E] text-slate-900 dark:text-slate-100 flex flex-col font-sans relative transition-colors duration-300"
+        :dir="isRTL ? 'rtl' : 'ltr'"
+    >
         <!-- Ambient Decorative Lighting Spheres -->
-        <div class="ambient-glow bg-cyan-600/20 w-96 h-96 top-0 left-1/4"></div>
-        <div class="ambient-glow bg-indigo-600/15 w-[30rem] h-[30rem] top-96 right-10"></div>
+        <div class="ambient-glow bg-cyan-500/20 w-96 h-96 top-0 left-1/4"></div>
+        <div class="ambient-glow bg-indigo-500/15 w-[30rem] h-[30rem] top-96 right-10"></div>
 
         <!-- Sticky Header Navbar -->
         <Navbar />

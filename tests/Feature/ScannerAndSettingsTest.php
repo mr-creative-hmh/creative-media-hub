@@ -92,4 +92,17 @@ class ScannerAndSettingsTest extends TestCase
         $updateResponse->assertStatus(200);
         $updateResponse->assertJson(['success' => true]);
     }
+
+    public function test_can_verify_free_subtitle_engine(): void
+    {
+        $response = $this->postJson(route('api.subtitles.verify-engine'), [
+            'query' => 'Inception',
+            'language' => 'ar',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson(['success' => true]);
+        $this->assertArrayHasKey('engine_status', $response->json());
+        $this->assertArrayHasKey('results', $response->json());
+    }
 }

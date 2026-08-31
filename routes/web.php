@@ -45,10 +45,11 @@ Route::post('/api/organizer/scan', [DiskOrganizerController::class, 'scan'])->na
 Route::post('/api/organizer/dry-run', [DiskOrganizerController::class, 'dryRun'])->name('api.organizer.dry-run');
 Route::post('/api/organizer/execute', [DiskOrganizerController::class, 'execute'])->name('api.organizer.execute');
 
-// Free Subtitles Hub & Downloader
+// Free Subtitles Hub, Live Scraper Diagnostic & Downloader
 Route::get('/subtitles', [SubtitleController::class, 'index'])->name('subtitles.index');
 Route::get('/api/subtitles/search', [SubtitleController::class, 'search'])->name('api.subtitles.search');
 Route::post('/api/subtitles/download', [SubtitleController::class, 'downloadForMedia'])->name('api.subtitles.download');
+Route::post('/api/subtitles/verify-engine', [SubtitleController::class, 'verifyEngine'])->name('api.subtitles.verify-engine');
 
 // Cinema Video & Subtitle Streaming Engine (HTTP 206 Partial Content)
 Route::get('/stream/movie/{mediaItem}', [StreamController::class, 'streamMovie'])->name('stream.movie');
@@ -67,7 +68,3 @@ Route::post('/api/downloads', [DownloadManagerController::class, 'store'])->name
 // System Settings & API Providers
 Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
 Route::post('/api/settings', [SettingsController::class, 'update'])->name('api.settings.update');
-
-if (file_exists(__DIR__.'/settings.php')) {
-    require __DIR__.'/settings.php';
-}

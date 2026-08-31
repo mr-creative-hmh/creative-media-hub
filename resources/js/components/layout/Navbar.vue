@@ -43,22 +43,22 @@ const mobileNavItems = [
 </script>
 
 <template>
-    <header class="sticky top-0 z-40 w-full glass-panel border-b border-white/10 px-4 lg:px-8 py-3.5 flex items-center justify-between gap-4 transition-all">
+    <header class="sticky top-0 z-40 w-full glass-panel border-b border-slate-200 dark:border-white/10 px-4 lg:px-8 py-3.5 flex items-center justify-between gap-4 transition-all">
         <!-- Logo & Mobile Toggle -->
         <div class="flex items-center gap-3">
-            <button @click="isMobileMenuOpen = !isMobileMenuOpen" class="lg:hidden p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300">
+            <button @click="isMobileMenuOpen = !isMobileMenuOpen" class="lg:hidden p-2 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300">
                 <Menu v-if="!isMobileMenuOpen" class="w-5 h-5" />
                 <X v-else class="w-5 h-5" />
             </button>
             <a href="/" class="flex items-center gap-2.5 group">
-                <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 group-hover:scale-105 transition-transform">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 group-hover:scale-105 transition-transform text-white">
                     <Clapperboard class="w-5 h-5 text-white" />
                 </div>
                 <div class="flex flex-col">
-                    <span class="font-extrabold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-cyan-400 font-sans">
+                    <span class="font-extrabold text-lg tracking-tight text-slate-900 dark:text-white font-sans">
                         {{ t('app_name') }}
                     </span>
-                    <span class="text-[10px] text-slate-400 font-medium tracking-wider uppercase hidden sm:inline-block">
+                    <span class="text-[10px] text-slate-500 dark:text-slate-400 font-bold tracking-wider uppercase hidden sm:inline-block">
                         Ultra Cinema Suite
                     </span>
                 </div>
@@ -73,7 +73,7 @@ const mobileNavItems = [
                     type="text"
                     v-model="searchQuery"
                     :placeholder="t('common.search_placeholder')"
-                    class="w-full h-10 rounded-2xl bg-white/[0.04] border border-white/10 pl-10 pr-4 text-xs sm:text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.07] transition-all font-sans"
+                    class="w-full h-10 rounded-2xl bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 pl-10 pr-4 text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 transition-all font-sans shadow-sm"
                 />
             </form>
         </div>
@@ -83,20 +83,19 @@ const mobileNavItems = [
             <!-- Dark / Light Mode Switcher -->
             <button
                 @click="toggleTheme"
-                class="flex items-center justify-center w-9 h-9 rounded-xl glass-panel border border-white/10 hover:border-cyan-500/40 text-slate-300 hover:text-cyan-400 transition-all active:scale-95 cursor-pointer shadow-md"
-                :title="resolvedAppearance === 'dark' ? 'Switch to Light Mode (الوضع المضيء)' : 'Switch to Dark Mode (الوضع الليلي)'"
+                class="flex items-center justify-center w-9 h-9 rounded-xl glass-panel border border-slate-200 dark:border-white/10 hover:border-cyan-500/40 text-slate-700 dark:text-slate-300 hover:text-cyan-500 transition-all active:scale-95 cursor-pointer shadow-sm"
+                :title="resolvedAppearance === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
             >
                 <Sun v-if="resolvedAppearance === 'dark'" class="w-4 h-4 text-amber-400" />
-                <Moon v-else class="w-4 h-4 text-cyan-500" />
+                <Moon v-else class="w-4 h-4 text-cyan-600" />
             </button>
 
             <!-- Language Switcher -->
             <button
                 @click="toggleLanguage"
-                class="flex items-center gap-2 px-3 py-1.5 rounded-xl glass-panel border border-white/10 hover:border-cyan-500/40 text-xs font-bold text-slate-300 hover:text-white transition-all active:scale-95 cursor-pointer shadow-md"
-                :title="isRTL ? 'Switch to English' : 'التحويل إلى العربية'"
+                class="flex items-center gap-2 px-3 py-1.5 rounded-xl glass-panel border border-slate-200 dark:border-white/10 hover:border-cyan-500/40 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-white transition-all active:scale-95 cursor-pointer shadow-sm"
             >
-                <Globe class="w-3.5 h-3.5 text-cyan-400" />
+                <Globe class="w-3.5 h-3.5 text-cyan-500" />
                 <span>{{ locale === 'ar' ? 'English' : 'العربية' }}</span>
             </button>
         </div>

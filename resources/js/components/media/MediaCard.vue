@@ -17,12 +17,12 @@ const hasEnSub = props.item.subtitles?.some((s: any) => s.language === 'en');
 <template>
     <div
         @click="emit('details', item)"
-        class="glass-card group relative rounded-2xl overflow-hidden cursor-pointer flex flex-col border border-white/10 hover:border-cyan-500/40 transition-all duration-300"
+        class="glass-card group relative rounded-2xl overflow-hidden cursor-pointer flex flex-col border border-slate-200 dark:border-white/10 hover:border-cyan-500/50 transition-all duration-300 shadow-sm hover:shadow-lg"
     >
         <!-- Poster Container -->
-        <div class="relative aspect-[2/3] w-full overflow-hidden bg-slate-900">
+        <div class="relative aspect-[2/3] w-full overflow-hidden bg-slate-200 dark:bg-slate-900">
             <img
-                :src="item.poster_path"
+                :src="item.poster_path || '/placeholder.jpg'"
                 :alt="item.title"
                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 loading="lazy"
@@ -33,14 +33,14 @@ const hasEnSub = props.item.subtitles?.some((s: any) => s.language === 'en');
 
             <!-- Top Quality & Favorite Badges -->
             <div class="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-10">
-                <span class="cinema-badge bg-black/60 text-cyan-400 border border-cyan-500/30 text-[10px]">
+                <span class="cinema-badge bg-black/70 text-cyan-400 border border-cyan-500/30 text-[10px]">
                     {{ item.resolution || '1080p' }}
                 </span>
                 <button
                     @click.stop="emit('toggleFavorite', item)"
                     class="w-7 h-7 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-transform hover:scale-110"
                 >
-                    <Heart class="w-3.5 h-3.5" :class="item.is_favorite ? 'fill-red-500 text-red-500' : 'text-slate-300'" />
+                    <Heart class="w-3.5 h-3.5" :class="item.is_favorite ? 'fill-red-500 text-red-500' : 'text-white'" />
                 </button>
             </div>
 
@@ -49,14 +49,14 @@ const hasEnSub = props.item.subtitles?.some((s: any) => s.language === 'en');
                 <div class="flex items-center gap-1">
                     <span
                         v-if="hasArSub"
-                        class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                        class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/90 text-white shadow-sm"
                         title="Arabic Subtitles Available"
                     >
                         AR
                     </span>
                     <span
                         v-if="hasEnSub"
-                        class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                        class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/90 text-white shadow-sm"
                         title="English Subtitles Available"
                     >
                         EN
@@ -64,7 +64,7 @@ const hasEnSub = props.item.subtitles?.some((s: any) => s.language === 'en');
                 </div>
 
                 <!-- Rating -->
-                <div v-if="item.rating" class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/60 text-amber-300 text-[10px] font-bold">
+                <div v-if="item.rating" class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/70 text-amber-300 text-[10px] font-bold">
                     <Star class="w-3 h-3 fill-current" />
                     <span>{{ item.rating }}</span>
                 </div>
@@ -82,11 +82,11 @@ const hasEnSub = props.item.subtitles?.some((s: any) => s.language === 'en');
         </div>
 
         <!-- Bottom Info -->
-        <div class="p-3 flex flex-col flex-1 justify-between bg-slate-950/40">
-            <h3 class="font-bold text-sm text-slate-100 truncate group-hover:text-cyan-400 transition-colors">
+        <div class="p-3 flex flex-col flex-1 justify-between bg-white dark:bg-slate-950/40">
+            <h3 class="font-bold text-sm text-slate-900 dark:text-slate-100 truncate group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors">
                 {{ isRTL && item.title_ar ? item.title_ar : item.title }}
             </h3>
-            <div class="flex items-center justify-between mt-1 text-[11px] text-slate-400">
+            <div class="flex items-center justify-between mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                 <span>{{ item.release_year }}</span>
                 <span v-if="item.runtime_minutes">{{ item.runtime_minutes }} {{ t('common.minutes') }}</span>
                 <span v-else-if="item.seasons?.length">{{ item.seasons.length }} {{ t('common.seasons') }}</span>

@@ -105,17 +105,12 @@ const executeOrganize = async (mode: 'move' | 'copy') => {
 
         if (res.ok) {
             executionResult.value = await res.json();
+            dryRunPlan.value = [];
+            scannedFiles.value = [];
         }
     } finally {
         isExecuting.value = false;
     }
-};
-
-const toggleSelectAll = (e: any) => {
-    const checked = e.target.checked;
-    dryRunPlan.value.forEach(item => {
-        if (item.status === 'ready') item.selected = checked;
-    });
 };
 </script>
 
@@ -126,189 +121,157 @@ const toggleSelectAll = (e: any) => {
         <!-- Header -->
         <div class="mb-8">
             <div class="flex items-center gap-3 mb-2">
-                <div class="w-10 h-10 rounded-2xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 flex items-center justify-center">
+                <div class="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 flex items-center justify-center">
                     <FolderSync class="w-5 h-5" />
                 </div>
                 <div>
-                    <h1 class="text-2xl sm:text-3xl font-extrabold text-white">
+                    <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
                         {{ t('organizer.title') }}
                     </h1>
-                    <p class="text-xs sm:text-sm text-slate-400 mt-0.5">
+                    <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-0.5">
                         {{ t('organizer.subtitle') }}
                     </p>
                 </div>
             </div>
         </div>
 
-        <!-- Configuration Settings Card -->
-        <div class="glass-panel rounded-3xl p-6 sm:p-8 mb-8 border border-white/10 space-y-6">
+        <!-- 1. Source & Target Directory Config -->
+        <div class="glass-panel rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-white/10 mb-8 space-y-6 shadow-sm">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <!-- Source Folder -->
                 <div class="space-y-2">
-                    <label class="font-bold text-xs text-slate-300 uppercase tracking-wider">
+                    <label class="font-bold text-xs text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                         {{ t('organizer.source_folder') }}
                     </label>
                     <input
                         type="text"
                         v-model="sourcePath"
                         placeholder="e.g. C:/Downloads/Incoming"
-                        class="w-full h-11 rounded-xl bg-white/[0.04] border border-white/15 px-4 text-sm text-slate-100 font-mono focus:border-cyan-500 outline-none"
+                        class="w-full h-11 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-300 dark:border-white/15 px-4 text-xs font-mono text-slate-900 dark:text-slate-100 focus:border-indigo-500 outline-none"
                     />
                 </div>
 
-                <!-- Target Root -->
+                <!-- Destination Root -->
                 <div class="space-y-2">
-                    <label class="font-bold text-xs text-slate-300 uppercase tracking-wider">
-                        {{ t('organizer.target_folder') }}
+                    <label class="font-bold text-xs text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        {{ t('organizer.target_root') }}
                     </label>
                     <input
                         type="text"
                         v-model="targetRoot"
-                        placeholder="e.g. C:/Media"
-                        class="w-full h-11 rounded-xl bg-white/[0.04] border border-white/15 px-4 text-sm text-slate-100 font-mono focus:border-cyan-500 outline-none"
+                        placeholder="e.g. C:/Media or D:/PlexLibrary"
+                        class="w-full h-11 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-300 dark:border-white/15 px-4 text-xs font-mono text-slate-900 dark:text-slate-100 focus:border-indigo-500 outline-none"
                     />
                 </div>
             </div>
 
-            <!-- Naming Templates -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-white/10">
+            <!-- Templates -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t border-slate-200 dark:border-white/10">
                 <div class="space-y-2">
-                    <label class="font-bold text-xs text-slate-300 uppercase tracking-wider">
-                        {{ t('organizer.movie_template') }}
+                    <label class="font-bold text-xs text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        {{ t('organizer.movie_pattern') }}
                     </label>
                     <input
                         type="text"
                         v-model="movieTemplate"
-                        class="w-full h-10 rounded-xl bg-white/[0.04] border border-white/15 px-4 text-xs text-slate-200 font-mono focus:border-cyan-500 outline-none"
+                        class="w-full h-10 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-300 dark:border-white/15 px-4 text-xs font-mono text-slate-900 dark:text-slate-100 focus:border-indigo-500 outline-none"
                     />
                 </div>
+
                 <div class="space-y-2">
-                    <label class="font-bold text-xs text-slate-300 uppercase tracking-wider">
-                        {{ t('organizer.series_template') }}
+                    <label class="font-bold text-xs text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        {{ t('organizer.series_pattern') }}
                     </label>
                     <input
                         type="text"
                         v-model="seriesTemplate"
-                        class="w-full h-10 rounded-xl bg-white/[0.04] border border-white/15 px-4 text-xs text-slate-200 font-mono focus:border-cyan-500 outline-none"
+                        class="w-full h-10 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-300 dark:border-white/15 px-4 text-xs font-mono text-slate-900 dark:text-slate-100 focus:border-indigo-500 outline-none"
                     />
                 </div>
             </div>
 
-            <!-- Action Trigger Buttons -->
-            <div class="flex items-center gap-4 pt-4 border-t border-white/10">
+            <!-- Action Buttons -->
+            <div class="flex items-center justify-between flex-wrap gap-4 pt-4 border-t border-slate-200 dark:border-white/10">
                 <button
                     @click="scanFolder"
                     :disabled="isScanning"
-                    class="flex items-center gap-2.5 px-6 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-sm shadow-xl shadow-cyan-500/20 active:scale-95 transition-all"
+                    class="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs shadow-lg shadow-indigo-600/30 active:scale-95 transition-all cursor-pointer"
                 >
-                    <RefreshCw class="w-4 h-4" :class="isScanning ? 'animate-spin' : ''" />
-                    <span>{{ isScanning ? (isRTL ? 'جاري الفحص...' : 'Scanning...') : t('organizer.scan_button') }}</span>
+                    <FolderSearch class="w-4 h-4" />
+                    <span>{{ isScanning ? (isRTL ? 'جاري الفحص...' : 'Scanning Folder...') : (isRTL ? 'فحص مجلد التنزيلات' : 'Scan Source Folder') }}</span>
                 </button>
-            </div>
-        </div>
 
-        <!-- Dry Run Diff Table Results -->
-        <div v-if="dryRunPlan.length > 0" class="glass-panel rounded-3xl p-6 border border-white/10 space-y-4 mb-8">
-            <div class="flex items-center justify-between flex-wrap gap-4 pb-4 border-b border-white/10">
-                <div class="flex items-center gap-2">
-                    <Eye class="w-5 h-5 text-cyan-400" />
-                    <h3 class="font-bold text-base text-white">
-                        {{ isRTL ? 'معاينة التغييرات وخطة إعادة التسمية (Dry-Run)' : 'Restructuring Dry-Run Preview' }}
-                    </h3>
-                    <span class="cinema-badge bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                        {{ dryRunPlan.length }} {{ isRTL ? 'ملفات' : 'files' }}
-                    </span>
-                </div>
-
-                <!-- Execution Action Buttons -->
-                <div class="flex items-center gap-3">
+                <div v-if="dryRunPlan.length > 0" class="flex items-center gap-3">
+                    <button
+                        @click="executeOrganize('copy')"
+                        :disabled="isExecuting"
+                        class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-800 dark:text-white font-extrabold text-xs active:scale-95 transition-all cursor-pointer"
+                    >
+                        <span>{{ isRTL ? 'نسخ منظم (Keep Original)' : 'Execute Copy' }}</span>
+                    </button>
                     <button
                         @click="executeOrganize('move')"
                         :disabled="isExecuting"
-                        class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+                        class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
                     >
-                        <CheckCircle2 class="w-4 h-4" />
-                        <span>{{ isExecuting ? (isRTL ? 'جاري التنظيم...' : 'Executing...') : t('organizer.execute_move') }}</span>
+                        <Play class="w-3.5 h-3.5 fill-current" />
+                        <span>{{ isRTL ? 'نقل منظم (Move & Organize)' : 'Execute Move' }}</span>
                     </button>
                 </div>
             </div>
+        </div>
 
-            <!-- Diff Table -->
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-xs border-collapse font-mono" :dir="isRTL ? 'rtl' : 'ltr'">
-                    <thead>
-                        <tr class="border-b border-white/10 text-slate-400">
-                            <th class="py-3 px-2 w-8">
-                                <input type="checkbox" checked @change="toggleSelectAll" class="rounded bg-white/10 border-white/20 text-cyan-500" />
-                            </th>
-                            <th class="py-3 px-3">{{ t('organizer.source_path') }}</th>
-                            <th class="py-3 px-3 w-8"></th>
-                            <th class="py-3 px-3 text-cyan-400">{{ t('organizer.dest_path') }}</th>
-                            <th class="py-3 px-3">{{ t('organizer.status') }}</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-white/5">
-                        <tr
-                            v-for="(item, idx) in dryRunPlan"
-                            :key="idx"
-                            class="hover:bg-white/[0.03] transition-colors"
-                        >
-                            <td class="py-3 px-2">
-                                <input
-                                    type="checkbox"
-                                    v-model="item.selected"
-                                    :disabled="item.status !== 'ready'"
-                                    class="rounded bg-white/10 border-white/20 text-cyan-500"
-                                />
-                            </td>
-                            <td class="py-3 px-3 text-slate-300 max-w-xs truncate" :title="item.source_path">
-                                {{ item.source_path }}
-                            </td>
-                            <td class="py-3 px-3 text-cyan-400">
-                                <component :is="isRTL ? ArrowLeft : ArrowRight" class="w-3.5 h-3.5" />
-                            </td>
-                            <td class="py-3 px-3 font-bold text-emerald-400 max-w-sm truncate" :title="item.destination_path">
-                                {{ item.destination_path }}
-                            </td>
-                            <td class="py-3 px-3">
-                                <span
-                                    v-if="item.status === 'ready'"
-                                    class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                                >
-                                    {{ t('organizer.ready') }}
-                                </span>
-                                <span
-                                    v-else-if="item.status === 'collision_exists'"
-                                    class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                                >
-                                    {{ t('organizer.collision') }}
-                                </span>
-                                <span
-                                    v-else
-                                    class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-500/20 text-slate-400 border border-slate-500/30"
-                                >
-                                    {{ t('organizer.identical') }}
-                                </span>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+        <!-- 2. Dry-Run Diff Simulation Table -->
+        <div v-if="dryRunPlan.length > 0" class="glass-panel rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-white/10 mb-8 space-y-4 shadow-sm">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
+                <div>
+                    <h3 class="font-bold text-base text-slate-900 dark:text-white">
+                        {{ t('organizer.dry_run_preview') }}
+                    </h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        {{ isRTL ? 'معاينة أسماء الملفات قبل التنفيذ الحقيقي' : 'Verify destination paths and filenames before executing physical disk changes' }}
+                    </p>
+                </div>
+                <span class="cinema-badge bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
+                    {{ dryRunPlan.length }} {{ isRTL ? 'ملفات جاهزة' : 'Planned' }}
+                </span>
+            </div>
+
+            <div class="divide-y divide-slate-100 dark:divide-white/5 overflow-x-auto">
+                <div
+                    v-for="(item, idx) in dryRunPlan"
+                    :key="`plan-${idx}`"
+                    class="py-3.5 grid grid-cols-1 lg:grid-cols-12 gap-3 items-center text-xs"
+                >
+                    <!-- Original Path -->
+                    <div class="lg:col-span-5 truncate text-slate-500 dark:text-slate-400 font-mono text-[11px]">
+                        {{ item.original_filename || item.source }}
+                    </div>
+
+                    <!-- Arrow -->
+                    <div class="lg:col-span-1 flex justify-center text-indigo-600 dark:text-indigo-400">
+                        <component :is="isRTL ? ArrowLeft : ArrowRight" class="w-4 h-4" />
+                    </div>
+
+                    <!-- Destination Path -->
+                    <div class="lg:col-span-6 font-mono text-[11px] font-bold text-emerald-600 dark:text-emerald-400 truncate">
+                        {{ item.destination }}
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Success Result Banner -->
-        <div v-if="executionResult" class="glass-panel rounded-3xl p-6 border border-emerald-500/40 bg-emerald-950/20 mb-8">
+        <!-- 3. Execution Result Confirmation -->
+        <div v-if="executionResult" class="glass-panel rounded-3xl p-6 sm:p-8 border border-emerald-500/40 bg-emerald-500/5 dark:bg-emerald-950/20 space-y-3 shadow-sm">
             <div class="flex items-center gap-3">
-                <CheckCircle2 class="w-6 h-6 text-emerald-400" />
-                <div>
-                    <h4 class="font-extrabold text-sm text-emerald-300">
-                        {{ isRTL ? 'تم تنظيم الملفات بنجاح!' : 'Organization Completed Successfully!' }}
-                    </h4>
-                    <p class="text-xs text-slate-300 mt-0.5">
-                        {{ executionResult.success_count }} {{ isRTL ? 'ملف تم نقله وهيكلته في المكتبة.' : 'files moved and structured into your library.' }}
-                    </p>
-                </div>
+                <CheckCircle2 class="w-6 h-6 text-emerald-500" />
+                <h4 class="font-extrabold text-sm text-emerald-700 dark:text-emerald-300">
+                    {{ isRTL ? 'تم تنظيم الملفات بنجاح!' : 'Organization Completed Successfully!' }}
+                </h4>
             </div>
+            <p class="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                {{ isRTL ? `تمت معالجة ${executionResult.count || 0} ملفات ونقلها بالهيكلة المحددة.` : `Successfully organized ${executionResult.count || 0} files according to standard templates.` }}
+            </p>
         </div>
     </AppLayout>
 </template>

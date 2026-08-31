@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import HeroBanner from '@/components/media/HeroBanner.vue';
@@ -8,7 +8,7 @@ import ContinueWatchingBar from '@/components/layout/ContinueWatchingBar.vue';
 import FilterBar from '@/components/media/FilterBar.vue';
 import MediaCard from '@/components/media/MediaCard.vue';
 import MediaDetailModal from '@/components/media/MediaDetailModal.vue';
-import { Film } from 'lucide-vue-next';
+import { Film, ScanLine, Plus } from 'lucide-vue-next';
 
 const props = defineProps<{
     movies: {
@@ -69,22 +69,23 @@ const handleToggleFavorite = async (item: any) => {
         <!-- Media Grid Header -->
         <div class="flex items-center justify-between mb-4">
             <div class="flex items-center gap-2">
-                <Film class="w-5 h-5 text-cyan-400" />
-                <h2 class="font-extrabold text-xl text-white tracking-tight font-sans">
+                <Film class="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                <h2 class="font-extrabold text-xl text-slate-900 dark:text-white tracking-tight font-sans">
                     {{ t('nav.movies') }}
                 </h2>
-                <span class="text-xs text-slate-400 font-semibold px-2 py-0.5 rounded-full bg-white/5 border border-white/10">
+                <span class="text-xs text-slate-600 dark:text-slate-400 font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10">
                     {{ movies.total }}
                 </span>
             </div>
         </div>
 
         <!-- Movies Grid -->
-        <div v-if="movies.data.length > 0" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+        <div v-if="movies.data.length > 0" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6 mb-8">
             <MediaCard
                 v-for="movie in movies.data"
                 :key="movie.id"
                 :item="movie"
+                type="movie"
                 @play="play"
                 @details="handleDetails"
                 @toggleFavorite="handleToggleFavorite"
@@ -92,20 +93,31 @@ const handleToggleFavorite = async (item: any) => {
         </div>
 
         <!-- Empty State -->
-        <div v-else class="glass-panel rounded-3xl p-12 text-center my-8 border border-white/10">
-            <Film class="w-12 h-12 text-slate-600 mx-auto mb-3" />
-            <h3 class="font-bold text-lg text-slate-200 mb-1">
+        <div v-else class="glass-panel rounded-3xl p-12 text-center border border-slate-200 dark:border-white/10 space-y-4">
+            <div class="w-16 h-16 rounded-3xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 mx-auto flex items-center justify-center">
+                <ScanLine class="w-8 h-8" />
+            </div>
+            <h3 class="font-extrabold text-lg text-slate-900 dark:text-white">
                 {{ isRTL ? 'لم يتم العثور على أفلام' : 'No Movies Found' }}
             </h3>
-            <p class="text-sm text-slate-400 max-w-md mx-auto">
-                {{ isRTL ? 'جرّب تعديل خيارات البحث أو التصفية لعرض المزيد من الأفلام.' : 'Try adjusting your search query or filters to discover more titles.' }}
+            <p class="text-xs text-slate-600 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+                {{ isRTL ? 'استخدم الفاحص الافتراضي لإضافة مجلدات الأفلام على جهازك وفهرستها تلقائياً.' : 'Use the Virtual Scanner to add your local movie folders and index them in the background.' }}
             </p>
+            <Link
+                href="/scanner"
+                class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-cyan-500 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 hover:bg-cyan-400 transition-all"
+            >
+                <Plus class="w-4 h-4" />
+                <span>{{ isRTL ? 'إضافة مجلد وفحص الأفلام' : 'Scan Movies Folder' }}</span>
+            </Link>
         </div>
 
-        <!-- Detail Modal -->
+        <!-- Modal -->
         <MediaDetailModal
             v-if="selectedDetailItem"
             :item="selectedDetailItem"
+            type="movie"
+            :is-open="!!selectedDetailItem"
             @close="selectedDetailItem = null"
             @play="(item) => { selectedDetailItem = null; play(item); }"
         />
