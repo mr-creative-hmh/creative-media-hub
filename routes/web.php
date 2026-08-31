@@ -10,10 +10,14 @@ use App\Http\Controllers\SubtitleController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-// Home redirect to Movies
+// Home & Dashboard redirect to Movies
 Route::get('/', function () {
     return redirect()->route('movies.index');
 })->name('home');
+
+Route::get('/dashboard', function () {
+    return redirect()->route('movies.index');
+})->name('dashboard');
 
 // Virtual Movies Hub
 Route::get('/movies', [MediaController::class, 'index'])->name('movies.index');
