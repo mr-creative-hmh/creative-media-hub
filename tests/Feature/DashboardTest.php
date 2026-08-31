@@ -13,11 +13,13 @@ class DashboardTest extends TestCase
     {
         $response = $this->get('/dashboard');
         $response->assertStatus(200);
+        $response->assertDontSee('@routes');
     }
 
     public function test_movies_index_renders_successfully(): void
     {
         $response = $this->get(route('movies.index'));
         $response->assertStatus(200);
+        $response->assertDontSee('@routes');
     }
 }

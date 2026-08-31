@@ -29,4 +29,23 @@ class WatchHistory extends Model
     {
         return $this->morphTo();
     }
+
+    public function mediaItem(): BelongsTo
+    {
+        return $this->belongsTo(MediaItem::class, 'watchable_id');
+    }
+
+    public function episode(): BelongsTo
+    {
+        return $this->belongsTo(Episode::class, 'watchable_id');
+    }
+
+    public function getProgressPercentageAttribute(): int
+    {
+        if ($this->duration_seconds > 0) {
+            return (int) round(($this->progress_seconds / $this->duration_seconds) * 100);
+        }
+
+        return 0;
+    }
 }
