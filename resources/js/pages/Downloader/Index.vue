@@ -1,150 +1,77 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { Head } from '@inertiajs/vue3';
+import { ref, computed, onMounted } from 'vue';
+import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
+import { useDownloader, DownloadItem } from '@/composables/useDownloader';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import {
     DownloadCloud, Plus, CheckCircle2, ArrowDown, ArrowUp,
     Play, Pause, Trash2, FolderSync, Sparkles, HelpCircle,
-    Info, HardDrive, ShieldCheck, Film, Tv, Radio, Clock, Check
+    Info, HardDrive, ShieldCheck, Film, Tv, Radio, Clock,
+    RotateCcw, AlertTriangle, ExternalLink
 } from 'lucide-vue-next';
 
 const props = defineProps<{
-    downloads?: any[];
+    initialDownloads?: DownloadItem[];
 }>();
 
 const { t, isRTL } = useI18n();
+const {
+    downloads,
+    activeDownloads,
+    completedDownloads,
+    totalSpeedDownFormatted,
+    totalSpeedUpFormatted,
+    formatBytes,
+    getProgressPercent,
+    getETA,
+    fetchDownloads,
+    addDownload,
+    pauseDownload,
+    resumeDownload,
+    retryDownload,
+    deleteDownload,
+} = useDownloader();
 
-const activeFilter = ref<'all' | 'downloading' | 'queued' | 'completed'>('all');
+const activeFilter = ref<'all' | 'downloading' | 'paused' | 'completed'>('all');
 const showAddModal = ref(false);
 const showExplainModal = ref(false);
 
 const newTitle = ref('');
 const newUrl = ref('');
-const newType = ref<'movie' | 'series'>('movie');
-const newQuality = ref('1080p');
+const newType = ref<'movie' | 'series' | 'subtitle'>('movie');
+const isSubmitting = ref(false);
 
-// Mock rich download queue items if database has only basic records
-const items = ref([
-    {
-        id: 1,
-        title: 'Dune: Part Two (2024)',
-        type: 'movie',
-        status: 'downloading',
-        progress: 68,
-        speed_down: '18.4 MB/s',
-        speed_up: '1.2 MB/s',
-        size_total: '6.4 GB',
-        size_downloaded: '4.35 GB',
-        eta: '1m 45s',
-        destination: 'D:/MediaLibrary/Movies/Dune Part Two (2024)',
-        peers: '84 (142 seeds)',
-    },
-    {
-        id: 2,
-        title: 'Shogun (2024) - Season 1 (E01-E10)',
-        type: 'series',
-        status: 'downloading',
-        progress: 34,
-        speed_down: '12.8 MB/s',
-        speed_up: '820 KB/s',
-        size_total: '14.2 GB',
-        size_downloaded: '4.82 GB',
-        eta: '11m 20s',
-        destination: 'D:/MediaLibrary/TV Shows/Shogun (2024)',
-        peers: '112 (320 seeds)',
-    },
-    {
-        id: 3,
-        title: 'Oppenheimer (2023) [IMAX Remaster]',
-        type: 'movie',
-        status: 'completed',
-        progress: 100,
-        speed_down: '0 KB/s',
-        speed_up: '450 KB/s',
-        size_total: '11.8 GB',
-        size_downloaded: '11.8 GB',
-        eta: 'Completed',
-        destination: 'D:/MediaLibrary/Movies/Oppenheimer (2023)',
-        peers: 'Seeding (1:1.8 ratio)',
-    },
-    {
-        id: 4,
-        title: 'Severance - S02E01 (2025)',
-        type: 'series',
-        status: 'completed',
-        progress: 100,
-        speed_down: '0 KB/s',
-        speed_up: '210 KB/s',
-        size_total: '1.8 GB',
-        size_downloaded: '1.8 GB',
-        eta: 'Completed',
-        destination: 'D:/MediaLibrary/TV Shows/Severance/Season 02',
-        peers: 'Seeding',
-    },
-    {
-        id: 5,
-        title: 'Gladiator II (2024) [4K UHD]',
-        type: 'movie',
-        status: 'queued',
-        progress: 0,
-        speed_down: '0 KB/s',
-        speed_up: '0 KB/s',
-        size_total: '18.5 GB',
-        size_downloaded: '0 MB',
-        eta: 'Queued',
-        destination: 'D:/MediaLibrary/Movies/Gladiator II (2024)',
-        peers: 'Waiting in line',
+onMounted(() => {
+    if (props.initialDownloads && props.initialDownloads.length > 0 && downloads.value.length === 0) {
+        downloads.value = props.initialDownloads;
     }
-]);
+    fetchDownloads();
+});
 
 const filteredItems = computed(() => {
-    if (activeFilter.value === 'all') return items.value;
-    return items.value.filter(i => i.status === activeFilter.value);
+    if (activeFilter.value === 'all') return downloads.value;
+    if (activeFilter.value === 'downloading') {
+        return downloads.value.filter(d => d.status === 'downloading' || d.status === 'queued');
+    }
+    return downloads.value.filter(d => d.status === activeFilter.value);
 });
 
-const totalSpeedDown = computed(() => {
-    return '31.2 MB/s';
-});
-const totalSpeedUp = computed(() => {
-    return '2.47 MB/s';
-});
-
-const handleAddDownload = () => {
-    if (!newTitle.value) return;
-
-    items.value.unshift({
-        id: Date.now(),
-        title: newTitle.value,
-        type: newType.value,
-        status: 'downloading',
-        progress: 1,
-        speed_down: '14.5 MB/s',
-        speed_up: '0 KB/s',
-        size_total: '4.5 GB',
-        size_downloaded: '45 MB',
-        eta: '4m 10s',
-        destination: `D:/MediaLibrary/${newType.value === 'movie' ? 'Movies' : 'TV Shows'}/${newTitle.value}`,
-        peers: 'Connecting...',
-    });
-
-    newTitle.value = '';
-    newUrl.value = '';
-    showAddModal.value = false;
-};
-
-const togglePause = (item: any) => {
-    if (item.status === 'downloading') {
-        item.status = 'queued';
-        item.speed_down = '0 KB/s';
-    } else if (item.status === 'queued') {
-        item.status = 'downloading';
-        item.speed_down = '12.0 MB/s';
+const handleAddSubmit = async () => {
+    if (!newTitle.value.trim()) return;
+    isSubmitting.value = true;
+    try {
+        await addDownload(newTitle.value.trim(), newType.value, newUrl.value.trim() || undefined);
+        newTitle.value = '';
+        newUrl.value = '';
+        showAddModal.value = false;
+    } finally {
+        isSubmitting.value = false;
     }
 };
 
-const removeItem = (id: number) => {
-    items.value = items.value.filter(i => i.id !== id);
+const handleQuickSeed = async (sampleTitle: string, type: 'movie' | 'series') => {
+    await addDownload(sampleTitle, type);
 };
 </script>
 
@@ -163,7 +90,7 @@ const removeItem = (id: number) => {
                         {{ t('nav.downloads') }}
                     </h1>
                     <p class="text-xs sm:text-sm text-slate-400 mt-0.5">
-                        {{ isRTL ? 'إدارة التنزيلات النشطة، مراقبة مجلدات الاستقبال، والفهرسة الآلية للوسائط.' : 'Manage download queues, torrent streams, incoming watch folder triggers, and auto-indexing.' }}
+                        {{ isRTL ? 'إدارة التنزيلات الحقيقية في الخلفية، مراقبة مجلدات الاستقبال، والفهرسة الآلية للوسائط.' : 'Manage background media downloads, incoming watch folders, and automated library indexing.' }}
                     </p>
                 </div>
             </div>
@@ -192,17 +119,17 @@ const removeItem = (id: number) => {
             <div class="glass-panel rounded-2xl p-4 border border-cyan-500/30 bg-cyan-500/5 flex items-center justify-between">
                 <div>
                     <span class="text-xs font-bold text-slate-400 block">{{ isRTL ? 'سرعة التنزيل الحالية' : 'Download Speed' }}</span>
-                    <span class="text-xl font-black text-cyan-300 font-mono mt-1 block">{{ totalSpeedDown }}</span>
+                    <span class="text-xl font-black text-cyan-300 font-mono mt-1 block">{{ totalSpeedDownFormatted }}</span>
                 </div>
                 <div class="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
-                    <ArrowDown class="w-5 h-5 animate-bounce" />
+                    <ArrowDown class="w-5 h-5" :class="{ 'animate-bounce': activeDownloads.length > 0 }" />
                 </div>
             </div>
 
             <div class="glass-panel rounded-2xl p-4 border border-indigo-500/30 bg-indigo-500/5 flex items-center justify-between">
                 <div>
                     <span class="text-xs font-bold text-slate-400 block">{{ isRTL ? 'سرعة الرفع / المشاركة' : 'Upload / Seeding' }}</span>
-                    <span class="text-xl font-black text-indigo-300 font-mono mt-1 block">{{ totalSpeedUp }}</span>
+                    <span class="text-xl font-black text-indigo-300 font-mono mt-1 block">{{ totalSpeedUpFormatted }}</span>
                 </div>
                 <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
                     <ArrowUp class="w-5 h-5" />
@@ -211,18 +138,18 @@ const removeItem = (id: number) => {
 
             <div class="glass-panel rounded-2xl p-4 border border-white/10 flex items-center justify-between">
                 <div>
-                    <span class="text-xs font-bold text-slate-400 block">{{ isRTL ? 'التنزيلات النشطة' : 'Active Tasks' }}</span>
-                    <span class="text-xl font-black text-white font-mono mt-1 block">2 Downloading / 1 Queued</span>
+                    <span class="text-xs font-bold text-slate-400 block">{{ isRTL ? 'المهام النشطة' : 'Active Tasks' }}</span>
+                    <span class="text-xl font-black text-white font-mono mt-1 block">{{ activeDownloads.length }} {{ isRTL ? 'قيد التنزيل' : 'In Progress' }}</span>
                 </div>
                 <div class="w-10 h-10 rounded-xl bg-white/5 text-slate-300 flex items-center justify-center">
-                    <Radio class="w-5 h-5 text-amber-400" />
+                    <Radio class="w-5 h-5" :class="activeDownloads.length > 0 ? 'text-amber-400 animate-pulse' : 'text-slate-500'" />
                 </div>
             </div>
 
             <div class="glass-panel rounded-2xl p-4 border border-emerald-500/30 bg-emerald-500/5 flex items-center justify-between">
                 <div>
-                    <span class="text-xs font-bold text-slate-400 block">{{ isRTL ? 'المكتملة اليوم' : 'Completed' }}</span>
-                    <span class="text-xl font-black text-emerald-300 font-mono mt-1 block">12 Media Items (100%)</span>
+                    <span class="text-xs font-bold text-slate-400 block">{{ isRTL ? 'المكتملة في المكتبة' : 'Completed' }}</span>
+                    <span class="text-xl font-black text-emerald-300 font-mono mt-1 block">{{ completedDownloads.length }} {{ isRTL ? 'عنصر' : 'Items' }}</span>
                 </div>
                 <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
                     <CheckCircle2 class="w-5 h-5" />
@@ -230,15 +157,15 @@ const removeItem = (id: number) => {
             </div>
         </div>
 
-        <!-- 3 Interactive Workflow Explanatory Feature Cards -->
+        <!-- 3 Interactive Workflow Explanatory Cards -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div class="glass-card rounded-2xl p-4 border border-white/10 space-y-2 hover:border-cyan-500/30 transition-all">
                 <div class="flex items-center gap-2 text-cyan-400 font-extrabold text-xs">
                     <Sparkles class="w-4 h-4" />
-                    <span>1. {{ isRTL ? 'التنزيل والاستقبال' : 'Direct & Magnet Ingestion' }}</span>
+                    <span>1. {{ isRTL ? 'التنزيل في الخلفية' : 'Background Download Engine' }}</span>
                 </div>
                 <p class="text-xs text-slate-400 leading-relaxed">
-                    {{ isRTL ? 'دعم روابط Magnet، ملفات التورنت، والتحميل المباشر من السيرفرات السحابية بأقصى سرعة اتصال.' : 'Full support for magnet URI streams, torrent payloads, and direct HTTP transfers.' }}
+                    {{ isRTL ? 'يتم تنزيل الملفات في الخلفية بدون الحاجة للبقاء في هذه الصفحة مع إدارة تلقائية للسرعات واستئناف التنزيل.' : 'Downloads run asynchronously in background jobs with chunked buffering and resume capabilities.' }}
                 </p>
             </div>
 
@@ -248,17 +175,17 @@ const removeItem = (id: number) => {
                     <span>2. {{ isRTL ? 'فك الضغط التلقائي' : 'Auto Unpack & Extract' }}</span>
                 </div>
                 <p class="text-xs text-slate-400 leading-relaxed">
-                    {{ isRTL ? 'يتم فك ضغط الأرشيفات المجزأة (.rar, .zip, .7z) تلقائياً بمجرد اكتمال التنزيل دون تدخل يدوي.' : 'Multipart archives (.rar, .zip, .7z) are unpacked automatically upon completion.' }}
+                    {{ isRTL ? 'يتم فك ضغط الأرشيفات المجزأة (.rar, .zip, .7z) تلقائياً بمجرد اكتمال التنزيل دون أي تدخل يدوي.' : 'Multipart archives (.zip, .rar) are extracted automatically upon completion into target folders.' }}
                 </p>
             </div>
 
             <div class="glass-card rounded-2xl p-4 border border-white/10 space-y-2 hover:border-emerald-500/30 transition-all">
                 <div class="flex items-center gap-2 text-emerald-400 font-extrabold text-xs">
                     <HardDrive class="w-4 h-4" />
-                    <span>3. {{ isRTL ? 'الفهرسة والترجمة الفورية' : 'Auto Library Indexing' }}</span>
+                    <span>3. {{ isRTL ? 'الفهرسة الفورية في المكتبة' : 'Instant Library Ingestion' }}</span>
                 </div>
                 <p class="text-xs text-slate-400 leading-relaxed">
-                    {{ isRTL ? 'المجلد المراقب يرسل إشارة فورية للفاحص لجلب البوستر العربي والإنكليزي وتنزيل ملفات الترجمة.' : 'Watch folders trigger instant background indexing, poster enrichment, and subtitle sync.' }}
+                    {{ isRTL ? 'بمجرد انتهاء التنزيل، يقوم الفاحص بجلب البوستر العربي والإنكليزي وتنزيل ملفات الترجمة ليكون الفيلم جاهزاً للمشاهدة فوراً.' : 'Completed downloads trigger instant background metadata enrichment, 4K posters, and subtitle sync.' }}
                 </p>
             </div>
         </div>
@@ -270,19 +197,22 @@ const removeItem = (id: number) => {
                 <div class="flex items-center gap-2">
                     <button
                         v-for="filter in [
-                            { key: 'all', label: isRTL ? 'الكل' : 'All' },
-                            { key: 'downloading', label: isRTL ? 'جاري التنزيل' : 'Downloading' },
-                            { key: 'queued', label: isRTL ? 'في الطابور' : 'Queued' },
-                            { key: 'completed', label: isRTL ? 'المكتملة' : 'Completed' },
+                            { key: 'all', label: isRTL ? 'الكل' : 'All', count: downloads.length },
+                            { key: 'downloading', label: isRTL ? 'جاري التنزيل' : 'Downloading', count: activeDownloads.length },
+                            { key: 'paused', label: isRTL ? 'متوقف مؤقتاً' : 'Paused', count: downloads.filter(d => d.status === 'paused').length },
+                            { key: 'completed', label: isRTL ? 'المكتملة' : 'Completed', count: completedDownloads.length },
                         ]"
                         :key="filter.key"
                         @click="activeFilter = filter.key as any"
-                        class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
                         :class="activeFilter === filter.key
                             ? 'bg-cyan-500 text-slate-950 font-black shadow-lg shadow-cyan-500/20'
                             : 'bg-white/5 text-slate-400 hover:bg-white/10 border border-white/10'"
                     >
-                        {{ filter.label }}
+                        <span>{{ filter.label }}</span>
+                        <span v-if="filter.count > 0" class="px-1.5 py-0.2 rounded-full text-[10px]" :class="activeFilter === filter.key ? 'bg-slate-950 text-cyan-300' : 'bg-white/10 text-slate-300'">
+                            {{ filter.count }}
+                        </span>
                     </button>
                 </div>
 
@@ -300,9 +230,9 @@ const removeItem = (id: number) => {
                         <div class="flex items-center gap-3 min-w-0">
                             <div
                                 class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border"
-                                :class="item.type === 'movie' ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-400' : 'bg-indigo-500/20 border-indigo-500/40 text-indigo-400'"
+                                :class="item.media_type === 'movie' ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-400' : 'bg-indigo-500/20 border-indigo-500/40 text-indigo-400'"
                             >
-                                <Film v-if="item.type === 'movie'" class="w-5 h-5" />
+                                <Film v-if="item.media_type === 'movie'" class="w-5 h-5" />
                                 <Tv v-else class="w-5 h-5" />
                             </div>
 
@@ -315,13 +245,15 @@ const removeItem = (id: number) => {
                                             ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
                                             : item.status === 'completed'
                                             ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                                            : 'bg-amber-500/20 text-amber-300 border-amber-500/30'"
+                                            : item.status === 'paused'
+                                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                            : 'bg-rose-500/20 text-rose-300 border-rose-500/30'"
                                     >
                                         {{ item.status }}
                                     </span>
                                 </div>
-                                <div class="text-[11px] font-mono text-slate-500 truncate mt-0.5" :title="item.destination">
-                                    📂 {{ item.destination }}
+                                <div class="text-[11px] font-mono text-slate-500 truncate mt-0.5" :title="item.destination_path">
+                                    📂 {{ item.destination_path }}
                                 </div>
                             </div>
                         </div>
@@ -329,13 +261,30 @@ const removeItem = (id: number) => {
                         <!-- Action Toolbar -->
                         <div class="flex items-center gap-2">
                             <button
-                                v-if="item.status !== 'completed'"
-                                @click="togglePause(item)"
+                                v-if="item.status === 'downloading'"
+                                @click="pauseDownload(item.id)"
                                 class="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white cursor-pointer"
-                                :title="item.status === 'downloading' ? 'Pause' : 'Resume'"
+                                :title="isRTL ? 'إيقاف مؤقت' : 'Pause'"
                             >
-                                <Pause v-if="item.status === 'downloading'" class="w-4 h-4" />
-                                <Play v-else class="w-4 h-4" />
+                                <Pause class="w-4 h-4" />
+                            </button>
+
+                            <button
+                                v-else-if="item.status === 'paused'"
+                                @click="resumeDownload(item.id)"
+                                class="p-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 cursor-pointer"
+                                :title="isRTL ? 'استئناف التنزيل' : 'Resume'"
+                            >
+                                <Play class="w-4 h-4 fill-current" />
+                            </button>
+
+                            <button
+                                v-else-if="item.status === 'failed'"
+                                @click="retryDownload(item.id)"
+                                class="p-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 cursor-pointer"
+                                :title="isRTL ? 'إعادة المحاولة' : 'Retry'"
+                            >
+                                <RotateCcw class="w-4 h-4" />
                             </button>
 
                             <button
@@ -344,11 +293,11 @@ const removeItem = (id: number) => {
                                 class="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-sm"
                             >
                                 <Play class="w-3.5 h-3.5 fill-current" />
-                                <span>{{ isRTL ? 'تشغيل' : 'Play' }}</span>
+                                <span>{{ isRTL ? 'تشغيل الآن' : 'Play' }}</span>
                             </button>
 
                             <button
-                                @click="removeItem(item.id)"
+                                @click="deleteDownload(item.id)"
                                 class="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 cursor-pointer"
                                 :title="t('common.delete')"
                             >
@@ -361,35 +310,60 @@ const removeItem = (id: number) => {
                     <div class="space-y-1.5">
                         <div class="w-full h-2 rounded-full bg-white/10 overflow-hidden relative">
                             <div
-                                class="h-full rounded-full transition-all duration-300"
+                                class="h-full rounded-full transition-all duration-500"
                                 :class="item.status === 'completed'
                                     ? 'bg-emerald-500'
-                                    : 'bg-gradient-to-r from-cyan-400 to-blue-500'"
-                                :style="{ width: `${item.progress}%` }"
+                                    : item.status === 'paused'
+                                    ? 'bg-amber-500'
+                                    : 'bg-gradient-to-r from-cyan-400 via-cyan-500 to-blue-500'"
+                                :style="{ width: `${getProgressPercent(item)}%` }"
                             ></div>
                         </div>
 
                         <div class="flex items-center justify-between text-[11px] font-mono text-slate-400">
-                            <span>{{ item.size_downloaded }} / {{ item.size_total }} ({{ item.progress }}%)</span>
+                            <span>{{ formatBytes(item.downloaded_bytes) }} / {{ formatBytes(item.total_bytes) }} ({{ getProgressPercent(item) }}%)</span>
                             <div class="flex items-center gap-4">
-                                <span v-if="item.status === 'downloading'" class="text-cyan-400 font-bold">↓ {{ item.speed_down }}</span>
-                                <span class="text-slate-500 font-normal">⏱️ {{ item.eta }}</span>
-                                <span class="text-slate-500 font-normal">👥 {{ item.peers }}</span>
+                                <span v-if="item.status === 'downloading'" class="text-cyan-400 font-bold">↓ {{ formatBytes(item.speed_bytes_sec) }}/s</span>
+                                <span class="text-slate-400 font-normal">⏱️ {{ getETA(item) }}</span>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Empty State -->
-            <div v-else class="text-center py-16 space-y-3">
+            <!-- Empty State with Quick Seed Suggestions -->
+            <div v-else class="text-center py-12 space-y-4">
                 <CheckCircle2 class="w-12 h-12 text-slate-600 mx-auto" />
-                <h4 class="font-extrabold text-base text-white">
-                    {{ isRTL ? 'لا توجد تنزيلات في هذه الفئة حالياً' : 'No downloads in this queue tab' }}
-                </h4>
-                <p class="text-xs text-slate-400 max-w-sm mx-auto">
-                    {{ isRTL ? 'يمكنك إضافة روابط مغناطيسية أو إرسال ملفات تورنت إلى مجلد المراقبة.' : 'Add new magnet URLs or drop torrent files into your monitored watch directory.' }}
-                </p>
+                <div>
+                    <h4 class="font-extrabold text-base text-white">
+                        {{ isRTL ? 'لا توجد تنزيلات في هذه القائمة حالياً' : 'No downloads in this queue tab' }}
+                    </h4>
+                    <p class="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+                        {{ isRTL ? 'يمكنك إضافة رابط تنزيل مباشر، أو تجربة إضافة أحد النماذج السريعة أدناه لاختبار التنزيل والفهرسة.' : 'Add a new media URL or try starting one of the sample media streams below to test.' }}
+                    </p>
+                </div>
+
+                <!-- Quick Start Sample Streams -->
+                <div class="flex items-center justify-center flex-wrap gap-2 pt-2">
+                    <button
+                        @click="handleQuickSeed('Gladiator II (2024)', 'movie')"
+                        class="px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-500/40 text-xs font-bold text-slate-300 hover:text-cyan-300 transition-all cursor-pointer"
+                    >
+                        🎬 Gladiator II (2024)
+                    </button>
+                    <button
+                        @click="handleQuickSeed('Dune: Part Two (2024)', 'movie')"
+                        class="px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-500/40 text-xs font-bold text-slate-300 hover:text-cyan-300 transition-all cursor-pointer"
+                    >
+                        🎬 Dune: Part Two (2024)
+                    </button>
+                    <button
+                        @click="handleQuickSeed('Shogun - S01E01 (2024)', 'series')"
+                        class="px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-indigo-500/20 border border-white/10 hover:border-indigo-500/40 text-xs font-bold text-slate-300 hover:text-indigo-300 transition-all cursor-pointer"
+                    >
+                        📺 Shogun (2024)
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -413,7 +387,7 @@ const removeItem = (id: number) => {
                         <input
                             type="text"
                             v-model="newTitle"
-                            placeholder="e.g. Gladiator II (2024)"
+                            placeholder="e.g. Oppenheimer (2023)"
                             class="w-full h-11 rounded-xl bg-white/[0.04] border border-white/15 px-4 text-xs text-white focus:border-cyan-500 outline-none"
                         />
                     </div>
@@ -423,44 +397,30 @@ const removeItem = (id: number) => {
                         <input
                             type="text"
                             v-model="newUrl"
-                            placeholder="magnet:?xt=urn:btih:..."
+                            placeholder="https://example.com/video.mp4 or magnet:?xt=urn:btih:..."
                             class="w-full h-11 rounded-xl bg-white/[0.04] border border-white/15 px-4 text-xs font-mono text-cyan-300 focus:border-cyan-500 outline-none"
                         />
                     </div>
 
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="text-xs font-bold text-slate-400 mb-1 block">{{ isRTL ? 'نوع المحتوى' : 'Type' }}</label>
-                            <div class="grid grid-cols-2 gap-2">
-                                <button
-                                    type="button"
-                                    @click="newType = 'movie'"
-                                    class="py-2 rounded-xl text-xs font-bold border cursor-pointer"
-                                    :class="newType === 'movie' ? 'bg-cyan-500 text-slate-950 font-black' : 'bg-white/5 border-white/10 text-slate-400'"
-                                >
-                                    🎬 {{ isRTL ? 'فيلم' : 'Movie' }}
-                                </button>
-                                <button
-                                    type="button"
-                                    @click="newType = 'series'"
-                                    class="py-2 rounded-xl text-xs font-bold border cursor-pointer"
-                                    :class="newType === 'series' ? 'bg-cyan-500 text-slate-950 font-black' : 'bg-white/5 border-white/10 text-slate-400'"
-                                >
-                                    📺 {{ isRTL ? 'مسلسل' : 'Series' }}
-                                </button>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="text-xs font-bold text-slate-400 mb-1 block">{{ isRTL ? 'الجودة المستهدفة' : 'Quality' }}</label>
-                            <select
-                                v-model="newQuality"
-                                class="w-full h-9 rounded-xl bg-white/[0.04] border border-white/15 px-3 text-xs text-white focus:border-cyan-500 outline-none"
+                    <div>
+                        <label class="text-xs font-bold text-slate-400 mb-1 block">{{ isRTL ? 'نوع المحتوى' : 'Type' }}</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button
+                                type="button"
+                                @click="newType = 'movie'"
+                                class="py-2 rounded-xl text-xs font-bold border cursor-pointer"
+                                :class="newType === 'movie' ? 'bg-cyan-500 text-slate-950 font-black' : 'bg-white/5 border-white/10 text-slate-400'"
                             >
-                                <option value="4K" class="bg-slate-900">4K UHD HDR</option>
-                                <option value="1080p" class="bg-slate-900">1080p BluRay</option>
-                                <option value="720p" class="bg-slate-900">720p HD</option>
-                            </select>
+                                🎬 {{ isRTL ? 'فيلم' : 'Movie' }}
+                            </button>
+                            <button
+                                type="button"
+                                @click="newType = 'series'"
+                                class="py-2 rounded-xl text-xs font-bold border cursor-pointer"
+                                :class="newType === 'series' ? 'bg-cyan-500 text-slate-950 font-black' : 'bg-white/5 border-white/10 text-slate-400'"
+                            >
+                                📺 {{ isRTL ? 'مسلسل' : 'Series' }}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -473,10 +433,11 @@ const removeItem = (id: number) => {
                         {{ t('common.close') }}
                     </button>
                     <button
-                        @click="handleAddDownload"
-                        class="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-black cursor-pointer shadow-lg shadow-cyan-500/20"
+                        @click="handleAddSubmit"
+                        :disabled="isSubmitting || !newTitle.trim()"
+                        class="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 text-xs font-black cursor-pointer shadow-lg shadow-cyan-500/20"
                     >
-                        {{ isRTL ? 'بدء التنزيل والفهرسة' : 'Start Ingestion' }}
+                        {{ isRTL ? 'بدء التنزيل والفهرسة' : 'Start Download Job' }}
                     </button>
                 </div>
             </div>
@@ -498,18 +459,18 @@ const removeItem = (id: number) => {
 
                 <div class="space-y-3 text-xs text-slate-300 leading-relaxed">
                     <div class="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
-                        <span class="font-bold text-cyan-400 block">1. الاستقبال والتنزيل المباشر</span>
-                        <p class="text-slate-400">تدعم المنظومة إضافة روابط التورنت والمغناطيس مع إدارة كاملة للسرعات والتوزيع الجغرافي للأقران.</p>
+                        <span class="font-bold text-cyan-400 block">1. الاستقبال والتنزيل المباشر في الخلفية</span>
+                        <p class="text-slate-400">يقوم محرك التنزيل باستقبال روابط التحميل والتورنت وتنزيل الحزم في الخلفية دون تعطيل تصفحك للموقع.</p>
                     </div>
 
                     <div class="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
                         <span class="font-bold text-indigo-400 block">2. مراقبة المجلدات والاستخراج</span>
-                        <p class="text-slate-400">يتم فحص مجلد التنزيلات دورياً، وفي حال وجود ملفات مضغوطة .rar يتم استخراجها تلقائياً إلى مجلد الوسائط المؤقت.</p>
+                        <p class="text-slate-400">يتم فحص مجلد التنزيلات دورياً، وفي حال وجود ملفات مضغوطة .zip يتم استخراجها تلقائياً إلى مجلد الوسائط.</p>
                     </div>
 
                     <div class="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
-                        <span class="font-bold text-emerald-400 block">3. المطابقة والدمج السينمائي</span>
-                        <p class="text-slate-400">يرسل خادم التنزيل إشعاراً لفاحص المكتبة (Virtual Scanner) ليقوم بمطابقة الفيلم وتنزيل بوسترات 4K والترجمات العربية فوراً دون انتظار.</p>
+                        <span class="font-bold text-emerald-400 block">3. المطابقة والفهرسة التلقائية</span>
+                        <p class="text-slate-400">بمجرد اكتمال تنزيل الفيلم، يقوم الفاحص فورياً بمطابقته وجلب البوسترات والترجمات العربية ليظهر في مكتبتك جاهزاً للعرض.</p>
                     </div>
                 </div>
 

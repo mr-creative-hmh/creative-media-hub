@@ -546,4 +546,16 @@ class VirtualLibraryScannerService
 
         return $episode;
     }
+
+    public function processSingleFile(string $filePath, string $typeHint = 'movie'): ?array
+    {
+        return $this->processFileItem([
+            'path' => $filePath,
+            'filename' => basename($filePath),
+            'extension' => pathinfo($filePath, PATHINFO_EXTENSION),
+            'size_bytes' => file_exists($filePath) ? filesize($filePath) : 1500000000,
+            'type_hint' => $typeHint === 'series' ? 'series' : 'movies',
+        ]);
+    }
+
 }

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
-import { router } from '@inertiajs/vue3';
+import { router, Link } from '@inertiajs/vue3';
 import { useScanner } from '@/composables/useScanner';
+import { useDownloader } from '@/composables/useDownloader';
 import AppLogo from '@/components/common/AppLogo.vue';
 import {
     Search, Globe, LayoutDashboard, Film, Clapperboard, FolderSync,
@@ -12,6 +13,7 @@ import {
 
 const { t, locale, setLocale, isRTL } = useI18n();
 const { scanStatus, isScanning, isPaused, openScanModal } = useScanner();
+const { activeDownloads, totalSpeedDownFormatted } = useDownloader();
 
 const searchQuery = ref('');
 const isMobileMenuOpen = ref(false);
@@ -45,13 +47,13 @@ const mobileNavItems = [
     <header class="sticky top-0 z-40 w-full glass-panel border-b border-white/10 bg-[#07090E]/90 backdrop-blur-xl px-4 lg:px-8 py-3 flex items-center justify-between gap-4 transition-all">
         <!-- Logo & Mobile Toggle -->
         <div class="flex items-center gap-3">
-            <button @click="isMobileMenuOpen = !isMobileMenuOpen" class="lg:hidden p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300">
+            <button @click="isMobileMenuOpen = !isMobileMenuOpen" class="lg:hidden p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 cursor-pointer">
                 <Menu v-if="!isMobileMenuOpen" class="w-5 h-5" />
                 <X v-else class="w-5 h-5" />
             </button>
-            <a href="/" class="flex items-center">
+            <Link href="/" class="flex items-center">
                 <AppLogo size="md" :show-text="true" />
-            </a>
+            </Link>
         </div>
 
         <!-- Universal Search Bar -->
@@ -69,6 +71,18 @@ const mobileNavItems = [
 
         <!-- Right Action Controls -->
         <div class="flex items-center gap-2 sm:gap-3">
+            <!-- Active Downloads Quick Pill -->
+            <Link
+                v-if="activeDownloads.length > 0"
+                href="/downloads"
+                class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 text-xs font-bold transition-all hover:bg-indigo-500/30 cursor-pointer shadow-sm"
+                :title="isRTL ? 'التنزيلات النشطة' : 'Active Downloads'"
+            >
+                <DownloadCloud class="w-3.5 h-3.5 animate-bounce text-indigo-400" />
+                <span class="font-mono text-[11px]">{{ totalSpeedDownFormatted }}</span>
+                <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping"></span>
+            </Link>
+
             <!-- Global Scanner Status Button / Active Pill -->
             <button
                 v-if="isScanning || isPaused"
@@ -104,16 +118,16 @@ const mobileNavItems = [
         </div>
     </header>
 
-    <!-- Mobile Drawer Menu -->
+    <!-- Mobile Drawer Menu (Instant SPA Links) -->
     <div v-if="isMobileMenuOpen" class="lg:hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col p-6 animate-in fade-in">
         <div class="flex items-center justify-between pb-6 border-b border-white/10">
             <AppLogo size="md" :show-text="true" />
-            <button @click="isMobileMenuOpen = false" class="p-2 text-slate-400 hover:text-white">
+            <button @click="isMobileMenuOpen = false" class="p-2 text-slate-400 hover:text-white cursor-pointer">
                 <X class="w-6 h-6" />
             </button>
         </div>
         <div class="flex flex-col gap-2 pt-6">
-            <a
+            <Link
                 v-for="item in mobileNavItems"
                 :key="item.href"
                 :href="item.href"
@@ -122,7 +136,7 @@ const mobileNavItems = [
             >
                 <component :is="item.icon" class="w-5 h-5 text-cyan-400" />
                 <span>{{ t(item.nameKey) }}</span>
-            </a>
+            </Link>
         </div>
     </div>
 </template>

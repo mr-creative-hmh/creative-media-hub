@@ -3,21 +3,37 @@
 namespace App\Http\Controllers;
 
 use App\Models\DownloadItem;
+use App\Services\Downloader\DownloadManagerService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Inertia\Response;
 
 class DownloadManagerController extends Controller
 {
-    public function index()
+    protected DownloadManagerService $downloadService;
+
+    public function __construct(DownloadManagerService $downloadService)
+    {
+        $this->downloadService = $downloadService;
+    }
+
+    public function index(): Response
     {
         $downloads = DownloadItem::orderByDesc('created_at')->get();
 
         return Inertia::render('Downloader/Index', [
-            'downloads' => $downloads,
+            'initialDownloads' => $downloads,
         ]);
     }
 
-    public function store(Request $request)
+    public function list(): JsonResponse
+    {
+        $downloads = DownloadItem::orderByDesc('created_at')->get();
+        return response()->json($downloads);
+    }
+
+    public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'title' => 'required|string',
@@ -26,17 +42,43 @@ class DownloadManagerController extends Controller
             'destination_path' => 'nullable|string',
         ]);
 
-        $item = DownloadItem::create([
-            'title' => $validated['title'],
-            'media_type' => $validated['media_type'],
-            'source_url' => $validated['source_url'] ?? 'https://example.com/stream/download',
-            'destination_path' => $validated['destination_path'] ?? 'C:/Downloads/Incoming/' . $validated['title'] . '.mkv',
-            'total_bytes' => rand(1500000000, 8000000000),
-            'downloaded_bytes' => 0,
-            'status' => 'downloading',
-            'speed_bytes_sec' => rand(5000000, 15000000),
-        ]);
+        $item = $this->downloadService->createDownload(
+            $validated['title'],
+            $validated['media_type'],
+            $validated['source_url'] ?? null,
+            $validated['destination_path'] ?? null
+        );
 
         return response()->json($item);
+    }
+
+    public function processBatch(): JsonResponse
+    {
+        $result = $this->downloadService->processBatch();
+        return response()->json($result);
+    }
+
+    public function pause(int $id): JsonResponse
+    {
+        $success = $this->downloadService->pause($id);
+        return response()->json(['success' => $success]);
+    }
+
+    public function resume(int $id): JsonResponse
+    {
+        $success = $this->downloadService->resume($id);
+        return response()->json(['success' => $success]);
+    }
+
+    public function retry(int $id): JsonResponse
+    {
+        $success = $this->downloadService->retry($id);
+        return response()->json(['success' => $success]);
+    }
+
+    public function destroy(int $id): JsonResponse
+    {
+        $success = $this->downloadService->delete($id, false);
+        return response()->json(['success' => $success]);
     }
 }

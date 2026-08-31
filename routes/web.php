@@ -84,9 +84,15 @@ Route::get('/api/continue-watching', [StreamController::class, 'getContinueWatch
 // Storage & Codec Analytics
 Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics.index');
 
-// Download & Watch Folder Center
+// Real Download & Background Ingestion Center
 Route::get('/downloads', [DownloadManagerController::class, 'index'])->name('downloads.index');
+Route::get('/api/downloads/list', [DownloadManagerController::class, 'list'])->name('api.downloads.list');
 Route::post('/api/downloads', [DownloadManagerController::class, 'store'])->name('api.downloads.store');
+Route::post('/api/downloads/process-batch', [DownloadManagerController::class, 'processBatch'])->name('api.downloads.process-batch');
+Route::post('/api/downloads/{id}/pause', [DownloadManagerController::class, 'pause'])->name('api.downloads.pause');
+Route::post('/api/downloads/{id}/resume', [DownloadManagerController::class, 'resume'])->name('api.downloads.resume');
+Route::post('/api/downloads/{id}/retry', [DownloadManagerController::class, 'retry'])->name('api.downloads.retry');
+Route::delete('/api/downloads/{id}', [DownloadManagerController::class, 'destroy'])->name('api.downloads.destroy');
 
 // System Settings & API Providers
 Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');

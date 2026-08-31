@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ConfirmModal from '@/components/common/ConfirmModal.vue';
@@ -660,12 +660,12 @@ const toggleSelectAll = (checked: boolean) => {
                     >
                         {{ isRTL ? 'تنظيم مجلد آخر' : 'Organize Another Folder' }}
                     </button>
-                    <a
+                    <Link
                         href="/movies"
                         class="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-black cursor-pointer shadow-lg shadow-cyan-500/20"
                     >
                         {{ isRTL ? 'عرض مكتبة الأفلام' : 'Explore Movies' }}
-                    </a>
+                    </Link>
                 </div>
             </div>
         </div>

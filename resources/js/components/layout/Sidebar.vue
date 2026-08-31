@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import { useScanner } from '@/composables/useScanner';
+import { useDownloader } from '@/composables/useDownloader';
 import {
     LayoutDashboard, Film, Tv, ScanLine, FolderSync,
     Subtitles, BarChart3, DownloadCloud, Settings, Sparkles,
@@ -9,6 +11,7 @@ import {
 
 const { t, isRTL } = useI18n();
 const { scanStatus, isScanning, isPaused, openScanModal } = useScanner();
+const { activeDownloads } = useDownloader();
 
 const navItems = [
     { nameKey: 'nav.dashboard', href: '/', icon: LayoutDashboard, pattern: '^/$|^/dashboard' },
@@ -19,7 +22,7 @@ const navItems = [
     { nameKey: 'nav.organizer', href: '/organizer', icon: FolderSync, pattern: '^/organizer' },
     { nameKey: 'nav.subtitles', href: '/subtitles', icon: Subtitles, pattern: '^/subtitles' },
     { nameKey: 'nav.analytics', href: '/analytics', icon: BarChart3, pattern: '^/analytics' },
-    { nameKey: 'nav.downloads', href: '/downloads', icon: DownloadCloud, pattern: '^/downloads' },
+    { nameKey: 'nav.downloads', href: '/downloads', icon: DownloadCloud, pattern: '^/downloads', badge: activeDownloads },
     { nameKey: 'nav.docs', href: '/docs', icon: BookOpen, pattern: '^/docs|^/guide' },
     { nameKey: 'nav.settings', href: '/settings', icon: Settings, pattern: '^/settings' },
 ];
@@ -49,24 +52,33 @@ const isActive = (pattern: string) => {
             </button>
         </div>
 
-        <!-- Navigation Links -->
+        <!-- Navigation Links (Instant SPA via Inertia Link) -->
         <div class="space-y-1">
-            <a
+            <Link
                 v-for="item in navItems"
                 :key="item.href"
                 :href="item.href"
-                class="flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all group cursor-pointer"
+                class="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all group cursor-pointer"
                 :class="isActive(item.pattern)
                     ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 shadow-sm font-bold'
                     : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border border-transparent'"
             >
-                <component
-                    :is="item.icon"
-                    class="w-4.5 h-4.5 transition-transform group-hover:scale-110"
-                    :class="isActive(item.pattern) ? 'text-cyan-400' : 'text-slate-400 group-hover:text-slate-200'"
-                />
-                <span>{{ t(item.nameKey) }}</span>
-            </a>
+                <div class="flex items-center gap-3.5">
+                    <component
+                        :is="item.icon"
+                        class="w-4.5 h-4.5 transition-transform group-hover:scale-110"
+                        :class="isActive(item.pattern) ? 'text-cyan-400' : 'text-slate-400 group-hover:text-slate-200'"
+                    />
+                    <span>{{ t(item.nameKey) }}</span>
+                </div>
+
+                <span
+                    v-if="item.badge && item.badge.length > 0"
+                    class="px-2 py-0.5 rounded-full bg-cyan-500 text-slate-950 font-black text-[10px] animate-pulse"
+                >
+                    {{ item.badge.length }}
+                </span>
+            </Link>
         </div>
 
         <!-- Virtual Scanner Quick Status in Sidebar Footer -->

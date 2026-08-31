@@ -6,9 +6,11 @@ import Sidebar from './Sidebar.vue';
 import CinemaPlayer from '@/components/player/CinemaPlayer.vue';
 import ScannerStatusModal from '@/components/scanner/ScannerStatusModal.vue';
 import { useScanner } from '@/composables/useScanner';
+import { useDownloader } from '@/composables/useDownloader';
 
 const { isRTL } = useI18n();
 const { fetchStatus } = useScanner();
+const { startBackgroundWorker } = useDownloader();
 
 const activePlayerItem = ref<any | null>(null);
 
@@ -19,6 +21,9 @@ onMounted(() => {
 
     // Initialize global background scanner worker
     fetchStatus();
+
+    // Initialize global background downloader worker
+    startBackgroundWorker();
 });
 
 const handlePlay = (item: any) => {
