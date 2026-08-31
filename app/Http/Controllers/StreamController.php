@@ -7,6 +7,7 @@ use App\Models\Episode;
 use App\Models\MediaItem;
 use App\Models\Subtitle;
 use App\Models\WatchHistory;
+use App\Services\Subtitles\EmbeddedSubtitleDetectorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
@@ -14,6 +15,13 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StreamController extends Controller
 {
+    protected EmbeddedSubtitleDetectorService $embeddedSubDetector;
+
+    public function __construct(EmbeddedSubtitleDetectorService $embeddedSubDetector)
+    {
+        $this->embeddedSubDetector = $embeddedSubDetector;
+    }
+
     public function streamMovie(MediaItem $mediaItem, Request $request)
     {
         $filePath = $mediaItem->file_path;
@@ -50,6 +58,23 @@ class StreamController extends Controller
     {
         $path = $subtitle->file_path;
 
+        // Check if subtitle is embedded inside video container
+        if ($subtitle->is_embedded || str_starts_with($path, 'embedded:')) {
+            $parts = explode(':', $path, 3);
+            $streamIndex = isset($parts[1]) ? (int) $parts[1] : 0;
+            $videoPath = $parts[2] ?? '';
+
+            if ($videoPath && File::exists($videoPath)) {
+                $vtt = $this->embeddedSubDetector->extractToWebVtt($videoPath, $streamIndex, $subtitle->format ?? 'srt');
+                return response($vtt, 200, [
+                    'Content-Type' => 'text/vtt; charset=utf-8',
+                    'Access-Control-Allow-Origin' => '*',
+                    'Cache-Control' => 'no-cache',
+                ]);
+            }
+        }
+
+        // External Subtitle File
         if (!$path || !File::exists($path)) {
             return response("WEBVTT\n\n", 200, ['Content-Type' => 'text/vtt; charset=utf-8']);
         }
@@ -78,127 +103,123 @@ class StreamController extends Controller
 
         $userId = Auth::id();
 
-        $history = WatchHistory::updateOrCreate([
-            'user_id' => $userId,
-            'watchable_id' => $validated['watchable_id'],
-            'watchable_type' => $modelClass,
-        ], [
-            'progress_seconds' => $validated['progress_seconds'],
-            'duration_seconds' => $validated['duration_seconds'],
-            'is_completed' => $isCompleted,
-            'last_watched_at' => now(),
-        ]);
+        $watchHistory = WatchHistory::updateOrCreate(
+            [
+                'user_id' => $userId,
+                'watchable_type' => $modelClass,
+                'watchable_id' => $validated['watchable_id'],
+            ],
+            [
+                'progress_seconds' => $validated['progress_seconds'],
+                'duration_seconds' => $validated['duration_seconds'],
+                'is_completed' => $isCompleted,
+                'last_watched_at' => now(),
+            ]
+        );
 
         return response()->json([
-            'status' => 'success',
-            'history' => $history,
+            'success' => true,
+            'progress' => $watchHistory,
         ]);
     }
 
-    public function getContinueWatching()
+    public function getContinueWatching(Request $request)
     {
         $userId = Auth::id();
 
-        $query = WatchHistory::where('is_completed', false)
-            ->where('progress_seconds', '>', 10)
-            ->with(['watchable']);
-
-        if ($userId) {
-            $query->where('user_id', $userId);
-        }
-
-        $histories = $query->orderByDesc('last_watched_at')
+        $history = WatchHistory::where('user_id', $userId)
+            ->where('is_completed', false)
+            ->where('progress_seconds', '>', 30)
+            ->orderByDesc('last_watched_at')
+            ->with(['watchable'])
             ->limit(10)
             ->get();
 
-        $items = $histories->map(function ($h) {
-            $watchable = $h->watchable;
-            if (!$watchable) return null;
-
-            $isEpisode = $h->watchable_type === Episode::class;
-            $title = $isEpisode ? ($watchable->series->title ?? '') . " - S{$watchable->season_id}E{$watchable->episode_number}" : $watchable->title;
-            $titleAr = $isEpisode ? ($watchable->series->title_ar ?? '') . " - حلقة {$watchable->episode_number}" : $watchable->title_ar;
-
-            return [
-                'id' => $h->id,
-                'watchable_id' => $h->watchable_id,
-                'watchable_type' => $isEpisode ? 'episode' : 'movie',
-                'title' => $title,
-                'title_ar' => $titleAr,
-                'progress_seconds' => $h->progress_seconds,
-                'duration_seconds' => $h->duration_seconds,
-                'percent' => round(($h->progress_seconds / max(1, $h->duration_seconds)) * 100),
-                'backdrop_path' => $isEpisode ? ($watchable->series->backdrop_path ?? $watchable->still_path) : $watchable->backdrop_path,
-                'poster_path' => $isEpisode ? ($watchable->series->poster_path ?? null) : $watchable->poster_path,
-                'last_watched_at' => $h->last_watched_at->diffForHumans(),
-            ];
-        })->filter()->values();
-
-        return response()->json($items);
+        return response()->json($history);
     }
 
     protected function streamFileRange(string $path, Request $request)
     {
         $size = filesize($path);
-        $start = 0;
-        $end = $size - 1;
-        $length = $size;
-        $status = 200;
+        $file = fopen($path, 'rb');
 
         $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-        $mime = match ($ext) {
+        $contentType = match ($ext) {
             'mp4', 'm4v' => 'video/mp4',
+            'mkv' => 'video/x-matroska',
             'webm' => 'video/webm',
-            'mkv' => 'video/mp4', // Modern browsers parse AVC/HEVC in MKV containers with mp4/webm MIME
-            'ogv' => 'video/ogg',
+            'ogv', 'ogg' => 'video/ogg',
+            'mov' => 'video/quicktime',
+            'avi' => 'video/x-msvideo',
             default => 'video/mp4',
         };
 
+        $start = 0;
+        $end = $size - 1;
+        $status = 200;
+
         $headers = [
-            'Content-Type' => $mime,
+            'Content-Type' => $contentType,
             'Accept-Ranges' => 'bytes',
+            'Access-Control-Allow-Origin' => '*',
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
         ];
 
-        if ($request->hasHeader('Range')) {
+        if ($request->header('Range')) {
             $range = $request->header('Range');
-            if (preg_match('/bytes=(\d+)-(\d*)/', $range, $matches)) {
+            if (preg_match('/bytes=(\d+)-(\d+)?/', $range, $matches)) {
                 $start = (int) $matches[1];
                 if (!empty($matches[2])) {
                     $end = (int) $matches[2];
                 }
-                $length = $end - $start + 1;
                 $status = 206;
                 $headers['Content-Range'] = "bytes {$start}-{$end}/{$size}";
             }
         }
 
+        $length = $end - $start + 1;
         $headers['Content-Length'] = (string) $length;
 
-        $response = new StreamedResponse(function () use ($path, $start, $length) {
-            $handle = fopen($path, 'rb');
-            fseek($handle, $start);
-            $chunkSize = 1024 * 512; // 512KB buffer for fast scrubbing
-            $remaining = $length;
+        fseek($file, $start);
 
-            while (!feof($handle) && $remaining > 0 && (connection_status() === CONNECTION_NORMAL)) {
-                $readLength = min($chunkSize, $remaining);
-                echo fread($handle, $readLength);
+        return new StreamedResponse(function () use ($file, $length) {
+            $remaining = $length;
+            $chunkSize = 1024 * 128; // 128 KB buffer
+
+            while (!feof($file) && $remaining > 0 && (connection_status() === CONNECTION_NORMAL)) {
+                $bytesToRead = min($chunkSize, $remaining);
+                $buffer = fread($file, $bytesToRead);
+                if ($buffer === false) break;
+
+                echo $buffer;
                 flush();
-                $remaining -= $readLength;
+                $remaining -= strlen($buffer);
             }
 
-            fclose($handle);
+            fclose($file);
         }, $status, $headers);
-
-        return $response;
     }
 
     protected function streamWithAacTranscode(string $path, Request $request)
     {
         $ffmpegBin = AppSetting::where('key', 'ffmpeg_path')->value('value') ?: 'ffmpeg';
-        $start = (int) $request->input('start', 0);
 
-        // FFmpeg fast audio transcode to AAC with zero video re-encoding and non-blocking stderr
+        $isFfmpegAvailable = false;
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            $testCmd = "where {$ffmpegBin} 2>NUL";
+        } else {
+            $testCmd = "which {$ffmpegBin} 2>/dev/null";
+        }
+        @exec($testCmd, $out, $code);
+        if ($code === 0 && !empty($out)) {
+            $isFfmpegAvailable = true;
+        }
+
+        if (!$isFfmpegAvailable) {
+            return $this->streamFileRange($path, $request);
+        }
+
+        $start = (int) $request->input('start', 0);
         $escapedPath = escapeshellarg($path);
         $seekFlag = $start > 0 ? "-ss {$start}" : "";
         $cmd = "{$ffmpegBin} -nostats -loglevel error -hide_banner {$seekFlag} -i {$escapedPath} -c:v copy -c:a aac -b:a 192k -ac 2 -f mp4 -movflags frag_keyframe+empty_moov+default_base_moof pipe:1";
@@ -206,13 +227,12 @@ class StreamController extends Controller
         $descriptors = [
             0 => ['pipe', 'r'],
             1 => ['pipe', 'w'],
-            2 => ['file', 'NUL', 'a'], // Windows discard stderr to prevent process pipe deadlock
+            2 => ['file', 'NUL', 'a'],
         ];
 
         $process = @proc_open($cmd, $descriptors, $pipes);
 
         if (!is_resource($process)) {
-            // Fallback to direct range stream if FFmpeg process cannot be spawned
             return $this->streamFileRange($path, $request);
         }
 
@@ -234,48 +254,78 @@ class StreamController extends Controller
             @proc_close($process);
         }, 200, [
             'Content-Type' => 'video/mp4',
+            'Accept-Ranges' => 'none',
             'Cache-Control' => 'no-cache',
-            'Connection' => 'keep-alive',
+            'Access-Control-Allow-Origin' => '*',
         ]);
     }
 
-    protected function convertToCleanWebVTT(string $rawContent, string $format): string
+    protected function convertToCleanWebVTT(string $rawContent, string $format = 'srt'): string
     {
-        // Strip UTF-8 BOM
-        $content = preg_replace('/^\xEF\xBB\xBF/', '', $rawContent);
+        $content = str_replace(["\r\n", "\r"], "\n", $rawContent);
 
-        // Convert ASS/SSA tags if present
+        if (str_starts_with(trim($content), 'WEBVTT')) {
+            return $content;
+        }
+
+        $vtt = "WEBVTT\n\n";
+
         if ($format === 'ass' || $format === 'ssa' || str_contains($content, '[Events]')) {
             $lines = explode("\n", $content);
-            $vttLines = ["WEBVTT\n"];
+            $inEvents = false;
+            $eventFormat = [];
+
             foreach ($lines as $line) {
-                if (str_starts_with(trim($line), 'Dialogue:')) {
-                    $parts = explode(',', $line, 10);
-                    if (count($parts) >= 10) {
-                        $start = str_replace('.', ':', trim($parts[1]));
-                        $end = str_replace('.', ':', trim($parts[2]));
-                        $text = trim($parts[9]);
+                $trimLine = trim($line);
+                if ($trimLine === '[Events]') {
+                    $inEvents = true;
+                    continue;
+                }
 
-                        // Replace ASS formatting tags {\...}
-                        $text = preg_replace('/\{[^}]*\}/', '', $text);
-                        $text = str_replace(['\N', '\n'], "\n", $text);
+                if ($inEvents && str_starts_with($trimLine, 'Format:')) {
+                    $eventFormat = array_map('trim', explode(',', substr($trimLine, 7)));
+                    continue;
+                }
 
-                        $vttLines[] = "{$start}.000 --> {$end}.000\n{$text}\n";
+                if ($inEvents && str_starts_with($trimLine, 'Dialogue:')) {
+                    $parts = explode(',', substr($trimLine, 9), count($eventFormat));
+                    if (count($parts) >= 9) {
+                        $startIdx = array_search('Start', $eventFormat) ?: 1;
+                        $endIdx = array_search('End', $eventFormat) ?: 2;
+                        $textIdx = array_search('Text', $eventFormat) ?: (count($parts) - 1);
+
+                        $start = $this->convertAssTimestampToVtt($parts[$startIdx] ?? '00:00:00.00');
+                        $end = $this->convertAssTimestampToVtt($parts[$endIdx] ?? '00:00:05.00');
+                        $text = $parts[$textIdx] ?? '';
+
+                        // Strip SSA style tags like {\an8\c&H00FFFF&}
+                        $cleanText = preg_replace('/\{[^}]+\}/', '', $text);
+                        $cleanText = str_replace(['\N', '\n'], "\n", $cleanText);
+
+                        $vtt .= "{$start} --> {$end}\n{$cleanText}\n\n";
                     }
                 }
             }
-            if (count($vttLines) > 1) {
-                return implode("\n", $vttLines);
-            }
+            return $vtt;
         }
 
-        // Convert SRT to WebVTT
-        if (!str_starts_with(trim($content), 'WEBVTT')) {
-            // Convert timestamp commas to periods: 00:01:23,456 --> 00:01:23.456
-            $content = preg_replace('/(\d{2}:\d{2}:\d{2}),(\d{3})/', '$1.$2', $content);
-            $content = "WEBVTT\n\n" . $content;
-        }
+        // Standard SRT conversion: convert 00:01:20,500 to 00:01:20.500
+        $cleanSrt = preg_replace('/(\d{2}:\d{2}:\d{2}),(\d{3})/', '$1.$2', $content);
+        return $vtt . trim($cleanSrt) . "\n";
+    }
 
-        return $content;
+    protected function convertAssTimestampToVtt(string $assTime): string
+    {
+        $parts = explode(':', trim($assTime));
+        if (count($parts) === 3) {
+            $hours = sprintf('%02d', (int) $parts[0]);
+            $minutes = sprintf('%02d', (int) $parts[1]);
+            $secsParts = explode('.', $parts[2]);
+            $secs = sprintf('%02d', (int) ($secsParts[0] ?? 0));
+            $millis = str_pad(substr($secsParts[1] ?? '000', 0, 3), 3, '0');
+
+            return "{$hours}:{$minutes}:{$secs}.{$millis}";
+        }
+        return '00:00:00.000';
     }
 }

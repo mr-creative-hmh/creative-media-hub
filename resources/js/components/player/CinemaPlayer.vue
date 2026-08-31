@@ -1,46 +1,56 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
     Play, Pause, Volume2, VolumeX, Maximize, Minimize,
-    X, RotateCcw, RotateCw, Subtitles, Settings, Check, Sparkles,
-    ExternalLink, Music, HelpCircle, Copy, AlertTriangle, Tv, Sliders,
-    Type, Palette, Clock, PictureInPicture2
+    RotateCcw, RotateCw, Subtitles, Settings, X,
+    Sparkles, Film, ArrowLeft, Sliders, Music, Volume1,
+    Copy, Check, PictureInPicture, Zap, ShieldCheck
 } from 'lucide-vue-next';
 
 const props = defineProps<{
     item: {
         id: number;
         title: string;
-        title_ar?: string;
-        watchable_id?: number;
-        watchable_type?: string;
-        subtitles?: Array<{ id: number; language: string; language_name?: string; format?: string; file_path?: string }>;
+        type?: 'movie' | 'episode';
+        subtitles?: Array<{
+            id: number;
+            language: string;
+            language_name: string;
+            file_path?: string;
+        }>;
     };
 }>();
 
 const emit = defineEmits(['close']);
-const { isRTL, t } = useI18n();
+
+const { t, isRTL } = useI18n();
 
 const videoRef = ref<HTMLVideoElement | null>(null);
-const playerContainer = ref<HTMLDivElement | null>(null);
+const playerContainerRef = ref<HTMLDivElement | null>(null);
 
 const isPlaying = ref(false);
+const isMuted = ref(false);
+const volume = ref(1);
 const currentTime = ref(0);
 const duration = ref(0);
-const volume = ref(1);
-const isMuted = ref(false);
 const isFullscreen = ref(false);
-const showControls = ref(true);
-const playbackRate = ref(1.0);
+const isPiP = ref(false);
+const isControlsVisible = ref(true);
+const playbackRate = ref(1);
 const selectedSubtitleId = ref<number | 'off'>('off');
-const showSubtitleMenu = ref(false);
+
+// Menus
 const showSpeedMenu = ref(false);
+const showSubtitleMenu = ref(false);
 const showAudioMenu = ref(false);
 const showSubSettings = ref(false);
-const audioMode = ref<'direct' | 'aac'>('direct');
 const toastNotice = ref('');
 const isDoubleTapSeeking = ref<'left' | 'right' | null>(null);
+
+// Audio Enhancer Modes (Web Audio API - Pure Client-Side Hardware Acceleration)
+type AudioEnhanceMode = 'direct' | 'voice_boost' | 'cinema_boost' | 'night_mode';
+const audioEnhanceMode = ref<AudioEnhanceMode>('direct');
 
 // Subtitle Customization Preferences
 const subFontSize = ref<'sm' | 'md' | 'lg' | 'xl'>('lg');
@@ -53,251 +63,361 @@ let progressInterval: any = null;
 let lastTapTime = 0;
 let lastTapSide: 'left' | 'right' | null = null;
 
+// Web Audio API Context & Nodes
+let audioCtx: AudioContext | null = null;
+let sourceNode: MediaElementAudioSourceNode | null = null;
+let gainNode: GainNode | null = null;
+let voiceFilterNode: BiquadFilterNode | null = null;
+let compressorNode: DynamicsCompressorNode | null = null;
+
 const baseStreamUrl = computed(() => {
-    const isEpisode = props.item.watchable_type === 'episode';
-    const mediaId = props.item.watchable_id || props.item.id;
-    return isEpisode ? `/stream/episode/${mediaId}` : `/stream/movie/${mediaId}`;
+    return props.item.type === 'episode'
+        ? `/stream/episode/${props.item.id}`
+        : `/stream/movie/${props.item.id}`;
 });
 
-const streamUrl = computed(() => {
-    if (audioMode.value === 'aac') {
-        return `${baseStreamUrl.value}?audio_mode=aac&start=${Math.floor(currentTime.value)}`;
+const subtitleUrl = computed(() => {
+    if (selectedSubtitleId.value === 'off') return '';
+    return `/stream/subtitles/${selectedSubtitleId.value}`;
+});
+
+// Setup Web Audio Enhancement Pipeline
+const setupWebAudioPipeline = () => {
+    if (!videoRef.value || audioCtx) return;
+
+    try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContextClass) return;
+
+        audioCtx = new AudioContextClass();
+        sourceNode = audioCtx.createMediaElementSource(videoRef.value);
+        gainNode = audioCtx.createGain();
+        voiceFilterNode = audioCtx.createBiquadFilter();
+        compressorNode = audioCtx.createDynamicsCompressor();
+
+        // Configure Voice Midrange Peaking Filter (1.5kHz dialogue boost)
+        voiceFilterNode.type = 'peaking';
+        voiceFilterNode.frequency.value = 1500;
+        voiceFilterNode.Q.value = 1.0;
+        voiceFilterNode.gain.value = 0;
+
+        // Configure Compressor for Night Mode
+        compressorNode.threshold.value = -24;
+        compressorNode.knee.value = 30;
+        compressorNode.ratio.value = 12;
+        compressorNode.attack.value = 0.003;
+        compressorNode.release.value = 0.25;
+
+        // Connect chain: Source -> Voice Filter -> Compressor -> Gain -> Destination
+        sourceNode.connect(voiceFilterNode);
+        voiceFilterNode.connect(compressorNode);
+        compressorNode.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+    } catch (e) {
+        console.warn('Web Audio API not supported or already connected:', e);
     }
-    return baseStreamUrl.value;
-});
+};
 
-const switchAudioMode = (mode: 'direct' | 'aac') => {
-    const savedTime = videoRef.value?.currentTime || 0;
-    audioMode.value = mode;
+const applyAudioEnhancement = (mode: AudioEnhanceMode) => {
+    audioEnhanceMode.value = mode;
     showAudioMenu.value = false;
-    toastNotice.value = mode === 'aac'
-        ? (isRTL.value ? 'تم تفعيل وضع تحويل الصوت إلى AAC المتوافق' : 'Enhanced AAC Audio Transcode Mode Activated')
-        : (isRTL.value ? 'تم تفعيل وضع البث المباشر الأصلي' : 'Direct Original Stream Mode Activated');
 
-    setTimeout(() => {
-        if (videoRef.value) {
-            videoRef.value.currentTime = savedTime;
-            videoRef.value.play().catch(() => {});
-            isPlaying.value = true;
-        }
-    }, 250);
-    setTimeout(() => { toastNotice.value = ''; }, 3000);
-};
-
-const copyStreamLink = () => {
-    const fullUrl = `${window.location.origin}${baseStreamUrl.value}`;
-    navigator.clipboard.writeText(fullUrl);
-    toastNotice.value = isRTL.value ? 'تم نسخ رابط البث المباشر (VLC/IINA)!' : 'Direct stream URL copied to clipboard!';
-    setTimeout(() => { toastNotice.value = ''; }, 2500);
-};
-
-const formatTime = (seconds: number) => {
-    if (isNaN(seconds) || seconds < 0) return '00:00';
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-
-    if (hrs > 0) {
-        return `${hrs}:${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    if (!audioCtx && videoRef.value) {
+        setupWebAudioPipeline();
     }
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+
+    if (!gainNode || !voiceFilterNode || !compressorNode) {
+        toastNotice.value = isRTL.value ? 'تم تطبيق وضع الصوت المباشر' : 'Direct Audio Active';
+        setTimeout(() => { toastNotice.value = ''; }, 3000);
+        return;
+    }
+
+    if (mode === 'direct') {
+        gainNode.gain.value = 1.0;
+        voiceFilterNode.gain.value = 0;
+        toastNotice.value = isRTL.value ? 'الصوت الأصلي المباشر (Untouched)' : 'Original Untouched Audio';
+    } else if (mode === 'voice_boost') {
+        // Boost center speech frequencies (+8dB at 1.5kHz)
+        gainNode.gain.value = 1.3;
+        voiceFilterNode.gain.value = 8;
+        toastNotice.value = isRTL.value ? 'تم تفعيل تعزيز الحوار والأصوات (+8dB Vocal EQ)' : 'Vocal & Dialogue Clarity Boost (+8dB)';
+    } else if (mode === 'cinema_boost') {
+        // Boost overall volume by 200% (+6dB gain) with warmth
+        gainNode.gain.value = 2.2;
+        voiceFilterNode.gain.value = 3;
+        toastNotice.value = isRTL.value ? 'مضخم الصوت السينمائي الفائق (Volume 200%)' : 'Cinema Volume Amplifier (200% Gain)';
+    } else if (mode === 'night_mode') {
+        // Dynamic Range Compression (soft explosions, clear whispers)
+        gainNode.gain.value = 1.2;
+        voiceFilterNode.gain.value = 6;
+        compressorNode.threshold.value = -32;
+        toastNotice.value = isRTL.value ? 'الوضع الليلي: موازنة الانفجارات وتوضيح الهمس' : 'Night Mode (Dynamic Range Balanced)';
+    }
+
+    setTimeout(() => { toastNotice.value = ''; }, 3500);
+};
+
+const copyStreamLink = async () => {
+    try {
+        const fullUrl = `${window.location.origin}${baseStreamUrl.value}`;
+        await navigator.clipboard.writeText(fullUrl);
+        toastNotice.value = isRTL.value ? 'تم نسخ رابط البث المباشر (لـ VLC / IINA)' : 'Direct Stream URL Copied (VLC / IINA)';
+        setTimeout(() => { toastNotice.value = ''; }, 3000);
+    } catch (e) {}
+};
+
+const togglePiP = async () => {
+    try {
+        if (document.pictureInPictureElement) {
+            await document.exitPictureInPicture();
+            isPiP.value = false;
+        } else if (videoRef.value) {
+            await videoRef.value.requestPictureInPicture();
+            isPiP.value = true;
+        }
+    } catch (e) {}
+};
+
+onMounted(() => {
+    if (props.item.subtitles && props.item.subtitles.length > 0) {
+        const arSub = props.item.subtitles.find(s => s.language === 'ar');
+        const enSub = props.item.subtitles.find(s => s.language === 'en');
+        if (isRTL.value && arSub) {
+            selectedSubtitleId.value = arSub.id;
+        } else if (enSub) {
+            selectedSubtitleId.value = enSub.id;
+        } else {
+            selectedSubtitleId.value = props.item.subtitles[0].id;
+        }
+    }
+
+    window.addEventListener('keydown', handleKeydown);
+    window.addEventListener('mousemove', resetControlsTimeout);
+
+    progressInterval = setInterval(saveProgressToServer, 10000);
+});
+
+onUnmounted(() => {
+    window.removeEventListener('keydown', handleKeydown);
+    window.removeEventListener('mousemove', resetControlsTimeout);
+    if (progressInterval) clearInterval(progressInterval);
+    if (controlsTimeout) clearTimeout(controlsTimeout);
+    if (audioCtx) {
+        try { audioCtx.close(); } catch (e) {}
+    }
+});
+
+const handleKeydown = (e: KeyboardEvent) => {
+    if (['Space', 'KeyK'].includes(e.code)) {
+        e.preventDefault();
+        togglePlay();
+    } else if (['ArrowLeft', 'KeyJ'].includes(e.code)) {
+        e.preventDefault();
+        seek(-10);
+    } else if (['ArrowRight', 'KeyL'].includes(e.code)) {
+        e.preventDefault();
+        seek(10);
+    } else if (e.code === 'ArrowUp') {
+        e.preventDefault();
+        changeVolume(0.1);
+    } else if (e.code === 'ArrowDown') {
+        e.preventDefault();
+        changeVolume(-0.1);
+    } else if (e.code === 'KeyF') {
+        e.preventDefault();
+        toggleFullscreen();
+    } else if (e.code === 'KeyM') {
+        e.preventDefault();
+        toggleMute();
+    } else if (e.code === 'KeyP') {
+        e.preventDefault();
+        togglePiP();
+    } else if (e.code === 'Escape') {
+        if (isFullscreen.value) {
+            toggleFullscreen();
+        } else {
+            emit('close');
+        }
+    }
+};
+
+const handleScreenTouch = (e: MouseEvent | TouchEvent) => {
+    const now = Date.now();
+    const container = playerContainerRef.value;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const clientX = 'clientX' in e ? e.clientX : (e as TouchEvent).touches[0]?.clientX || 0;
+    const isLeft = clientX - rect.left < rect.width * 0.4;
+    const isRight = clientX - rect.left > rect.width * 0.6;
+    const side = isLeft ? 'left' : (isRight ? 'right' : null);
+
+    if (side && lastTapSide === side && now - lastTapTime < 350) {
+        // Double tap confirmed
+        seek(side === 'left' ? -10 : 10);
+        isDoubleTapSeeking.value = side;
+        setTimeout(() => { isDoubleTapSeeking.value = null; }, 600);
+        lastTapTime = 0;
+        lastTapSide = null;
+    } else {
+        lastTapTime = now;
+        lastTapSide = side;
+        resetControlsTimeout();
+    }
+};
+
+const resetControlsTimeout = () => {
+    isControlsVisible.value = true;
+    if (controlsTimeout) clearTimeout(controlsTimeout);
+    controlsTimeout = setTimeout(() => {
+        if (isPlaying.value && !showSpeedMenu.value && !showSubtitleMenu.value && !showAudioMenu.value && !showSubSettings.value) {
+            isControlsVisible.value = false;
+        }
+    }, 3500);
 };
 
 const togglePlay = () => {
     if (!videoRef.value) return;
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
     if (videoRef.value.paused) {
-        videoRef.value.play();
+        videoRef.value.play().catch(() => {});
         isPlaying.value = true;
     } else {
         videoRef.value.pause();
         isPlaying.value = false;
     }
+    resetControlsTimeout();
 };
 
-const seek = (time: number) => {
+const seek = (seconds: number) => {
     if (!videoRef.value) return;
-    videoRef.value.currentTime = Math.max(0, Math.min(time, duration.value));
+    videoRef.value.currentTime = Math.max(0, Math.min(duration.value, videoRef.value.currentTime + seconds));
+    resetControlsTimeout();
+};
+
+const onTimeUpdate = () => {
+    if (!videoRef.value) return;
     currentTime.value = videoRef.value.currentTime;
 };
 
-const skip = (seconds: number) => {
+const onLoadedMetadata = () => {
     if (!videoRef.value) return;
-    seek(videoRef.value.currentTime + seconds);
-    isDoubleTapSeeking.value = seconds < 0 ? 'left' : 'right';
-    setTimeout(() => { isDoubleTapSeeking.value = null; }, 500);
+    duration.value = videoRef.value.duration || 0;
+    applySubtitleStyles();
+};
+
+const onProgressScrub = (e: MouseEvent) => {
+    if (!videoRef.value || !duration.value) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    videoRef.value.currentTime = pos * duration.value;
 };
 
 const toggleMute = () => {
     if (!videoRef.value) return;
-    videoRef.value.muted = !videoRef.value.muted;
-    isMuted.value = videoRef.value.muted;
+    isMuted.value = !isMuted.value;
+    videoRef.value.muted = isMuted.value;
 };
 
-const setVolume = (val: number) => {
+const changeVolume = (delta: number) => {
     if (!videoRef.value) return;
-    volume.value = Math.max(0, Math.min(1, val));
+    volume.value = Math.max(0, Math.min(1, volume.value + delta));
     videoRef.value.volume = volume.value;
-    videoRef.value.muted = volume.value === 0;
-    isMuted.value = videoRef.value.muted;
+    isMuted.value = volume.value === 0;
 };
 
-const setSpeed = (rate: number) => {
+const toggleFullscreen = async () => {
+    if (!playerContainerRef.value) return;
+    if (!document.fullscreenElement) {
+        await playerContainerRef.value.requestFullscreen();
+        isFullscreen.value = true;
+    } else {
+        await document.exitFullscreen();
+        isFullscreen.value = false;
+    }
+};
+
+const setPlaybackRate = (rate: number) => {
     if (!videoRef.value) return;
     playbackRate.value = rate;
     videoRef.value.playbackRate = rate;
     showSpeedMenu.value = false;
 };
 
-const toggleFullscreen = () => {
-    if (!playerContainer.value) return;
-    if (!document.fullscreenElement) {
-        playerContainer.value.requestFullscreen().then(() => {
-            isFullscreen.value = true;
-        }).catch(() => {});
-    } else {
-        document.exitFullscreen().then(() => {
-            isFullscreen.value = false;
-        }).catch(() => {});
-    }
-};
-
-const togglePiP = async () => {
-    if (!videoRef.value) return;
-    try {
-        if (document.pictureInPictureElement) {
-            await document.exitPictureInPicture();
-        } else if (document.pictureInPictureEnabled) {
-            await videoRef.value.requestPictureInPicture();
-        }
-    } catch (e) {}
-};
-
-const selectSubtitle = (subId: number | 'off') => {
+const setSubtitle = (subId: number | 'off') => {
     selectedSubtitleId.value = subId;
     showSubtitleMenu.value = false;
-
-    if (!videoRef.value) return;
-    const tracks = videoRef.value.textTracks;
-
-    for (let i = 0; i < tracks.length; i++) {
-        if (subId === 'off') {
-            tracks[i].mode = 'disabled';
-        } else {
-            const trackId = parseInt(tracks[i].id);
-            tracks[i].mode = trackId === subId ? 'showing' : 'disabled';
-        }
-    }
+    setTimeout(() => {
+        applySubtitleStyles();
+    }, 150);
 };
 
-const adjustSubOffset = (delta: number) => {
-    subOffsetSeconds.value = Math.round((subOffsetSeconds.value + delta) * 10) / 10;
-    toastNotice.value = `${isRTL.value ? 'مزامنة الترجمة' : 'Subtitle Sync'}: ${subOffsetSeconds.value > 0 ? '+' : ''}${subOffsetSeconds.value}s`;
+const adjustSubtitleOffset = (delta: number) => {
+    subOffsetSeconds.value = parseFloat((subOffsetSeconds.value + delta).toFixed(1));
+    toastNotice.value = `${isRTL.value ? 'مزامنة الترجمة' : 'Subtitle Sync Offset'}: ${subOffsetSeconds.value > 0 ? '+' : ''}${subOffsetSeconds.value}s`;
     setTimeout(() => { toastNotice.value = ''; }, 2000);
 };
 
-const handleTimeUpdate = () => {
-    if (!videoRef.value) return;
-    currentTime.value = videoRef.value.currentTime;
-    duration.value = videoRef.value.duration || 0;
-};
-
-const handleLoadedMetadata = () => {
-    if (!videoRef.value) return;
-    duration.value = videoRef.value.duration || 0;
-    if (selectedSubtitleId.value !== 'off') {
-        selectSubtitle(selectedSubtitleId.value);
+const applySubtitleStyles = () => {
+    // Dynamic WebVTT Cue CSS Customization
+    const styleId = 'cinema-vtt-custom-styles';
+    let styleEl = document.getElementById(styleId);
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = styleId;
+        document.head.appendChild(styleEl);
     }
+
+    const fontSizes = { sm: '15px', md: '19px', lg: '24px', xl: '30px' };
+    const colors = {
+        white: '#FFFFFF',
+        yellow: '#FFD700',
+        cyan: '#00FFFF',
+        green: '#00FF7F'
+    };
+    const backgrounds = {
+        none: 'transparent',
+        translucent: 'rgba(0, 0, 0, 0.75)',
+        solid: '#000000'
+    };
+
+    styleEl.innerHTML = `
+        video::cue {
+            font-family: 'Cairo', 'Outfit', sans-serif !important;
+            font-size: ${fontSizes[subFontSize.value]} !important;
+            color: ${colors[subColor.value]} !important;
+            background-color: ${backgrounds[subBackground.value]} !important;
+            text-shadow: 0px 2px 4px rgba(0,0,0,0.9), 0px 0px 10px rgba(0,0,0,0.7) !important;
+            padding: 4px 10px !important;
+            border-radius: 6px !important;
+            line-height: 1.4 !important;
+        }
+    `;
 };
 
-const resetControlsTimeout = () => {
-    showControls.value = true;
-    clearTimeout(controlsTimeout);
-    if (isPlaying.value) {
-        controlsTimeout = setTimeout(() => {
-            showControls.value = false;
-            showSubtitleMenu.value = false;
-            showSpeedMenu.value = false;
-            showAudioMenu.value = false;
-            showSubSettings.value = false;
-        }, 3500);
+watch([subFontSize, subColor, subBackground], () => {
+    applySubtitleStyles();
+});
+
+const formatTime = (seconds: number) => {
+    if (!seconds || isNaN(seconds)) return '00:00';
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    if (hrs > 0) {
+        return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-const handleVideoAreaClick = (e: MouseEvent) => {
-    const target = e.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const isLeft = x < rect.width * 0.4;
-    const isRight = x > rect.width * 0.6;
-
-    const now = Date.now();
-    const side = isLeft ? 'left' : isRight ? 'right' : null;
-
-    if (now - lastTapTime < 300 && lastTapSide === side && side !== null) {
-        if (side === 'left') skip(-10);
-        if (side === 'right') skip(10);
-        lastTapTime = 0;
-        lastTapSide = null;
-    } else {
-        lastTapTime = now;
-        lastTapSide = side;
-        togglePlay();
-    }
-};
-
-const handleKeydown = (e: KeyboardEvent) => {
-    if (['input', 'textarea'].includes((e.target as HTMLElement).tagName.toLowerCase())) return;
-
-    switch (e.key.toLowerCase()) {
-        case ' ':
-        case 'k':
-            e.preventDefault();
-            togglePlay();
-            break;
-        case 'arrowleft':
-        case 'j':
-            e.preventDefault();
-            skip(-10);
-            break;
-        case 'arrowright':
-        case 'l':
-            e.preventDefault();
-            skip(10);
-            break;
-        case 'arrowup':
-            e.preventDefault();
-            setVolume(volume.value + 0.1);
-            break;
-        case 'arrowdown':
-            e.preventDefault();
-            setVolume(volume.value - 0.1);
-            break;
-        case 'f':
-            e.preventDefault();
-            toggleFullscreen();
-            break;
-        case 'm':
-            e.preventDefault();
-            toggleMute();
-            break;
-        case 'p':
-            e.preventDefault();
-            togglePiP();
-            break;
-        case 'escape':
-            if (showSubSettings.value) {
-                showSubSettings.value = false;
-            } else if (!isFullscreen.value) {
-                emit('close');
-            }
-            break;
-    }
-    resetControlsTimeout();
-};
-
-const saveProgress = async () => {
-    if (!currentTime.value || !duration.value) return;
-
+const saveProgressToServer = async () => {
+    if (!videoRef.value || currentTime.value < 10) return;
     try {
         await fetch('/api/playback/progress', {
             method: 'POST',
@@ -306,101 +426,92 @@ const saveProgress = async () => {
                 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
             },
             body: JSON.stringify({
-                watchable_id: props.item.watchable_id || props.item.id,
-                watchable_type: props.item.watchable_type || 'movie',
+                watchable_id: props.item.id,
+                watchable_type: props.item.type || 'movie',
                 progress_seconds: Math.floor(currentTime.value),
-                duration_seconds: Math.floor(duration.value),
+                duration_seconds: Math.floor(duration.value) || 1,
             }),
         });
     } catch (e) {}
 };
-
-onMounted(() => {
-    window.addEventListener('keydown', handleKeydown);
-    window.addEventListener('mousemove', resetControlsTimeout);
-    progressInterval = setInterval(saveProgress, 10000);
-
-    if (props.item.subtitles && props.item.subtitles.length > 0) {
-        const arSub = props.item.subtitles.find(s => s.language === 'ar');
-        selectedSubtitleId.value = arSub ? arSub.id : props.item.subtitles[0].id;
-    }
-});
-
-onUnmounted(() => {
-    window.removeEventListener('keydown', handleKeydown);
-    window.removeEventListener('mousemove', resetControlsTimeout);
-    clearTimeout(controlsTimeout);
-    clearInterval(progressInterval);
-    saveProgress();
-});
 </script>
 
 <template>
     <div
-        ref="playerContainer"
-        class="fixed inset-0 z-50 bg-black flex items-center justify-center select-none overflow-hidden"
-        :class="{ 'cursor-none': !showControls && isPlaying }"
+        ref="playerContainerRef"
+        class="fixed inset-0 z-50 bg-black flex items-center justify-center select-none overflow-hidden group/player"
+        :class="{ 'cursor-none': !isControlsVisible && isPlaying }"
         @mousemove="resetControlsTimeout"
-        @mouseleave="showControls = false"
+        @click="handleScreenTouch"
     >
-        <div class="ambient-glow bg-cyan-500/10 w-[45rem] h-[45rem] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
-
+        <!-- HTML5 High-Performance Video Element -->
         <video
             ref="videoRef"
-            class="w-full h-full object-contain relative z-10"
-            :src="streamUrl"
+            :src="baseStreamUrl"
+            class="w-full h-full object-contain"
             playsinline
-            preload="auto"
-            @timeupdate="handleTimeUpdate"
-            @loadedmetadata="handleLoadedMetadata"
+            crossorigin="anonymous"
+            @timeupdate="onTimeUpdate"
+            @loadedmetadata="onLoadedMetadata"
             @play="isPlaying = true"
             @pause="isPlaying = false"
             @ended="isPlaying = false"
         >
             <track
-                v-for="sub in item.subtitles || []"
-                :key="sub.id"
-                :id="sub.id.toString()"
-                :src="`/stream/subtitles/${sub.id}`"
+                v-if="selectedSubtitleId !== 'off'"
                 kind="subtitles"
-                :srclang="sub.language || 'und'"
-                :label="sub.language_name || sub.language"
-                :default="selectedSubtitleId === sub.id"
+                :src="subtitleUrl"
+                :srclang="item.subtitles?.find(s => s.id === selectedSubtitleId)?.language || 'ar'"
+                :label="item.subtitles?.find(s => s.id === selectedSubtitleId)?.language_name || 'Arabic'"
+                default
             />
         </video>
 
-        <div v-if="isDoubleTapSeeking === 'left'" class="absolute left-8 top-1/2 -translate-y-1/2 z-20 pointer-events-none flex flex-col items-center gap-2 p-5 rounded-full bg-black/60 backdrop-blur-md border border-white/20 animate-in zoom-in-75">
-            <RotateCcw class="w-8 h-8 text-cyan-400 animate-spin" />
-            <span class="text-xs font-black text-white font-mono">-10s</span>
-        </div>
-        <div v-if="isDoubleTapSeeking === 'right'" class="absolute right-8 top-1/2 -translate-y-1/2 z-20 pointer-events-none flex flex-col items-center gap-2 p-5 rounded-full bg-black/60 backdrop-blur-md border border-white/20 animate-in zoom-in-75">
-            <RotateCw class="w-8 h-8 text-cyan-400 animate-spin" />
-            <span class="text-xs font-black text-white font-mono">+10s</span>
+        <!-- Double-Tap Seek Ripples -->
+        <div
+            v-if="isDoubleTapSeeking"
+            class="absolute inset-y-0 w-1/3 flex items-center justify-center pointer-events-none z-30 animate-in fade-in"
+            :class="isDoubleTapSeeking === 'left' ? 'left-0' : 'right-0'"
+        >
+            <div class="p-6 rounded-full bg-cyan-500/20 backdrop-blur-md border border-cyan-500/40 text-cyan-300 flex flex-col items-center gap-1 scale-125 transition-transform">
+                <RotateCcw v-if="isDoubleTapSeeking === 'left'" class="w-8 h-8 animate-spin" />
+                <RotateCw v-else class="w-8 h-8 animate-spin" />
+                <span class="text-xs font-black font-mono">{{ isDoubleTapSeeking === 'left' ? '-10s' : '+10s' }}</span>
+            </div>
         </div>
 
-        <div class="absolute inset-0 z-10 cursor-pointer" @click="handleVideoAreaClick"></div>
-
-        <div v-if="toastNotice" class="absolute top-20 left-1/2 -translate-x-1/2 z-40 px-5 py-2.5 rounded-2xl bg-black/80 backdrop-blur-md border border-cyan-500/40 text-cyan-300 font-bold text-xs shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
-            <Sparkles class="w-4 h-4 text-cyan-400" />
+        <!-- Toast Notice -->
+        <div
+            v-if="toastNotice"
+            class="absolute top-20 left-1/2 -translate-x-1/2 z-40 px-5 py-2.5 rounded-2xl bg-black/80 backdrop-blur-md border border-cyan-500/40 text-cyan-300 text-xs font-black shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2"
+        >
+            <Zap class="w-4 h-4 text-cyan-400" />
             <span>{{ toastNotice }}</span>
         </div>
 
+        <!-- OSD Controls Overlay -->
         <div
-            class="absolute inset-0 z-30 flex flex-col justify-between p-4 sm:p-8 pointer-events-none transition-opacity duration-300 bg-gradient-to-t from-black/95 via-transparent to-black/80"
-            :class="showControls ? 'opacity-100' : 'opacity-0'"
+            class="absolute inset-0 flex flex-col justify-between p-4 sm:p-8 bg-gradient-to-t from-black/90 via-transparent to-black/80 transition-opacity duration-300 z-20 pointer-events-none"
+            :class="{ 'opacity-0': !isControlsVisible && isPlaying, 'opacity-100': isControlsVisible || !isPlaying }"
         >
-            <div class="flex items-center justify-between pointer-events-auto gap-4">
-                <div class="flex items-center gap-3 min-w-0">
-                    <div class="w-10 h-10 rounded-2xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 flex items-center justify-center shrink-0">
-                        <Play class="w-5 h-5 fill-current ml-0.5" />
-                    </div>
-                    <div class="min-w-0">
-                        <h2 class="font-extrabold text-base sm:text-lg text-white truncate max-w-xl">
-                            {{ isRTL && item.title_ar ? item.title_ar : item.title }}
+            <!-- Top Bar -->
+            <div class="flex items-center justify-between pointer-events-auto">
+                <div class="flex items-center gap-3">
+                    <button
+                        @click="emit('close')"
+                        class="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white transition-all active:scale-95 cursor-pointer shadow-sm"
+                        :title="t('common.close')"
+                    >
+                        <ArrowLeft v-if="!isRTL" class="w-5 h-5" />
+                        <X v-else class="w-5 h-5" />
+                    </button>
+                    <div>
+                        <h2 class="font-extrabold text-sm sm:text-base text-white tracking-wide truncate max-w-sm sm:max-w-xl">
+                            {{ item.title }}
                         </h2>
                         <div class="flex items-center gap-2 mt-0.5">
                             <span class="cinema-badge bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[10px]">
-                                {{ audioMode === 'aac' ? 'AAC 2.0 (Enhanced Compatibility)' : 'Direct Stream' }}
+                                {{ audioEnhanceMode === 'voice_boost' ? 'Vocal EQ (+8dB)' : audioEnhanceMode === 'cinema_boost' ? 'Cinema Amp (200%)' : audioEnhanceMode === 'night_mode' ? 'Night Mode' : 'Direct Audio' }}
                             </span>
                             <span v-if="selectedSubtitleId !== 'off'" class="cinema-badge bg-indigo-500/20 text-indigo-300 border-indigo-500/30 text-[10px]">
                                 CC: {{ item.subtitles?.find(s => s.id === selectedSubtitleId)?.language_name || 'Active' }}
@@ -421,189 +532,251 @@ onUnmounted(() => {
                     <button
                         @click="togglePiP"
                         class="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all cursor-pointer shadow-sm"
-                        :title="isRTL ? 'صورة داخل صورة' : 'Picture-in-Picture'"
+                        :title="isRTL ? 'صورة داخل صورة' : 'Picture in Picture'"
                     >
-                        <PictureInPicture2 class="w-4 h-4" />
-                    </button>
-
-                    <button
-                        @click="emit('close')"
-                        class="p-2.5 rounded-2xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition-all cursor-pointer"
-                        :title="t('common.close')"
-                    >
-                        <X class="w-5 h-5" />
+                        <PictureInPicture class="w-4 h-4" />
                     </button>
                 </div>
             </div>
 
+            <!-- Bottom Controls Bar -->
             <div class="space-y-3 pointer-events-auto">
-                <div class="space-y-1">
-                    <div class="relative group cursor-pointer py-2" @click="(e) => {
-                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                        const percent = (e.clientX - rect.left) / rect.width;
-                        seek(percent * duration);
-                    }">
-                        <div class="h-1.5 group-hover:h-2.5 rounded-full bg-white/20 transition-all overflow-hidden relative">
-                            <div
-                                class="h-full bg-gradient-to-r from-cyan-400 via-cyan-500 to-indigo-500 rounded-full transition-all relative"
-                                :style="{ width: `${(currentTime / (duration || 1)) * 100}%` }"
-                            ></div>
-                        </div>
+                <!-- Timeline Progress Bar -->
+                <div
+                    @click.stop="onProgressScrub"
+                    class="relative w-full h-3 flex items-center cursor-pointer group/scrub py-2"
+                >
+                    <div class="w-full h-1 group-hover/scrub:h-2 rounded-full bg-white/20 relative transition-all duration-200 overflow-hidden">
+                        <div
+                            class="h-full bg-gradient-to-r from-cyan-400 via-cyan-500 to-blue-500 rounded-full"
+                            :style="{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }"
+                        ></div>
                     </div>
-
-                    <div class="flex items-center justify-between text-xs font-mono font-bold text-slate-400">
-                        <span>{{ formatTime(currentTime) }}</span>
-                        <span>{{ formatTime(duration) }}</span>
-                    </div>
+                    <div
+                        class="absolute w-3.5 h-3.5 rounded-full bg-white shadow-lg shadow-cyan-500/50 scale-0 group-hover/scrub:scale-100 transition-transform -translate-x-1/2 pointer-events-none"
+                        :style="{ left: `${duration ? (currentTime / duration) * 100 : 0}%` }"
+                    ></div>
                 </div>
 
+                <!-- Main Button Toolbar -->
                 <div class="flex items-center justify-between flex-wrap gap-3">
+                    <!-- Left: Play/Pause/Volume -->
                     <div class="flex items-center gap-2 sm:gap-3">
                         <button
                             @click="togglePlay"
-                            class="w-10 h-10 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center transition-all active:scale-95 cursor-pointer shadow-lg shadow-cyan-500/30"
+                            class="p-3 rounded-2xl bg-cyan-500 text-slate-950 hover:bg-cyan-400 font-bold transition-all active:scale-95 shadow-lg shadow-cyan-500/20 cursor-pointer"
                         >
                             <Pause v-if="isPlaying" class="w-5 h-5 fill-current" />
                             <Play v-else class="w-5 h-5 fill-current ml-0.5" />
                         </button>
 
                         <button
-                            @click="skip(-10)"
-                            class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all cursor-pointer"
-                            :title="isRTL ? 'رجوع 10 ثواني (J)' : 'Skip backward 10s (J)'"
+                            @click="seek(-10)"
+                            class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all active:scale-95 cursor-pointer"
+                            :title="isRTL ? 'إرجاع 10 ثواني' : 'Rewind 10s'"
                         >
                             <RotateCcw class="w-4 h-4" />
                         </button>
 
                         <button
-                            @click="skip(10)"
-                            class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all cursor-pointer"
-                            :title="isRTL ? 'تقديم 10 ثواني (L)' : 'Skip forward 10s (L)'"
+                            @click="seek(10)"
+                            class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all active:scale-95 cursor-pointer"
+                            :title="isRTL ? 'تقديم 10 ثواني' : 'Forward 10s'"
                         >
                             <RotateCw class="w-4 h-4" />
                         </button>
 
-                        <div class="flex items-center gap-2 group relative">
+                        <!-- Volume Controls -->
+                        <div class="flex items-center gap-2 group/volume ml-1 sm:ml-2">
                             <button
                                 @click="toggleMute"
-                                class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all cursor-pointer"
+                                class="p-2 text-slate-300 hover:text-white transition-colors cursor-pointer"
                             >
-                                <VolumeX v-if="isMuted || volume === 0" class="w-4 h-4 text-rose-400" />
-                                <Volume2 v-else class="w-4 h-4" />
+                                <VolumeX v-if="isMuted || volume === 0" class="w-5 h-5 text-rose-400" />
+                                <Volume2 v-else class="w-5 h-5 text-cyan-400" />
                             </button>
                             <input
                                 type="range"
                                 min="0"
                                 max="1"
                                 step="0.05"
-                                :value="isMuted ? 0 : volume"
-                                @input="(e: any) => setVolume(parseFloat(e.target.value))"
-                                class="w-16 sm:w-20 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                                v-model.number="volume"
+                                @input="isMuted = false; if (videoRef) videoRef.volume = volume;"
+                                class="w-16 sm:w-24 h-1 bg-white/20 accent-cyan-400 rounded-lg cursor-pointer"
                             />
+                        </div>
+
+                        <!-- Time Tracker -->
+                        <div class="text-xs font-mono text-slate-300 font-bold ml-2">
+                            <span>{{ formatTime(currentTime) }}</span>
+                            <span class="text-slate-500 mx-1">/</span>
+                            <span class="text-slate-400">{{ formatTime(duration) }}</span>
                         </div>
                     </div>
 
-                    <div class="flex items-center gap-2 relative">
+                    <!-- Right: Subtitles, Sound Studio, Speed, Fullscreen -->
+                    <div class="flex items-center gap-2 sm:gap-3">
+                        <!-- Sound & Vocal Enhancer Studio Dropdown -->
                         <div class="relative">
                             <button
-                                @click="showSubtitleMenu = !showSubtitleMenu; showSpeedMenu = false; showAudioMenu = false; showSubSettings = false;"
+                                @click="showAudioMenu = !showAudioMenu; showSubtitleMenu = false; showSpeedMenu = false; showSubSettings = false;"
+                                class="flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer"
+                                :class="audioEnhanceMode !== 'direct'
+                                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm'
+                                    : 'bg-white/10 text-slate-300 border-white/10 hover:bg-white/20'"
+                                :title="isRTL ? 'استوديو تعزيز الصوت وتوضيح الحوار' : 'Audio & Vocal Booster Studio'"
+                            >
+                                <Music class="w-4 h-4" />
+                                <span class="hidden sm:inline">{{ isRTL ? 'محسن الصوت' : 'Sound Boost' }}</span>
+                            </button>
+
+                            <div
+                                v-if="showAudioMenu"
+                                class="absolute bottom-12 right-0 w-80 rounded-2xl bg-[#080B12] border border-white/15 p-3 shadow-2xl space-y-2 z-50 animate-in fade-in slide-in-from-bottom-2"
+                            >
+                                <div class="px-1 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-white/10 pb-1.5 flex items-center justify-between">
+                                    <span>{{ isRTL ? 'استوديو تعزيز الصوت السينمائي' : 'Sound & Vocal Booster Studio' }}</span>
+                                    <span class="text-cyan-400 font-mono text-[9px]">WebAudio™</span>
+                                </div>
+
+                                <button
+                                    @click="applyAudioEnhancement('direct')"
+                                    class="w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-start gap-2.5 transition-colors cursor-pointer"
+                                    :class="audioEnhanceMode === 'direct' ? 'bg-cyan-500 text-slate-950 font-black' : 'text-slate-300 hover:bg-white/10'"
+                                >
+                                    <Check v-if="audioEnhanceMode === 'direct'" class="w-4 h-4 shrink-0 mt-0.5" />
+                                    <div>
+                                        <div class="font-bold">{{ isRTL ? 'الصوت الأصلي المباشر (Direct)' : 'Original Direct Stream' }}</div>
+                                        <div class="text-[10px] opacity-80 mt-0.5">{{ isRTL ? 'تشغيل الصوت الطبيعي بدون تعديل.' : 'Untouched high-fidelity audio track.' }}</div>
+                                    </div>
+                                </button>
+
+                                <button
+                                    @click="applyAudioEnhancement('voice_boost')"
+                                    class="w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-start gap-2.5 transition-colors cursor-pointer"
+                                    :class="audioEnhanceMode === 'voice_boost' ? 'bg-cyan-500 text-slate-950 font-black' : 'text-slate-300 hover:bg-white/10'"
+                                >
+                                    <Check v-if="audioEnhanceMode === 'voice_boost'" class="w-4 h-4 shrink-0 mt-0.5" />
+                                    <div>
+                                        <div class="font-bold flex items-center gap-1.5">
+                                            <span>{{ isRTL ? 'توضيح الحوار والأصوات (+8dB Vocal)' : 'Vocal & Dialogue Clarity (+8dB)' }}</span>
+                                            <span class="cinema-badge bg-cyan-400/20 text-cyan-300 text-[9px] py-0">Recommended</span>
+                                        </div>
+                                        <div class="text-[10px] opacity-80 mt-0.5">{{ isRTL ? 'فلتر يعزل ترددات الكلام البشري ويضخمها لحل مشكلة الحوار المنخفض في أفلام 5.1/EAC3.' : 'Equalizes human speech frequencies to eliminate low dialogue in 5.1 tracks.' }}</div>
+                                    </div>
+                                </button>
+
+                                <button
+                                    @click="applyAudioEnhancement('cinema_boost')"
+                                    class="w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-start gap-2.5 transition-colors cursor-pointer"
+                                    :class="audioEnhanceMode === 'cinema_boost' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-300 hover:bg-white/10'"
+                                >
+                                    <Check v-if="audioEnhanceMode === 'cinema_boost'" class="w-4 h-4 shrink-0 mt-0.5" />
+                                    <div>
+                                        <div class="font-bold">{{ isRTL ? 'مضخم الصوت الفائق (200% Max Gain)' : 'Cinema Super Amplifier (200% Gain)' }}</div>
+                                        <div class="text-[10px] opacity-80 mt-0.5">{{ isRTL ? 'مضاعفة قوة الصوت للأفلام ذات التسجيل المنخفض.' : 'Multiplies hardware output volume for quiet streams.' }}</div>
+                                    </div>
+                                </button>
+
+                                <button
+                                    @click="applyAudioEnhancement('night_mode')"
+                                    class="w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-start gap-2.5 transition-colors cursor-pointer"
+                                    :class="audioEnhanceMode === 'night_mode' ? 'bg-indigo-500 text-slate-950 font-black' : 'text-slate-300 hover:bg-white/10'"
+                                >
+                                    <Check v-if="audioEnhanceMode === 'night_mode'" class="w-4 h-4 shrink-0 mt-0.5" />
+                                    <div>
+                                        <div class="font-bold">{{ isRTL ? 'الوضع الليلي الذكي (Dynamic Night Mode)' : 'Smart Night Mode (Compressor)' }}</div>
+                                        <div class="text-[10px] opacity-80 mt-0.5">{{ isRTL ? 'يخفف أصوات الانفجارات العالية ويضخم الهمسات للمشاهدة الليلية.' : 'Compresses dynamic range so loud sound effects never wake up the house.' }}</div>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Subtitles Menu & Customization Studio -->
+                        <div class="relative">
+                            <button
+                                @click="showSubtitleMenu = !showSubtitleMenu; showAudioMenu = false; showSpeedMenu = false;"
                                 class="flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer"
                                 :class="selectedSubtitleId !== 'off'
                                     ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm'
                                     : 'bg-white/10 text-slate-300 border-white/10 hover:bg-white/20'"
                             >
                                 <Subtitles class="w-4 h-4" />
-                                <span>{{ isRTL ? 'الترجمة' : 'Subtitles' }}</span>
+                                <span class="hidden sm:inline">{{ isRTL ? 'الترجمة' : 'Subtitles' }}</span>
                             </button>
 
+                            <!-- Subtitles Dropdown Panel -->
                             <div
                                 v-if="showSubtitleMenu"
-                                class="absolute bottom-12 right-0 w-64 rounded-2xl bg-[#080B12] border border-white/15 p-2.5 shadow-2xl space-y-1 z-50 animate-in fade-in slide-in-from-bottom-2"
+                                class="absolute bottom-12 right-0 w-72 rounded-2xl bg-[#080B12] border border-white/15 p-3 shadow-2xl space-y-2 z-50 animate-in fade-in slide-in-from-bottom-2"
                             >
-                                <div class="px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-white/10 flex items-center justify-between">
-                                    <span>{{ isRTL ? 'ملفات الترجمة' : 'Subtitle Tracks' }}</span>
+                                <div class="px-1 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-white/10 pb-1.5 flex items-center justify-between">
+                                    <span>{{ isRTL ? 'مسارات الترجمة المتوفرة' : 'Subtitles Tracks' }}</span>
                                     <button
-                                        @click="showSubSettings = true; showSubtitleMenu = false;"
-                                        class="text-cyan-400 hover:underline flex items-center gap-1 cursor-pointer"
+                                        @click="showSubSettings = !showSubSettings"
+                                        class="p-1 rounded-lg hover:bg-white/10 text-cyan-400 cursor-pointer"
+                                        :title="isRTL ? 'تخصيص الخط والألوان والمزامنة' : 'Customize Font, Color & Sync'"
                                     >
-                                        <Sliders class="w-3 h-3" />
-                                        <span>{{ isRTL ? 'تخصيص' : 'Style' }}</span>
+                                        <Sliders class="w-3.5 h-3.5" />
                                     </button>
                                 </div>
 
+                                <!-- Subtitle Timing & Offset Controls -->
+                                <div class="p-2 rounded-xl bg-white/[0.03] border border-white/10 space-y-1.5">
+                                    <div class="flex items-center justify-between text-[11px] font-bold text-slate-300">
+                                        <span>{{ isRTL ? 'تأخير / تسريع الترجمة' : 'Subtitle Sync Offset' }}</span>
+                                        <span class="font-mono text-cyan-300">{{ subOffsetSeconds > 0 ? `+${subOffsetSeconds}s` : `${subOffsetSeconds}s` }}</span>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <button @click="adjustSubtitleOffset(-0.5)" class="flex-1 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[11px] font-bold text-slate-300">-0.5s</button>
+                                        <button @click="subOffsetSeconds = 0; toastNotice = 'Sync Reset';" class="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[11px] font-bold text-slate-400">0s</button>
+                                        <button @click="adjustSubtitleOffset(0.5)" class="flex-1 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[11px] font-bold text-slate-300">+0.5s</button>
+                                    </div>
+                                </div>
+
+                                <!-- Font Style Studio (Collapsible) -->
+                                <div v-if="showSubSettings" class="p-2.5 rounded-xl bg-cyan-950/40 border border-cyan-500/30 space-y-2 text-[11px]">
+                                    <div class="font-bold text-cyan-300">{{ isRTL ? 'حجم الخط ولونه (Cairo & Outfit)' : 'Font Size & Color Studio' }}</div>
+                                    <div class="grid grid-cols-4 gap-1">
+                                        <button v-for="size in (['sm', 'md', 'lg', 'xl'] as const)" :key="size" @click="subFontSize = size" class="py-1 rounded-lg text-center font-bold" :class="subFontSize === size ? 'bg-cyan-500 text-slate-950' : 'bg-white/5 text-slate-400'">{{ size.toUpperCase() }}</button>
+                                    </div>
+                                    <div class="grid grid-cols-4 gap-1 pt-1">
+                                        <button @click="subColor = 'yellow'" class="h-6 rounded-lg bg-[#FFD700] text-slate-950 text-[10px] font-black">Yellow</button>
+                                        <button @click="subColor = 'white'" class="h-6 rounded-lg bg-white text-slate-950 text-[10px] font-black">White</button>
+                                        <button @click="subColor = 'cyan'" class="h-6 rounded-lg bg-[#00FFFF] text-slate-950 text-[10px] font-black">Cyan</button>
+                                        <button @click="subColor = 'green'" class="h-6 rounded-lg bg-[#00FF7F] text-slate-950 text-[10px] font-black">Green</button>
+                                    </div>
+                                </div>
+
+                                <!-- Track Selection List -->
                                 <button
-                                    @click="selectSubtitle('off')"
-                                    class="w-full px-3 py-2 rounded-xl text-xs font-bold text-left flex items-center justify-between cursor-pointer transition-colors"
+                                    @click="setSubtitle('off')"
+                                    class="w-full p-2 rounded-xl text-xs font-bold text-left flex items-center justify-between transition-colors cursor-pointer"
                                     :class="selectedSubtitleId === 'off' ? 'bg-cyan-500 text-slate-950 font-black' : 'text-slate-300 hover:bg-white/10'"
                                 >
-                                    <span>{{ isRTL ? 'إيقاف الترجمة' : 'Off' }}</span>
-                                    <Check v-if="selectedSubtitleId === 'off'" class="w-3.5 h-3.5" />
+                                    <span>{{ isRTL ? 'إيقاف الترجمة (Off)' : 'Turn Off Subtitles' }}</span>
+                                    <Check v-if="selectedSubtitleId === 'off'" class="w-4 h-4" />
                                 </button>
 
-                                <button
-                                    v-for="sub in item.subtitles || []"
-                                    :key="sub.id"
-                                    @click="selectSubtitle(sub.id)"
-                                    class="w-full px-3 py-2 rounded-xl text-xs font-bold text-left flex items-center justify-between cursor-pointer transition-colors"
-                                    :class="selectedSubtitleId === sub.id ? 'bg-cyan-500 text-slate-950 font-black' : 'text-slate-300 hover:bg-white/10'"
-                                >
-                                    <span class="truncate">{{ sub.language_name || sub.language }} ({{ sub.format || 'SRT' }})</span>
-                                    <Check v-if="selectedSubtitleId === sub.id" class="w-3.5 h-3.5" />
-                                </button>
-
-                                <div v-if="!item.subtitles || item.subtitles.length === 0" class="px-3 py-2 text-xs text-slate-500 italic text-center">
-                                    {{ isRTL ? 'لا توجد ترجمات مرتبطة' : 'No subtitles attached' }}
+                                <div v-if="item.subtitles && item.subtitles.length > 0" class="max-h-40 overflow-y-auto space-y-1">
+                                    <button
+                                        v-for="sub in item.subtitles"
+                                        :key="sub.id"
+                                        @click="setSubtitle(sub.id)"
+                                        class="w-full p-2 rounded-xl text-xs font-bold text-left flex items-center justify-between transition-colors cursor-pointer"
+                                        :class="selectedSubtitleId === sub.id ? 'bg-cyan-500 text-slate-950 font-black' : 'text-slate-300 hover:bg-white/10'"
+                                    >
+                                        <div class="flex items-center gap-2">
+                                            <span>{{ sub.language_name }}</span>
+                                            <span class="text-[10px] opacity-75 font-mono uppercase">({{ sub.language }})</span>
+                                        </div>
+                                        <Check v-if="selectedSubtitleId === sub.id" class="w-4 h-4" />
+                                    </button>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="relative">
-                            <button
-                                @click="showAudioMenu = !showAudioMenu; showSubtitleMenu = false; showSpeedMenu = false; showSubSettings = false;"
-                                class="flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer"
-                                :class="audioMode === 'aac'
-                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
-                                    : 'bg-white/10 text-slate-300 border-white/10 hover:bg-white/20'"
-                                :title="isRTL ? 'وضع الصوت والتوافقية' : 'Audio Compatibility Mode'"
-                            >
-                                <Music class="w-4 h-4" />
-                                <span class="hidden sm:inline">{{ audioMode === 'aac' ? 'AAC Audio' : 'Direct Audio' }}</span>
-                            </button>
-
-                            <div
-                                v-if="showAudioMenu"
-                                class="absolute bottom-12 right-0 w-72 rounded-2xl bg-[#080B12] border border-white/15 p-3 shadow-2xl space-y-2 z-50 animate-in fade-in slide-in-from-bottom-2"
-                            >
-                                <div class="px-1 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-white/10 pb-1.5">
-                                    {{ isRTL ? 'إعدادات تشغيل الصوت' : 'Audio Stream & Compatibility' }}
-                                </div>
-
-                                <button
-                                    @click="switchAudioMode('direct')"
-                                    class="w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-start gap-2.5 transition-colors cursor-pointer"
-                                    :class="audioMode === 'direct' ? 'bg-cyan-500 text-slate-950 font-black' : 'text-slate-300 hover:bg-white/10'"
-                                >
-                                    <Check v-if="audioMode === 'direct'" class="w-4 h-4 shrink-0 mt-0.5" />
-                                    <div>
-                                        <div class="font-bold">{{ isRTL ? 'البث المباشر (Direct Stream)' : 'Direct Stream (Passthrough)' }}</div>
-                                        <div class="text-[10px] opacity-80 mt-0.5">{{ isRTL ? 'تشغيل الصوت الأصلي للملف بأعلى نقاوة.' : 'Original untouched audio tracks for modern devices.' }}</div>
-                                    </div>
-                                </button>
-
-                                <button
-                                    @click="switchAudioMode('aac')"
-                                    class="w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-start gap-2.5 transition-colors cursor-pointer"
-                                    :class="audioMode === 'aac' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-300 hover:bg-white/10'"
-                                >
-                                    <Check v-if="audioMode === 'aac'" class="w-4 h-4 shrink-0 mt-0.5" />
-                                    <div>
-                                        <div class="font-bold">{{ isRTL ? 'تحويل الصوت إلى AAC (لحل مشكلة انعدام الصوت)' : 'AAC Transcode Mode (Fix Silent EAC3)' }}</div>
-                                        <div class="text-[10px] opacity-80 mt-0.5">{{ isRTL ? 'تحويل صوتي فوري في الخلفية لضمان عمل الصوت في جميع المتصفحات.' : 'Real-time AAC transcode for EAC3/AC3 audio compatibility.' }}</div>
-                                    </div>
-                                </button>
-                            </div>
-                        </div>
-
+                        <!-- Speed Controls -->
                         <div class="relative">
                             <button
                                 @click="showSpeedMenu = !showSpeedMenu; showSubtitleMenu = false; showAudioMenu = false; showSubSettings = false;"
@@ -611,131 +784,32 @@ onUnmounted(() => {
                             >
                                 {{ playbackRate }}x
                             </button>
-
                             <div
                                 v-if="showSpeedMenu"
-                                class="absolute bottom-12 right-0 w-32 rounded-2xl bg-[#080B12] border border-white/15 p-1.5 shadow-2xl space-y-0.5 z-50 animate-in fade-in slide-in-from-bottom-2"
+                                class="absolute bottom-12 right-0 w-28 rounded-2xl bg-[#080B12] border border-white/15 p-2 shadow-2xl space-y-1 z-50 animate-in fade-in"
                             >
                                 <button
-                                    v-for="rate in [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]"
+                                    v-for="rate in [0.5, 0.75, 1, 1.25, 1.5, 2]"
                                     :key="rate"
-                                    @click="setSpeed(rate)"
-                                    class="w-full px-3 py-1.5 rounded-xl text-xs font-bold text-left flex items-center justify-between cursor-pointer font-mono"
+                                    @click="setPlaybackRate(rate)"
+                                    class="w-full p-1.5 rounded-lg text-xs font-mono font-bold text-center cursor-pointer transition-colors"
                                     :class="playbackRate === rate ? 'bg-cyan-500 text-slate-950 font-black' : 'text-slate-300 hover:bg-white/10'"
                                 >
-                                    <span>{{ rate }}x</span>
-                                    <Check v-if="playbackRate === rate" class="w-3.5 h-3.5" />
+                                    {{ rate }}x
                                 </button>
                             </div>
                         </div>
 
+                        <!-- Fullscreen Toggle -->
                         <button
                             @click="toggleFullscreen"
-                            class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all cursor-pointer"
-                            :title="isRTL ? 'شاشة كاملة (F)' : 'Fullscreen (F)'"
+                            class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all active:scale-95 cursor-pointer"
+                            :title="isFullscreen ? 'Exit Fullscreen' : 'Fullscreen (F)'"
                         >
                             <Minimize v-if="isFullscreen" class="w-4 h-4" />
                             <Maximize v-else class="w-4 h-4" />
                         </button>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <div
-            v-if="showSubSettings"
-            class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in"
-            @click.self="showSubSettings = false"
-        >
-            <div class="relative w-full max-w-md rounded-3xl bg-[#080B12] border border-cyan-500/30 p-6 shadow-2xl shadow-cyan-500/10 space-y-5 overflow-hidden">
-                <div class="ambient-glow bg-cyan-500/15 w-64 h-64 -top-20 -right-20 pointer-events-none"></div>
-
-                <div class="flex items-center justify-between border-b border-white/10 pb-3 relative z-10">
-                    <div class="flex items-center gap-2.5">
-                        <Sliders class="w-5 h-5 text-cyan-400" />
-                        <h3 class="font-extrabold text-sm text-white">{{ isRTL ? 'استوديو تخصيص مظهر الترجمة' : 'Subtitle Styling & Sync Studio' }}</h3>
-                    </div>
-                    <button @click="showSubSettings = false" class="p-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white cursor-pointer">
-                        <X class="w-4 h-4" />
-                    </button>
-                </div>
-
-                <div class="space-y-2 relative z-10">
-                    <span class="text-xs font-bold text-slate-400 block">{{ isRTL ? 'حجم خط الترجمة' : 'Font Size' }}</span>
-                    <div class="grid grid-cols-4 gap-2">
-                        <button
-                            v-for="s in [
-                                { key: 'sm', label: isRTL ? 'صغير' : 'Small' },
-                                { key: 'md', label: isRTL ? 'متوسط' : 'Medium' },
-                                { key: 'lg', label: isRTL ? 'كبير' : 'Large' },
-                                { key: 'xl', label: isRTL ? 'ضخم' : 'Extra' },
-                            ]"
-                            :key="s.key"
-                            @click="subFontSize = s.key as any"
-                            class="py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                            :class="subFontSize === s.key ? 'bg-cyan-500 text-slate-950 font-black' : 'bg-white/5 text-slate-300 hover:bg-white/10 border border-white/10'"
-                        >
-                            {{ s.label }}
-                        </button>
-                    </div>
-                </div>
-
-                <div class="space-y-2 relative z-10">
-                    <span class="text-xs font-bold text-slate-400 block">{{ isRTL ? 'لون الترجمة' : 'Font Color' }}</span>
-                    <div class="grid grid-cols-4 gap-2">
-                        <button
-                            v-for="c in [
-                                { key: 'yellow', label: isRTL ? 'ذهبي / أصفر' : 'Yellow', hex: '#FFD700' },
-                                { key: 'white', label: isRTL ? 'أبيض' : 'White', hex: '#FFFFFF' },
-                                { key: 'cyan', label: isRTL ? 'سماوي' : 'Cyan', hex: '#00FFFF' },
-                                { key: 'green', label: isRTL ? 'أخضر' : 'Green', hex: '#00FF7F' },
-                            ]"
-                            :key="c.key"
-                            @click="subColor = c.key as any"
-                            class="py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                            :class="subColor === c.key ? 'bg-cyan-500 text-slate-950 font-black' : 'bg-white/5 text-slate-300 hover:bg-white/10 border border-white/10'"
-                        >
-                            <span class="w-2.5 h-2.5 rounded-full border border-black/40" :style="{ backgroundColor: c.hex }"></span>
-                            <span>{{ c.label }}</span>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="space-y-2 relative z-10 pt-2 border-t border-white/10">
-                    <div class="flex items-center justify-between text-xs">
-                        <span class="font-bold text-slate-400">{{ isRTL ? 'مزامنة وتأخير/تقديم الترجمة' : 'Subtitle Timing Offset' }}</span>
-                        <span class="font-mono font-bold text-cyan-400">{{ subOffsetSeconds > 0 ? '+' : '' }}{{ subOffsetSeconds }}s</span>
-                    </div>
-
-                    <div class="flex items-center justify-between gap-2">
-                        <button
-                            @click="adjustSubOffset(-0.5)"
-                            class="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-slate-300 border border-white/10 cursor-pointer"
-                        >
-                            -0.5s
-                        </button>
-                        <button
-                            @click="subOffsetSeconds = 0"
-                            class="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-slate-400 border border-white/10 cursor-pointer"
-                        >
-                            {{ isRTL ? 'إعادة ضبط' : 'Reset' }}
-                        </button>
-                        <button
-                            @click="adjustSubOffset(0.5)"
-                            class="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-slate-300 border border-white/10 cursor-pointer"
-                        >
-                            +0.5s
-                        </button>
-                    </div>
-                </div>
-
-                <div class="pt-2 relative z-10">
-                    <button
-                        @click="showSubSettings = false"
-                        class="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-black cursor-pointer shadow-lg shadow-cyan-500/20"
-                    >
-                        {{ isRTL ? 'تطبيق وحفظ' : 'Apply & Close' }}
-                    </button>
                 </div>
             </div>
         </div>

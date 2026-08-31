@@ -38,6 +38,7 @@ class PhysicalOrganizerService
             $year = !empty($parsed['year']) ? (string) $parsed['year'] : 'Unknown Year';
             $seasonNum = isset($parsed['season']) ? (int) $parsed['season'] : 1;
             $episodeNum = isset($parsed['episode']) ? (int) $parsed['episode'] : 1;
+            $epTitle = !empty($parsed['episode_title']) ? $parsed['episode_title'] : "Episode {$episodeNum}";
 
             $firstChar = mb_strtoupper(mb_substr($cleanTitle, 0, 1));
             $firstLetter = preg_match('/^[A-Z0-9]$/i', $firstChar) ? $firstChar : '#';
@@ -53,7 +54,7 @@ class PhysicalOrganizerService
                 '{FirstLetter}' => $firstLetter,
                 '{Season:02}' => sprintf('%02d', $seasonNum),
                 '{Episode:02}' => sprintf('%02d', $episodeNum),
-                '{EpisodeTitle}' => "Episode {$episodeNum}",
+                '{EpisodeTitle}' => $epTitle,
                 '{ext}' => $parsed['extension'] ?? (pathinfo($filePath, PATHINFO_EXTENSION) ?: 'mkv'),
             ];
 
@@ -85,6 +86,7 @@ class PhysicalOrganizerService
                 'year' => $parsed['year'] ?? null,
                 'season' => $isSeries ? $seasonNum : null,
                 'episode' => $isSeries ? $episodeNum : null,
+                'episode_title' => $epTitle,
                 'resolution' => $parsed['resolution'] ?? '1080p',
                 'size_bytes' => $file['size_bytes'] ?? 0,
                 'size_formatted' => $file['size_formatted'] ?? '',
