@@ -11,7 +11,7 @@ import {
 } from 'lucide-vue-next';
 
 const props = defineProps<{
-    directories: Array<{ path: string; type: string; count?: number }>;
+    directories: Array<{ id?: string; path: string; type: string; count?: number }>;
     scanStatus: any;
     stats: {
         total_movies: number;
@@ -79,8 +79,9 @@ const addDirectory = async () => {
     }
 };
 
-const removeDirectory = async (index: number) => {
+const removeDirectory = async (idxOrDir: number | any) => {
     try {
+        const index = typeof idxOrDir === 'number' ? idxOrDir : monitoredDirs.value.indexOf(idxOrDir);
         const res = await fetch(`/api/scanner/directories/${index}`, {
             method: 'DELETE',
             headers: {
@@ -89,12 +90,17 @@ const removeDirectory = async (index: number) => {
         });
         if (res.ok) {
             const data = await res.json();
-            monitoredDirs.value = data.directories;
+            monitoredDirs.value = data.directories || [];
+            toastMessage.value = isRTL.value ? 'تم إزالة المجلد من المراقبة.' : 'Directory removed.';
         }
     } catch (e) {}
 };
 
 const startScan = async () => {
+    if (monitoredDirs.value.length === 0) {
+        toastMessage.value = isRTL.value ? 'يرجى إضافة مجلد واحد على الأقل للفحص.' : 'Please add at least one folder to scan.';
+        return;
+    }
     isScanning.value = true;
     try {
         const res = await fetch('/api/scanner/start', {
@@ -153,7 +159,6 @@ const startBatchWorkerLoop = async () => {
                 const data = await res.json();
                 scanJob.value = data.status;
 
-                // Auto-scroll terminal
                 const term = document.getElementById('terminal-feed');
                 if (term) term.scrollTop = term.scrollHeight;
 
@@ -388,7 +393,8 @@ onUnmounted(() => {
                 </h3>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Folders List or Empty State -->
+            <div v-if="monitoredDirs.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div
                     v-for="(dir, idx) in monitoredDirs"
                     :key="dir.path"
@@ -438,6 +444,17 @@ onUnmounted(() => {
                         </button>
                     </div>
                 </div>
+            </div>
+
+            <!-- Clean Empty State when no folders added -->
+            <div v-else class="glass-panel rounded-3xl p-10 text-center text-slate-400 border border-white/10 space-y-2">
+                <Folder class="w-8 h-8 text-cyan-500/50 mx-auto" />
+                <p class="font-bold text-white text-sm">
+                    {{ isRTL ? 'لم تقم بإضافة أي مجلدات للمكتبة بعد' : 'No media folders added yet' }}
+                </p>
+                <p class="text-xs text-slate-500 max-w-md mx-auto">
+                    {{ isRTL ? 'أدخل مسار مجلد الأفلام أو المسلسلات أدناه للبدء بالفهرسة والمسح التلقائي.' : 'Enter your movies or TV shows folder path below to start scanning and indexing your personal library.' }}
+                </p>
             </div>
 
             <!-- Add Folder Form -->

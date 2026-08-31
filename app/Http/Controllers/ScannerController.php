@@ -27,20 +27,24 @@ class ScannerController extends Controller
     public function index(): Response
     {
         $directoriesSetting = AppSetting::where('key', 'monitored_directories')->first();
-        $directories = $directoriesSetting ? json_decode($directoriesSetting->value, true) : [
-            ['id' => 'dir-1', 'path' => 'C:/Media/Movies', 'type' => 'movies', 'auto_scan' => true],
-            ['id' => 'dir-2', 'path' => 'C:/Media/TV Shows', 'type' => 'series', 'auto_scan' => true],
-        ];
+        $directories = $directoriesSetting ? (json_decode($directoriesSetting->value, true) ?: []) : [];
+
+        $totalSizeBytes = MediaItem::sum('file_size_bytes') + Episode::sum('file_size_bytes');
+        $formattedSize = $totalSizeBytes >= 1073741824
+            ? round($totalSizeBytes / 1073741824, 2) . ' GB'
+            : ($totalSizeBytes >= 1048576 ? round($totalSizeBytes / 1048576, 1) . ' MB' : '0 B');
 
         $stats = [
             'total_movies' => MediaItem::count(),
             'total_series' => Series::count(),
             'total_episodes' => Episode::count(),
+            'total_subtitles' => Subtitle::count(),
+            'storage_size_formatted' => $formattedSize,
         ];
 
         return Inertia::render('Scanner/Index', [
             'directories' => $directories,
-            'initialScanStatus' => $this->scannerService->getScanStatus(),
+            'scanStatus' => $this->scannerService->getScanStatus(),
             'stats' => $stats,
         ]);
     }
@@ -68,21 +72,24 @@ class ScannerController extends Controller
         return response()->json(['success' => true, 'directories' => $directories]);
     }
 
-    public function removeDirectory(Request $request): JsonResponse
+    public function removeDirectory(Request $request, $index = null): JsonResponse
     {
-        $validated = $request->validate([
-            'id' => 'required|string',
-        ]);
-
         $setting = AppSetting::where('key', 'monitored_directories')->first();
         if ($setting) {
             $directories = json_decode($setting->value, true) ?: [];
-            $filtered = array_values(array_filter($directories, fn ($d) => ($d['id'] ?? '') !== $validated['id']));
-            $setting->update(['value' => json_encode($filtered)]);
-            return response()->json(['success' => true, 'directories' => $filtered]);
+
+            $id = $request->input('id');
+            if ($id) {
+                $directories = array_values(array_filter($directories, fn ($d) => ($d['id'] ?? '') !== $id));
+            } elseif ($index !== null && isset($directories[$index])) {
+                array_splice($directories, (int) $index, 1);
+            }
+
+            $setting->update(['value' => json_encode(array_values($directories))]);
+            return response()->json(['success' => true, 'directories' => array_values($directories)]);
         }
 
-        return response()->json(['success' => false, 'message' => 'Settings not found']);
+        return response()->json(['success' => true, 'directories' => []]);
     }
 
     public function startScan(Request $request): JsonResponse
