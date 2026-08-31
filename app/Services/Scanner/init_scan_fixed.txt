@@ -1,0 +1,56 @@
+    public function initScan(array $directories): array
+    {
+        $discoveredFiles = [];
+
+        foreach ($directories as $dir) {
+            $path = $dir['path'] ?? '';
+            $type = $dir['type'] ?? 'mixed';
+            $normPath = $this->fsScanner->normalizePath($path);
+
+            if (!empty($path) && (is_dir($path) || is_dir($normPath))) {
+                $targetPath = is_dir($path) ? $path : $normPath;
+                $files = $this->fsScanner->scanDirectory($targetPath);
+                foreach ($files as &$f) {
+                    $f['suggested_type'] = $type;
+                }
+                unset($f);
+                $discoveredFiles = array_merge($discoveredFiles, $files);
+            }
+        }
+
+        $totalFiles = count($discoveredFiles);
+
+        $initialLogs = [
+            [
+                'time' => now()->format('H:i:s'),
+                'level' => 'info',
+                'message' => "Scanner initialized across " . count($directories) . " monitored directories.",
+            ],
+            [
+                'time' => now()->format('H:i:s'),
+                'level' => $totalFiles > 0 ? 'success' : 'warning',
+                'message' => "Discovered {$totalFiles} video media stream(s) ready for indexing.",
+            ],
+        ];
+
+        $jobData = [
+            'status' => $totalFiles > 0 ? 'running' : 'completed',
+            'total_files' => $totalFiles,
+            'processed_files' => 0,
+            'progress_percent' => $totalFiles > 0 ? 0 : 100,
+            'current_file' => '',
+            'queue' => $discoveredFiles,
+            'scanned_items' => [],
+            'logs' => $initialLogs,
+            'started_at' => now()->toDateTimeString(),
+            'updated_at' => now()->toDateTimeString(),
+        ];
+
+        Cache::put('virtual_scan_job', $jobData, 86400);
+
+        return [
+            'success' => true,
+            'total_files' => $totalFiles,
+            'status' => $jobData['status'],
+        ];
+    }

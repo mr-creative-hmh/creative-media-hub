@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\File;
 class FilesystemScannerService
 {
     protected array $videoExtensions = ['mkv', 'mp4', 'avi', 'mov', 'm4v', 'webm', 'ts', 'wmv', 'flv', 'iso'];
-    protected array $subtitleExtensions = ['srt', 'vtt', 'sub', 'ass', 'idx', 'smi'];
+    protected array $subtitleExtensions = ['srt', 'vtt', 'sub', 'ass', 'ssa', 'idx', 'smi'];
     protected array $posterExtensions = ['jpg', 'jpeg', 'png', 'webp'];
 
     protected SceneNameParserService $parser;
@@ -37,32 +37,58 @@ class FilesystemScannerService
         $subtitleFiles = [];
         $imageFiles = [];
 
+        $isTesting = app()->runningUnitTests() || app()->environment('testing');
+
         foreach ($allFiles as $file) {
+            $filename = $file->getFilename();
+
+            // Skip hidden / system dotfiles
+            if (str_starts_with($filename, '.') || str_starts_with($filename, '._')) {
+                continue;
+            }
+
             $ext = strtolower($file->getExtension());
             $filePath = $this->normalizePath($file->getPathname());
+            $parentDir = pathinfo($filePath, PATHINFO_DIRNAME);
+            $parentFolder = basename($parentDir);
+
+            // Skip sample files & trailer/extra clips
+            if ($this->parser->isSampleOrExtra($filename, $parentFolder)) {
+                continue;
+            }
 
             if (in_array($ext, $this->videoExtensions)) {
+                $size = $file->getSize();
+                if (!$isTesting && $size < 15 * 1024 * 1024 && !str_contains(strtolower($filePath), 'test')) {
+                    continue;
+                }
+
                 $videoFiles[] = [
                     'path' => $filePath,
-                    'filename' => $file->getFilename(),
-                    'size_bytes' => $file->getSize(),
-                    'size_formatted' => $this->formatBytes($file->getSize()),
+                    'filename' => $filename,
+                    'size_bytes' => $size,
+                    'size_formatted' => $this->formatBytes($size),
                     'modified_at' => $file->getMTime(),
                     'extension' => $ext,
                     'parsed' => $this->parser->parse($filePath),
                 ];
             } elseif (in_array($ext, $this->subtitleExtensions)) {
+                $subInfo = $this->parseSubtitleMetadata($filename);
                 $subtitleFiles[] = [
                     'path' => $filePath,
-                    'filename' => $file->getFilename(),
+                    'filename' => $filename,
                     'size_bytes' => $file->getSize(),
                     'extension' => $ext,
-                    'language' => $this->detectSubtitleLanguage($file->getFilename()),
+                    'language' => $subInfo['language'],
+                    'language_name' => $subInfo['language_name'],
+                    'is_forced' => $subInfo['is_forced'],
+                    'is_sdh' => $subInfo['is_sdh'],
+                    'format' => $ext,
                 ];
             } elseif (in_array($ext, $this->posterExtensions)) {
                 $imageFiles[] = [
                     'path' => $filePath,
-                    'filename' => $file->getFilename(),
+                    'filename' => $filename,
                 ];
             }
         }
@@ -85,22 +111,29 @@ class FilesystemScannerService
                 $subParent = pathinfo($subDir, PATHINFO_DIRNAME);
                 $subBase = pathinfo($sub['filename'], PATHINFO_FILENAME);
 
-                $isSameDir = ($subDir === $videoDir);
-                $isSubFolder = ($subParent === $videoDir && in_array(strtolower(basename($subDir)), ['subs', 'subtitles', 'sub']));
+                $isSameDir = (strtolower($subDir) === strtolower($videoDir));
+                $isSubFolder = (strtolower($subParent) === strtolower($videoDir) && in_array(strtolower(basename($subDir)), ['subs', 'subtitles', 'sub']));
 
                 if ($isSameDir || $isSubFolder) {
                     $matches = false;
 
-                    // 1. Direct prefix or base match
-                    if (str_starts_with($subBase, $videoBase) || str_starts_with($videoBase, $subBase)) {
+                    // 1. Direct stem match (case-insensitive)
+                    $vBaseClean = strtolower(preg_replace('/[^a-z0-9]/i', '', $videoBase));
+                    $sBaseClean = strtolower(preg_replace('/[^a-z0-9]/i', '', $subBase));
+
+                    if (str_starts_with($sBaseClean, $vBaseClean) || str_starts_with($vBaseClean, $sBaseClean)) {
                         $matches = true;
                     }
-                    // 2. Series Episode match (e.g. S01E02 in subtitle name)
+                    // 2. Series Episode match (e.g. S01E02 or 1x02 in subtitle name)
                     elseif ($isSeries && $sNum !== null && $epNum !== null) {
                         $epPattern = sprintf('/[sS]%02d[eE]%02d|\b%dx%02d\b/i', $sNum, $epNum, $sNum, $epNum);
                         if (preg_match($epPattern, $subBase)) {
                             $matches = true;
                         }
+                    }
+                    // 3. SubFolder numbered / generic language match (e.g. Subs/1_English.srt or Subs/Arabic.srt)
+                    elseif ($isSubFolder) {
+                        $matches = true;
                     }
 
                     if ($matches) {
@@ -114,7 +147,7 @@ class FilesystemScannerService
                 $imgDir = pathinfo($img['path'], PATHINFO_DIRNAME);
                 $imgName = strtolower($img['filename']);
 
-                if ($imgDir === $videoDir || pathinfo($imgDir, PATHINFO_DIRNAME) === $videoDir || $imgDir === pathinfo($videoDir, PATHINFO_DIRNAME)) {
+                if (strtolower($imgDir) === strtolower($videoDir) || strtolower(pathinfo($imgDir, PATHINFO_DIRNAME)) === strtolower($videoDir) || strtolower($imgDir) === strtolower(pathinfo($videoDir, PATHINFO_DIRNAME))) {
                     // Match Poster
                     if (!$v['local_poster']) {
                         if (str_contains($imgName, 'poster') || str_contains($imgName, 'cover') || str_contains($imgName, 'folder') || str_starts_with(pathinfo($img['filename'], PATHINFO_FILENAME), $videoBase)) {
@@ -134,25 +167,52 @@ class FilesystemScannerService
         return $videoFiles;
     }
 
-    public function detectSubtitleLanguage(string $filename): string
+    public function parseSubtitleMetadata(string $filename): array
     {
         $lower = strtolower($filename);
-        if (preg_match('/\b(ar|ara|arabic|العربية)\b/i', $lower) || str_contains($lower, '.ar.') || str_ends_with($lower, '.ar.srt')) {
-            return 'ar';
+        $cleanSearch = ' ' . preg_replace('/[^a-z0-9\p{Arabic}\p{Hebrew}\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}\p{Cyrillic}]/u', ' ', $lower) . ' ';
+
+        $isForced = (bool) preg_match('/\b(forced|force)\b/i', $cleanSearch);
+        $isSDH = (bool) preg_match('/\b(sdh|cc|hi)\b/i', $cleanSearch);
+
+        $lang = 'und';
+        $langName = 'Unknown';
+
+        $langMap = [
+            'ar' => ['code' => 'ar', 'name' => 'Arabic', 'pattern' => '/\b(ar|ara|arabic|عربي)\b/u'],
+            'en' => ['code' => 'en', 'name' => 'English', 'pattern' => '/\b(en|eng|english|en\s*us|en\s*gb)\b/i'],
+            'fr' => ['code' => 'fr', 'name' => 'French', 'pattern' => '/\b(fr|fre|fra|french|français)\b/u'],
+            'es' => ['code' => 'es', 'name' => 'Spanish', 'pattern' => '/\b(es|spa|spanish|español)\b/u'],
+            'de' => ['code' => 'de', 'name' => 'German', 'pattern' => '/\b(de|ger|deu|german|deutsch)\b/i'],
+            'it' => ['code' => 'it', 'name' => 'Italian', 'pattern' => '/\b(it|ita|italian|italiano)\b/i'],
+            'ru' => ['code' => 'ru', 'name' => 'Russian', 'pattern' => '/\b(ru|rus|russian|русский)\b/u'],
+            'ja' => ['code' => 'ja', 'name' => 'Japanese', 'pattern' => '/\b(ja|jpn|japanese|日本語)\b/u'],
+            'ko' => ['code' => 'ko', 'name' => 'Korean', 'pattern' => '/\b(ko|kor|korean|한국어)\b/u'],
+            'zh' => ['code' => 'zh', 'name' => 'Chinese', 'pattern' => '/\b(zh|chi|zho|chinese|中文)\b/u'],
+            'he' => ['code' => 'he', 'name' => 'Hebrew', 'pattern' => '/\b(he|heb|hebrew|עברית)\b/u'],
+            'tr' => ['code' => 'tr', 'name' => 'Turkish', 'pattern' => '/\b(tr|tur|turkish|türkçe)\b/u'],
+            'fa' => ['code' => 'fa', 'name' => 'Persian', 'pattern' => '/\b(fa|fas|per|farsi|persian|فارسی)\b/u'],
+        ];
+
+        foreach ($langMap as $key => $info) {
+            if (preg_match($info['pattern'], $cleanSearch) || str_contains($lower, ".{$key}.") || str_ends_with($lower, ".{$key}.srt") || str_ends_with($lower, ".{$key}.vtt")) {
+                $lang = $info['code'];
+                $langName = $info['name'];
+                break;
+            }
         }
-        if (preg_match('/\b(en|eng|english|انجليزي)\b/i', $lower) || str_contains($lower, '.en.') || str_ends_with($lower, '.en.srt')) {
-            return 'en';
-        }
-        if (preg_match('/\b(fr|fre|french)\b/i', $lower)) {
-            return 'fr';
-        }
-        if (preg_match('/\b(es|spa|spanish)\b/i', $lower)) {
-            return 'es';
-        }
-        if (preg_match('/\b(de|ger|german)\b/i', $lower)) {
-            return 'de';
-        }
-        return 'und';
+
+        return [
+            'language' => $lang,
+            'language_name' => $langName,
+            'is_forced' => $isForced,
+            'is_sdh' => $isSDH,
+        ];
+    }
+
+    public function detectSubtitleLanguage(string $filename): string
+    {
+        return $this->parseSubtitleMetadata($filename)['language'];
     }
 
     public function normalizePath(string $path): string

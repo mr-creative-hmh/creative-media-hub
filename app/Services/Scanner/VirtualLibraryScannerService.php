@@ -42,12 +42,15 @@ class VirtualLibraryScannerService
         foreach ($directories as $dir) {
             $path = $dir['path'] ?? '';
             $type = $dir['type'] ?? 'mixed';
+            $normPath = $this->fsScanner->normalizePath($path);
 
-            if (!empty($path) && is_dir($path)) {
-                $files = $this->fsScanner->scanDirectory($path);
+            if (!empty($path) && (is_dir($path) || is_dir($normPath))) {
+                $targetPath = is_dir($path) ? $path : $normPath;
+                $files = $this->fsScanner->scanDirectory($targetPath);
                 foreach ($files as &$f) {
                     $f['suggested_type'] = $type;
                 }
+                unset($f);
                 $discoveredFiles = array_merge($discoveredFiles, $files);
             }
         }
@@ -92,11 +95,15 @@ class VirtualLibraryScannerService
     public function initScanForFolder(string $folderPath, string $type = 'mixed'): array
     {
         $discoveredFiles = [];
-        if (is_dir($folderPath)) {
-            $files = $this->fsScanner->scanDirectory($folderPath);
+        $normPath = $this->fsScanner->normalizePath($folderPath);
+        $target = is_dir($folderPath) ? $folderPath : (is_dir($normPath) ? $normPath : '');
+
+        if (!empty($target)) {
+            $files = $this->fsScanner->scanDirectory($target);
             foreach ($files as &$f) {
                 $f['suggested_type'] = $type;
             }
+            unset($f);
             $discoveredFiles = $files;
         }
 
@@ -133,6 +140,11 @@ class VirtualLibraryScannerService
             'total_files' => $totalFiles,
             'status' => $jobData['status'],
         ];
+    }
+
+    public function processBatch(int $batchSize = 4): array
+    {
+        return $this->processNextBatch($batchSize);
     }
 
     public function processNextBatch(int $batchSize = 4): array
@@ -213,11 +225,6 @@ class VirtualLibraryScannerService
         if (!$hasMore) {
             $jobData['status'] = 'completed';
             $jobData['progress_percent'] = 100;
-            $jobData['logs'][] = [
-                'time' => now()->format('H:i:s'),
-                'level' => 'success',
-                'message' => "🎉 Virtual Library Scan Completed! Total items indexed: {$jobData['processed_files']}",
-            ];
         }
 
         Cache::put('virtual_scan_job', $jobData, 86400);
@@ -316,21 +323,23 @@ class VirtualLibraryScannerService
 
         $updated = 0;
         foreach ($items as $item) {
-            $meta = $this->metadata->aggregateMovieMetadata($item->title, $item->release_year);
-            $poster = $meta['poster_path'] ?? null;
-            if (!$poster) {
-                $poster = $this->webArtwork->searchAndDownloadArtwork($item->title, $item->release_year, 'movie');
-            }
+            try {
+                $meta = $this->metadata->aggregateMovieMetadata($item->title, $item->release_year);
+                $poster = $meta['poster_path'] ?? null;
+                if (!$poster) {
+                    $poster = $this->webArtwork->searchAndDownloadArtwork($item->title, $item->release_year, 'movie');
+                }
 
-            if ($poster || !empty($meta['overview_ar']) || !empty($meta['title_ar'])) {
-                $item->update([
-                    'poster_path' => $poster ?: $item->poster_path,
-                    'overview_ar' => $meta['overview_ar'] ?? $item->overview_ar,
-                    'title_ar' => $meta['title_ar'] ?? $item->title_ar,
-                    'rating' => $meta['rating'] ?? $item->rating,
-                ]);
-                $updated++;
-            }
+                if ($poster || !empty($meta['overview_ar']) || !empty($meta['title_ar'])) {
+                    $item->update([
+                        'poster_path' => $poster ?: $item->poster_path,
+                        'overview_ar' => $meta['overview_ar'] ?? $item->overview_ar,
+                        'title_ar' => $meta['title_ar'] ?? $item->title_ar,
+                        'rating' => $meta['rating'] ?? $item->rating,
+                    ]);
+                    $updated++;
+                }
+            } catch (\Throwable $e) {}
         }
 
         return ['updated' => $updated, 'total' => $items->count()];
@@ -341,14 +350,18 @@ class VirtualLibraryScannerService
         $cleanTitle = $parsed['clean_title'] ?? ($parsed['title'] ?? pathinfo($file['filename'], PATHINFO_FILENAME));
         $year = $parsed['year'] ?? null;
 
-        $meta = $this->metadata->aggregateMovieMetadata($cleanTitle, $year);
+        $meta = [];
+        $posterUrl = $file['local_poster'] ?? null;
+        $backdropUrl = $file['local_backdrop'] ?? null;
 
-        $posterUrl = $meta['poster_path'] ?? ($file['local_poster'] ?? null);
-        if (empty($posterUrl)) {
-            $posterUrl = $this->webArtwork->searchAndDownloadArtwork($cleanTitle, $year, 'movie');
-        }
-
-        $backdropUrl = $meta['backdrop_path'] ?? ($file['local_backdrop'] ?? null);
+        try {
+            $meta = $this->metadata->aggregateMovieMetadata($cleanTitle, $year);
+            $posterUrl = $meta['poster_path'] ?? $posterUrl;
+            if (empty($posterUrl)) {
+                $posterUrl = $this->webArtwork->searchAndDownloadArtwork($cleanTitle, $year, 'movie');
+            }
+            $backdropUrl = $meta['backdrop_path'] ?? $backdropUrl;
+        } catch (\Throwable $e) {}
 
         $movie = MediaItem::updateOrCreate(
             ['file_path' => $file['path']],
@@ -377,11 +390,13 @@ class VirtualLibraryScannerService
         $genres = !empty($meta['genres']) ? $meta['genres'] : ['Action', 'Drama'];
         $genreIds = [];
         foreach ($genres as $gName) {
-            $genre = Genre::firstOrCreate(
-                ['slug' => Str::slug($gName)],
-                ['name_en' => $gName, 'name_ar' => $gName]
-            );
-            $genreIds[] = $genre->id;
+            try {
+                $genre = Genre::firstOrCreate(
+                    ['slug' => Str::slug($gName)],
+                    ['name_en' => $gName, 'name_ar' => $gName]
+                );
+                $genreIds[] = $genre->id;
+            } catch (\Throwable $e) {}
         }
         $movie->genres()->sync($genreIds);
 
@@ -438,35 +453,37 @@ class VirtualLibraryScannerService
         }
 
         if (!$series->poster_path || !$series->overview || $series->overview === "Experience the complete series of {$showTitle}.") {
-            $meta = $this->metadata->aggregateSeriesMetadata($showTitle, $parsed['year'] ?? null);
-            $posterUrl = $meta['poster_path'] ?? ($file['local_poster'] ?? null);
-            if (empty($posterUrl)) {
-                $posterUrl = $this->webArtwork->searchAndDownloadArtwork($showTitle, $parsed['year'] ?? null, 'series');
-            }
-
-            $backdropUrl = $meta['backdrop_path'] ?? ($file['local_backdrop'] ?? null);
-
-            $series->update([
-                'title_ar' => $meta['title_ar'] ?? $series->title_ar,
-                'overview' => $meta['overview'] ?? $series->overview,
-                'overview_ar' => $meta['overview_ar'] ?? $series->overview_ar,
-                'poster_path' => $posterUrl ?? $series->poster_path,
-                'backdrop_path' => $backdropUrl ?? $series->backdrop_path,
-                'rating' => $meta['rating'] ?? $series->rating,
-                'release_year' => $meta['year'] ?? $series->release_year,
-            ]);
-
-            if (!empty($meta['genres'])) {
-                $genreIds = [];
-                foreach ($meta['genres'] as $gName) {
-                    $genre = Genre::firstOrCreate(
-                        ['slug' => Str::slug($gName)],
-                        ['name_en' => $gName, 'name_ar' => $gName]
-                    );
-                    $genreIds[] = $genre->id;
+            try {
+                $meta = $this->metadata->aggregateSeriesMetadata($showTitle, $parsed['year'] ?? null);
+                $posterUrl = $meta['poster_path'] ?? ($file['local_poster'] ?? null);
+                if (empty($posterUrl)) {
+                    $posterUrl = $this->webArtwork->searchAndDownloadArtwork($showTitle, $parsed['year'] ?? null, 'series');
                 }
-                $series->genres()->sync($genreIds);
-            }
+
+                $backdropUrl = $meta['backdrop_path'] ?? ($file['local_backdrop'] ?? null);
+
+                $series->update([
+                    'title_ar' => $meta['title_ar'] ?? $series->title_ar,
+                    'overview' => $meta['overview'] ?? $series->overview,
+                    'overview_ar' => $meta['overview_ar'] ?? $series->overview_ar,
+                    'poster_path' => $posterUrl ?? $series->poster_path,
+                    'backdrop_path' => $backdropUrl ?? $series->backdrop_path,
+                    'rating' => $meta['rating'] ?? $series->rating,
+                    'release_year' => $meta['year'] ?? $series->release_year,
+                ]);
+
+                if (!empty($meta['genres'])) {
+                    $genreIds = [];
+                    foreach ($meta['genres'] as $gName) {
+                        $genre = Genre::firstOrCreate(
+                            ['slug' => Str::slug($gName)],
+                            ['name_en' => $gName, 'name_ar' => $gName]
+                        );
+                        $genreIds[] = $genre->id;
+                    }
+                    $series->genres()->sync($genreIds);
+                }
+            } catch (\Throwable $e) {}
         }
 
         $season = Season::firstOrCreate(
@@ -481,6 +498,8 @@ class VirtualLibraryScannerService
             ]
         );
 
+        $epTitle = $parsed['episode_title'] ?? "Episode {$epNum}";
+
         $episode = Episode::updateOrCreate(
             [
                 'season_id' => $season->id,
@@ -488,7 +507,7 @@ class VirtualLibraryScannerService
             ],
             [
                 'series_id' => $series->id,
-                'title' => "Episode {$epNum}",
+                'title' => $epTitle,
                 'file_path' => $file['path'],
                 'file_size_bytes' => $file['size_bytes'] ?? 0,
                 'overview' => "Episode {$epNum} of Season {$seasonNum}",
