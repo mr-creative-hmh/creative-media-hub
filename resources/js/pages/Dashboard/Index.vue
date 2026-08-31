@@ -9,7 +9,7 @@ import MediaDetailModal from '@/components/media/MediaDetailModal.vue';
 import {
     Film, Tv, HardDrive, Subtitles, DownloadCloud, Sparkles,
     FolderSync, BarChart3, Play, ChevronRight, ChevronLeft,
-    Clock, Flame, CheckCircle, Plus
+    Clock, Flame, CheckCircle, Plus, ScanLine
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -59,7 +59,7 @@ const openDetail = (item: any) => {
             />
         </div>
 
-        <!-- 2. Bento Grid Quick Overview Stats Bar -->
+        <!-- 2. Bento Grid Quick Overview Stats Bar (Virtual Scanner & Physical Organizer featured) -->
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-10">
             <!-- Total Movies -->
             <Link
@@ -89,18 +89,38 @@ const openDetail = (item: any) => {
                 <div class="text-2xl font-black text-white mt-2">{{ stats.total_series }}</div>
             </Link>
 
-            <!-- Storage Used -->
+            <!-- Virtual Scanner Quick Trigger -->
             <Link
-                href="/analytics"
-                class="glass-panel p-4 rounded-2xl border border-white/10 hover:border-emerald-500/40 transition-all duration-300 group hover:-translate-y-0.5 shadow-lg shadow-black/40 flex flex-col justify-between"
+                href="/scanner"
+                class="glass-panel p-4 rounded-2xl border border-cyan-500/30 bg-cyan-950/20 hover:border-cyan-400 transition-all duration-300 group hover:-translate-y-0.5 shadow-lg shadow-cyan-950/30 flex flex-col justify-between"
             >
                 <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ t('analytics_view.storage_used') }}</span>
-                    <div class="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <HardDrive class="w-3.5 h-3.5" />
+                    <span class="text-[11px] font-bold text-cyan-300 uppercase tracking-wider">{{ t('nav.scanner') }}</span>
+                    <div class="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <ScanLine class="w-3.5 h-3.5" />
                     </div>
                 </div>
-                <div class="text-xl font-black text-white mt-2">{{ stats.storage_formatted }}</div>
+                <div class="text-xs font-bold text-slate-200 mt-2 flex items-center gap-1">
+                    <span>{{ isRTL ? 'فهرسة المجلدات' : 'Index Folders' }}</span>
+                    <component :is="isRTL ? ChevronLeft : ChevronRight" class="w-3 h-3 text-cyan-400" />
+                </div>
+            </Link>
+
+            <!-- Physical Organizer Action -->
+            <Link
+                href="/organizer"
+                class="glass-panel p-4 rounded-2xl border border-white/10 hover:border-indigo-500/40 transition-all duration-300 group hover:-translate-y-0.5 shadow-lg shadow-black/40 flex flex-col justify-between"
+            >
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ t('nav.organizer') }}</span>
+                    <div class="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center group-hover:rotate-45 transition-transform">
+                        <FolderSync class="w-3.5 h-3.5" />
+                    </div>
+                </div>
+                <div class="text-xs font-bold text-slate-200 mt-2 flex items-center gap-1">
+                    <span>{{ isRTL ? 'إعادة التسمية' : 'Restructure' }}</span>
+                    <component :is="isRTL ? ChevronLeft : ChevronRight" class="w-3 h-3 text-indigo-400" />
+                </div>
             </Link>
 
             <!-- Missing Subtitles Alert -->
@@ -119,35 +139,18 @@ const openDetail = (item: any) => {
                 </div>
             </Link>
 
-            <!-- Active Downloads Queue -->
+            <!-- Storage Used -->
             <Link
-                href="/downloads"
-                class="glass-panel p-4 rounded-2xl border border-white/10 hover:border-cyan-500/40 transition-all duration-300 group hover:-translate-y-0.5 shadow-lg shadow-black/40 flex flex-col justify-between"
+                href="/analytics"
+                class="glass-panel p-4 rounded-2xl border border-white/10 hover:border-emerald-500/40 transition-all duration-300 group hover:-translate-y-0.5 shadow-lg shadow-black/40 flex flex-col justify-between"
             >
                 <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ t('nav.downloads') }}</span>
-                    <div class="w-7 h-7 rounded-lg bg-cyan-500/10 text-cyan-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <DownloadCloud class="w-3.5 h-3.5" />
+                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ t('analytics_view.storage_used') }}</span>
+                    <div class="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <HardDrive class="w-3.5 h-3.5" />
                     </div>
                 </div>
-                <div class="text-2xl font-black text-white mt-2">{{ stats.active_downloads_count }}</div>
-            </Link>
-
-            <!-- Organizer Action Shortcut -->
-            <Link
-                href="/organizer"
-                class="glass-panel p-4 rounded-2xl border border-cyan-500/30 bg-cyan-950/20 hover:border-cyan-400 transition-all duration-300 group hover:-translate-y-0.5 shadow-lg shadow-cyan-950/30 flex flex-col justify-between"
-            >
-                <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-cyan-300 uppercase tracking-wider">{{ isRTL ? 'منظّم الملفات' : 'Organizer' }}</span>
-                    <div class="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center group-hover:rotate-45 transition-transform">
-                        <FolderSync class="w-3.5 h-3.5" />
-                    </div>
-                </div>
-                <div class="text-xs font-bold text-slate-300 mt-2 flex items-center gap-1">
-                    <span>{{ isRTL ? 'فحص وإعادة تسمية' : 'Scan & Sort' }}</span>
-                    <component :is="isRTL ? ChevronLeft : ChevronRight" class="w-3 h-3" />
-                </div>
+                <div class="text-xl font-black text-white mt-2">{{ stats.storage_formatted }}</div>
             </Link>
         </div>
 

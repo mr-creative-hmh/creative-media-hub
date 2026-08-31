@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
+import { useAppearance } from '@/composables/useAppearance';
 import { router } from '@inertiajs/vue3';
 import {
     Search, Globe, LayoutDashboard, Film, Clapperboard, FolderSync,
-    Subtitles, BarChart3, DownloadCloud, Menu, X, Tv
+    Subtitles, BarChart3, DownloadCloud, Menu, X, Tv, Sun, Moon,
+    Settings, ScanLine
 } from 'lucide-vue-next';
 
 const { t, locale, setLocale, isRTL } = useI18n();
+const { resolvedAppearance, updateAppearance } = useAppearance();
+
 const searchQuery = ref('');
 const isMobileMenuOpen = ref(false);
 
@@ -21,14 +25,20 @@ const toggleLanguage = () => {
     setLocale(locale.value === 'ar' ? 'en' : 'ar');
 };
 
+const toggleTheme = () => {
+    updateAppearance(resolvedAppearance.value === 'dark' ? 'light' : 'dark');
+};
+
 const mobileNavItems = [
     { nameKey: 'nav.dashboard', href: '/', icon: LayoutDashboard },
     { nameKey: 'nav.movies', href: '/movies', icon: Film },
     { nameKey: 'nav.series', href: '/series', icon: Tv },
+    { nameKey: 'nav.scanner', href: '/scanner', icon: ScanLine },
     { nameKey: 'nav.organizer', href: '/organizer', icon: FolderSync },
     { nameKey: 'nav.subtitles', href: '/subtitles', icon: Subtitles },
     { nameKey: 'nav.analytics', href: '/analytics', icon: BarChart3 },
     { nameKey: 'nav.downloads', href: '/downloads', icon: DownloadCloud },
+    { nameKey: 'nav.settings', href: '/settings', icon: Settings },
 ];
 </script>
 
@@ -68,11 +78,22 @@ const mobileNavItems = [
             </form>
         </div>
 
-        <!-- Language Switcher & Controls -->
+        <!-- Theme Toggle, Language Switcher & Controls -->
         <div class="flex items-center gap-2 sm:gap-3">
+            <!-- Dark / Light Mode Switcher -->
+            <button
+                @click="toggleTheme"
+                class="flex items-center justify-center w-9 h-9 rounded-xl glass-panel border border-white/10 hover:border-cyan-500/40 text-slate-300 hover:text-cyan-400 transition-all active:scale-95 cursor-pointer shadow-md"
+                :title="resolvedAppearance === 'dark' ? 'Switch to Light Mode (الوضع المضيء)' : 'Switch to Dark Mode (الوضع الليلي)'"
+            >
+                <Sun v-if="resolvedAppearance === 'dark'" class="w-4 h-4 text-amber-400" />
+                <Moon v-else class="w-4 h-4 text-cyan-500" />
+            </button>
+
+            <!-- Language Switcher -->
             <button
                 @click="toggleLanguage"
-                class="flex items-center gap-2 px-3 py-1.5 rounded-xl glass-panel border border-white/10 hover:border-cyan-500/40 text-xs font-bold text-slate-300 hover:text-white transition-all active:scale-95"
+                class="flex items-center gap-2 px-3 py-1.5 rounded-xl glass-panel border border-white/10 hover:border-cyan-500/40 text-xs font-bold text-slate-300 hover:text-white transition-all active:scale-95 cursor-pointer shadow-md"
                 :title="isRTL ? 'Switch to English' : 'التحويل إلى العربية'"
             >
                 <Globe class="w-3.5 h-3.5 text-cyan-400" />

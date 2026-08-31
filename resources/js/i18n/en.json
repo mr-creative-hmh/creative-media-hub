@@ -5,6 +5,7 @@
     "dashboard": "Dashboard",
     "movies": "Movies",
     "series": "TV Series",
+    "scanner": "Virtual Scanner",
     "organizer": "Disk Organizer",
     "subtitles": "Subtitles",
     "analytics": "Analytics",
@@ -30,7 +31,10 @@
     "download": "Download",
     "close": "Close",
     "hours": "hrs",
-    "minutes": "min"
+    "minutes": "min",
+    "save": "Save Changes",
+    "cancel": "Cancel",
+    "remove": "Remove"
   },
   "media": {
     "trending": "Trending Now",
@@ -49,22 +53,36 @@
     "sort_year": "Release Year",
     "sort_title": "Alphabetical (A-Z)"
   },
-  "player": {
-    "play": "Play",
-    "pause": "Pause",
-    "mute": "Mute",
-    "unmute": "Unmute",
-    "speed": "Playback Speed",
-    "subtitles": "Subtitles",
-    "subtitles_off": "Off",
-    "fullscreen": "Fullscreen",
-    "exit_fullscreen": "Exit Fullscreen",
-    "pip": "Picture in Picture",
-    "next_episode": "Next Episode"
+  "scanner": {
+    "title": "Virtual Media Scanner & Background Jobs",
+    "subtitle": "Index your local movie and series directories virtually with automated metadata scraping.",
+    "monitored_directories": "Monitored Media Folders",
+    "add_directory": "Add Media Folder",
+    "folder_path": "Folder Path (e.g. C:/Movies or /Volumes/Media)",
+    "media_type": "Folder Content Type",
+    "movies_type": "Movies Only",
+    "series_type": "TV Series Only",
+    "mixed_type": "Mixed / Auto-Detect",
+    "start_scan": "Start Library Scan",
+    "pause_scan": "Pause Scan",
+    "resume_scan": "Resume Scan",
+    "cancel_scan": "Cancel Scan",
+    "job_status": "Background Scan Job",
+    "status_idle": "Idle",
+    "status_running": "Scanning in Background...",
+    "status_paused": "Paused",
+    "status_completed": "Completed",
+    "status_cancelled": "Cancelled",
+    "scanned_files": "Scanned Media Files",
+    "matched_metadata": "Scraped Metadata",
+    "current_activity": "Current Processing",
+    "clear_demo_title": "Clean Slate & Reset Library",
+    "clear_demo_desc": "Wipe sample demo items so you can index your own clean local folders from scratch.",
+    "clear_demo_button": "Clear Demo Media Catalog"
   },
   "organizer": {
     "title": "Physical Disk Organizer",
-    "subtitle": "Scan incoming folders, parse release scene names, and restructure with zero errors.",
+    "subtitle": "Scan incoming folders, parse release scene names, and physically restructure files.",
     "source_folder": "Incoming Folder Path",
     "target_folder": "Organized Media Library Root",
     "movie_template": "Movie Folder & File Pattern",
@@ -88,6 +106,18 @@
     "missing_ar": "Missing Arabic",
     "missing_en": "Missing English",
     "search_prompt": "Search subtitle by title, year, or release hash..."
+  },
+  "settings": {
+    "title": "Settings & Metadata Providers",
+    "subtitle": "Configure API keys, scrapers fallback priorities, and subtitle accounts.",
+    "tmdb_key": "TMDb API Key (v3 auth)",
+    "omdb_key": "OMDb API Key",
+    "opensubtitles_key": "OpenSubtitles API Key",
+    "preferred_language": "Default Metadata Language",
+    "fallback_providers": "Active Metadata Scrapers",
+    "auto_fetch_meta": "Automatically scrap metadata upon new file discovery",
+    "auto_fetch_subs": "Automatically download missing Arabic & English subtitles",
+    "save_success": "Settings saved successfully!"
   },
   "analytics_view": {
     "title": "Storage & Codec Analytics",
