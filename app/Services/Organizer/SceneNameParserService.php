@@ -6,11 +6,17 @@ class SceneNameParserService
 {
     public function parse(string $filenameOrPath): array
     {
-        $filename = pathinfo($filenameOrPath, PATHINFO_FILENAME);
-        $extension = pathinfo($filenameOrPath, PATHINFO_EXTENSION);
+        $normalized = str_replace('\\', '/', $filenameOrPath);
+        $parts = explode('/', $normalized);
+        $filename = end($parts);
+        $parentFolder = count($parts) > 1 ? $parts[count($parts) - 2] : '';
+        $grandparentFolder = count($parts) > 2 ? $parts[count($parts) - 3] : '';
 
-        // Normalize separators: dots, underscores to spaces
-        $clean = preg_replace('/[._]/', ' ', $filename);
+        $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        $baseName = pathinfo($filename, PATHINFO_FILENAME);
+
+        // Normalize separators
+        $clean = preg_replace('/[._]/', ' ', $baseName);
 
         $type = 'movie';
         $season = null;
@@ -21,8 +27,9 @@ class SceneNameParserService
         $audio = null;
         $source = null;
         $group = null;
+        $isParentSeasonFolder = false;
 
-        // 1. Detect TV Series (S01E02, 1x02, Season 1 Episode 2)
+        // 1. Detect TV Series from filename (S01E02, 1x02, Season 1 Episode 2, EP02)
         if (preg_match('/[sS](\d{1,2})[eE](\d{1,3})/i', $clean, $matches)) {
             $type = 'series';
             $season = (int) $matches[1];
@@ -35,14 +42,25 @@ class SceneNameParserService
             $type = 'series';
             $season = (int) $matches[1];
             $episode = (int) $matches[2];
+        } elseif (preg_match('/^(?:ep|episode)?\s*(\d{1,3})\s*[-_ ]/i', $clean, $matches)) {
+            $episode = (int) $matches[1];
         }
 
-        // 2. Detect Year (1900-2099)
+        // 2. Folder-Aware Series & Season Detection (e.g. Breaking Bad/Season 01/01.mkv)
+        if ($parentFolder && preg_match('/^(?:Season|Series|Staffel|Saison)\s*(\d{1,2})$/i', trim($parentFolder), $sMatches)) {
+            $type = 'series';
+            $isParentSeasonFolder = true;
+            if ($season === null) {
+                $season = (int) $sMatches[1];
+            }
+        }
+
+        // 3. Detect Year (1900-2099)
         if (preg_match('/\b(19\d\d|20\d\d)\b/', $clean, $matches)) {
             $year = (int) $matches[1];
         }
 
-        // 3. Detect Resolution
+        // 4. Detect Resolution
         if (preg_match('/\b(2160p|4k|uhd)\b/i', $clean)) {
             $resolution = '4K UHD';
         } elseif (preg_match('/\b(1080p|1080i|fhd)\b/i', $clean)) {
@@ -53,7 +71,7 @@ class SceneNameParserService
             $resolution = '480p SD';
         }
 
-        // 4. Detect Video Codec
+        // 5. Detect Video Codec
         if (preg_match('/\b(x265|h265|hevc)\b/i', $clean)) {
             $codec = 'HEVC / H.265';
         } elseif (preg_match('/\b(x264|h264|avc)\b/i', $clean)) {
@@ -64,7 +82,7 @@ class SceneNameParserService
             $codec = 'XviD';
         }
 
-        // 5. Detect Audio
+        // 6. Detect Audio
         if (preg_match('/\b(atmos)\b/i', $clean)) {
             $audio = 'Dolby Atmos';
         } elseif (preg_match('/\b(truehd)\b/i', $clean)) {
@@ -81,7 +99,7 @@ class SceneNameParserService
             $audio = 'AAC';
         }
 
-        // 6. Detect Source
+        // 7. Detect Source
         if (preg_match('/\b(bluray|remux|bdrip|brrip)\b/i', $clean)) {
             $source = 'BluRay';
         } elseif (preg_match('/\b(web-dl|webdl|webrip|web)\b/i', $clean)) {
@@ -92,12 +110,12 @@ class SceneNameParserService
             $source = 'DVDRip';
         }
 
-        // 7. Extract Release Group (usually at the very end after a dash)
-        if (preg_match('/-([a-zA-Z0-9]+)$/', $filename, $matches)) {
+        // 8. Extract Release Group
+        if (preg_match('/-([a-zA-Z0-9]+)$/', $baseName, $matches)) {
             $group = $matches[1];
         }
 
-        // 8. Clean up Title: strip everything from season/episode or year onward
+        // 9. Extract Clean Title
         $title = $clean;
         $cutoffPatterns = [
             '/[sS]\d{1,2}[eE]\d{1,3}.*$/i',
@@ -113,28 +131,42 @@ class SceneNameParserService
             }
         }
 
-        // Clean extra punctuation and trim
-        $title = preg_replace('/[\[\]\(\)\{\}\-]/', ' ', $title);
-        $title = trim(preg_replace('/\s+/', ' ', $title));
-        $title = ucwords(strtolower($title));
+        $cleanTitle = $this->cleanTitleString($title);
 
-        if (empty($title)) {
-            $title = $filename;
+        // If filename title is just episode number (e.g. "05 - Kissed by fire" or "01") and parent is Season folder
+        if ($isParentSeasonFolder && $grandparentFolder && (empty($cleanTitle) || is_numeric($cleanTitle) || preg_match('/^\d{1,3}\s+/', $cleanTitle))) {
+            $cleanTitle = $this->cleanTitleString($grandparentFolder);
+        }
+
+        if (empty($cleanTitle)) {
+            $cleanTitle = $this->cleanTitleString($baseName);
         }
 
         return [
-            'original_filename' => $filename . '.' . $extension,
-            'clean_title' => $title,
+            'original_filename' => $filename,
+            'title' => $cleanTitle,
+            'clean_title' => $cleanTitle,
+            'series_title' => $type === 'series' ? $cleanTitle : null,
             'type' => $type,
-            'season' => $season,
-            'episode' => $episode,
+            'season' => $season ?? ($type === 'series' ? 1 : null),
+            'episode' => $episode ?? ($type === 'series' ? 1 : null),
             'year' => $year,
             'resolution' => $resolution,
             'codec' => $codec,
             'audio' => $audio,
             'source' => $source,
             'group' => $group,
-            'extension' => strtolower($extension),
+            'extension' => $extension,
         ];
+    }
+
+    protected function cleanTitleString(string $raw): string
+    {
+        // Strip bracket tags like [YTS.MX], [1080p], (2024)
+        $s = preg_replace('/\[[^\]]*\]/', ' ', $raw);
+        $s = preg_replace('/\([^\)]*\)/', ' ', $s);
+        $s = preg_replace('/[._\-]/', ' ', $s);
+        $s = trim(preg_replace('/\s+/', ' ', $s));
+        return ucwords(strtolower($s));
     }
 }

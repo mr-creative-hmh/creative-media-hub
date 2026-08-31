@@ -152,7 +152,7 @@ class VirtualLibraryScannerService
                 return ['status' => $currentStatus, 'has_more' => false];
             }
 
-            $parsed = $file['parsed'] ?? $this->parser->parse($file['filename']);
+            $parsed = $file['parsed'] ?? $this->parser->parse($file['path']);
             $isSeries = ($file['expected_type'] === 'series') || ($parsed['type'] === 'series');
 
             $processed++;
@@ -165,11 +165,13 @@ class VirtualLibraryScannerService
                 }
 
                 if ($item) {
+                    $cleanTitle = $parsed['clean_title'] ?? ($parsed['title'] ?? $file['filename']);
                     $recentItems[] = [
-                        'title' => $item->title ?? ($parsed['title'] ?? $file['filename']),
+                        'title' => $cleanTitle,
                         'type' => $isSeries ? 'series' : 'movie',
                         'resolution' => $parsed['resolution'] ?? '1080p',
                         'file_path' => $file['path'],
+                        'subtitles_count' => count($file['subtitles'] ?? []),
                     ];
                 }
             } catch (\Throwable $e) {
@@ -201,11 +203,11 @@ class VirtualLibraryScannerService
 
     protected function indexMovie(array $file, array $parsed): MediaItem
     {
-        $cleanTitle = $parsed['title'] ?? pathinfo($file['filename'], PATHINFO_FILENAME);
+        $cleanTitle = $parsed['clean_title'] ?? ($parsed['title'] ?? pathinfo($file['filename'], PATHINFO_FILENAME));
         $year = $parsed['year'] ?? null;
 
         $meta = $this->metadata->aggregateMovieMetadata($cleanTitle, $year);
-        $posterUrl = $file['local_poster'] ?? ($meta['poster_url'] ?? null);
+        $posterUrl = $file['local_poster'] ?? ($meta['poster_path'] ?? null);
 
         $movie = MediaItem::updateOrCreate(
             ['file_path' => $file['path']],
@@ -219,10 +221,10 @@ class VirtualLibraryScannerService
                 'overview' => $meta['overview'] ?? "Enjoy watching {$cleanTitle}.",
                 'overview_ar' => $meta['overview_ar'] ?? null,
                 'poster_path' => $posterUrl,
-                'backdrop_path' => $meta['backdrop_url'] ?? null,
+                'backdrop_path' => $meta['backdrop_path'] ?? null,
                 'trailer_url' => $meta['trailer_url'] ?? null,
                 'rating' => $meta['rating'] ?? 7.5,
-                'runtime_minutes' => $meta['runtime'] ?? 115,
+                'runtime_minutes' => $meta['runtime_minutes'] ?? 115,
                 'resolution' => $parsed['resolution'] ?? '1080p',
                 'video_codec' => $parsed['codec'] ?? 'HEVC',
                 'audio_codec' => $parsed['audio'] ?? 'AAC 5.1',
@@ -242,8 +244,19 @@ class VirtualLibraryScannerService
         }
         $movie->genres()->sync($genreIds);
 
+        // Attach subtitles
         if (!empty($file['subtitles'])) {
             foreach ($file['subtitles'] as $sub) {
+                $lang = $sub['language'] ?? 'und';
+                $langName = match ($lang) {
+                    'ar' => 'Arabic',
+                    'en' => 'English',
+                    'fr' => 'French',
+                    'es' => 'Spanish',
+                    'de' => 'German',
+                    default => 'Original Subtitle',
+                };
+
                 Subtitle::updateOrCreate(
                     [
                         'subtitlable_id' => $movie->id,
@@ -251,8 +264,8 @@ class VirtualLibraryScannerService
                         'file_path' => $sub['path'],
                     ],
                     [
-                        'language' => str_contains(strtolower($sub['filename']), 'ar') ? 'ar' : 'en',
-                        'language_name' => str_contains(strtolower($sub['filename']), 'ar') ? 'Arabic' : 'English',
+                        'language' => $lang,
+                        'language_name' => $langName,
                         'format' => $sub['extension'] ?? 'srt',
                     ]
                 );
@@ -264,14 +277,15 @@ class VirtualLibraryScannerService
 
     protected function indexSeriesEpisode(array $file, array $parsed): Episode
     {
-        $seriesTitle = $parsed['title'] ?? pathinfo($file['filename'], PATHINFO_FILENAME);
-        $seasonNum = $parsed['season'] ?? 1;
-        $episodeNum = $parsed['episode'] ?? 1;
+        $seriesTitle = $parsed['clean_title'] ?? ($parsed['title'] ?? pathinfo($file['filename'], PATHINFO_FILENAME));
+        $seasonNum = (int) ($parsed['season'] ?? 1);
+        $episodeNum = (int) ($parsed['episode'] ?? 1);
         $year = $parsed['year'] ?? null;
 
         $seriesMeta = $this->metadata->aggregateSeriesMetadata($seriesTitle, $year);
-        $posterUrl = $file['local_poster'] ?? ($seriesMeta['poster_url'] ?? null);
+        $posterUrl = $file['local_poster'] ?? ($seriesMeta['poster_path'] ?? null);
 
+        // 1. Unified Show Grouping
         $series = Series::firstOrCreate(
             ['title' => $seriesMeta['title'] ?? $seriesTitle],
             [
@@ -282,17 +296,27 @@ class VirtualLibraryScannerService
                 'overview' => $seriesMeta['overview'] ?? "Experience {$seriesTitle}.",
                 'overview_ar' => $seriesMeta['overview_ar'] ?? null,
                 'poster_path' => $posterUrl,
-                'backdrop_path' => $seriesMeta['backdrop_url'] ?? null,
+                'backdrop_path' => $seriesMeta['backdrop_path'] ?? null,
                 'rating' => $seriesMeta['rating'] ?? 8.0,
                 'folder_path' => dirname($file['path']),
             ]
         );
 
+        // If poster or overview wasn't set earlier, enrich it now
+        if (!$series->poster_path && $posterUrl) {
+            $series->update(['poster_path' => $posterUrl]);
+        }
+        if (!$series->backdrop_path && !empty($seriesMeta['backdrop_path'])) {
+            $series->update(['backdrop_path' => $seriesMeta['backdrop_path']]);
+        }
+
+        // 2. Unified Season Grouping
         $season = Season::firstOrCreate(
             ['series_id' => $series->id, 'season_number' => $seasonNum],
             ['title' => "Season {$seasonNum}"]
         );
 
+        // 3. Unique Episode Record
         $episode = Episode::updateOrCreate(
             ['file_path' => $file['path']],
             [
@@ -300,7 +324,7 @@ class VirtualLibraryScannerService
                 'season_id' => $season->id,
                 'episode_number' => $episodeNum,
                 'title' => "Episode {$episodeNum}",
-                'overview' => "Episode {$episodeNum} of Season {$seasonNum}",
+                'overview' => "Season {$seasonNum} Episode {$episodeNum}",
                 'resolution' => $parsed['resolution'] ?? '1080p',
                 'video_codec' => $parsed['codec'] ?? 'HEVC',
                 'audio_codec' => $parsed['audio'] ?? 'AAC 5.1',
@@ -308,8 +332,19 @@ class VirtualLibraryScannerService
             ]
         );
 
+        // 4. Attach Subtitles directly to the Episode
         if (!empty($file['subtitles'])) {
             foreach ($file['subtitles'] as $sub) {
+                $lang = $sub['language'] ?? 'und';
+                $langName = match ($lang) {
+                    'ar' => 'Arabic',
+                    'en' => 'English',
+                    'fr' => 'French',
+                    'es' => 'Spanish',
+                    'de' => 'German',
+                    default => 'Original Subtitle',
+                };
+
                 Subtitle::updateOrCreate(
                     [
                         'subtitlable_id' => $episode->id,
@@ -317,8 +352,8 @@ class VirtualLibraryScannerService
                         'file_path' => $sub['path'],
                     ],
                     [
-                        'language' => str_contains(strtolower($sub['filename']), 'ar') ? 'ar' : 'en',
-                        'language_name' => str_contains(strtolower($sub['filename']), 'ar') ? 'Arabic' : 'English',
+                        'language' => $lang,
+                        'language_name' => $langName,
                         'format' => $sub['extension'] ?? 'srt',
                     ]
                 );

@@ -38,12 +38,12 @@ class MetadataAggregator
             'year' => $year,
             'tmdb_id' => null,
             'imdb_id' => null,
-            'overview' => "A captivating movie titled {$title}.",
+            'overview' => "Enjoy watching {$title}.",
             'overview_ar' => null,
-            'poster_url' => null,
-            'backdrop_url' => null,
+            'poster_path' => null,
+            'backdrop_path' => null,
             'rating' => 7.5,
-            'runtime' => 110,
+            'runtime_minutes' => 110,
             'genres' => ['Action', 'Drama'],
             'director' => null,
             'cast' => [],
@@ -55,13 +55,13 @@ class MetadataAggregator
 
         if (!empty($searchResults)) {
             $first = $searchResults[0];
-            $providerKey = $first['provider'] ?? 'tmdb';
-            $id = $first['id'] ?? null;
+            $providerKey = strtolower($first['provider'] ?? 'tmdb');
+            $id = $first['id'] ?? ($first['tmdb_id'] ?? null);
 
             if ($id) {
                 $details = $this->getMovieDetails($id, $providerKey, $lang);
                 if ($details) {
-                    return array_merge($default, $details);
+                    return array_merge($default, $first, $details);
                 }
             }
 
@@ -81,28 +81,29 @@ class MetadataAggregator
             'tmdb_id' => null,
             'tvmaze_id' => null,
             'imdb_id' => null,
-            'overview' => "An exciting television series titled {$title}.",
+            'overview' => "Experience the complete story of {$title}.",
             'overview_ar' => null,
-            'poster_url' => null,
-            'backdrop_url' => null,
+            'poster_path' => null,
+            'backdrop_path' => null,
             'rating' => 8.0,
             'status' => 'Returning Series',
             'genres' => ['Drama', 'Thriller'],
             'cast' => [],
+            'seasons' => [],
         ];
 
-        // 1. Search across metadata chain
+        // 1. Search across metadata chain (TVMaze is 100% free with no API key needed, TMDb if configured)
         $searchResults = $this->searchSeries($title, $year, $lang);
 
         if (!empty($searchResults)) {
             $first = $searchResults[0];
-            $providerKey = $first['provider'] ?? 'tvmaze';
-            $id = $first['id'] ?? null;
+            $providerKey = strtolower($first['provider'] ?? 'tvmaze');
+            $id = $first['id'] ?? ($first['tvmaze_id'] ?? ($first['tmdb_id'] ?? null));
 
             if ($id) {
                 $details = $this->getSeriesDetails($id, $providerKey, $lang);
                 if ($details) {
-                    return array_merge($default, $details);
+                    return array_merge($default, $first, $details);
                 }
             }
 
@@ -164,6 +165,7 @@ class MetadataAggregator
 
     public function getMovieDetails(string|int $id, string $providerKey = 'tmdb', string $lang = 'en'): ?array
     {
+        $providerKey = strtolower($providerKey);
         if (isset($this->providers[$providerKey])) {
             try {
                 $data = $this->providers[$providerKey]->getMovieDetails($id, $lang);
@@ -185,6 +187,7 @@ class MetadataAggregator
 
     public function getSeriesDetails(string|int $id, string $providerKey = 'tvmaze', string $lang = 'en'): ?array
     {
+        $providerKey = strtolower($providerKey);
         if (isset($this->providers[$providerKey])) {
             try {
                 $data = $this->providers[$providerKey]->getSeriesDetails($id, $lang);
@@ -206,9 +209,17 @@ class MetadataAggregator
 
     public function getSeasonEpisodes(string|int $seriesId, int $seasonNumber, string $providerKey = 'tmdb', string $lang = 'en'): array
     {
+        $providerKey = strtolower($providerKey);
         if (isset($this->providers[$providerKey])) {
             try {
                 return $this->providers[$providerKey]->getSeasonEpisodes($seriesId, $seasonNumber, $lang);
+            } catch (\Throwable $e) {}
+        }
+
+        foreach ($this->providers as $p) {
+            try {
+                $eps = $p->getSeasonEpisodes($seriesId, $seasonNumber, $lang);
+                if (!empty($eps)) return $eps;
             } catch (\Throwable $e) {}
         }
 

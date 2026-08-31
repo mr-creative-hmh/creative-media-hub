@@ -24,32 +24,38 @@ class PhysicalOrganizerService
         $plan = [];
 
         foreach ($scannedFiles as $file) {
-            $parsed = $file['parsed'] ?? $this->parser->parse($file['filename']);
+            $filePath = $file['path'] ?? ($file['filename'] ?? '');
+            $parsed = $file['parsed'] ?? $this->parser->parse($filePath);
             $isSeries = ($parsed['type'] ?? 'movie') === 'series';
 
             $pattern = $isSeries ? $seriesPattern : $moviePattern;
             $typeDir = $isSeries ? 'TV Shows' : 'Movies';
 
+            $cleanTitle = $parsed['clean_title'] ?? ($parsed['title'] ?? 'Unknown');
+            $year = $parsed['year'] ? (string) $parsed['year'] : 'Unknown Year';
+            $seasonNum = isset($parsed['season']) ? (int) $parsed['season'] : 1;
+            $episodeNum = isset($parsed['episode']) ? (int) $parsed['episode'] : 1;
+
             $tokens = [
                 '{Type}' => $typeDir,
-                '{Title}' => $parsed['clean_title'] ?? 'Unknown',
-                '{Year}' => $parsed['year'] ? (string) $parsed['year'] : 'Unknown Year',
+                '{Title}' => $cleanTitle,
+                '{Year}' => $year,
                 '{Resolution}' => $parsed['resolution'] ?: '1080p',
                 '{Codec}' => $parsed['codec'] ?: 'x264',
-                '{Season:02}' => isset($parsed['season']) ? sprintf('%02d', $parsed['season']) : '01',
-                '{Episode:02}' => isset($parsed['episode']) ? sprintf('%02d', $parsed['episode']) : '01',
-                '{EpisodeTitle}' => 'Episode ' . ($parsed['episode'] ?? 1),
+                '{Season:02}' => sprintf('%02d', $seasonNum),
+                '{Episode:02}' => sprintf('%02d', $episodeNum),
+                '{EpisodeTitle}' => "Episode {$episodeNum}",
                 '{ext}' => $parsed['extension'] ?? 'mkv',
             ];
 
             $relPath = str_replace(array_keys($tokens), array_values($tokens), $pattern);
             // Clean double slashes or extra brackets
             $relPath = preg_replace('#/+#', '/', $relPath);
-            $relPath = str_replace(['[]', '[ ]'], '', $relPath);
+            $relPath = str_replace(['[]', '[ ]', '()', '( )'], '', $relPath);
             $relPath = trim($relPath, '/');
 
             $destination = "{$targetRoot}/{$relPath}";
-            $source = str_replace('\\', '/', $file['path']);
+            $source = str_replace('\\', '/', $filePath);
 
             $exists = File::exists($destination);
             $isIdentical = $source === $destination;
@@ -64,31 +70,35 @@ class PhysicalOrganizerService
             $item = [
                 'source_path' => $source,
                 'destination_path' => $destination,
-                'filename' => $file['filename'],
-                'clean_title' => $parsed['clean_title'],
+                'filename' => $file['filename'] ?? basename($filePath),
+                'clean_title' => $cleanTitle,
                 'type' => $parsed['type'],
                 'year' => $parsed['year'],
-                'season' => $parsed['season'] ?? null,
-                'episode' => $parsed['episode'] ?? null,
+                'season' => $isSeries ? $seasonNum : null,
+                'episode' => $isSeries ? $episodeNum : null,
                 'resolution' => $parsed['resolution'],
-                'size_bytes' => $file['size_bytes'],
+                'size_bytes' => $file['size_bytes'] ?? 0,
                 'size_formatted' => $file['size_formatted'] ?? '',
                 'status' => $status,
                 'selected' => $status === 'ready',
                 'subtitles' => [],
             ];
 
-            // Subtitle mapping
+            // Subtitle mapping with language preserving
             if (!empty($file['subtitles'])) {
                 $destDir = pathinfo($destination, PATHINFO_DIRNAME);
                 $destBase = pathinfo($destination, PATHINFO_FILENAME);
 
                 foreach ($file['subtitles'] as $sub) {
-                    $subExt = $sub['extension'];
-                    $subDest = "{$destDir}/{$destBase}.{$subExt}";
+                    $subExt = $sub['extension'] ?? 'srt';
+                    $lang = $sub['language'] ?? 'und';
+                    $langSuffix = in_array($lang, ['ar', 'en', 'fr', 'es', 'de']) ? ".{$lang}" : '';
+
+                    $subDest = "{$destDir}/{$destBase}{$langSuffix}.{$subExt}";
                     $item['subtitles'][] = [
                         'source' => $sub['path'],
                         'destination' => $subDest,
+                        'language' => $lang,
                     ];
                 }
             }
