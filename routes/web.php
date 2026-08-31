@@ -12,10 +12,15 @@ use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\StreamController;
 use App\Http\Controllers\SubtitleController;
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 
 // Cinema Dashboard & Overview Hub
 Route::get('/', [DashboardController::class, 'index'])->name('home');
 Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+// Documentation & User Guide
+Route::get('/docs', function () { return Inertia::render('Docs/Index'); })->name('docs.index');
+Route::get('/guide', function () { return Inertia::render('Docs/Index'); })->name('guide.index');
 
 // Standalone Library Metadata Management Studio
 Route::get('/metadata', [MetadataManagementController::class, 'index'])->name('metadata.index');

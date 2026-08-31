@@ -8,10 +8,8 @@ use App\Models\MediaItem;
 use App\Models\Subtitle;
 use App\Models\WatchHistory;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StreamController extends Controller
@@ -56,15 +54,13 @@ class StreamController extends Controller
             return response("WEBVTT\n\n", 200, ['Content-Type' => 'text/vtt; charset=utf-8']);
         }
 
-        $content = File::get($path);
+        $rawContent = File::get($path);
+        $vtt = $this->convertToCleanWebVTT($rawContent, $subtitle->format ?? 'srt');
 
-        if ($subtitle->format === 'srt' || !str_starts_with(trim($content), 'WEBVTT')) {
-            $content = "WEBVTT\n\n" . preg_replace('/(\d{2}:\d{2}:\d{2}),(\d{3})/', '$1.$2', $content);
-        }
-
-        return response($content, 200, [
+        return response($vtt, 200, [
             'Content-Type' => 'text/vtt; charset=utf-8',
             'Access-Control-Allow-Origin' => '*',
+            'Cache-Control' => 'no-cache',
         ]);
     }
 
@@ -148,8 +144,18 @@ class StreamController extends Controller
         $end = $size - 1;
         $length = $size;
         $status = 200;
+
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $mime = match ($ext) {
+            'mp4', 'm4v' => 'video/mp4',
+            'webm' => 'video/webm',
+            'mkv' => 'video/mp4', // Modern browsers parse AVC/HEVC in MKV containers with mp4/webm MIME
+            'ogv' => 'video/ogg',
+            default => 'video/mp4',
+        };
+
         $headers = [
-            'Content-Type' => 'video/mp4',
+            'Content-Type' => $mime,
             'Accept-Ranges' => 'bytes',
         ];
 
@@ -171,7 +177,7 @@ class StreamController extends Controller
         $response = new StreamedResponse(function () use ($path, $start, $length) {
             $handle = fopen($path, 'rb');
             fseek($handle, $start);
-            $chunkSize = 1024 * 1024; // 1MB buffer
+            $chunkSize = 1024 * 512; // 512KB buffer for fast scrubbing
             $remaining = $length;
 
             while (!feof($handle) && $remaining > 0 && (connection_status() === CONNECTION_NORMAL)) {
@@ -192,15 +198,15 @@ class StreamController extends Controller
         $ffmpegBin = AppSetting::where('key', 'ffmpeg_path')->value('value') ?: 'ffmpeg';
         $start = (int) $request->input('start', 0);
 
-        // FFmpeg on-the-fly fast audio transcode to AAC with zero video re-encoding
+        // FFmpeg fast audio transcode to AAC with zero video re-encoding and non-blocking stderr
         $escapedPath = escapeshellarg($path);
         $seekFlag = $start > 0 ? "-ss {$start}" : "";
-        $cmd = "{$ffmpegBin} {$seekFlag} -i {$escapedPath} -c:v copy -c:a aac -b:a 192k -ac 2 -f mp4 -movflags frag_keyframe+empty_moov pipe:1";
+        $cmd = "{$ffmpegBin} -nostats -loglevel error -hide_banner {$seekFlag} -i {$escapedPath} -c:v copy -c:a aac -b:a 192k -ac 2 -f mp4 -movflags frag_keyframe+empty_moov+default_base_moof pipe:1";
 
         $descriptors = [
             0 => ['pipe', 'r'],
             1 => ['pipe', 'w'],
-            2 => ['pipe', 'w'],
+            2 => ['file', 'NUL', 'a'], // Windows discard stderr to prevent process pipe deadlock
         ];
 
         $process = @proc_open($cmd, $descriptors, $pipes);
@@ -210,23 +216,66 @@ class StreamController extends Controller
             return $this->streamFileRange($path, $request);
         }
 
-        fclose($pipes[0]);
+        if (isset($pipes[0]) && is_resource($pipes[0])) {
+            fclose($pipes[0]);
+        }
 
         return new StreamedResponse(function () use ($pipes, $process) {
-            while (!feof($pipes[1]) && (connection_status() === CONNECTION_NORMAL)) {
-                $chunk = fread($pipes[1], 1024 * 64);
-                if ($chunk !== false && strlen($chunk) > 0) {
-                    echo $chunk;
-                    flush();
+            if (isset($pipes[1]) && is_resource($pipes[1])) {
+                while (!feof($pipes[1]) && (connection_status() === CONNECTION_NORMAL)) {
+                    $chunk = fread($pipes[1], 1024 * 64);
+                    if ($chunk !== false && strlen($chunk) > 0) {
+                        echo $chunk;
+                        flush();
+                    }
                 }
+                fclose($pipes[1]);
             }
-            fclose($pipes[1]);
-            fclose($pipes[2]);
-            proc_close($process);
+            @proc_close($process);
         }, 200, [
             'Content-Type' => 'video/mp4',
             'Cache-Control' => 'no-cache',
             'Connection' => 'keep-alive',
         ]);
+    }
+
+    protected function convertToCleanWebVTT(string $rawContent, string $format): string
+    {
+        // Strip UTF-8 BOM
+        $content = preg_replace('/^\xEF\xBB\xBF/', '', $rawContent);
+
+        // Convert ASS/SSA tags if present
+        if ($format === 'ass' || $format === 'ssa' || str_contains($content, '[Events]')) {
+            $lines = explode("\n", $content);
+            $vttLines = ["WEBVTT\n"];
+            foreach ($lines as $line) {
+                if (str_starts_with(trim($line), 'Dialogue:')) {
+                    $parts = explode(',', $line, 10);
+                    if (count($parts) >= 10) {
+                        $start = str_replace('.', ':', trim($parts[1]));
+                        $end = str_replace('.', ':', trim($parts[2]));
+                        $text = trim($parts[9]);
+
+                        // Replace ASS formatting tags {\...}
+                        $text = preg_replace('/\{[^}]*\}/', '', $text);
+                        $text = str_replace(['\N', '\n'], "\n", $text);
+
+                        $vttLines[] = "{$start}.000 --> {$end}.000\n{$text}\n";
+                    }
+                }
+            }
+            if (count($vttLines) > 1) {
+                return implode("\n", $vttLines);
+            }
+        }
+
+        // Convert SRT to WebVTT
+        if (!str_starts_with(trim($content), 'WEBVTT')) {
+            // Convert timestamp commas to periods: 00:01:23,456 --> 00:01:23.456
+            $content = preg_replace('/(\d{2}:\d{2}:\d{2}),(\d{3})/', '$1.$2', $content);
+            $content = "WEBVTT\n\n" . $content;
+        }
+
+        return $content;
     }
 }

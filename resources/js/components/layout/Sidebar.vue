@@ -4,7 +4,7 @@ import { useScanner } from '@/composables/useScanner';
 import {
     LayoutDashboard, Film, Tv, ScanLine, FolderSync,
     Subtitles, BarChart3, DownloadCloud, Settings, Sparkles,
-    RefreshCw, Pause, Play, HardDrive
+    RefreshCw, Pause, Play, HardDrive, BookOpen
 } from 'lucide-vue-next';
 
 const { t, isRTL } = useI18n();
@@ -20,6 +20,7 @@ const navItems = [
     { nameKey: 'nav.subtitles', href: '/subtitles', icon: Subtitles, pattern: '^/subtitles' },
     { nameKey: 'nav.analytics', href: '/analytics', icon: BarChart3, pattern: '^/analytics' },
     { nameKey: 'nav.downloads', href: '/downloads', icon: DownloadCloud, pattern: '^/downloads' },
+    { nameKey: 'nav.docs', href: '/docs', icon: BookOpen, pattern: '^/docs|^/guide' },
     { nameKey: 'nav.settings', href: '/settings', icon: Settings, pattern: '^/settings' },
 ];
 
@@ -33,7 +34,7 @@ const isActive = (pattern: string) => {
 
 <template>
     <aside class="hidden lg:flex flex-col w-64 glass-panel border-r border-white/10 min-h-[calc(100vh-61px)] p-4 shrink-0 transition-all bg-[#0A0D14]/80 space-y-4">
-        <!-- Top Fast Scan Trigger (Creative-FileFlow Style) -->
+        <!-- Top Fast Scan Trigger -->
         <div>
             <button
                 @click="openScanModal"

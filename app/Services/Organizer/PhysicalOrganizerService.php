@@ -34,10 +34,13 @@ class PhysicalOrganizerService
             $pattern = $isSeries ? $seriesPattern : $moviePattern;
             $typeDir = $isSeries ? 'TV Shows' : 'Movies';
 
-            $cleanTitle = $parsed['clean_title'] ?? ($parsed['title'] ?? 'Unknown');
-            $year = $parsed['year'] ? (string) $parsed['year'] : 'Unknown Year';
+            $cleanTitle = $parsed['clean_title'] ?? ($parsed['title'] ?? ($parsed['series_title'] ?? 'Unknown'));
+            $year = !empty($parsed['year']) ? (string) $parsed['year'] : 'Unknown Year';
             $seasonNum = isset($parsed['season']) ? (int) $parsed['season'] : 1;
             $episodeNum = isset($parsed['episode']) ? (int) $parsed['episode'] : 1;
+
+            $firstChar = mb_strtoupper(mb_substr($cleanTitle, 0, 1));
+            $firstLetter = preg_match('/^[A-Z0-9]$/i', $firstChar) ? $firstChar : '#';
 
             $tokens = [
                 '{Type}' => $typeDir,
@@ -45,16 +48,19 @@ class PhysicalOrganizerService
                 '{Year}' => $year,
                 '{Resolution}' => $parsed['resolution'] ?: '1080p',
                 '{Codec}' => $parsed['codec'] ?: 'x264',
+                '{Edition}' => $parsed['edition'] ?? '',
+                '{Group}' => $parsed['group'] ?? 'MEDIA',
+                '{FirstLetter}' => $firstLetter,
                 '{Season:02}' => sprintf('%02d', $seasonNum),
                 '{Episode:02}' => sprintf('%02d', $episodeNum),
                 '{EpisodeTitle}' => "Episode {$episodeNum}",
-                '{ext}' => $parsed['extension'] ?? 'mkv',
+                '{ext}' => $parsed['extension'] ?? (pathinfo($filePath, PATHINFO_EXTENSION) ?: 'mkv'),
             ];
 
             $relPath = str_replace(array_keys($tokens), array_values($tokens), $pattern);
-            // Clean double slashes or extra brackets
+            // Clean double slashes or extra empty brackets
             $relPath = preg_replace('#/+#', '/', $relPath);
-            $relPath = str_replace(['[]', '[ ]', '()', '( )'], '', $relPath);
+            $relPath = str_replace(['[]', '[ ]', '()', '( )', ' - .', ' .'], ['', '', '', '', '.', '.'], $relPath);
             $relPath = trim($relPath, '/');
 
             $destination = "{$targetRoot}/{$relPath}";
@@ -75,11 +81,11 @@ class PhysicalOrganizerService
                 'destination_path' => $destination,
                 'filename' => $file['filename'] ?? basename($filePath),
                 'clean_title' => $cleanTitle,
-                'type' => $parsed['type'],
-                'year' => $parsed['year'],
+                'type' => $parsed['type'] ?? ($isSeries ? 'series' : 'movie'),
+                'year' => $parsed['year'] ?? null,
                 'season' => $isSeries ? $seasonNum : null,
                 'episode' => $isSeries ? $episodeNum : null,
-                'resolution' => $parsed['resolution'],
+                'resolution' => $parsed['resolution'] ?? '1080p',
                 'size_bytes' => $file['size_bytes'] ?? 0,
                 'size_formatted' => $file['size_formatted'] ?? '',
                 'status' => $status,
@@ -93,15 +99,19 @@ class PhysicalOrganizerService
                 $destBase = pathinfo($destination, PATHINFO_FILENAME);
 
                 foreach ($file['subtitles'] as $sub) {
-                    $subExt = $sub['extension'] ?? 'srt';
+                    $subPath = $sub['path'] ?? '';
+                    $subExt = $sub['extension'] ?? (pathinfo($subPath, PATHINFO_EXTENSION) ?: 'srt');
                     $lang = $sub['language'] ?? 'und';
                     $langSuffix = in_array($lang, ['ar', 'en', 'fr', 'es', 'de']) ? ".{$lang}" : '';
 
                     $subDest = "{$destDir}/{$destBase}{$langSuffix}.{$subExt}";
+                    $subSource = str_replace('\\', '/', $subPath);
+
                     $item['subtitles'][] = [
-                        'source' => $sub['path'],
+                        'source' => $subSource,
                         'destination' => $subDest,
                         'language' => $lang,
+                        'exists' => File::exists($subDest),
                     ];
                 }
             }
@@ -112,17 +122,13 @@ class PhysicalOrganizerService
         return $plan;
     }
 
-    public function execute(array $planItems, string $mode = 'move'): array
+    public function execute(array $plan, string $mode = 'move'): array
     {
-        $executed = [];
-        $failed = [];
-        $journal = [
-            'timestamp' => now()->toIso8601String(),
-            'mode' => $mode,
-            'operations' => [],
-        ];
+        $processed = 0;
+        $failed = 0;
+        $errors = [];
 
-        foreach ($planItems as $item) {
+        foreach ($plan as $item) {
             if (empty($item['selected'])) {
                 continue;
             }
@@ -131,68 +137,60 @@ class PhysicalOrganizerService
             $dest = $item['destination_path'];
 
             try {
+                if (!File::exists($source)) {
+                    $failed++;
+                    $errors[] = "Source file does not exist: {$source}";
+                    continue;
+                }
+
                 $destDir = pathinfo($dest, PATHINFO_DIRNAME);
                 if (!File::isDirectory($destDir)) {
-                    File::makeDirectory($destDir, 0755, true);
+                    File::makeDirectory($destDir, 0755, true, true);
                 }
 
                 if ($mode === 'move') {
                     File::move($source, $dest);
-                    $journal['operations'][] = ['action' => 'move', 'from' => $source, 'to' => $dest];
-
-                    // 🔄 Synchronize Virtual Library Database
-                    MediaItem::where('file_path', $source)->update([
-                        'file_path' => $dest,
-                        'folder_path' => $destDir,
-                    ]);
-                    Episode::where('file_path', $source)->update([
-                        'file_path' => $dest,
-                    ]);
-                } elseif ($mode === 'copy') {
+                    $this->updateDatabasePath($source, $dest);
+                } else {
                     File::copy($source, $dest);
-                    $journal['operations'][] = ['action' => 'copy', 'from' => $source, 'to' => $dest];
                 }
 
-                // Handle Subtitles
-                foreach ($item['subtitles'] ?? [] as $sub) {
-                    if (File::exists($sub['source'])) {
-                        if ($mode === 'move') {
-                            File::move($sub['source'], $sub['destination']);
-                            $journal['operations'][] = ['action' => 'move', 'from' => $sub['source'], 'to' => $sub['destination']];
+                // Process linked subtitles
+                if (!empty($item['subtitles'])) {
+                    foreach ($item['subtitles'] as $sub) {
+                        $subSource = $sub['source'];
+                        $subDest = $sub['destination'];
 
-                            Subtitle::where('file_path', $sub['source'])->update([
-                                'file_path' => $sub['destination'],
-                            ]);
-                        } else {
-                            File::copy($sub['source'], $sub['destination']);
+                        if (File::exists($subSource)) {
+                            if ($mode === 'move') {
+                                File::move($subSource, $subDest);
+                                Subtitle::where('file_path', $subSource)->update(['file_path' => $subDest]);
+                            } else {
+                                File::copy($subSource, $subDest);
+                            }
                         }
                     }
                 }
 
-                $executed[] = $item;
-            } catch (\Exception $e) {
-                Log::error("Organizer operation failed for {$source}: " . $e->getMessage());
-                $failed[] = [
-                    'item' => $item,
-                    'error' => $e->getMessage(),
-                ];
+                $processed++;
+            } catch (\Throwable $e) {
+                $failed++;
+                $errors[] = "Failed processing {$source}: " . $e->getMessage();
+                Log::error("Organizer execute failed: " . $e->getMessage());
             }
-        }
-
-        // Save Journal
-        if (!empty($journal['operations'])) {
-            $journalDir = storage_path('app/organizer_journals');
-            if (!File::isDirectory($journalDir)) {
-                File::makeDirectory($journalDir, 0755, true);
-            }
-            File::put("{$journalDir}/journal_" . time() . ".json", json_encode($journal, JSON_PRETTY_PRINT));
         }
 
         return [
-            'success_count' => count($executed),
-            'failed_count' => count($failed),
-            'executed' => $executed,
+            'success' => $failed === 0,
+            'processed' => $processed,
             'failed' => $failed,
+            'errors' => $errors,
         ];
+    }
+
+    protected function updateDatabasePath(string $oldPath, string $newPath): void
+    {
+        MediaItem::where('file_path', $oldPath)->update(['file_path' => $newPath]);
+        Episode::where('file_path', $oldPath)->update(['file_path' => $newPath]);
     }
 }

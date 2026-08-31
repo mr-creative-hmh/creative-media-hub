@@ -11,7 +11,8 @@
     "subtitles": "الترجمات المجانية",
     "analytics": "الإحصائيات والتخزين",
     "downloads": "التحميلات",
-    "settings": "الإعدادات والمزودات"
+    "settings": "الإعدادات والمزودات",
+    "docs": "الدليل والتوثيق"
   },
   "common": {
     "search_placeholder": "ابحث عن أفلام، مسلسلات، مخرجين، ممثلين...",
@@ -106,5 +107,15 @@
     "watch_hours": "ساعات المشاهدة",
     "resolution_ratio": "نسبة 4K إلى 1080p",
     "codec_ratio": "كفاءة الترميز (HEVC مقابل H.264)"
+  },
+  "organizer": {
+    "strategy_plex": "نمط Plex و Emby القياسي",
+    "strategy_jellyfin": "نمط Jellyfin و Kodi المبسط",
+    "strategy_flat": "المكتبة المسطحة (بدون مجلدات فرعية)",
+    "strategy_az": "الترتيب الأبجدي (A - Z)",
+    "strategy_res": "التجميع حسب الجودة والدقة",
+    "strategy_scene": "نمط فرق الإصدار والنسخ الخاصة",
+    "strategy_custom": "تخصيص يدوي حر",
+    "set_default_dir": "تعيين المجلد الافتراضي"
   }
 }

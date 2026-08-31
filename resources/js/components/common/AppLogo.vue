@@ -11,7 +11,7 @@ withDefaults(defineProps<{
     animated: true,
 });
 
-const { t } = useI18n();
+const { t, isRTL } = useI18n();
 </script>
 
 <template>
@@ -62,10 +62,10 @@ const { t } = useI18n();
             </svg>
         </div>
 
-        <!-- Typography Branding -->
+        <!-- Typography Branding with unified Arabic font -->
         <div v-if="showText" class="flex flex-col">
             <span
-                class="font-black tracking-tight text-white font-sans leading-none"
+                class="font-black tracking-tight text-white leading-none"
                 :class="size === 'sm' ? 'text-sm' : size === 'lg' ? 'text-xl' : size === 'xl' ? 'text-2xl' : 'text-base'"
             >
                 {{ t('app_name') }}

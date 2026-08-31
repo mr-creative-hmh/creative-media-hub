@@ -7,7 +7,7 @@ import AppLogo from '@/components/common/AppLogo.vue';
 import {
     Search, Globe, LayoutDashboard, Film, Clapperboard, FolderSync,
     Subtitles, BarChart3, DownloadCloud, Menu, X, Tv,
-    Settings, ScanLine, Sparkles, RefreshCw, Pause
+    Settings, ScanLine, Sparkles, RefreshCw, Pause, BookOpen
 } from 'lucide-vue-next';
 
 const { t, locale, setLocale, isRTL } = useI18n();
@@ -36,6 +36,7 @@ const mobileNavItems = [
     { nameKey: 'nav.subtitles', href: '/subtitles', icon: Subtitles },
     { nameKey: 'nav.analytics', href: '/analytics', icon: BarChart3 },
     { nameKey: 'nav.downloads', href: '/downloads', icon: DownloadCloud },
+    { nameKey: 'nav.docs', href: '/docs', icon: BookOpen },
     { nameKey: 'nav.settings', href: '/settings', icon: Settings },
 ];
 </script>

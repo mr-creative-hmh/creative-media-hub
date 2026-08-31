@@ -11,7 +11,8 @@
     "subtitles": "Subtitles",
     "analytics": "Analytics",
     "downloads": "Downloads",
-    "settings": "Settings"
+    "settings": "Settings",
+    "docs": "User Guide & Docs"
   },
   "common": {
     "search_placeholder": "Search movies, series, directors, actors...",
@@ -106,5 +107,15 @@
     "watch_hours": "Watch Time",
     "resolution_ratio": "4K to 1080p Ratio",
     "codec_ratio": "Codec Efficiency (HEVC vs H.264)"
+  },
+  "organizer": {
+    "strategy_plex": "Plex & Emby Standard",
+    "strategy_jellyfin": "Jellyfin & Kodi Clean Standard",
+    "strategy_flat": "Flat Directory (No Subfolders)",
+    "strategy_az": "Alphabetical Categorized (A-Z)",
+    "strategy_res": "Resolution Partitioned (4K, 1080p)",
+    "strategy_scene": "Scene & Edition Pattern",
+    "strategy_custom": "Custom Pattern Builder",
+    "set_default_dir": "Set Default (Working Dir)"
   }
 }

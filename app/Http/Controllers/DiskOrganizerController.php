@@ -25,9 +25,15 @@ class DiskOrganizerController extends Controller
 
     public function index(): Response
     {
+        $defaultDir = str_replace('\\', '/', base_path('storage/app/media'));
+        if (!file_exists($defaultDir)) {
+            @mkdir($defaultDir, 0755, true);
+        }
+
         return Inertia::render('Organizer/Index', [
             'defaultMovieTemplate' => AppSetting::get('movie_naming_template', '{Type}/{Title} ({Year})/{Title} ({Year}) [{Resolution}].{ext}'),
-            'defaultSeriesTemplate' => AppSetting::get('series_naming_template', '{Type}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} [{Resolution}].{ext}'),
+            'defaultSeriesTemplate' => AppSetting::get('series_naming_template', '{Type}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} - {EpisodeTitle} [{Resolution}].{ext}'),
+            'defaultWorkingDir' => $defaultDir,
         ]);
     }
 

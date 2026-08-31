@@ -8,12 +8,14 @@
     :root {
         --font-sans: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
         --font-arabic: 'Cairo', 'Tajawal', system-ui, sans-serif;
-        color-scheme: light dark;
+        color-scheme: dark;
     }
 
+    [dir="rtl"],
     [dir="rtl"] body,
+    [dir="rtl"] .font-sans,
     [dir="rtl"] * {
-        font-family: var(--font-arabic), var(--font-sans);
+        font-family: 'Cairo', 'Tajawal', system-ui, -apple-system, sans-serif !important;
     }
 
     /* Light Theme Defaults */
@@ -48,76 +50,51 @@
     ::-webkit-scrollbar-track {
         background: transparent;
     }
-    html.dark ::-webkit-scrollbar-thumb {
+    ::-webkit-scrollbar-thumb {
         background: rgba(255, 255, 255, 0.15);
         border-radius: 9999px;
     }
-    html:not(.dark) ::-webkit-scrollbar-thumb {
-        background: rgba(0, 0, 0, 0.2);
-        border-radius: 9999px;
-    }
     ::-webkit-scrollbar-thumb:hover {
-        background: rgba(6, 182, 212, 0.6);
+        background: rgba(6, 182, 212, 0.4);
     }
 }
 
-/* Glassmorphism & Theme-Aware Aesthetic Classes */
-.glass-panel {
-    transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+.custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
 }
 
-html.dark .glass-panel {
-    background: rgba(18, 22, 34, 0.75);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+/* Glassmorphism & Cinema Aesthetic Classes */
+.glass-panel {
+    background: rgba(13, 18, 28, 0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-html:not(.dark) .glass-panel {
-    background: rgba(255, 255, 255, 0.9);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(226, 232, 240, 0.9);
-    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+.glass-card {
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-html.dark .glass-card {
-    background: rgba(15, 23, 42, 0.65);
-    backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-html:not(.dark) .glass-card {
-    background: #FFFFFF;
-    backdrop-filter: blur(16px);
-    border: 1px solid rgba(226, 232, 240, 0.9);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
-}
-
-/* Ambient Glowing Orbs */
 .ambient-glow {
     position: absolute;
-    filter: blur(100px);
-    pointer-events: none;
     border-radius: 9999px;
+    filter: blur(100px);
+    opacity: 0.5;
     z-index: 0;
-    transition: opacity 0.5s ease;
 }
 
-html:not(.dark) .ambient-glow {
-    opacity: 0.15;
-}
-
-html.dark .ambient-glow {
-    opacity: 0.35;
-}
-
-/* Cinema Badges */
 .cinema-badge {
     display: inline-flex;
     align-items: center;
-    gap: 0.375rem;
-    padding: 0.25rem 0.625rem;
+    padding: 0.125rem 0.5rem;
     border-radius: 9999px;
     font-size: 0.75rem;
     font-weight: 700;
@@ -125,11 +102,40 @@ html.dark .ambient-glow {
     backdrop-filter: blur(8px);
 }
 
-/* Hide scrollbars for carousels */
-.scrollbar-none::-webkit-scrollbar {
-    display: none;
+/* Subtitles Styling & Cue formatting */
+::cue {
+    background-color: rgba(0, 0, 0, 0.75);
+    color: #ffffff;
+    font-family: 'Cairo', 'Outfit', system-ui, sans-serif;
+    font-size: 1.25rem;
+    line-height: 1.4;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9);
+    border-radius: 4px;
+    padding: 2px 8px;
 }
-.scrollbar-none {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+
+::cue(font[color="#ffff00"]),
+::cue(font[color="yellow"]),
+::cue(c.yellow) {
+    color: #FFD700 !important;
+}
+
+::cue(font[color="#00ffff"]),
+::cue(font[color="cyan"]),
+::cue(c.cyan) {
+    color: #00FFFF !important;
+}
+
+::cue(font[color="#00ff00"]),
+::cue(font[color="green"]),
+::cue(c.green) {
+    color: #00FF7F !important;
+}
+
+::cue(b) {
+    font-weight: 800;
+}
+
+::cue(i) {
+    font-style: italic;
 }
