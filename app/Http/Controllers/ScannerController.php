@@ -28,26 +28,26 @@ class ScannerController extends Controller
 
     public function index(): Response
     {
-        $directoriesSetting = AppSetting::where('key', 'monitored_directories')->first();
-        $directories = $directoriesSetting ? (json_decode($directoriesSetting->value, true) ?: []) : [];
+        $setting = AppSetting::where('key', 'scanner_monitored_directories')->first();
+        $directories = $setting ? json_decode($setting->value, true) : [];
 
-        $totalSizeBytes = MediaItem::sum('file_size_bytes') + Episode::sum('file_size_bytes');
-        $formattedSize = $totalSizeBytes >= 1073741824
-            ? round($totalSizeBytes / 1073741824, 2) . ' GB'
-            : ($totalSizeBytes >= 1048576 ? round($totalSizeBytes / 1048576, 1) . ' MB' : '0 B');
+        $totalMovies = MediaItem::count();
+        $totalSeries = Series::count();
+        $totalEpisodes = Episode::count();
+        $totalSubs = Subtitle::count();
 
-        $stats = [
-            'total_movies' => MediaItem::count(),
-            'total_series' => Series::count(),
-            'total_episodes' => Episode::count(),
-            'total_subtitles' => Subtitle::count(),
-            'storage_size_formatted' => $formattedSize,
-        ];
+        $storageBytes = (int) MediaItem::sum('file_size_bytes') + (int) Episode::sum('file_size_bytes');
 
         return Inertia::render('Scanner/Index', [
-            'directories' => $directories,
+            'directories' => $directories ?: [],
             'scanStatus' => $this->scannerService->getScanStatus(),
-            'stats' => $stats,
+            'stats' => [
+                'total_movies' => $totalMovies,
+                'total_series' => $totalSeries,
+                'total_episodes' => $totalEpisodes,
+                'total_subtitles' => $totalSubs,
+                'storage_size_formatted' => $this->formatBytes($storageBytes),
+            ],
         ]);
     }
 
@@ -55,50 +55,70 @@ class ScannerController extends Controller
     {
         $validated = $request->validate([
             'path' => 'required|string',
-            'type' => 'required|in:movies,series,mixed',
+            'type' => 'required|string|in:movies,series,mixed',
         ]);
 
-        $setting = AppSetting::firstOrCreate(['key' => 'monitored_directories'], ['value' => '[]', 'type' => 'json']);
-        $directories = json_decode($setting->value, true) ?: [];
+        $setting = AppSetting::firstOrCreate(
+            ['key' => 'scanner_monitored_directories'],
+            ['value' => json_encode([])]
+        );
 
-        $newDir = [
-            'id' => 'dir-' . uniqid(),
-            'path' => $validated['path'],
-            'type' => $validated['type'],
-            'auto_scan' => true,
-        ];
+        $dirs = json_decode($setting->value, true) ?: [];
 
-        $directories[] = $newDir;
-        $setting->update(['value' => json_encode($directories)]);
+        $cleanPath = rtrim(str_replace('\\', '/', trim($validated['path'])), '/');
 
-        return response()->json(['success' => true, 'directories' => $directories]);
-    }
-
-    public function removeDirectory(Request $request, $index = null): JsonResponse
-    {
-        $setting = AppSetting::where('key', 'monitored_directories')->first();
-        if ($setting) {
-            $directories = json_decode($setting->value, true) ?: [];
-
-            $id = $request->input('id');
-            if ($id) {
-                $directories = array_values(array_filter($directories, fn ($d) => ($d['id'] ?? '') !== $id));
-            } elseif ($index !== null && isset($directories[$index])) {
-                array_splice($directories, (int) $index, 1);
+        // Prevent duplicate directory entries
+        foreach ($dirs as $d) {
+            if (rtrim(str_replace('\\', '/', $d['path']), '/') === $cleanPath) {
+                return response()->json(['success' => true, 'directories' => $dirs]);
             }
-
-            $setting->update(['value' => json_encode(array_values($directories))]);
-            return response()->json(['success' => true, 'directories' => array_values($directories)]);
         }
 
-        return response()->json(['success' => true, 'directories' => []]);
+        $dirs[] = [
+            'id' => uniqid('dir_'),
+            'path' => $cleanPath,
+            'type' => $validated['type'],
+        ];
+
+        $setting->update(['value' => json_encode($dirs)]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Directory added to monitored list.',
+            'directories' => $dirs,
+        ]);
+    }
+
+    public function removeDirectory($index): JsonResponse
+    {
+        $setting = AppSetting::where('key', 'scanner_monitored_directories')->first();
+        if (!$setting) {
+            return response()->json(['success' => true, 'directories' => []]);
+        }
+
+        $dirs = json_decode($setting->value, true) ?: [];
+
+        if (is_numeric($index) && isset($dirs[$index])) {
+            array_splice($dirs, (int) $index, 1);
+        } else {
+            $dirs = array_values(array_filter($dirs, fn($d) => ($d['id'] ?? '') !== $index && ($d['path'] ?? '') !== $index));
+        }
+
+        $setting->update(['value' => json_encode($dirs)]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Directory removed from monitored list.',
+            'directories' => $dirs,
+        ]);
     }
 
     public function startScan(Request $request): JsonResponse
     {
         $directories = $request->input('directories');
+
         if (empty($directories)) {
-            $setting = AppSetting::where('key', 'monitored_directories')->first();
+            $setting = AppSetting::where('key', 'scanner_monitored_directories')->first();
             $directories = $setting ? json_decode($setting->value, true) : [];
         }
 
@@ -113,11 +133,11 @@ class ScannerController extends Controller
 
     public function rescanFresh(Request $request): JsonResponse
     {
-        // 1. Wipe previous scanned items
+        // 1. Wipe previous scanned database entries
         $this->wipeAllScannedMedia();
 
-        // 2. Load directories
-        $setting = AppSetting::where('key', 'monitored_directories')->first();
+        // 2. Fetch monitored directories
+        $setting = AppSetting::where('key', 'scanner_monitored_directories')->first();
         $directories = $setting ? json_decode($setting->value, true) : [];
 
         // 3. Initialize fresh scan
@@ -136,9 +156,17 @@ class ScannerController extends Controller
         $validated = $request->validate([
             'path' => 'required|string',
             'type' => 'nullable|string|in:movies,series,mixed',
+            'fresh' => 'nullable|boolean',
         ]);
 
-        $initResult = $this->scannerService->initScanForFolder($validated['path'], $validated['type'] ?? 'mixed');
+        $folderPath = rtrim(str_replace('\\', '/', trim($validated['path'])), '/');
+
+        // If fresh is requested for this specific folder, wipe existing items from this path
+        if (!empty($validated['fresh'])) {
+            $this->wipeFolderMedia($folderPath);
+        }
+
+        $initResult = $this->scannerService->initScanForFolder($folderPath, $validated['type'] ?? 'mixed');
 
         return response()->json([
             'success' => true,
@@ -191,7 +219,7 @@ class ScannerController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Library catalog and scanned media cleared successfully.',
+            'message' => 'Library catalog, analytics, and watch history cleared successfully.',
             'status' => $this->scannerService->getScanStatus(),
         ]);
     }
@@ -207,9 +235,11 @@ class ScannerController extends Controller
                 $episodes = Episode::whereIn('season_id', $seasonIds)->get();
                 foreach ($episodes as $ep) {
                     Subtitle::where('subtitlable_type', Episode::class)->where('subtitlable_id', $ep->id)->delete();
+                    WatchHistory::where('watchable_type', Episode::class)->where('watchable_id', $ep->id)->delete();
                     $ep->delete();
                 }
                 Season::whereIn('id', $seasonIds)->delete();
+                DB::table('genre_series')->where('series_id', $series->id)->delete();
                 $series->delete();
                 return response()->json(['success' => true, 'message' => "Series '{$series->title}' removed from library."]);
             }
@@ -217,7 +247,9 @@ class ScannerController extends Controller
             $movie = MediaItem::find($id);
             if ($movie) {
                 Subtitle::where('subtitlable_type', MediaItem::class)->where('subtitlable_id', $movie->id)->delete();
+                WatchHistory::where('watchable_type', MediaItem::class)->where('watchable_id', $movie->id)->delete();
                 WatchHistory::where('media_item_id', $movie->id)->delete();
+                DB::table('genre_media_item')->where('media_item_id', $movie->id)->delete();
                 $movie->delete();
                 return response()->json(['success' => true, 'message' => "Movie '{$movie->title}' removed from library."]);
             }
@@ -235,6 +267,10 @@ class ScannerController extends Controller
         Season::truncate();
         Series::truncate();
         MediaItem::truncate();
+        try {
+            DB::table('genre_media_item')->truncate();
+            DB::table('genre_series')->truncate();
+        } catch (\Throwable $e) {}
         DB::statement('PRAGMA foreign_keys = ON;');
 
         Cache::put('virtual_scan_job', [
@@ -249,9 +285,50 @@ class ScannerController extends Controller
                 [
                     'time' => now()->format('H:i:s'),
                     'level' => 'info',
-                    'message' => 'Library catalog reset and cleared by user.',
-                ],
+                    'message' => 'Library catalog, media items, and analytics wiped.',
+                ]
             ],
+            'started_at' => now()->toDateTimeString(),
+            'updated_at' => now()->toDateTimeString(),
         ], 86400);
+    }
+
+    protected function wipeFolderMedia(string $folderPath): void
+    {
+        $cleanPath = rtrim(str_replace('\\', '/', $folderPath), '/');
+
+        // Delete movies originating from this folder
+        $movies = MediaItem::where('file_path', 'like', "{$cleanPath}%")->orWhere('folder_path', 'like', "{$cleanPath}%")->get();
+        foreach ($movies as $m) {
+            Subtitle::where('subtitlable_type', MediaItem::class)->where('subtitlable_id', $m->id)->delete();
+            WatchHistory::where('watchable_type', MediaItem::class)->where('watchable_id', $m->id)->delete();
+            $m->delete();
+        }
+
+        // Delete episodes originating from this folder
+        $episodes = Episode::where('file_path', 'like', "{$cleanPath}%")->get();
+        foreach ($episodes as $ep) {
+            Subtitle::where('subtitlable_type', Episode::class)->where('subtitlable_id', $ep->id)->delete();
+            WatchHistory::where('watchable_type', Episode::class)->where('watchable_id', $ep->id)->delete();
+            $ep->delete();
+        }
+
+        // Delete orphan seasons & series
+        Season::doesntHave('episodes')->delete();
+        Series::doesntHave('seasons')->delete();
+    }
+
+    protected function formatBytes(int $bytes): string
+    {
+        if ($bytes >= 1073741824) {
+            return round($bytes / 1073741824, 2) . ' GB';
+        }
+        if ($bytes >= 1048576) {
+            return round($bytes / 1048576, 2) . ' MB';
+        }
+        if ($bytes > 0) {
+            return round($bytes / 1024, 2) . ' KB';
+        }
+        return '0 GB';
     }
 }

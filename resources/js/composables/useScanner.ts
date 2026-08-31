@@ -129,6 +129,24 @@ export function useScanner() {
         } catch (e) {}
     };
 
+    const scanFolder = async (path: string, type: string = 'mixed', fresh: boolean = false) => {
+        try {
+            const res = await fetch('/api/scanner/scan-folder', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                },
+                body: JSON.stringify({ path, type, fresh }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                scanStatus.value = data.status;
+                runBackgroundWorker();
+            }
+        } catch (e) {}
+    };
+
     const clearCatalog = async () => {
         try {
             const res = await fetch('/api/scanner/clear-catalog', {
@@ -203,6 +221,7 @@ export function useScanner() {
         fetchStatus,
         startFullScan,
         rescanFresh,
+        scanFolder,
         clearCatalog,
         pauseScan,
         resumeScan,

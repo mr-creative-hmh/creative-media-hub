@@ -18,9 +18,20 @@ class AnalyticsController extends Controller
         $totalSeries = Series::count();
         $totalEpisodes = Episode::count();
 
-        $movieBytes = MediaItem::sum('file_size_bytes') ?: 65000000000;
-        $episodeBytes = Episode::sum('file_size_bytes') ?: 45000000000;
+        $movieBytes = (int) MediaItem::sum('file_size_bytes');
+        $episodeBytes = (int) Episode::sum('file_size_bytes');
         $totalStorageBytes = $movieBytes + $episodeBytes;
+
+        // Format storage
+        if ($totalStorageBytes >= 1073741824) {
+            $storageFormatted = round($totalStorageBytes / 1073741824, 2) . ' GB';
+        } elseif ($totalStorageBytes >= 1048576) {
+            $storageFormatted = round($totalStorageBytes / 1048576, 2) . ' MB';
+        } elseif ($totalStorageBytes > 0) {
+            $storageFormatted = round($totalStorageBytes / 1024, 2) . ' KB';
+        } else {
+            $storageFormatted = '0 GB';
+        }
 
         // Resolution Distribution
         $res4k = MediaItem::where('resolution', 'like', '%4K%')->count() + Episode::where('resolution', 'like', '%4K%')->count();
@@ -33,7 +44,7 @@ class AnalyticsController extends Controller
         $av1 = MediaItem::where('video_codec', 'like', '%AV1%')->count() + Episode::where('video_codec', 'like', '%AV1%')->count();
 
         // Total Watch Time in Hours
-        $totalWatchSeconds = WatchHistory::sum('progress_seconds') ?: 18200;
+        $totalWatchSeconds = (int) WatchHistory::sum('progress_seconds');
         $totalWatchHours = round($totalWatchSeconds / 3600, 1);
 
         // Top Genres
@@ -44,6 +55,7 @@ class AnalyticsController extends Controller
                 'name_ar' => $g->name_ar,
                 'count' => $g->media_items_count + $g->series_count,
             ])
+            ->filter(fn($g) => $g['count'] > 0)
             ->sortByDesc('count')
             ->values()
             ->take(8);
@@ -54,7 +66,7 @@ class AnalyticsController extends Controller
                 'total_series' => $totalSeries,
                 'total_episodes' => $totalEpisodes,
                 'total_storage_bytes' => $totalStorageBytes,
-                'total_storage_formatted' => round($totalStorageBytes / 1073741824, 2) . ' GB',
+                'total_storage_formatted' => $storageFormatted,
                 'total_watch_hours' => $totalWatchHours,
                 'resolutions' => [
                     '4k' => $res4k,

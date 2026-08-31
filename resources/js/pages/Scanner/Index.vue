@@ -4,6 +4,7 @@ import { Head, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import { useScanner } from '@/composables/useScanner';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import ConfirmModal from '@/components/common/ConfirmModal.vue';
 import {
     ScanLine, FolderPlus, Play, Pause, XCircle, RotateCcw,
     CheckCircle2, AlertCircle, FileVideo, HardDrive, Terminal,
@@ -32,6 +33,7 @@ const {
     resumeScan,
     cancelScan,
     rescanFresh,
+    scanFolder,
     clearCatalog,
     runBackgroundWorker,
     fetchStatus
@@ -45,6 +47,23 @@ const isBatchEnriching = ref(false);
 const isClearing = ref(false);
 const toastMessage = ref('');
 const terminalFilter = ref<'all' | 'success' | 'info' | 'error'>('all');
+
+const confirmModal = ref<{
+    show: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    cancelText?: string;
+    type: 'danger' | 'warning' | 'info';
+    action: () => Promise<void> | void;
+}>({
+    show: false,
+    title: '',
+    message: '',
+    confirmText: '',
+    type: 'danger',
+    action: () => {},
+});
 
 const filteredLogs = computed(() => {
     const logs = scanStatus.value.logs || [];
@@ -79,21 +98,30 @@ const addDirectory = async () => {
     }
 };
 
-const removeDirectory = async (idxOrDir: number | any) => {
-    try {
-        const index = typeof idxOrDir === 'number' ? idxOrDir : monitoredDirs.value.indexOf(idxOrDir);
-        const res = await fetch(`/api/scanner/directories/${index}`, {
-            method: 'DELETE',
-            headers: {
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
-            },
-        });
-        if (res.ok) {
-            const data = await res.json();
-            monitoredDirs.value = data.directories || [];
-            toastMessage.value = isRTL.value ? 'تم إزالة المجلد من المراقبة.' : 'Directory removed.';
-        }
-    } catch (e) {}
+const promptRemoveDirectory = (idx: number, dir: any) => {
+    confirmModal.value = {
+        show: true,
+        title: isRTL.value ? 'إزالة المجلد من المراقبة' : 'Remove Monitored Folder',
+        message: isRTL.value ? `هل أنت متأكد من إزالة المجلد "${dir.path}" من قائمة المجلدات المفحوصة؟ (لن يتم حذف الملفات من القرص).` : `Are you sure you want to remove "${dir.path}" from monitored library folders? (Files on disk will NOT be deleted).`,
+        confirmText: isRTL.value ? 'إزالة المجلد' : 'Remove Folder',
+        type: 'danger',
+        action: async () => {
+            confirmModal.value.show = false;
+            try {
+                const res = await fetch(`/api/scanner/directories/${idx}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    },
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    monitoredDirs.value = data.directories || [];
+                    toastMessage.value = isRTL.value ? 'تم إزالة المجلد من المراقبة.' : 'Directory removed.';
+                }
+            } catch (e) {}
+        },
+    };
 };
 
 const startScan = async () => {
@@ -118,43 +146,60 @@ const startScan = async () => {
     } catch (e) {}
 };
 
-const handleRescanFresh = async () => {
-    if (confirm(isRTL.value ? 'هل أنت متأكد من رغبتك في إعادة فحص المكتبة بالكامل ومسح الفهارس السابقة؟' : 'Are you sure you want to wipe the previous scan and start a fresh library indexing?')) {
-        await rescanFresh();
-        toastMessage.value = isRTL.value ? 'تم تصفير الفهارس وبدء فحص جديد شامل!' : 'Previous index wiped. Fresh scan started!';
-    }
+const promptRescanFresh = () => {
+    confirmModal.value = {
+        show: true,
+        title: isRTL.value ? 'إعادة فحص شاملة للمكتبة' : 'Fresh Full Library Rescan',
+        message: isRTL.value ? 'سيتم تصفير الفهارس السابقة وإعادة فحص وتحميل بيانات وأغلفة جميع المجلدات المراقبة من جديد.' : 'Are you sure you want to wipe the previous scan and start a fresh library indexing across all monitored folders?',
+        confirmText: isRTL.value ? 'بدء فحص شامل' : 'Start Fresh Scan',
+        type: 'warning',
+        action: async () => {
+            confirmModal.value.show = false;
+            await rescanFresh();
+            toastMessage.value = isRTL.value ? 'تم تصفير الفهارس وبدء فحص جديد شامل!' : 'Previous index wiped. Fresh scan started!';
+        },
+    };
 };
 
-const handleClearCatalog = async () => {
-    if (confirm(isRTL.value ? 'تحذير: سيتم حذف كافة عناصر المكتبة المفهرسة من قاعدة البيانات (لن يتم حذف الملفات من القرص الصلب). هل تريد المتابعة؟' : 'Warning: This will remove all indexed movies and series from your library database (files on disk will NOT be deleted). Continue?')) {
-        isClearing.value = true;
-        try {
-            await clearCatalog();
-            toastMessage.value = isRTL.value ? 'تم تفريغ فهارس المكتبة بنجاح.' : 'Library catalog cleared.';
-            setTimeout(() => { router.reload(); }, 800);
-        } finally {
-            isClearing.value = false;
-        }
-    }
+const promptClearCatalog = () => {
+    confirmModal.value = {
+        show: true,
+        title: isRTL.value ? 'مسح كافة فهارس المكتبة والإحصائيات' : 'Clear Library Catalog & Analytics',
+        message: isRTL.value ? 'تحذير: سيتم حذف كافة عناصر المكتبة والأفلام والمسلسلات وسجل المشاهدة والإحصائيات من قاعدة البيانات (لن يتم حذف الملفات من القرص). هل تريد المتابعة؟' : 'Warning: This will remove all indexed movies, series, watch histories, and analytics metrics from your library database (files on disk will NOT be deleted). Continue?',
+        confirmText: isRTL.value ? 'تأكيد المسح الشامل' : 'Wipe Catalog',
+        type: 'danger',
+        action: async () => {
+            confirmModal.value.show = false;
+            isClearing.value = true;
+            try {
+                await clearCatalog();
+                toastMessage.value = isRTL.value ? 'تم تفريغ فهارس المكتبة والإحصائيات بنجاح.' : 'Library catalog & analytics cleared.';
+                setTimeout(() => { router.reload(); }, 800);
+            } finally {
+                isClearing.value = false;
+            }
+        },
+    };
 };
 
 const scanSingleFolder = async (dir: { path: string; type: string }) => {
-    try {
-        const res = await fetch('/api/scanner/scan-folder', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
-            },
-            body: JSON.stringify({
-                path: dir.path,
-                type: dir.type,
-            }),
-        });
-        const data = await res.json();
-        scanStatus.value = data.status;
-        runBackgroundWorker();
-    } catch (e) {}
+    await scanFolder(dir.path, dir.type, false);
+    toastMessage.value = isRTL.value ? `جاري فحص: ${dir.path}` : `Scanning folder: ${dir.path}`;
+};
+
+const promptFreshRescanFolder = (dir: { path: string; type: string }) => {
+    confirmModal.value = {
+        show: true,
+        title: isRTL.value ? 'إعادة فحص جديدة للمجلد المختار' : 'Fresh Rescan Folder',
+        message: isRTL.value ? `سيتم إعادة فهرسة وتحديث الوسائط والأغلفة الموجودة في المجلد: "${dir.path}". هل تريد المتابعة؟` : `This will re-index and refresh media items and metadata for: "${dir.path}". Continue?`,
+        confirmText: isRTL.value ? 'إعادة الفحص الآن' : 'Rescan Folder',
+        type: 'warning',
+        action: async () => {
+            confirmModal.value.show = false;
+            await scanFolder(dir.path, dir.type, true);
+            toastMessage.value = isRTL.value ? `بدء فحص جديد للمجلد: ${dir.path}` : `Fresh scan started for: ${dir.path}`;
+        },
+    };
 };
 
 const enrichMissingPosters = async () => {
@@ -176,6 +221,12 @@ const enrichMissingPosters = async () => {
         }
     } finally {
         isBatchEnriching.value = false;
+    }
+};
+
+const triggerConfirmAction = async () => {
+    if (confirmModal.value.action) {
+        await confirmModal.value.action();
     }
 };
 
@@ -218,85 +269,91 @@ onMounted(() => {
                         class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-xs font-bold transition-all cursor-pointer"
                     >
                         <RefreshCw v-if="isBatchEnriching" class="w-4 h-4 animate-spin text-cyan-400" />
-                        <ImageIcon v-else class="w-4 h-4 text-cyan-400" />
-                        <span>{{ isRTL ? 'جلب الأغلفة الناقصة' : 'Fetch Posters' }}</span>
+                        <Sparkles v-else class="w-4 h-4 text-cyan-400" />
+                        <span>{{ isRTL ? 'تحميل الأغلفة الناقصة تلقائياً' : 'Auto-Download Missing Artwork' }}</span>
                     </button>
 
                     <button
-                        @click="handleRescanFresh"
+                        @click="promptRescanFresh"
                         :disabled="isScanning"
-                        class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold transition-all cursor-pointer"
-                        :title="isRTL ? 'مسح الفهرس السابق وبدء فحص شامل جديد' : 'Wipe previous scan and initialize a fresh library index'"
+                        class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-amber-300 border border-white/10 hover:border-amber-500/40 text-xs font-bold transition-all cursor-pointer"
                     >
-                        <RotateCcw class="w-4 h-4 text-indigo-400" />
-                        <span>{{ isRTL ? 'إعادة الفحص من الصفر' : 'Fresh Rescan' }}</span>
+                        <RotateCcw class="w-4 h-4" />
+                        <span>{{ isRTL ? 'إعادة فحص شاملة للمكتبة' : 'Fresh Full Rescan' }}</span>
                     </button>
 
                     <button
-                        @click="handleClearCatalog"
+                        @click="promptClearCatalog"
                         :disabled="isClearing || isScanning"
-                        class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer"
-                        :title="isRTL ? 'تفريغ فهارس المكتبة من قاعدة البيانات' : 'Wipe all scanned items from database'"
+                        class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer"
                     >
-                        <Trash2 class="w-4 h-4 text-rose-400" />
-                        <span>{{ isRTL ? 'تفريغ الفهارس' : 'Clear Library' }}</span>
+                        <Trash2 class="w-4 h-4" />
+                        <span>{{ isRTL ? 'مسح فهارس المكتبة والإحصائيات' : 'Clear Library Catalog' }}</span>
                     </button>
 
                     <button
-                        v-if="!isScanning"
                         @click="startScan"
-                        class="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs shadow-lg shadow-cyan-500/25 active:scale-95 transition-all cursor-pointer"
+                        :disabled="isScanning"
+                        class="flex items-center gap-2 px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-black shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
                     >
                         <Play class="w-4 h-4 fill-current" />
-                        <span>{{ isRTL ? 'بدء الفحص' : 'Start Scan' }}</span>
+                        <span>{{ isRTL ? 'بدء فحص كافة المجلدات' : 'Start Full Scan' }}</span>
                     </button>
                 </div>
             </div>
-        </div>
 
-        <!-- Toast Notice -->
-        <div v-if="toastMessage" class="mb-6 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <CheckCircle2 class="w-4 h-4 shrink-0" />
-                <span>{{ toastMessage }}</span>
+            <!-- Notification Toast -->
+            <div v-if="toastMessage" class="mt-4 p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-bold flex items-center justify-between animate-in fade-in">
+                <div class="flex items-center gap-2">
+                    <CheckCircle2 class="w-4 h-4 text-cyan-400" />
+                    <span>{{ toastMessage }}</span>
+                </div>
+                <button @click="toastMessage = ''" class="text-slate-400 hover:text-white cursor-pointer">
+                    <XCircle class="w-4 h-4" />
+                </button>
             </div>
-            <button @click="toastMessage = ''" class="cursor-pointer text-emerald-400 hover:text-emerald-300">
-                <XCircle class="w-4 h-4" />
-            </button>
         </div>
 
-        <!-- 1. Stats Row (Creative-FileFlow Architecture) -->
+        <!-- 1. Stats Bento Row -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-            <div class="glass-panel p-4 rounded-2xl border border-white/10">
-                <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ isRTL ? 'الأفلام المفهرسة' : 'Indexed Movies' }}</span>
-                    <Film class="w-4 h-4 text-cyan-400" />
+            <div class="glass-panel p-5 rounded-2xl border border-white/10 flex items-center gap-4">
+                <div class="w-11 h-11 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center shrink-0">
+                    <Film class="w-5 h-5" />
                 </div>
-                <div class="text-2xl font-black text-white mt-2">{{ stats.total_movies }}</div>
+                <div>
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'الأفلام المفهرسة' : 'Indexed Movies' }}</span>
+                    <span class="text-2xl font-black text-white mt-0.5 block">{{ stats.total_movies }}</span>
+                </div>
             </div>
 
-            <div class="glass-panel p-4 rounded-2xl border border-white/10">
-                <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ isRTL ? 'المسلسلات' : 'TV Series' }}</span>
-                    <Tv class="w-4 h-4 text-indigo-400" />
+            <div class="glass-panel p-5 rounded-2xl border border-white/10 flex items-center gap-4">
+                <div class="w-11 h-11 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0">
+                    <Tv class="w-5 h-5" />
                 </div>
-                <div class="text-2xl font-black text-white mt-2">{{ stats.total_series }}</div>
+                <div>
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'المسلسلات المفهرسة' : 'TV Series' }}</span>
+                    <span class="text-2xl font-black text-white mt-0.5 block">{{ stats.total_series }} <span class="text-xs text-slate-500">({{ stats.total_episodes }} ep)</span></span>
+                </div>
             </div>
 
-            <div class="glass-panel p-4 rounded-2xl border border-white/10">
-                <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ isRTL ? 'الحلقات المكتشفة' : 'Total Episodes' }}</span>
-                    <FileVideo class="w-4 h-4 text-emerald-400" />
+            <div class="glass-panel p-5 rounded-2xl border border-white/10 flex items-center gap-4">
+                <div class="w-11 h-11 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
+                    <HardDrive class="w-5 h-5" />
                 </div>
-                <div class="text-2xl font-black text-white mt-2">{{ stats.total_episodes }}</div>
+                <div>
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'حجم الوسائط' : 'Indexed Size' }}</span>
+                    <span class="text-2xl font-black text-white mt-0.5 block">{{ stats.storage_size_formatted }}</span>
+                </div>
             </div>
 
-            <div class="glass-panel p-4 rounded-2xl border border-white/10">
-                <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ isRTL ? 'الحجم الكلي' : 'Indexed Size' }}</span>
-                    <HardDrive class="w-4 h-4 text-amber-400" />
+            <div class="glass-panel p-5 rounded-2xl border border-white/10 flex items-center gap-4">
+                <div class="w-11 h-11 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0">
+                    <Layers class="w-5 h-5" />
                 </div>
-                <div class="text-2xl font-black text-white mt-2">{{ stats.storage_size_formatted || '0 GB' }}</div>
+                <div>
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'ملفات الترجمة' : 'Subtitles' }}</span>
+                    <span class="text-2xl font-black text-white mt-0.5 block">{{ stats.total_subtitles }}</span>
+                </div>
             </div>
         </div>
 
@@ -395,34 +452,47 @@ onMounted(() => {
                                         {{ dir.type === 'movies' ? (isRTL ? 'أفلام' : 'Movies') : dir.type === 'series' ? (isRTL ? 'مسلسلات' : 'TV Series') : (isRTL ? 'مختلط' : 'Mixed') }}
                                     </span>
                                     <span class="text-[11px] text-slate-400">
-                                        {{ isRTL ? 'فهرسة مستمرة' : 'Active Index' }}
+                                        {{ isRTL ? 'فهرسة نشطة' : 'Active Index' }}
                                     </span>
                                 </div>
                             </div>
                         </div>
 
                         <button
-                            @click="removeDirectory(idx)"
-                            class="text-slate-500 hover:text-rose-400 transition-colors p-1 cursor-pointer"
-                            title="Remove folder"
+                            @click="promptRemoveDirectory(idx, dir)"
+                            class="text-slate-500 hover:text-rose-400 transition-colors p-1.5 rounded-lg hover:bg-rose-500/10 cursor-pointer"
+                            :title="isRTL ? 'إزالة المجلد' : 'Remove folder'"
                         >
                             <Trash2 class="w-4 h-4" />
                         </button>
                     </div>
 
-                    <div class="pt-2 border-t border-white/5 flex items-center justify-between">
+                    <div class="pt-3 border-t border-white/5 flex items-center justify-between flex-wrap gap-2">
                         <span class="text-[11px] text-slate-400 flex items-center gap-1">
                             <CheckCircle2 class="w-3.5 h-3.5 text-emerald-400" />
-                            <span>{{ isRTL ? 'جاهز للفحص' : 'Ready to scan' }}</span>
+                            <span>{{ isRTL ? 'جاهز للفحص' : 'Ready' }}</span>
                         </span>
-                        <button
-                            @click="scanSingleFolder(dir)"
-                            :disabled="isScanning"
-                            class="px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                        >
-                            <Play class="w-3 h-3 fill-current" />
-                            <span>{{ isRTL ? 'فحص هذا المجلد' : 'Scan Folder' }}</span>
-                        </button>
+
+                        <div class="flex items-center gap-2">
+                            <button
+                                @click="promptFreshRescanFolder(dir)"
+                                :disabled="isScanning"
+                                class="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-amber-500/20 text-amber-300 border border-white/10 hover:border-amber-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                                :title="isRTL ? 'إعادة فحص جديدة لهذا المجلد ومسح عناصره السابقة' : 'Wipe previous items from this folder and rescan freshly'"
+                            >
+                                <RotateCcw class="w-3 h-3" />
+                                <span>{{ isRTL ? 'فحص جديد' : 'Fresh Rescan' }}</span>
+                            </button>
+
+                            <button
+                                @click="scanSingleFolder(dir)"
+                                :disabled="isScanning"
+                                class="px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                            >
+                                <Play class="w-3 h-3 fill-current" />
+                                <span>{{ isRTL ? 'فحص المجلد' : 'Scan' }}</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -449,130 +519,86 @@ onMounted(() => {
                     />
                     <FolderPlus class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 </div>
-                <select
-                    v-model="newDirType"
-                    class="w-full sm:w-36 px-3 py-2.5 rounded-xl bg-[#0E121E] border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500"
-                >
-                    <option value="mixed">{{ isRTL ? 'مختلط (Mixed)' : 'Mixed Content' }}</option>
-                    <option value="movies">{{ isRTL ? 'أفلام فقط' : 'Movies Only' }}</option>
-                    <option value="series">{{ isRTL ? 'مسلسلات فقط' : 'Series Only' }}</option>
-                </select>
-                <button
-                    type="submit"
-                    :disabled="isAddingDir || !newDirPath.trim()"
-                    class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer shrink-0"
-                >
-                    <FolderPlus class="w-4 h-4" />
-                    <span>{{ isRTL ? 'إضافة مجلد' : 'Add Folder' }}</span>
-                </button>
+
+                <div class="flex items-center gap-2 w-full sm:w-auto">
+                    <select
+                        v-model="newDirType"
+                        class="py-2.5 px-3 rounded-xl bg-[#080B12] border border-white/10 text-xs text-slate-300 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                    >
+                        <option value="mixed">{{ isRTL ? 'مختلط (أفلام ومسلسلات)' : 'Mixed Content' }}</option>
+                        <option value="movies">{{ isRTL ? 'أفلام فقط' : 'Movies Only' }}</option>
+                        <option value="series">{{ isRTL ? 'مسلسلات فقط' : 'TV Series Only' }}</option>
+                    </select>
+
+                    <button
+                        type="submit"
+                        :disabled="isAddingDir || !newDirPath.trim()"
+                        class="px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
+                    >
+                        <FolderPlus class="w-4 h-4" />
+                        <span>{{ isRTL ? 'إضافة المجلد' : 'Add Folder' }}</span>
+                    </button>
+                </div>
             </form>
         </div>
 
-        <!-- 4. Interactive Live Diagnostic Terminal Feed (Creative-FileFlow Style) -->
-        <div class="glass-panel rounded-3xl p-6 border border-white/10 space-y-4 mb-8">
-            <div class="flex items-center justify-between flex-wrap gap-4 pb-3 border-b border-white/10">
-                <div class="flex items-center gap-2.5">
-                    <Terminal class="w-5 h-5 text-cyan-400" />
-                    <div>
-                        <h3 class="font-bold text-sm text-white">
-                            {{ isRTL ? 'سجل العمليات المباشر (Scanner Live Terminal)' : 'Scanner Live Terminal' }}
-                        </h3>
-                        <p class="text-xs text-slate-400">
-                            {{ isRTL ? 'تتبع فوري لاكتشاف الملفات ومطابقة الأغلفة والترجمات' : 'Real-time feed of file discovery, metadata matching, and subtitle linking.' }}
-                        </p>
-                    </div>
+        <!-- 4. Real-time Diagnostic Terminal Feed -->
+        <div class="glass-panel rounded-3xl p-6 border border-white/10 space-y-4">
+            <div class="flex items-center justify-between flex-wrap gap-3 border-b border-white/10 pb-4">
+                <div class="flex items-center gap-2">
+                    <Terminal class="w-4 h-4 text-cyan-400" />
+                    <h3 class="font-extrabold text-sm text-white">{{ isRTL ? 'سجل العمليات والفهرسة المباشر' : 'Diagnostic Real-Time Console' }}</h3>
                 </div>
 
-                <!-- Log Filter Buttons -->
-                <div class="flex items-center gap-1.5 bg-white/5 p-1 rounded-xl border border-white/10">
+                <!-- Filter badges -->
+                <div class="flex items-center gap-1 text-[10px]">
                     <button
-                        v-for="flt in [
-                            { id: 'all', label: isRTL ? 'الكل' : 'All' },
-                            { id: 'success', label: isRTL ? 'نجاح' : 'Success' },
-                            { id: 'info', label: isRTL ? 'معلومات' : 'Info' },
-                            { id: 'error', label: isRTL ? 'أخطاء' : 'Errors' },
-                        ]"
-                        :key="flt.id"
-                        @click="terminalFilter = flt.id as any"
-                        class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
-                        :class="terminalFilter === flt.id ? 'bg-cyan-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'"
+                        v-for="flt in ['all', 'success', 'info', 'error'] as const"
+                        :key="flt"
+                        @click="terminalFilter = flt"
+                        class="px-2.5 py-1 rounded-lg uppercase font-bold transition-all cursor-pointer"
+                        :class="terminalFilter === flt ? 'bg-cyan-500 text-slate-950 font-black' : 'bg-white/5 text-slate-400 hover:text-white'"
                     >
-                        {{ flt.label }}
+                        {{ flt }}
                     </button>
                 </div>
             </div>
 
-            <!-- Terminal Window -->
-            <div
-                id="terminal-feed"
-                class="bg-[#05070B] rounded-2xl p-4 font-mono text-[11px] h-56 overflow-y-auto space-y-1.5 border border-white/5 scroll-smooth"
-            >
-                <div v-if="filteredLogs.length === 0" class="text-slate-500 py-6 text-center">
-                    {{ isRTL ? 'لا توجد سجلات حالياً. ابدأ الفحص لعرض العمليات.' : 'No terminal events logged yet. Start a scan to view real-time operations.' }}
-                </div>
-
+            <!-- Terminal Output Window -->
+            <div id="terminal-feed" class="h-64 overflow-y-auto font-mono text-xs space-y-1.5 p-4 rounded-2xl bg-black/80 border border-white/5 custom-scrollbar">
                 <div
-                    v-for="(log, lIdx) in filteredLogs"
-                    :key="lIdx"
+                    v-for="(log, idx) in filteredLogs"
+                    :key="idx"
                     class="flex items-start gap-2.5 leading-relaxed"
                 >
-                    <span class="text-slate-500 shrink-0 select-none">[{{ log.time }}]</span>
+                    <span class="text-slate-600 select-none shrink-0">[{{ log.time }}]</span>
                     <span
-                        class="font-bold shrink-0 select-none uppercase text-[10px] px-1 rounded"
                         :class="{
-                            'bg-emerald-500/20 text-emerald-400': log.level === 'success',
-                            'bg-cyan-500/20 text-cyan-400': log.level === 'info',
-                            'bg-amber-500/20 text-amber-400': log.level === 'warning',
-                            'bg-rose-500/20 text-rose-400': log.level === 'error',
-                        }"
-                    >
-                        {{ log.level }}
-                    </span>
-                    <span
-                        class="break-all"
-                        :class="{
-                            'text-emerald-300': log.level === 'success',
-                            'text-slate-300': log.level === 'info',
-                            'text-amber-300': log.level === 'warning',
-                            'text-rose-300': log.level === 'error',
+                            'text-emerald-400': log.level === 'success',
+                            'text-cyan-300': log.level === 'info',
+                            'text-amber-400': log.level === 'warning',
+                            'text-rose-400 font-bold': log.level === 'error',
                         }"
                     >
                         {{ log.message }}
                     </span>
                 </div>
-            </div>
-        </div>
 
-        <!-- 5. Recent Scanned Items Grid -->
-        <div v-if="scanStatus.scanned_items?.length" class="space-y-4">
-            <h3 class="font-bold text-sm text-white flex items-center gap-2">
-                <CheckCircle2 class="w-4 h-4 text-emerald-400" />
-                <span>{{ isRTL ? 'آخر الملفات المفهرسة حديثاً' : 'Recently Indexed Media' }}</span>
-            </h3>
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                <div
-                    v-for="item in scanStatus.scanned_items"
-                    :key="item.file_path"
-                    class="glass-panel p-3.5 rounded-2xl border border-white/10 flex items-center justify-between gap-3"
-                >
-                    <div class="min-w-0 space-y-1">
-                        <div class="flex items-center gap-1.5">
-                            <span class="cinema-badge bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[9px]">
-                                {{ item.type === 'series' ? 'TV' : 'MOVIE' }}
-                            </span>
-                            <span class="cinema-badge bg-white/10 text-slate-300 border-white/10 text-[9px]">
-                                {{ item.resolution }}
-                            </span>
-                            <span v-if="item.subtitles_count > 0" class="cinema-badge bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[9px]">
-                                +{{ item.subtitles_count }} SUB
-                            </span>
-                        </div>
-                        <h4 class="font-bold text-xs text-white truncate max-w-xs">{{ item.title }}</h4>
-                    </div>
-                    <CheckCircle2 class="w-4 h-4 text-emerald-400 shrink-0" />
+                <div v-if="filteredLogs.length === 0" class="text-slate-600 italic py-12 text-center">
+                    {{ isRTL ? 'لا توجد عمليات حالية. اضغط على "بدء الفحص" لبدء الفهرسة.' : 'Scanner console idle. Start a scan to watch live events.' }}
                 </div>
             </div>
         </div>
+
+        <!-- Custom Confirm Modal -->
+        <ConfirmModal
+            :show="confirmModal.show"
+            :title="confirmModal.title"
+            :message="confirmModal.message"
+            :confirm-text="confirmModal.confirmText"
+            :type="confirmModal.type"
+            @confirm="triggerConfirmAction"
+            @cancel="confirmModal.show = false"
+        />
     </AppLayout>
 </template>

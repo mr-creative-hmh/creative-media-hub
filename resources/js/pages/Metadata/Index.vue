@@ -4,6 +4,7 @@ import { Head, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import FixMatchModal from '@/components/media/FixMatchModal.vue';
+import ConfirmModal from '@/components/common/ConfirmModal.vue';
 import {
     Sparkles, Search, Image as ImageIcon, Globe, Film, Tv,
     Star, RefreshCw, CheckCircle2, AlertCircle, Play,
@@ -37,6 +38,22 @@ const toastMessage = ref('');
 const selectedItemForFix = ref<any | null>(null);
 const showFixModal = ref(false);
 
+const confirmModal = ref<{
+    show: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    type: 'danger' | 'warning' | 'info';
+    action: () => Promise<void> | void;
+}>({
+    show: false,
+    title: '',
+    message: '',
+    confirmText: '',
+    type: 'danger',
+    action: () => {},
+});
+
 const applyFilter = (filterKey: string) => {
     activeFilter.value = filterKey;
     router.get('/metadata', {
@@ -58,25 +75,24 @@ const openFixMatch = (item: any) => {
 };
 
 const handleItemUpdated = (updatedItem: any) => {
-    if (selectedItemForFix.value) {
-        Object.assign(selectedItemForFix.value, updatedItem);
+    showFixModal.value = false;
+    toastMessage.value = isRTL.value ? `تم تحديث بيانات "${updatedItem.title}" بنجاح!` : `Metadata updated for "${updatedItem.title}"!`;
+    const target = props.items.find((i) => i.id === updatedItem.id && i.type === updatedItem.type);
+    if (target) {
+        Object.assign(target, updatedItem);
     }
-    toastMessage.value = isRTL.value ? 'تم تحديث البيانات والأغلفة بنجاح!' : 'Metadata & artwork updated successfully!';
 };
 
-const handleBatchEnrich = async () => {
+const enrichAllMissing = async () => {
     isBatchEnriching.value = true;
-    toastMessage.value = '';
-
     try {
-        const res = await fetch('/api/metadata/batch-enrich', {
+        const res = await fetch('/api/library/enrich-missing', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
             },
         });
-
         if (res.ok) {
             const data = await res.json();
             toastMessage.value = isRTL.value
@@ -91,45 +107,65 @@ const handleBatchEnrich = async () => {
     }
 };
 
-const handleDeleteItem = async (item: any) => {
-    if (!confirm(isRTL.value ? `هل أنت متأكد من حذف "${item.title}" من فهارس المكتبة؟ (لن يتم حذف الملف من القرص)` : `Remove "${item.title}" from library index? (Disk file will NOT be deleted)`)) {
-        return;
-    }
+const handleDeleteItem = (item: any) => {
+    confirmModal.value = {
+        show: true,
+        title: isRTL.value ? 'حذف العنصر من فهارس المكتبة' : 'Remove Media From Library',
+        message: isRTL.value ? `هل أنت متأكد من حذف "${item.title}" من فهارس المكتبة؟ (لن يتم حذف الملف من القرص).` : `Are you sure you want to remove "${item.title}" from the library index? (Disk file will NOT be deleted).`,
+        confirmText: isRTL.value ? 'حذف من الفهارس' : 'Remove Item',
+        type: 'danger',
+        action: async () => {
+            confirmModal.value.show = false;
+            try {
+                const res = await fetch(`/api/media/${item.id}?type=${item.type || 'movie'}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    },
+                });
 
-    try {
-        const res = await fetch(`/api/media/${item.id}?type=${item.type || 'movie'}`, {
-            method: 'DELETE',
-            headers: {
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
-            },
-        });
-
-        if (res.ok) {
-            const idx = props.items.indexOf(item);
-            if (idx !== -1) props.items.splice(idx, 1);
-            toastMessage.value = isRTL.value ? `تم حذف "${item.title}" من المكتبة.` : `"${item.title}" removed from library.`;
-        }
-    } catch (e) {}
+                if (res.ok) {
+                    const idx = props.items.indexOf(item);
+                    if (idx !== -1) props.items.splice(idx, 1);
+                    toastMessage.value = isRTL.value ? `تم حذف "${item.title}" من المكتبة.` : `"${item.title}" removed from library.`;
+                }
+            } catch (e) {}
+        },
+    };
 };
 
-const handleClearAllMedia = async () => {
-    if (confirm(isRTL.value ? 'تحذير: سيتم حذف كافة عناصر المكتبة المفهرسة من قاعدة البيانات (لن يتم حذف الملفات من القرص الصلب). هل تريد المتابعة؟' : 'Warning: This will remove all indexed movies and series from your library database (files on disk will NOT be deleted). Continue?')) {
-        isClearing.value = true;
-        try {
-            const res = await fetch('/api/scanner/clear-catalog', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
-                },
-            });
-            if (res.ok) {
-                toastMessage.value = isRTL.value ? 'تم تفريغ فهارس المكتبة بنجاح.' : 'Library catalog cleared.';
-                setTimeout(() => { router.reload(); }, 800);
+const handleClearAllMedia = () => {
+    confirmModal.value = {
+        show: true,
+        title: isRTL.value ? 'مسح كافة فهارس المكتبة والإحصائيات' : 'Clear Library Catalog & Analytics',
+        message: isRTL.value ? 'تحذير: سيتم حذف كافة عناصر المكتبة وسجل المشاهدة والإحصائيات من قاعدة البيانات (لن يتم حذف الملفات من القرص). هل تريد المتابعة؟' : 'Warning: This will remove all indexed movies, series, watch histories, and analytics metrics from your library database (files on disk will NOT be deleted). Continue?',
+        confirmText: isRTL.value ? 'تأكيد المسح الشامل' : 'Wipe Catalog',
+        type: 'danger',
+        action: async () => {
+            confirmModal.value.show = false;
+            isClearing.value = true;
+            try {
+                const res = await fetch('/api/scanner/clear-catalog', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    },
+                });
+                if (res.ok) {
+                    toastMessage.value = isRTL.value ? 'تم تفريغ فهارس المكتبة والإحصائيات بنجاح.' : 'Library catalog & analytics cleared.';
+                    setTimeout(() => { router.reload(); }, 800);
+                }
+            } finally {
+                isClearing.value = false;
             }
-        } finally {
-            isClearing.value = false;
-        }
+        },
+    };
+};
+
+const triggerConfirmAction = async () => {
+    if (confirmModal.value.action) {
+        await confirmModal.value.action();
     }
 };
 </script>
@@ -147,154 +183,130 @@ const handleClearAllMedia = async () => {
                     </div>
                     <div>
                         <h1 class="text-2xl sm:text-3xl font-extrabold text-white">
-                            {{ isRTL ? 'استوديو بيانات وأغلفة المكتبة' : 'Library Metadata & Cover Studio' }}
+                            {{ isRTL ? 'استوديو إدارة البيانات والأغلفة' : 'Library Metadata & Cover Studio' }}
                         </h1>
                         <p class="text-xs sm:text-sm text-slate-400 mt-0.5">
-                            {{ isRTL ? 'فحص وتعديل وتحديث الأغلفة والبيانات العربية والإنجليزية' : 'Manage movie & TV metadata, fetch missing posters, and fix unmatched titles.' }}
+                            {{ isRTL ? 'تعديل وتحديث الأغلفة والبيانات الناقصة والترجمات العربية بنقرة واحدة.' : 'Fix missing covers, search TMDB/Bing, update Arabic overviews and match items.' }}
                         </p>
                     </div>
                 </div>
 
-                <!-- Batch Actions -->
-                <div class="flex items-center gap-2.5">
+                <div class="flex items-center gap-2.5 flex-wrap">
+                    <button
+                        @click="enrichAllMissing"
+                        :disabled="isBatchEnriching"
+                        class="flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-black shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
+                    >
+                        <RefreshCw v-if="isBatchEnriching" class="w-4 h-4 animate-spin text-slate-950" />
+                        <Sparkles v-else class="w-4 h-4" />
+                        <span>{{ isRTL ? 'تحميل تلقائي لجميع الأغلفة والبيانات الناقصة' : 'Auto-Enrich All Missing Metadata' }}</span>
+                    </button>
+
                     <button
                         @click="handleClearAllMedia"
                         :disabled="isClearing"
-                        class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer"
-                        :title="isRTL ? 'تفريغ فهارس المكتبة بالكامل' : 'Wipe entire library catalog from database'"
+                        class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer"
                     >
-                        <Trash2 class="w-4 h-4 text-rose-400" />
-                        <span>{{ isRTL ? 'تفريغ المكتبة' : 'Clear Library' }}</span>
-                    </button>
-
-                    <button
-                        @click="handleBatchEnrich"
-                        :disabled="isBatchEnriching"
-                        class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
-                    >
-                        <RefreshCw v-if="isBatchEnriching" class="w-4 h-4 animate-spin" />
-                        <ImageIcon v-else class="w-4 h-4" />
-                        <span>{{ isRTL ? 'جلب الأغلفة الناقصة تلقائياً' : 'Auto-Fetch Missing Posters' }}</span>
+                        <Trash2 class="w-4 h-4" />
+                        <span>{{ isRTL ? 'مسح الفهارس' : 'Clear Library' }}</span>
                     </button>
                 </div>
             </div>
-        </div>
 
-        <!-- Toast Notification -->
-        <div v-if="toastMessage" class="mb-6 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <CheckCircle2 class="w-4 h-4 shrink-0" />
-                <span>{{ toastMessage }}</span>
-            </div>
-            <button @click="toastMessage = ''" class="cursor-pointer text-emerald-400 hover:text-emerald-300">
-                <X class="w-4 h-4" />
-            </button>
-        </div>
-
-        <!-- 1. Stats Row -->
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-            <div
-                @click="applyFilter('all')"
-                class="glass-panel p-4 rounded-2xl border border-white/10 hover:border-cyan-500/50 cursor-pointer transition-all flex flex-col justify-between"
-                :class="activeFilter === 'all' ? 'border-cyan-500/50 bg-cyan-500/5' : ''"
-            >
-                <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ isRTL ? 'إجمالي المحتوى' : 'Total Media' }}</span>
-                <div class="text-2xl font-black text-white mt-2">{{ stats.total_items }}</div>
-            </div>
-
-            <div
-                @click="applyFilter('missing_posters')"
-                class="glass-panel p-4 rounded-2xl border border-white/10 hover:border-amber-500/50 cursor-pointer transition-all flex flex-col justify-between"
-                :class="activeFilter === 'missing_posters' ? 'border-amber-500/50 bg-amber-500/5' : ''"
-            >
-                <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ isRTL ? 'بدون غلاف' : 'Missing Posters' }}</span>
-                    <ImageIcon class="w-4 h-4 text-amber-400" />
+            <!-- Toast Notice -->
+            <div v-if="toastMessage" class="mt-4 p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-bold flex items-center justify-between animate-in fade-in">
+                <div class="flex items-center gap-2">
+                    <CheckCircle2 class="w-4 h-4 text-cyan-400" />
+                    <span>{{ toastMessage }}</span>
                 </div>
-                <div class="text-2xl font-black mt-2" :class="stats.missing_posters_count > 0 ? 'text-amber-400' : 'text-emerald-400'">
-                    {{ stats.missing_posters_count }}
-                </div>
-            </div>
-
-            <div
-                @click="applyFilter('missing_arabic')"
-                class="glass-panel p-4 rounded-2xl border border-white/10 hover:border-indigo-500/50 cursor-pointer transition-all flex flex-col justify-between"
-                :class="activeFilter === 'missing_arabic' ? 'border-indigo-500/50 bg-indigo-500/5' : ''"
-            >
-                <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ isRTL ? 'بدون ترجمة عربية' : 'Missing Arabic' }}</span>
-                    <Globe class="w-4 h-4 text-indigo-400" />
-                </div>
-                <div class="text-2xl font-black mt-2 text-indigo-400">
-                    {{ stats.missing_arabic_count }}
-                </div>
-            </div>
-
-            <div
-                @click="applyFilter('movies')"
-                class="glass-panel p-4 rounded-2xl border border-white/10 hover:border-cyan-500/50 cursor-pointer transition-all flex flex-col justify-between"
-                :class="activeFilter === 'movies' ? 'border-cyan-500/50 bg-cyan-500/5' : ''"
-            >
-                <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ isRTL ? 'أفلام' : 'Movies' }}</span>
-                    <Film class="w-4 h-4 text-cyan-400" />
-                </div>
-                <div class="text-2xl font-black text-white mt-2">{{ stats.movies_count }}</div>
-            </div>
-
-            <div
-                @click="applyFilter('series')"
-                class="glass-panel p-4 rounded-2xl border border-white/10 hover:border-cyan-500/50 cursor-pointer transition-all flex flex-col justify-between"
-                :class="activeFilter === 'series' ? 'border-cyan-500/50 bg-cyan-500/5' : ''"
-            >
-                <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{{ isRTL ? 'مسلسلات' : 'TV Series' }}</span>
-                    <Tv class="w-4 h-4 text-cyan-400" />
-                </div>
-                <div class="text-2xl font-black text-white mt-2">{{ stats.series_count }}</div>
+                <button @click="toastMessage = ''" class="text-slate-400 hover:text-white cursor-pointer">
+                    <X class="w-4 h-4" />
+                </button>
             </div>
         </div>
 
-        <!-- 2. Search & Filters Bar -->
-        <div class="glass-panel rounded-2xl p-4 border border-white/10 mb-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div class="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+        <!-- Metric Stat Cards -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+            <div class="glass-panel p-5 rounded-2xl border border-white/10 flex items-center gap-4">
+                <div class="w-10 h-10 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center shrink-0">
+                    <Film class="w-5 h-5" />
+                </div>
+                <div>
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'إجمالي العناصر' : 'Total Items' }}</span>
+                    <span class="text-2xl font-black text-white mt-0.5 block">{{ stats.total_items }}</span>
+                </div>
+            </div>
+
+            <div class="glass-panel p-5 rounded-2xl border border-white/10 flex items-center gap-4">
+                <div class="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+                    <ImageIcon class="w-5 h-5" />
+                </div>
+                <div>
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'بلا غلاف' : 'Missing Posters' }}</span>
+                    <span class="text-2xl font-black text-amber-400 mt-0.5 block">{{ stats.missing_posters_count }}</span>
+                </div>
+            </div>
+
+            <div class="glass-panel p-5 rounded-2xl border border-white/10 flex items-center gap-4">
+                <div class="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0">
+                    <Globe class="w-5 h-5" />
+                </div>
+                <div>
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'بلا وصف عربي' : 'Missing Arabic' }}</span>
+                    <span class="text-2xl font-black text-indigo-300 mt-0.5 block">{{ stats.missing_arabic_count }}</span>
+                </div>
+            </div>
+
+            <div class="glass-panel p-5 rounded-2xl border border-white/10 flex items-center gap-4">
+                <div class="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
+                    <CheckCircle2 class="w-5 h-5" />
+                </div>
+                <div>
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'أفلام / مسلسلات' : 'Movies / Series' }}</span>
+                    <span class="text-xl font-black text-emerald-400 mt-0.5 block">{{ stats.movies_count }} / {{ stats.series_count }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter & Search Bar -->
+        <div class="glass-panel p-4 rounded-2xl border border-white/10 mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
+            <!-- Filter Pills -->
+            <div class="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
                 <button
-                    v-for="tab in [
-                        { id: 'all', label: isRTL ? 'الكل' : 'All Media' },
-                        { id: 'missing_posters', label: isRTL ? 'بدون غلاف' : 'Missing Covers' },
-                        { id: 'missing_arabic', label: isRTL ? 'بدون عربي' : 'Missing Arabic' },
-                        { id: 'movies', label: isRTL ? 'أفلام' : 'Movies' },
-                        { id: 'series', label: isRTL ? 'مسلسلات' : 'Series' },
+                    v-for="btn in [
+                        { key: 'all', label: isRTL ? 'الكل' : 'All Media' },
+                        { key: 'missing_poster', label: isRTL ? '⚠️ بلا غلاف' : '⚠️ Missing Poster' },
+                        { key: 'missing_arabic', label: isRTL ? '🌐 بحاجة لتعريب' : '🌐 Missing Arabic' },
+                        { key: 'movies', label: isRTL ? 'الأفلام' : 'Movies' },
+                        { key: 'series', label: isRTL ? 'المسلسلات' : 'TV Series' },
                     ]"
-                    :key="tab.id"
-                    @click="applyFilter(tab.id)"
-                    class="px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer"
-                    :class="activeFilter === tab.id
-                        ? 'bg-cyan-500 text-slate-950 font-black shadow-md shadow-cyan-500/20'
-                        : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'"
+                    :key="btn.key"
+                    @click="applyFilter(btn.key)"
+                    class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
+                    :class="activeFilter === btn.key ? 'bg-cyan-500 text-slate-950 font-black shadow-md shadow-cyan-500/20' : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'"
                 >
-                    {{ tab.label }}
+                    {{ btn.label }}
                 </button>
             </div>
 
-            <!-- Search Form -->
-            <form @submit.prevent="handleSearch" class="relative w-full sm:w-80">
+            <!-- Search Field -->
+            <form @submit.prevent="handleSearch" class="relative w-full md:w-72">
                 <input
                     v-model="searchQuery"
                     type="text"
-                    :placeholder="isRTL ? 'البحث بالاسم أو العنوان...' : 'Search by title...'"
-                    class="w-full pl-10 pr-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                    :placeholder="isRTL ? 'بحث بالاسم...' : 'Search title...'"
+                    class="w-full pl-9 pr-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                 />
                 <Search class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             </form>
         </div>
 
-        <!-- 3. Media Items Table / Grid -->
+        <!-- Media Items Table / Grid -->
         <div v-if="items.length > 0" class="space-y-3">
             <div
                 v-for="item in items"
                 :key="`${item.type}-${item.id}`"
-                class="glass-panel p-4 rounded-2xl border border-white/10 hover:border-cyan-500/40 transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group"
+                class="glass-panel p-4 rounded-2xl border border-white/10 hover:border-cyan-500/30 transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group"
             >
                 <!-- Item Info -->
                 <div class="flex items-center gap-4 min-w-0 flex-1">
@@ -388,6 +400,17 @@ const handleClearAllMedia = async () => {
             :item="selectedItemForFix"
             @close="showFixModal = false"
             @updated="handleItemUpdated"
+        />
+
+        <!-- Custom Confirm Modal -->
+        <ConfirmModal
+            :show="confirmModal.show"
+            :title="confirmModal.title"
+            :message="confirmModal.message"
+            :confirm-text="confirmModal.confirmText"
+            :type="confirmModal.type"
+            @confirm="triggerConfirmAction"
+            @cancel="confirmModal.show = false"
         />
     </AppLayout>
 </template>
