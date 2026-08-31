@@ -7,16 +7,13 @@ class SceneNameParserService
     public function parse(string $filenameOrPath): array
     {
         $normalized = str_replace('\\', '/', $filenameOrPath);
-        $parts = explode('/', $normalized);
+        $parts = array_values(array_filter(explode('/', $normalized)));
         $filename = end($parts);
         $parentFolder = count($parts) > 1 ? $parts[count($parts) - 2] : '';
         $grandparentFolder = count($parts) > 2 ? $parts[count($parts) - 3] : '';
 
         $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
         $baseName = pathinfo($filename, PATHINFO_FILENAME);
-
-        // Normalize separators
-        $clean = preg_replace('/[._]/', ' ', $baseName);
 
         $type = 'movie';
         $season = null;
@@ -29,7 +26,9 @@ class SceneNameParserService
         $group = null;
         $isParentSeasonFolder = false;
 
-        // 1. Detect TV Series from filename (S01E02, 1x02, Season 1 Episode 2, EP02)
+        $clean = preg_replace('/[._]/', ' ', $baseName);
+
+        // 1. Detect TV Series from filename (S01E02, 1x02, Season 1 Episode 2, EP02, Episode 2)
         if (preg_match('/[sS](\d{1,2})[eE](\d{1,3})/i', $clean, $matches)) {
             $type = 'series';
             $season = (int) $matches[1];
@@ -44,12 +43,27 @@ class SceneNameParserService
             $episode = (int) $matches[2];
         } elseif (preg_match('/^(?:ep|episode)?\s*(\d{1,3})\s*[-_ ]/i', $clean, $matches)) {
             $episode = (int) $matches[1];
+            $type = 'series';
         }
 
-        // 2. Folder-Aware Series & Season Detection (e.g. Breaking Bad/Season 01/01.mkv)
+        // 2. Folder-Aware Series & Season Detection
         if ($parentFolder && preg_match('/^(?:Season|Series|Staffel|Saison)\s*(\d{1,2})$/i', trim($parentFolder), $sMatches)) {
             $type = 'series';
             $isParentSeasonFolder = true;
+            if ($season === null) {
+                $season = (int) $sMatches[1];
+            }
+        } elseif ($parentFolder && preg_match('/^[sS](\d{1,2})$/i', trim($parentFolder), $sMatches)) {
+            $type = 'series';
+            $isParentSeasonFolder = true;
+            if ($season === null) {
+                $season = (int) $sMatches[1];
+            }
+        }
+
+        // Check if parent folder contains "Season X" like "The Sopranos Season 1"
+        if (!$isParentSeasonFolder && $parentFolder && preg_match('/\b(?:Season|Series|Staffel|Saison)\s*(\d{1,2})\b/i', $parentFolder, $sMatches)) {
+            $type = 'series';
             if ($season === null) {
                 $season = (int) $sMatches[1];
             }
@@ -58,16 +72,18 @@ class SceneNameParserService
         // 3. Detect Year (1900-2099)
         if (preg_match('/\b(19\d\d|20\d\d)\b/', $clean, $matches)) {
             $year = (int) $matches[1];
+        } elseif ($parentFolder && preg_match('/\b(19\d\d|20\d\d)\b/', $parentFolder, $matches)) {
+            $year = (int) $matches[1];
         }
 
         // 4. Detect Resolution
-        if (preg_match('/\b(2160p|4k|uhd)\b/i', $clean)) {
+        if (preg_match('/\b(2160p|4k|uhd)\b/i', $clean . ' ' . $parentFolder)) {
             $resolution = '4K UHD';
-        } elseif (preg_match('/\b(1080p|1080i|fhd)\b/i', $clean)) {
+        } elseif (preg_match('/\b(1080p|1080i|fhd)\b/i', $clean . ' ' . $parentFolder)) {
             $resolution = '1080p FHD';
-        } elseif (preg_match('/\b(720p|hd)\b/i', $clean)) {
+        } elseif (preg_match('/\b(720p|hd)\b/i', $clean . ' ' . $parentFolder)) {
             $resolution = '720p HD';
-        } elseif (preg_match('/\b(480p|sd|576p)\b/i', $clean)) {
+        } elseif (preg_match('/\b(480p|sd|576p)\b/i', $clean . ' ' . $parentFolder)) {
             $resolution = '480p SD';
         }
 
@@ -116,26 +132,36 @@ class SceneNameParserService
         }
 
         // 9. Extract Clean Title
-        $title = $clean;
+        $titleCandidate = $clean;
+
+        // Cut off scene tokens
         $cutoffPatterns = [
             '/[sS]\d{1,2}[eE]\d{1,3}.*$/i',
             '/\b\d{1,2}x\d{1,3}.*$/i',
+            '/\b(?:Season|Series|Staffel|Saison)\s*\d{1,2}\b.*$/i',
+            '/\bS\d{1,2}\b.*$/i',
             '/\b(19\d\d|20\d\d)\b.*$/',
-            '/\b(2160p|1080p|720p|480p|4k|bluray|web-dl|webrip|hdtv|dvdrip|x264|x265|hevc|aac)\b.*$/i',
+            '/\b(2160p|1080p|720p|480p|4k|bluray|remux|web-dl|webdl|webrip|hdtv|dvdrip|x264|x265|hevc|aac)\b.*$/i',
         ];
 
         foreach ($cutoffPatterns as $pattern) {
-            if (preg_match($pattern, $title)) {
-                $title = preg_replace($pattern, '', $title);
+            if (preg_match($pattern, $titleCandidate)) {
+                $titleCandidate = preg_replace($pattern, '', $titleCandidate);
                 break;
             }
         }
 
-        $cleanTitle = $this->cleanTitleString($title);
+        $cleanTitle = $this->cleanTitleString($titleCandidate);
 
-        // If filename title is just episode number (e.g. "05 - Kissed by fire" or "01") and parent is Season folder
-        if ($isParentSeasonFolder && $grandparentFolder && (empty($cleanTitle) || is_numeric($cleanTitle) || preg_match('/^\d{1,3}\s+/', $cleanTitle))) {
-            $cleanTitle = $this->cleanTitleString($grandparentFolder);
+        // Fallbacks for series hierarchy
+        if ($type === 'series') {
+            if ($isParentSeasonFolder && $grandparentFolder) {
+                // e.g. /The Sopranos/Season 1/01.mkv -> series name is grandparent "The Sopranos"
+                $cleanTitle = $this->cleanTitleString($grandparentFolder);
+            } elseif ($parentFolder && (empty($cleanTitle) || is_numeric($cleanTitle) || preg_match('/^\d{1,3}$/', $cleanTitle))) {
+                // e.g. /The Sopranos Season 1/01.mkv -> parent cleaned is "The Sopranos"
+                $cleanTitle = $this->cleanTitleString($parentFolder);
+            }
         }
 
         if (empty($cleanTitle)) {
@@ -160,15 +186,29 @@ class SceneNameParserService
         ];
     }
 
-    protected function cleanTitleString(string $raw): string
+    public function cleanTitleString(string $raw): string
     {
-        // Strip bracket tags like [YTS.MX], [1080p], (2024), {rarbg}
+        // 1. Strip bracket tags like [YTS.MX], [1080p], (2024), {rarbg}
         $s = preg_replace('/\[[^\]]*\]/', ' ', $raw);
         $s = preg_replace('/\([^\)]*\)/', ' ', $s);
         $s = preg_replace('/\{[^\}]*\}/', ' ', $s);
         $s = preg_replace('/[\[\]\(\)\{\}]/', ' ', $s);
+
+        // 2. Strip Season tokens: "Season 1", "Staffel 2", "S01", "S1", "Complete"
+        $s = preg_replace('/\b(?:Season|Series|Staffel|Saison)\s*\d{1,2}\b/i', ' ', $s);
+        $s = preg_replace('/\bS\d{1,2}\b/i', ' ', $s);
+        $s = preg_replace('/\b(?:Complete|Anthology|Boxset|Collection)\b/i', ' ', $s);
+
+        // 3. Strip common quality/scene tags
+        $s = preg_replace('/\b(?:2160p|1080p|720p|480p|4k|bluray|remux|web-dl|webdl|webrip|hdtv|dvdrip|x264|x265|hevc|aac|dts|ac3|atmos)\b/i', ' ', $s);
+
+        // 4. Strip year if at end
+        $s = preg_replace('/\b(19\d\d|20\d\d)\b/', ' ', $s);
+
+        // 5. Clean punctuation and spaces
         $s = preg_replace('/[._\-]/', ' ', $s);
         $s = trim(preg_replace('/\s+/', ' ', $s));
+
         return ucwords(strtolower($s));
     }
 }

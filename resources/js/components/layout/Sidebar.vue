@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { useI18n } from '@/i18n/useI18n';
+import { useScanner } from '@/composables/useScanner';
 import {
     LayoutDashboard, Film, Tv, ScanLine, FolderSync,
-    Subtitles, BarChart3, DownloadCloud, Settings, Sparkles
+    Subtitles, BarChart3, DownloadCloud, Settings, Sparkles,
+    RefreshCw, Pause, Play, HardDrive
 } from 'lucide-vue-next';
 
 const { t, isRTL } = useI18n();
+const { scanStatus, isScanning, isPaused, openScanModal } = useScanner();
 
 const navItems = [
     { nameKey: 'nav.dashboard', href: '/', icon: LayoutDashboard, pattern: '^/$|^/dashboard' },
@@ -29,7 +32,23 @@ const isActive = (pattern: string) => {
 </script>
 
 <template>
-    <aside class="hidden lg:flex flex-col w-64 glass-panel border-r border-white/10 min-h-[calc(100vh-61px)] p-4 shrink-0 transition-all bg-[#0A0D14]/80">
+    <aside class="hidden lg:flex flex-col w-64 glass-panel border-r border-white/10 min-h-[calc(100vh-61px)] p-4 shrink-0 transition-all bg-[#0A0D14]/80 space-y-4">
+        <!-- Top Fast Scan Trigger (Creative-FileFlow Style) -->
+        <div>
+            <button
+                @click="openScanModal"
+                class="w-full py-2.5 px-4 rounded-xl text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 active:scale-[0.98] transition-all bg-gradient-to-r from-cyan-400 via-cyan-500 to-blue-500 hover:from-cyan-300 hover:to-blue-400 cursor-pointer"
+            >
+                <RefreshCw v-if="isScanning && !isPaused" class="w-4 h-4 animate-spin text-slate-950" />
+                <Pause v-else-if="isPaused" class="w-4 h-4 text-slate-950 fill-current" />
+                <HardDrive v-else class="w-4 h-4 text-slate-950" />
+                <span>
+                    {{ isScanning ? (isPaused ? (isRTL ? 'الفحص متوقف مؤقتاً' : 'Scan Paused') : `${isRTL ? 'جاري الفحص' : 'Scanning'} ${scanStatus.progress_percent || 0}%`) : (isRTL ? 'فحص ومراقبة المكتبة' : 'Scan Media Library') }}
+                </span>
+            </button>
+        </div>
+
+        <!-- Navigation Links -->
         <div class="space-y-1">
             <a
                 v-for="item in navItems"
@@ -49,25 +68,28 @@ const isActive = (pattern: string) => {
             </a>
         </div>
 
-        <!-- Virtual Scanner Quick Status in Sidebar -->
+        <!-- Virtual Scanner Quick Status in Sidebar Footer -->
         <div class="mt-auto pt-4 space-y-2">
             <div class="rounded-2xl bg-gradient-to-b from-cyan-950/40 to-slate-900/60 border border-cyan-500/20 p-3.5 relative overflow-hidden">
                 <div class="ambient-glow bg-cyan-500 w-20 h-20 -top-8 -right-8 pointer-events-none"></div>
                 <div class="flex items-center justify-between mb-1">
                     <h4 class="font-bold text-xs text-cyan-300 uppercase tracking-wider">
-                        {{ isRTL ? 'الماسح الفوري' : 'Virtual Scanner' }}
+                        {{ isRTL ? 'الفاحص الافتراضي' : 'Virtual Scanner' }}
                     </h4>
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span
+                        class="w-2 h-2 rounded-full"
+                        :class="isScanning ? 'bg-cyan-400 animate-ping' : isPaused ? 'bg-amber-400' : 'bg-emerald-500 animate-pulse'"
+                    ></span>
                 </div>
                 <p class="text-[11px] text-slate-400 mb-2.5 leading-relaxed">
-                    {{ isRTL ? 'فهرسة المجلدات وتحميل الأغلفة والترجمات في الخلفية.' : 'Monitor local folders and index media in background without moving files.' }}
+                    {{ isRTL ? 'مراقبة المجلدات وفهرسة الوسائط في الخلفية بدون نقل الملفات.' : 'Monitor local folders and index media in background without moving files.' }}
                 </p>
-                <a
-                    href="/scanner"
-                    class="inline-flex items-center justify-center w-full py-1.5 rounded-xl bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500 hover:text-slate-950 border border-cyan-500/30 text-xs font-bold transition-all shadow-sm"
+                <button
+                    @click="openScanModal"
+                    class="inline-flex items-center justify-center w-full py-1.5 rounded-xl bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500 hover:text-slate-950 border border-cyan-500/30 text-xs font-bold transition-all shadow-sm cursor-pointer"
                 >
-                    {{ isRTL ? 'فتح الماسح الافتراضي' : 'Open Virtual Scanner' }}
-                </a>
+                    {{ isRTL ? 'لوحة الفاحص السريعة' : 'Quick Scanner Modal' }}
+                </button>
             </div>
         </div>
     </aside>

@@ -2,13 +2,15 @@
 import { ref } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import { router } from '@inertiajs/vue3';
+import { useScanner } from '@/composables/useScanner';
 import {
     Search, Globe, LayoutDashboard, Film, Clapperboard, FolderSync,
     Subtitles, BarChart3, DownloadCloud, Menu, X, Tv,
-    Settings, ScanLine, Sparkles
+    Settings, ScanLine, Sparkles, RefreshCw, Pause
 } from 'lucide-vue-next';
 
 const { t, locale, setLocale, isRTL } = useI18n();
+const { scanStatus, isScanning, isPaused, openScanModal } = useScanner();
 
 const searchQuery = ref('');
 const isMobileMenuOpen = ref(false);
@@ -73,15 +75,39 @@ const mobileNavItems = [
             </form>
         </div>
 
-        <!-- Language Switcher & Controls -->
+        <!-- Right Action Controls -->
         <div class="flex items-center gap-2 sm:gap-3">
+            <!-- Global Scanner Status Button / Active Pill -->
+            <button
+                v-if="isScanning || isPaused"
+                @click="openScanModal"
+                class="flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                :class="isScanning ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300 shadow-lg shadow-cyan-500/10' : 'bg-amber-500/20 border-amber-500/40 text-amber-300'"
+                :title="isRTL ? 'عرض فاحص المكتبة المباشر' : 'View Virtual Scanner'"
+            >
+                <RefreshCw v-if="isScanning" class="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                <Pause v-else class="w-3.5 h-3.5 text-amber-400" />
+                <span class="font-mono">{{ scanStatus.progress_percent || 0 }}%</span>
+                <span class="text-[11px] opacity-80 hidden md:inline-block">({{ scanStatus.processed_files }}/{{ scanStatus.total_files }})</span>
+            </button>
+
+            <button
+                v-else
+                @click="openScanModal"
+                class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-panel border border-white/10 hover:border-cyan-500/40 text-xs font-bold text-slate-300 hover:text-white transition-all active:scale-95 cursor-pointer shadow-sm"
+                :title="isRTL ? 'فاحص المكتبة المباشر' : 'Live Virtual Scanner'"
+            >
+                <ScanLine class="w-3.5 h-3.5 text-cyan-400" />
+                <span>{{ isRTL ? 'فاحص المكتبة' : 'Scan Library' }}</span>
+            </button>
+
             <!-- Language Switcher -->
             <button
                 @click="toggleLanguage"
                 class="flex items-center gap-2 px-3 py-1.5 rounded-xl glass-panel border border-white/10 hover:border-cyan-500/40 text-xs font-bold text-slate-300 hover:text-white transition-all active:scale-95 cursor-pointer shadow-sm"
             >
                 <Globe class="w-3.5 h-3.5 text-cyan-400" />
-                <span>{{ locale === 'ar' ? 'English' : 'العربية' }}</span>
+                <span>{{ locale === 'ar' ? 'English' : 'عربي' }}</span>
             </button>
         </div>
     </header>

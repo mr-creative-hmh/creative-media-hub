@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
+import { useScanner } from '@/composables/useScanner';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import {
     ScanLine, FolderPlus, Play, Pause, XCircle, RotateCcw,
@@ -23,31 +24,27 @@ const props = defineProps<{
 }>();
 
 const { t, isRTL } = useI18n();
+const {
+    scanStatus,
+    isScanning,
+    isPaused,
+    pauseScan,
+    resumeScan,
+    cancelScan,
+    runBackgroundWorker,
+    fetchStatus
+} = useScanner();
 
 const monitoredDirs = ref([...props.directories]);
 const newDirPath = ref('');
 const newDirType = ref('mixed');
 const isAddingDir = ref(false);
-
-const isScanning = ref(props.scanStatus?.status === 'running');
-const scanJob = ref(props.scanStatus || {
-    status: 'idle',
-    progress_percent: 0,
-    total_files: 0,
-    processed_files: 0,
-    current_file: '',
-    scanned_items: [],
-    logs: [],
-});
-
 const isBatchEnriching = ref(false);
 const toastMessage = ref('');
 const terminalFilter = ref<'all' | 'success' | 'info' | 'error'>('all');
 
-let pollTimer: any = null;
-
 const filteredLogs = computed(() => {
-    const logs = scanJob.value.logs || [];
+    const logs = scanStatus.value.logs || [];
     if (terminalFilter.value === 'all') return logs;
     return logs.filter((l: any) => l.level === terminalFilter.value);
 });
@@ -101,7 +98,6 @@ const startScan = async () => {
         toastMessage.value = isRTL.value ? 'يرجى إضافة مجلد واحد على الأقل للفحص.' : 'Please add at least one folder to scan.';
         return;
     }
-    isScanning.value = true;
     try {
         const res = await fetch('/api/scanner/start', {
             method: 'POST',
@@ -114,15 +110,12 @@ const startScan = async () => {
             }),
         });
         const data = await res.json();
-        scanJob.value = data.status;
-        startBatchWorkerLoop();
-    } catch (e) {
-        isScanning.value = false;
-    }
+        scanStatus.value = data.status;
+        runBackgroundWorker();
+    } catch (e) {}
 };
 
 const scanSingleFolder = async (dir: { path: string; type: string }) => {
-    isScanning.value = true;
     try {
         const res = await fetch('/api/scanner/scan-folder', {
             method: 'POST',
@@ -136,63 +129,9 @@ const scanSingleFolder = async (dir: { path: string; type: string }) => {
             }),
         });
         const data = await res.json();
-        scanJob.value = data.status;
-        startBatchWorkerLoop();
-    } catch (e) {
-        isScanning.value = false;
-    }
-};
-
-const startBatchWorkerLoop = async () => {
-    while (isScanning.value) {
-        try {
-            const res = await fetch('/api/scanner/process-batch', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
-                },
-                body: JSON.stringify({ batch_size: 4 }),
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                scanJob.value = data.status;
-
-                const term = document.getElementById('terminal-feed');
-                if (term) term.scrollTop = term.scrollHeight;
-
-                if (!data.has_more || data.status.status === 'completed' || data.status.status === 'cancelled') {
-                    isScanning.value = false;
-                    break;
-                }
-            } else {
-                break;
-            }
-        } catch (e) {
-            break;
-        }
-        await new Promise((r) => setTimeout(r, 400));
-    }
-};
-
-const pauseScan = async () => {
-    await fetch('/api/scanner/pause', { method: 'POST', headers: { 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '' } });
-    scanJob.value.status = 'paused';
-    isScanning.value = false;
-};
-
-const resumeScan = async () => {
-    await fetch('/api/scanner/resume', { method: 'POST', headers: { 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '' } });
-    scanJob.value.status = 'running';
-    isScanning.value = true;
-    startBatchWorkerLoop();
-};
-
-const cancelScan = async () => {
-    await fetch('/api/scanner/cancel', { method: 'POST', headers: { 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '' } });
-    scanJob.value.status = 'cancelled';
-    isScanning.value = false;
+        scanStatus.value = data.status;
+        runBackgroundWorker();
+    } catch (e) {}
 };
 
 const enrichMissingPosters = async () => {
@@ -217,15 +156,14 @@ const enrichMissingPosters = async () => {
     }
 };
 
-onMounted(() => {
-    if (scanJob.value.status === 'running') {
-        isScanning.value = true;
-        startBatchWorkerLoop();
-    }
+watch(() => scanStatus.value.logs?.length, async () => {
+    await nextTick();
+    const term = document.getElementById('terminal-feed');
+    if (term) term.scrollTop = term.scrollHeight;
 });
 
-onUnmounted(() => {
-    if (pollTimer) clearInterval(pollTimer);
+onMounted(() => {
+    fetchStatus();
 });
 </script>
 
@@ -262,7 +200,7 @@ onUnmounted(() => {
                     </button>
 
                     <button
-                        v-if="!isScanning && scanJob.status !== 'running'"
+                        v-if="!isScanning"
                         @click="startScan"
                         class="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs shadow-lg shadow-cyan-500/25 active:scale-95 transition-all cursor-pointer"
                     >
@@ -320,7 +258,7 @@ onUnmounted(() => {
         </div>
 
         <!-- 2. Active Scan Progress & Control Bar -->
-        <div v-if="isScanning || scanJob.status === 'running' || scanJob.status === 'paused'" class="glass-panel rounded-3xl p-6 border border-cyan-500/30 mb-8 space-y-4 shadow-lg shadow-cyan-500/5 relative overflow-hidden">
+        <div v-if="isScanning || scanStatus.status === 'running' || scanStatus.status === 'paused'" class="glass-panel rounded-3xl p-6 border border-cyan-500/30 mb-8 space-y-4 shadow-lg shadow-cyan-500/5 relative overflow-hidden">
             <div class="ambient-glow bg-cyan-500/20 w-80 h-80 -top-20 -right-20 pointer-events-none"></div>
 
             <div class="flex items-center justify-between flex-wrap gap-4 relative z-10">
@@ -332,11 +270,11 @@ onUnmounted(() => {
                         <h3 class="font-extrabold text-sm text-white flex items-center gap-2">
                             <span>{{ isRTL ? 'جاري فهرسة المكتبة وتحميل الأغلفة...' : 'Virtual Scanner Active & Indexing...' }}</span>
                             <span class="cinema-badge bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[10px]">
-                                {{ scanJob.processed_files }} / {{ scanJob.total_files }}
+                                {{ scanStatus.processed_files }} / {{ scanStatus.total_files }}
                             </span>
                         </h3>
                         <p class="text-xs text-slate-400 truncate max-w-lg mt-0.5">
-                            {{ scanJob.current_file || (isRTL ? 'جاري قراءة الملفات...' : 'Processing media streams...') }}
+                            {{ scanStatus.current_file || (isRTL ? 'جاري قراءة الملفات...' : 'Processing media streams...') }}
                         </p>
                     </div>
                 </div>
@@ -344,7 +282,7 @@ onUnmounted(() => {
                 <!-- Control Buttons -->
                 <div class="flex items-center gap-2">
                     <button
-                        v-if="scanJob.status === 'running'"
+                        v-if="isScanning"
                         @click="pauseScan"
                         class="px-3.5 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1.5 cursor-pointer hover:bg-amber-500/30"
                     >
@@ -352,7 +290,7 @@ onUnmounted(() => {
                         <span>{{ isRTL ? 'إيقاف مؤقت' : 'Pause' }}</span>
                     </button>
                     <button
-                        v-if="scanJob.status === 'paused'"
+                        v-if="isPaused"
                         @click="resumeScan"
                         class="px-3.5 py-1.5 rounded-xl bg-cyan-500 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer hover:bg-cyan-400"
                     >
@@ -374,12 +312,12 @@ onUnmounted(() => {
                 <div class="w-full h-3 rounded-full bg-white/5 border border-white/10 overflow-hidden">
                     <div
                         class="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 transition-all duration-300 relative"
-                        :style="{ width: `${scanJob.progress_percent || 0}%` }"
+                        :style="{ width: `${scanStatus.progress_percent || 0}%` }"
                     ></div>
                 </div>
                 <div class="flex justify-between text-[11px] font-bold text-slate-400">
-                    <span>{{ isRTL ? 'نسبة الإنجاز' : 'Progress' }}: {{ scanJob.progress_percent || 0 }}%</span>
-                    <span>{{ scanJob.processed_files }} / {{ scanJob.total_files }} {{ isRTL ? 'ملف' : 'files' }}</span>
+                    <span>{{ isRTL ? 'نسبة الإنجاز' : 'Progress' }}: {{ scanStatus.progress_percent || 0 }}%</span>
+                    <span>{{ scanStatus.processed_files }} / {{ scanStatus.total_files }} {{ isRTL ? 'ملف' : 'files' }}</span>
                 </div>
             </div>
         </div>
@@ -563,7 +501,7 @@ onUnmounted(() => {
         </div>
 
         <!-- 5. Recent Scanned Items Grid -->
-        <div v-if="scanJob.scanned_items?.length" class="space-y-4">
+        <div v-if="scanStatus.scanned_items?.length" class="space-y-4">
             <h3 class="font-bold text-sm text-white flex items-center gap-2">
                 <CheckCircle2 class="w-4 h-4 text-emerald-400" />
                 <span>{{ isRTL ? 'آخر الملفات المفهرسة حديثاً' : 'Recently Indexed Media' }}</span>
@@ -571,7 +509,7 @@ onUnmounted(() => {
 
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <div
-                    v-for="item in scanJob.scanned_items"
+                    v-for="item in scanStatus.scanned_items"
                     :key="item.file_path"
                     class="glass-panel p-3.5 rounded-2xl border border-white/10 flex items-center justify-between gap-3"
                 >
