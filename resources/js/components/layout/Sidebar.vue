@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { useI18n } from '@/i18n/useI18n';
-import { Film, Tv, FolderSync, Subtitles, BarChart3, DownloadCloud } from 'lucide-vue-next';
+import { LayoutDashboard, Film, Tv, FolderSync, Subtitles, BarChart3, DownloadCloud } from 'lucide-vue-next';
 
 const { t, isRTL } = useI18n();
 
 const navItems = [
+    { nameKey: 'nav.dashboard', href: '/', icon: LayoutDashboard, pattern: '^/$|^/dashboard' },
     { nameKey: 'nav.movies', href: '/movies', icon: Film, pattern: '^/movies' },
     { nameKey: 'nav.series', href: '/series', icon: Tv, pattern: '^/series' },
     { nameKey: 'nav.organizer', href: '/organizer', icon: FolderSync, pattern: '^/organizer' },
@@ -47,14 +48,14 @@ const isActive = (pattern: string) => {
             <div class="rounded-2xl bg-gradient-to-b from-cyan-950/40 to-slate-900/60 border border-cyan-500/20 p-4 relative overflow-hidden">
                 <div class="ambient-glow bg-cyan-500 w-24 h-24 -top-8 -right-8"></div>
                 <h4 class="font-bold text-xs text-cyan-300 uppercase tracking-wider mb-1">
-                    {{ isRTL ? 'المنظم التلقائي' : 'Smart Auto-Sort' }}
+                    {{ isRTL ? 'تنظيم القرص الذكي' : 'Smart Auto-Sort' }}
                 </h4>
                 <p class="text-xs text-slate-400 mb-3 leading-relaxed">
-                    {{ isRTL ? 'Plex / Jellyfin هيكلة تلقائية طبقاً لمعايير' : 'Standardized Plex & Jellyfin folder hierarchies with 1-click dry run.' }}
+                    {{ isRTL ? 'هيكلة قياسية لمكتبات Plex و Jellyfin مع محاكاة التغييرات فورياً.' : 'Standardized Plex & Jellyfin folder hierarchies with 1-click dry run.' }}
                 </p>
                 <a
                     href="/organizer"
-                    class="inline-flex items-center justify-center w-full py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-colors"
+                    class="inline-flex items-center justify-center w-full py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-colors"
                 >
                     {{ t('organizer.title') }}
                 </a>

@@ -9,9 +9,9 @@ class ExampleTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_home_redirects_to_movies(): void
+    public function test_home_renders_dashboard_successfully(): void
     {
         $response = $this->get('/');
-        $response->assertRedirect(route('movies.index'));
+        $response->assertStatus(200);
     }
 }

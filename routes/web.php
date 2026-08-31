@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DiskOrganizerController;
 use App\Http\Controllers\DownloadManagerController;
 use App\Http\Controllers\MediaController;
@@ -8,16 +9,10 @@ use App\Http\Controllers\SeriesController;
 use App\Http\Controllers\StreamController;
 use App\Http\Controllers\SubtitleController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
-// Home & Dashboard redirect to Movies
-Route::get('/', function () {
-    return redirect()->route('movies.index');
-})->name('home');
-
-Route::get('/dashboard', function () {
-    return redirect()->route('movies.index');
-})->name('dashboard');
+// Cinema Dashboard & Overview Hub
+Route::get('/', [DashboardController::class, 'index'])->name('home');
+Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
 // Virtual Movies Hub
 Route::get('/movies', [MediaController::class, 'index'])->name('movies.index');
