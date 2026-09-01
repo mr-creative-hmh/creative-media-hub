@@ -1,10 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
-title Creative Media Hub - Portable Server
+title Creative Media Hub
 cd /d "%~dp0"
 
 echo ===================================================
-echo           CREATIVE MEDIA HUB - PORTABLE
+echo             CREATIVE MEDIA HUB
 echo ===================================================
 echo.
 
@@ -46,7 +46,14 @@ set "PORT=8088"
 set "HOST=127.0.0.1"
 set "URL=http://%HOST%:%PORT%"
 
-echo [*] Starting Creative Media Hub on %URL% ...
+:: Check if Electron is installed for native desktop experience
+if exist "node_modules\electron\dist\electron.exe" (
+    echo [*] Starting Creative Media Hub in Native Desktop Window...
+    start "" "node_modules\electron\dist\electron.exe" "%~dp0desktop\main.cjs"
+    exit /b 0
+)
+
+echo [*] Starting Creative Media Hub Web Server on %URL% ...
 echo [*] Press Ctrl+C or close this window to stop the server.
 echo.
 

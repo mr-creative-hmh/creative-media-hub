@@ -8,7 +8,10 @@
         "dev": "vp dev",
         "check": "vp check",
         "check:fix": "vp check --fix",
-        "types:check": "vue-tsc --noEmit"
+        "types:check": "vue-tsc --noEmit",
+        "desktop:dev": "electron desktop/main.cjs",
+        "desktop:start": "electron desktop/main.cjs",
+        "desktop:build": "electron-builder --win"
     },
     "dependencies": {
         "@inertiajs/vite": "^3.0.0",
@@ -37,7 +40,9 @@
         "typescript": "^5.2.2",
         "vite": "^8.0.0",
         "vite-plus": "0.3.0",
-        "vue-tsc": "^2.2.4"
+        "vue-tsc": "^2.2.4",
+        "electron": "^34.0.0",
+        "electron-builder": "^25.1.8"
     },
     "optionalDependencies": {
         "@laravel/multiplex": "^0.4.1",
@@ -47,5 +52,24 @@
         "@tailwindcss/oxide-win32-x64-msvc": "^4.0.1",
         "lightningcss-linux-x64-gnu": "^1.29.1",
         "lightningcss-win32-x64-msvc": "^1.29.1"
+    },
+    "main": "desktop/main.cjs",
+    "build": {
+        "appId": "com.creativemediahub.app",
+        "productName": "Creative Media Hub",
+        "directories": {
+            "output": "dist"
+        },
+        "win": {
+            "target": [
+                "nsis",
+                "portable"
+            ],
+            "icon": "public/favicon.ico"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true
+        }
     }
 }

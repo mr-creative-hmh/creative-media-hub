@@ -4,13 +4,14 @@
 
 ![Creative Media Hub Banner](https://raw.githubusercontent.com/mr-creative-hmh/creative-media-streaming-library/main/public/favicon.svg)
 
-### **Next-Generation Personal Streaming Server, Library Organizer & Cinema Player**
-*Engineered with Laravel 12, Inertia.js, Vue 3, Tailwind CSS, SQLite, FFmpeg & Video.js*
+### **Next-Generation Personal Streaming Server, Desktop App & Library Organizer**
+*Engineered with Laravel 12, Inertia.js, Vue 3, Electron Desktop, Tailwind CSS, SQLite, FFmpeg & Video.js*
 
 [![PHP 8.2+](https://img.shields.io/badge/PHP-8.2%2B-777BB4?style=flat&logo=php&logoColor=white)](https://php.net)
 [![Laravel 12](https://img.shields.io/badge/Laravel-12.x-FF2D20?style=flat&logo=laravel&logoColor=white)](https://laravel.com)
 [![Vue 3](https://img.shields.io/badge/Vue.js-3.x-4FC08D?style=flat&logo=vue.js&logoColor=white)](https://vuejs.org)
 [![Inertia.js](https://img.shields.io/badge/Inertia.js-2.x-9553E9?style=flat&logo=inertia&logoColor=white)](https://inertiajs.com)
+[![Electron](https://img.shields.io/badge/Electron-Windows_Desktop-47848F?style=flat&logo=electron&logoColor=white)](https://electronjs.org)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.x-06B6D4?style=flat&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
 [![SQLite](https://img.shields.io/badge/SQLite-3.x-003B57?style=flat&logo=sqlite&logoColor=white)](https://sqlite.org)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-Supported-007808?style=flat&logo=ffmpeg&logoColor=white)](https://ffmpeg.org)
@@ -22,14 +23,57 @@
 
 ## 🌟 Overview
 
-**Creative Media Hub** is a self-hosted media streaming platform, physical library organizer, and metadata manager. It turns any local movie/series collection into a streaming experience with full Arabic and English metadata, real-time remuxing, embedded and external subtitle sync, and portable drive support.
+**Creative Media Hub** is a self-hosted personal media streaming platform, native Windows desktop application, physical library organizer, and metadata manager. It turns your local movie and series collection into a cinema experience with full Arabic and English metadata, real-time FFmpeg remuxing, embedded/external subtitle synchronization, and portable drive support.
+
+---
+
+## 🖥️ Native Windows Desktop App & Portable Mode
+
+Creative Media Hub can run as a **Native Windows Desktop App (`.exe`)** or directly from an **External Hard Drive (USB / HDD / SSD)** with zero installation.
+
+### 1. Launching as a Windows Desktop App
+```bash
+# Run in native Electron desktop window (with live hot-reload)
+npm run desktop:dev
+
+# Build standalone Windows Setup Installer & Portable .exe
+npm run desktop:build
+```
+The output executables (`Creative Media Hub Setup.exe` and portable `Creative Media Hub.exe`) will be generated inside the `dist/` directory!
+
+---
+
+### 2. Running Portably from an External Hard Drive
+You can place the entire folder on an external hard drive and run it on any Windows PC without installing PHP or Node.js on the host machine:
+
+```
+E:\CreativeMediaHub├── Start-CreativeMediaHub.bat       <-- Double click to start & launch app
+├── Stop-CreativeMediaHub.bat        <-- Stop background server
+├── Start-CreativeMediaHub.ps1       <-- PowerShell launcher
+├── .env                             <-- Configured for SQLite
+├── database/
+│   └── database.sqlite              <-- Database travels with your drive!
+├── public/                          <-- Pre-compiled static assets
+├── app/                             <-- Application logic
+├── vendor/                          <-- Composer dependencies
+└── php/                             <-- (Optional) Portable PHP 8.2+ folder
+    └── php.exe
+```
+
+1. **Copy the Folder**: Copy the project to your external hard drive (e.g. `E:\CreativeMediaHub\`).
+2. **Add Portable PHP (Optional - Zero-Install for Any PC)**:
+   - Download the **PHP 8.2 or 8.3 Non-Thread Safe (x64) Zip** from [windows.php.net](https://windows.php.net/download/).
+   - Extract it into a `php` folder in the project (`E:\CreativeMediaHub\php\php.exe`).
+   - In `php\php.ini`, ensure `pdo_sqlite`, `sqlite3`, `curl`, `mbstring`, `fileinfo`, `gd`, and `openssl` extensions are enabled.
+3. **Double Click `Start-CreativeMediaHub.bat`**:
+   - Automatically detects PHP, connects the SQLite database, and opens the application!
 
 ---
 
 ## ✨ Key Features
 
 ### 🎥 1. Cinema Player Engine
-- **Direct & Remux Streaming Modes**: Plays MP4, WebM, MKV, AVI, WMV, TS, and MOV files. Non-browser-native formats (AVI, WMV, TS) are remuxed in real time via FFmpeg into streamable fragmented MP4 pipelines.
+- **Direct & Remux Streaming**: Plays MP4, WebM, MKV, AVI, WMV, TS, and MOV files. Non-browser-native containers (AVI, WMV, TS) are remuxed in real time via FFmpeg into streamable fragmented MP4 pipelines.
 - **Real-Time Buffer Bar**: YouTube-style dual-layer progress bar displaying server cache progress and client download buffer in real-time.
 - **Smart Subtitle Engine**:
   - Auto-detection of external `.srt`, `.vtt`, `.ass`, `.ssa`, and `.sub` files.
@@ -65,41 +109,6 @@
 
 ---
 
-## 🚀 Running as a Windows Portable App (External Hard Drive)
-
-You can run **Creative Media Hub** directly from an external hard drive (USB HDD / SSD) on any Windows computer **without installing PHP, Node.js, or Composer on the host machine!**
-
-### Portable Folder Structure
-Place the project on your external drive (e.g., `E:\CreativeMediaHub\`):
-```
-E:\CreativeMediaHub├── Start-CreativeMediaHub.bat       <-- Double click to start & open browser
-├── Stop-CreativeMediaHub.bat        <-- Stop background server
-├── Start-CreativeMediaHub.ps1       <-- PowerShell launcher
-├── .env                             <-- Configured for SQLite
-├── database/
-│   └── database.sqlite              <-- Database travels with your drive!
-├── public/                          <-- Pre-built static assets (Vite)
-├── app/                             <-- Application logic
-├── vendor/                          <-- Composer dependencies
-└── php/                             <-- (Optional) Portable PHP 8.2+ folder
-    └── php.exe
-```
-
-### Steps to Run Portably:
-1. **Build Assets Once**: Run `npm run build` on your development PC before copying to the external drive.
-2. **Copy to External Drive**: Copy the entire project folder to your external drive.
-3. *(Optional)* **Add Portable PHP**: If the target computer does not have PHP installed:
-   - Download the **PHP 8.2 or 8.3 Non-Thread Safe (x64) Zip** from [windows.php.net](https://windows.php.net/download/).
-   - Extract it into a `php` folder inside the project (so `E:\CreativeMediaHub\php\php.exe` exists).
-   - In `php\php.ini`, ensure `extension=pdo_sqlite`, `extension=sqlite3`, `extension=curl`, `extension=mbstring`, `extension=fileinfo`, and `extension=openssl` are enabled.
-4. **Launch**:
-   - Double-click **`Start-CreativeMediaHub.bat`**.
-   - It will detect the portable PHP, configure the local SQLite database, start the server at `http://127.0.0.1:8088`, and automatically open your default browser!
-5. **Stop**:
-   - Close the terminal window or run **`Stop-CreativeMediaHub.bat`**.
-
----
-
 ## 💻 Standard Installation & Setup
 
 ### Prerequisites
@@ -110,37 +119,50 @@ E:\CreativeMediaHub├── Start-CreativeMediaHub.bat       <-- Double click t
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/mr-creative-hmh/creative-media-streaming-library.git creative-media-hub
+git clone https://github.com/mr-creative-hmh/creative-media-hub.git creative-media-hub
 cd creative-media-hub
 ```
 
-### 2. Install PHP & JavaScript Dependencies
+### 2. Install Dependencies
 ```bash
 composer install --optimize-autoloader
 npm install
 ```
 
-### 3. Environment Configuration
+### 3. Environment & Database Setup
 ```bash
 cp .env.example .env
 php artisan key:generate
-```
-
-### 4. Database Setup (SQLite)
-```bash
 touch database/database.sqlite
 php artisan migrate
 ```
 
-### 5. Build Assets & Start Development Server
+### 4. Build Assets & Start
 ```bash
 # Build frontend assets
 npm run build
 
-# Start the Laravel application
+# Start web development server
 php artisan serve
 ```
-Open **`http://localhost:8000`** in your browser.
+
+---
+
+## 🏷️ How to Rename GitHub Repository & Local Folder
+
+### 1. Rename GitHub Repository:
+1. Open your repository on GitHub: `https://github.com/mr-creative-hmh/creative-media-streaming-library/settings`
+2. In the **Repository name** input, enter `creative-media-hub` and click **Rename**.
+3. In your local terminal, update your git remote URL:
+   ```bash
+   git remote set-url origin https://github.com/mr-creative-hmh/creative-media-hub.git
+   ```
+
+### 2. Rename Local Folder in Laravel Herd:
+1. Close any running IDE or terminal windows.
+2. Rename the directory:
+   `C:\Users\hasan\Herd\creative-media-streaming-library` $	o$ `C:\Users\hasan\Herd\creative-media-hub`
+3. Laravel Herd will immediately serve it under `http://creative-media-hub.test`!
 
 ---
 
@@ -160,21 +182,9 @@ Open **`http://localhost:8000`** in your browser.
 
 ---
 
-## 🛠️ Tech Stack & Architecture
-
-- **Backend**: [Laravel 12](https://laravel.com) with Artisan CLI, Cache API, and Eloquent ORM.
-- **Frontend**: [Inertia.js](https://inertiajs.com) + [Vue 3](https://vuejs.org) (Composition API, `<script setup>`, TypeScript).
-- **Styling**: [Tailwind CSS 4](https://tailwindcss.com) with dark cinema theme and custom typography.
-- **Player**: HTML5 Video API + [Video.js](https://videojs.com) with custom HUD and stream chunking.
-- **Database**: [SQLite](https://sqlite.org) with write-ahead logging (WAL) for concurrency.
-- **Transcoding & Remuxing**: [FFmpeg](https://ffmpeg.org) / `ffprobe` for stream analysis, on-the-fly MP4 remuxing, and subtitle extraction.
-
----
-
 ## 🧪 Automated Testing
 
-To run the complete automated test suite (61 tests, 428 assertions):
-
+To run the test suite:
 ```bash
 php artisan test
 ```
