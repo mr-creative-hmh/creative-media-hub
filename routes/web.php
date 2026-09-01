@@ -103,6 +103,8 @@ Route::get('/api/stream/cache-status', [StreamController::class, 'getCacheStatus
 // Server-Side Remux Streaming Routes (Instant on-the-fly AAC remuxing for unsupported formats)
 Route::get('/stream/remux/movie/{mediaItem}', [StreamController::class, 'streamRemuxMovie'])->name('stream.remux.movie');
 Route::get('/stream/remux/episode/{episode}', [StreamController::class, 'streamRemuxEpisode'])->name('stream.remux.episode');
+Route::get('/stream/remux/movie/{mediaItem}', [StreamController::class, 'streamRemuxMovie'])->name('stream.movie.remux');
+Route::get('/stream/remux/episode/{episode}', [StreamController::class, 'streamRemuxEpisode'])->name('stream.episode.remux');
 
 // Storage & Codec Analytics
 Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics.index');

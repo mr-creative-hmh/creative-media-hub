@@ -121,7 +121,7 @@ class CollectionController extends Controller
                     'genres' => $m->genres,
                     'subtitles_count' => $m->subtitles->count(),
                     'stream_url' => route('stream.movie', $m->id),
-                    'remux_url' => route('stream.movie.remux', $m->id),
+                    'remux_url' => route('stream.remux.movie', $m->id),
                 ];
             });
 
