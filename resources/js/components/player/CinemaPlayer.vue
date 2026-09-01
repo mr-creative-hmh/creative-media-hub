@@ -901,21 +901,21 @@ onBeforeUnmount(() => {
             class="w-full h-full object-contain cursor-pointer"
         ></video>
 
-        <!-- Subtitle Overlay (Dynamic WebVTT Rendering with Custom Arabic Typography) -->
+        <!-- Subtitle Overlay (Dynamic WebVTT Rendering with Crystal-Clear Arabic/English Typography) -->
         <div
             v-if="selectedSubtitleId !== 'off' && activeCueText"
-            class="absolute inset-x-0 z-30 flex items-center justify-center px-6 pointer-events-none transition-all duration-300 ease-out"
-            style="bottom: 12%;"
+            class="absolute inset-x-0 z-30 flex items-center justify-center px-4 sm:px-8 pointer-events-none transition-all duration-200 ease-out"
+            :style="{ bottom: isControlsVisible ? '13%' : '5.5%' }"
         >
             <div
-                class="subtitle-pill px-4 py-1.5 sm:px-6 sm:py-2.5 rounded-xl bg-black/80 border border-white/10 text-white text-center font-bold tracking-wide shadow-2xl backdrop-blur-sm transition-all duration-150 max-w-3xl pointer-events-none"
+                class="subtitle-pill px-4 py-1.5 sm:px-5 sm:py-2 rounded-lg bg-black/75 text-white text-center font-bold tracking-wide shadow-2xl backdrop-blur-xs transition-all duration-100 max-w-4xl pointer-events-none border border-white/5"
                 :class="{
-                    'text-base sm:text-lg': subtitleFontSize === 'sm',
-                    'text-lg sm:text-2xl': subtitleFontSize === 'md',
-                    'text-xl sm:text-3xl': subtitleFontSize === 'lg',
-                    'text-2xl sm:text-4xl': subtitleFontSize === 'xl',
+                    'text-sm sm:text-base': subtitleFontSize === 'sm',
+                    'text-base sm:text-lg': subtitleFontSize === 'md',
+                    'text-lg sm:text-2xl': subtitleFontSize === 'lg',
+                    'text-xl sm:text-3xl': subtitleFontSize === 'xl',
                 }"
-                style="text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0,0,0,0.8); line-height: 1.45;"
+                style="font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans Arabic', 'Cairo', sans-serif; text-shadow: 0 2px 4px #000, 0 0 2px #000, 1px 1px 2px #000; line-height: 1.4;"
                 v-html="activeCueText"
             ></div>
         </div>

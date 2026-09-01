@@ -231,13 +231,15 @@ class StreamController extends Controller
             return response()->json(['duration_seconds' => 0, 'runtime_minutes' => 0]);
         }
 
-        if ($model->runtime_minutes && $model->runtime_minutes > 0) {
+        // Return cached exact duration from database if present
+        if (!empty($model->duration_seconds) && $model->duration_seconds > 0) {
             return response()->json([
-                'duration_seconds' => $model->runtime_minutes * 60,
-                'runtime_minutes' => $model->runtime_minutes,
+                'duration_seconds' => (int) $model->duration_seconds,
+                'runtime_minutes' => max(1, (int) round($model->duration_seconds / 60)),
             ]);
         }
 
+        // Directly probe the ORIGINAL video file on disk for exact seconds
         $ffprobe = FfmpegLocatorService::getFfprobePath();
         if ($ffprobe) {
             $escaped = escapeshellarg($model->file_path);
@@ -247,17 +249,26 @@ class StreamController extends Controller
                 $data = @json_decode($out, true);
                 if (!empty($data['format']['duration']) && is_numeric($data['format']['duration'])) {
                     $secs = (int) round((float) $data['format']['duration']);
-                    $mins = max(1, (int) round($secs / 60));
-                    $model->update(['runtime_minutes' => $mins]);
-                    return response()->json([
-                        'duration_seconds' => $secs,
-                        'runtime_minutes' => $mins,
-                    ]);
+                    if ($secs > 0) {
+                        $mins = max(1, (int) round($secs / 60));
+                        $model->duration_seconds = $secs;
+                        $model->runtime_minutes = $mins;
+                        $model->save();
+
+                        return response()->json([
+                            'duration_seconds' => $secs,
+                            'runtime_minutes' => $mins,
+                        ]);
+                    }
                 }
             }
         }
 
-        return response()->json(['duration_seconds' => 1320, 'runtime_minutes' => 22]);
+        $fallbackMins = $model->runtime_minutes ?: 45;
+        return response()->json([
+            'duration_seconds' => $fallbackMins * 60,
+            'runtime_minutes' => $fallbackMins,
+        ]);
     }
 
     /**
@@ -345,15 +356,15 @@ class StreamController extends Controller
 
     public function streamRemuxMovie(MediaItem $mediaItem, Request $request)
     {
-        return $this->streamRemuxFile($mediaItem->file_path, $request, $mediaItem->video_codec);
+        return $this->streamRemuxFile($mediaItem->file_path, $request, $mediaItem->video_codec, 'movie', $mediaItem->id);
     }
 
     public function streamRemuxEpisode(Episode $episode, Request $request)
     {
-        return $this->streamRemuxFile($episode->file_path, $request, $episode->video_codec);
+        return $this->streamRemuxFile($episode->file_path, $request, $episode->video_codec, 'episode', $episode->id);
     }
 
-    protected function streamRemuxFile(string $filePath, Request $request, ?string $videoCodec = null)
+    protected function streamRemuxFile(string $filePath, Request $request, ?string $videoCodec = null, string $modelType = 'media', int $modelId = 0)
     {
         if (!file_exists($filePath)) {
             abort(404, 'Media file not found');
@@ -387,6 +398,56 @@ class StreamController extends Controller
                 '-crf', '22',
                 '-pix_fmt', 'yuv420p'
             ];
+        }
+
+        $cacheDir = storage_path('app/cache/media_streams');
+        if (!is_dir($cacheDir)) {
+            @mkdir($cacheDir, 0777, true);
+        }
+
+        $mtime = file_exists($filePath) ? filemtime($filePath) : 0;
+        $cacheKey = "stream_{$modelType}_{$modelId}_{$mtime}";
+        $cachedFile = "{$cacheDir}/{$cacheKey}.mp4";
+        $lockFile = "{$cacheDir}/{$cacheKey}.lock";
+
+        // If complete cached file is ready on disk and we are starting from 0, stream directly with Byte-Range HTTP 206
+        if (file_exists($cachedFile) && filesize($cachedFile) > 1024 * 1024 && $startSeconds == 0) {
+            return $this->streamFileRange($cachedFile, $request);
+        }
+
+        // Launch background transcode worker to cache the full file to disk so caching continues even when paused
+        if (!file_exists($lockFile) && !file_exists($cachedFile)) {
+            @file_put_contents($lockFile, date('Y-m-d H:i:s'));
+            $bgCmd = array_merge(
+                [
+                    escapeshellarg($ffmpegPath),
+                    '-nostdin',
+                    '-hide_banner',
+                    '-loglevel', 'error',
+                    '-y',
+                    '-i', escapeshellarg($filePath),
+                    '-map', '0:v:0',
+                    '-map', '0:a:0?',
+                ],
+                $videoArgs,
+                [
+                    '-c:a', 'aac',
+                    '-b:a', '192k',
+                    '-ac', '2',
+                    '-sn',
+                    '-movflags', '+faststart',
+                    escapeshellarg($cachedFile . '.part')
+                ]
+            );
+
+            $bgCmdStr = implode(' ', $bgCmd);
+            if ($isWin) {
+                $finalBgCmd = 'cmd /c "' . $bgCmdStr . ' && move /Y "' . $cachedFile . '.part" "' . $cachedFile . '" && del /F /Q "' . $lockFile . '"' . '"';
+                @pclose(popen("start /B " . $finalBgCmd, "r"));
+            } else {
+                $finalBgCmd = "({$bgCmdStr} && mv '{$cachedFile}.part' '{$cachedFile}' && rm -f '{$lockFile}') > /dev/null 2>&1 &";
+                @exec($finalBgCmd);
+            }
         }
 
         $cmd = array_merge(
