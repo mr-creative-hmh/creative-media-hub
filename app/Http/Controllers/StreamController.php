@@ -183,17 +183,24 @@ class StreamController extends Controller
             if ($item instanceof Episode) {
                 $item->loadMissing(['series', 'season', 'subtitles']);
                 $series = $item->series ?? ($item->season->series ?? null);
-                $seriesTitle = $series ? ($series->title_ar ?: $series->title) : 'Series';
-                $epTitle = $item->title_ar ?: $item->title;
+                $sNameEn = $series ? $series->title : 'Series';
+                $sNameAr = $series ? ($series->title_ar ?: $series->title) : 'مسلسل';
                 $sNum = $item->season_number ?? ($item->season->season_number ?? 1);
-                $eNum = $item->episode_number;
+                $eNum = $item->episode_number ?? 1;
                 $seriesSlug = $series ? ($series->slug ?: "series-{$series->id}") : "series-{$item->series_id}";
 
                 return [
                     'id' => $item->id,
                     'watchable_id' => $item->id,
                     'watchable_type' => 'episode',
-                    'title' => "{$seriesTitle} - S" . str_pad($sNum, 2, '0', STR_PAD_LEFT) . "E" . str_pad($eNum, 2, '0', STR_PAD_LEFT) . " - {$epTitle}",
+                    'series' => $series,
+                    'series_id' => $series?->id ?? $item->series_id,
+                    'series_title' => $sNameEn,
+                    'series_title_ar' => $sNameAr,
+                    'season_number' => $sNum,
+                    'episode_number' => $eNum,
+                    'title' => "{$sNameEn} - Season {$sNum} - Episode {$eNum}",
+                    'title_ar' => "{$sNameAr} - الموسم {$sNum} - الحلقة {$eNum}",
                     'type' => 'episode',
                     'series_slug' => $seriesSlug,
                     'slug_url' => route('series.episode.show', [$seriesSlug, $sNum, $eNum]),
@@ -221,7 +228,45 @@ class StreamController extends Controller
         ]);
     }
 
-        public function stopStream(Request $request)
+            public function getCacheStatus(Request $request)
+    {
+        $type = $request->input('type', 'movie');
+        $id = (int) $request->input('id');
+
+        $model = $type === 'episode' ? Episode::find($id) : MediaItem::find($id);
+        if (!$model || !$model->file_path || !file_exists($model->file_path)) {
+            return response()->json(['is_cached' => false, 'cached_percent' => 0]);
+        }
+
+        $mtime = filemtime($model->file_path);
+        $cacheDir = storage_path('app/cache/media_streams');
+        $cacheKey = "stream_{$type}_{$id}_{$mtime}";
+        $cachedFile = "{$cacheDir}/{$cacheKey}.mp4";
+        $partFile = "{$cacheDir}/{$cacheKey}.mp4.part";
+
+        if (file_exists($cachedFile)) {
+            return response()->json([
+                'is_cached' => true,
+                'cached_percent' => 100,
+                'file_size' => filesize($cachedFile),
+            ]);
+        }
+
+        if (file_exists($partFile)) {
+            $origSize = filesize($model->file_path);
+            $partSize = filesize($partFile);
+            $pct = $origSize > 0 ? min(99, round(($partSize / $origSize) * 100)) : 0;
+            return response()->json([
+                'is_cached' => false,
+                'cached_percent' => $pct,
+                'part_size' => $partSize,
+            ]);
+        }
+
+        return response()->json(['is_cached' => false, 'cached_percent' => 0]);
+    }
+
+    public function stopStream(Request $request)
     {
         $type = $request->input('type', 'movie');
         $id = (int) $request->input('id');

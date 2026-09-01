@@ -59,6 +59,7 @@ const closePlayer = () => {
         <CinemaPlayer
             v-if="activePlayerItem"
             :item="activePlayerItem"
+            :initial-progress="activePlayerItem.progress_seconds || activePlayerItem.initial_progress || 0"
             @close="closePlayer"
         />
 

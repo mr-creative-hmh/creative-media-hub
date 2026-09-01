@@ -61,7 +61,10 @@ const playerContainerRef = ref<HTMLDivElement | null>(null);
 const isPlaying = ref(false);
 const isMuted = ref(false);
 const volume = ref(1.0);
-const currentTime = ref(0);
+
+// Initialize initial progress from prop, item, or localStorage
+const initialSec = Number(props.initialProgress) || Number(props.item?.progress_seconds) || Number(props.item?.initial_progress) || 0;
+const currentTime = ref(initialSec > 0 ? initialSec : 0);
 
 // Initialize duration from original file metadata immediately
 const initialDuration = Number(props.item?.duration_seconds) || (Number(props.item?.runtime_minutes) ? Number(props.item.runtime_minutes) * 60 : 0);
@@ -72,6 +75,7 @@ const bufferedPercent = ref(0);
 const isFullscreen = ref(false);
 const isControlsVisible = ref(true);
 const isBuffering = ref(false);
+const hasAppliedInitialSeek = ref(false);
 
 // Active Modal/Drawer States
 const showEqualizer = ref(false);
@@ -116,6 +120,7 @@ let isAudioPipelineInitialized = false;
 let controlsTimeout: any = null;
 let progressSaveInterval: any = null;
 let bufferTrackInterval: any = null;
+let serverCachePollInterval: any = null;
 
 const isEpisode = computed(() => {
     return props.item?.type === 'episode' 
@@ -137,7 +142,7 @@ const checkNeedsRemux = (item: any) => {
 };
 
 const isRemuxStream = ref(checkNeedsRemux(props.item));
-const remuxStartOffset = ref(props.initialProgress ? Math.floor(props.initialProgress) : 0);
+const remuxStartOffset = ref(isRemuxStream.value && initialSec > 0 ? Math.floor(initialSec) : 0);
 
 // Stable Stream URL: Direct Stream vs Server-Side Remux
 const streamUrl = computed(() => {
@@ -219,16 +224,21 @@ const displayYear = computed(() => {
     return props.item?.release_year || props.item?.year || (props.item?.series?.release_year ?? '');
 });
 
-// Clean Header Title (Arabic in Arabic mode only, English in English mode only. No generic bracket titles like (Episode 5))
+// Clean Header Title (Strictly respect locale: Arabic in Arabic mode only, English in English mode only. Format: Series - Season X - Episode Y)
 const playerHeaderTitle = computed(() => {
     if (isEpisode.value) {
-        let cleanSeriesName = '';
+        let sName = '';
         if (isRTL.value) {
-            cleanSeriesName = props.item?.series?.title_ar || props.item?.title_ar || props.item?.series?.title || props.item?.title || 'مسلسل';
+            sName = props.item?.series?.title_ar || props.item?.series_title_ar || props.item?.title_ar || props.item?.series?.title || props.item?.series_title || props.item?.title || 'مسلسل';
         } else {
-            cleanSeriesName = props.item?.series?.title || props.item?.title || 'Series';
+            sName = props.item?.series?.title || props.item?.series_title || props.item?.title || 'Series';
         }
-        cleanSeriesName = cleanSeriesName.replace(/\s*-\s*S\d+E\d+\s*-\s*Episode\s*\d+/gi, '').replace(/\s*-\s*S\d+E\d+/gi, '').trim();
+        
+        // Clean out raw codes or suffixes
+        sName = sName.replace(/\s*-\s*S\d+E\d+\s*-\s*Episode\s*\d+/gi, '')
+                     .replace(/\s*-\s*S\d+E\d+/gi, '')
+                     .replace(/\s*-\s*(?:Season|الموسم)\s*\d+\s*-\s*(?:Episode|الحلقة)\s*\d+/gi, '')
+                     .trim();
 
         const s = props.item?.season_number ?? (props.item?.season?.season_number ?? 1);
         const e = props.item?.episode_number ?? 1;
@@ -236,26 +246,13 @@ const playerHeaderTitle = computed(() => {
         const seasonLabel = isRTL.value ? `الموسم ${s}` : `Season ${s}`;
         const episodeLabel = isRTL.value ? `الحلقة ${e}` : `Episode ${e}`;
 
-        let formatted = `${cleanSeriesName} - ${seasonLabel} - ${episodeLabel}`;
-        
-        const rawEpTitle = (isRTL.value && props.item?.title_ar) ? props.item.title_ar : (props.item?.title || '');
-        const isGeneric = !rawEpTitle 
-            || !!rawEpTitle.match(/^(?:Episode|حلقة|الحلقة)\s*\d+$/i) 
-            || rawEpTitle === `Episode ${e}`
-            || rawEpTitle === `الحلقة ${e}`
-            || rawEpTitle.includes(`S${s}E${e}`) 
-            || rawEpTitle.includes(`S0${s}E0${e}`);
-            
-        if (!isGeneric) {
-            const cleanEpTitle = rawEpTitle.replace(/^(?:Episode|الحلقة)\s*\d+:\s*/i, '').replace(/^[^-]+-\s*S\d+E\d+\s*-\s*/i, '').trim();
-            if (cleanEpTitle && cleanEpTitle !== cleanSeriesName && !cleanEpTitle.match(/^(?:Episode|الحلقة)\s*\d+$/i)) {
-                formatted += ` (${cleanEpTitle})`;
-            }
-        }
-        return formatted;
+        return `${sName} - ${seasonLabel} - ${episodeLabel}`;
     }
 
-    return (isRTL.value && props.item?.title_ar) ? props.item.title_ar : (props.item?.title || 'Media');
+    if (isRTL.value && props.item?.title_ar) {
+        return props.item.title_ar;
+    }
+    return props.item?.title || 'Media';
 });
 
 // =========================================================================
@@ -370,8 +367,23 @@ const updateBufferProgress = () => {
         const effectiveEnd = (isRemuxStream.value && remuxStartOffset.value > 0)
             ? remuxStartOffset.value + maxBufferedEnd
             : maxBufferedEnd;
-        bufferedPercent.value = Math.min(100, Math.max(0, (effectiveEnd / duration.value) * 100));
+        const calc = Math.min(100, Math.max(0, (effectiveEnd / duration.value) * 100));
+        if (calc > bufferedPercent.value) {
+            bufferedPercent.value = calc;
+        }
     }
+};
+
+// Check server background transcode cache progress
+const checkServerCacheStatus = async () => {
+    try {
+        const type = isEpisode.value ? 'episode' : 'movie';
+        const res = await fetch(`/api/stream/cache-status?type=${type}&id=${props.item.id}`);
+        const data = await res.json();
+        if (data.cached_percent && data.cached_percent > bufferedPercent.value) {
+            bufferedPercent.value = data.cached_percent;
+        }
+    } catch (e) {}
 };
 
 // Fetch Duration & Subtitles
@@ -616,9 +628,12 @@ const onLoadedMetadata = () => {
         duration.value = d;
     }
 
-    const saved = props.initialProgress || 0;
-    if (saved > 0 && saved < duration.value - 10) {
-        executeSeek(saved);
+    // Direct stream seek to saved position once on load
+    if (!hasAppliedInitialSeek.value) {
+        hasAppliedInitialSeek.value = true;
+        if (!isRemuxStream.value && initialSec > 0 && initialSec < duration.value - 5) {
+            videoRef.value.currentTime = initialSec;
+        }
     }
 
     videoRef.value.play().then(() => {
@@ -687,7 +702,7 @@ const formatTime = (seconds: number) => {
 };
 
 const savePlaybackProgress = async () => {
-    if (!currentTime.value || currentTime.value <= 5) return;
+    if (!currentTime.value || currentTime.value <= 3) return;
     const dur = Math.floor(duration.value);
     const current = Math.floor(currentTime.value);
 
@@ -796,29 +811,31 @@ onMounted(() => {
     fetchSubtitles();
     fetchMediaDuration();
 
-    if (!props.initialProgress) {
-        const localSaved = Number(localStorage.getItem(`progress_${isEpisode.value ? 'episode' : 'movie'}_${props.item.id}`)) || 0;
-        if (localSaved > 0) {
-            currentTime.value = localSaved;
-        }
-    }
-
     progressSaveInterval = setInterval(() => {
         if (isPlaying.value) {
             savePlaybackProgress();
         }
-    }, 15000);
+    }, 12000);
 
     // Track YouTube-Style Buffer Line continuously (even when paused)
     bufferTrackInterval = setInterval(() => {
         updateBufferProgress();
-    }, 600);
+    }, 400);
+
+    // Poll server background transcode cache status in Remux mode
+    if (isRemuxStream.value) {
+        checkServerCacheStatus();
+        serverCachePollInterval = setInterval(() => {
+            checkServerCacheStatus();
+        }, 2000);
+    }
 });
 
 onBeforeUnmount(() => {
     window.removeEventListener('keydown', onKeyDown);
     clearInterval(progressSaveInterval);
     clearInterval(bufferTrackInterval);
+    clearInterval(serverCachePollInterval);
     clearTimeout(controlsTimeout);
     clearTimeout(toastTimeout);
     savePlaybackProgress();
@@ -1006,8 +1023,8 @@ onBeforeUnmount(() => {
                         <div class="absolute inset-x-0 h-2 group-hover/track:h-3 bg-white/20 rounded-full overflow-hidden transition-all pointer-events-none shadow-inner">
                             <!-- High-Contrast Light Gray YouTube-Style Buffered Bar -->
                             <div
-                                class="absolute inset-y-0 left-0 bg-slate-200/50 dark:bg-white/40 rounded-full transition-all duration-300"
-                                :style="{ width: `${Math.max(progressPercent, bufferedPercent)}%` }"
+                                class="absolute inset-y-0 left-0 bg-slate-200/60 dark:bg-white/50 rounded-full transition-all duration-300 shadow-[0_0_8px_rgba(255,255,255,0.4)]"
+                                :style="{ width: `${bufferedPercent}%` }"
                             ></div>
                             <!-- Active Played Gradient Fill -->
                             <div

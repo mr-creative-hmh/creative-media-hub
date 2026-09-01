@@ -89,6 +89,7 @@ Route::post('/api/watch-history/progress', [StreamController::class, 'saveProgre
 Route::get('/api/continue-watching', [StreamController::class, 'getContinueWatching'])->name('api.continue-watching');
 Route::get('/api/media/duration', [StreamController::class, 'getMediaDuration'])->name('api.media.duration');
 Route::post('/api/stream/stop', [StreamController::class, 'stopStream'])->name('api.stream.stop');
+Route::get('/api/stream/cache-status', [StreamController::class, 'getCacheStatus'])->name('api.stream.cache-status');
 
 // Server-Side Remux Streaming Routes (Instant on-the-fly AAC remuxing for unsupported formats)
 Route::get('/stream/remux/movie/{mediaItem}', [StreamController::class, 'streamRemuxMovie'])->name('stream.remux.movie');
