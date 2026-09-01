@@ -67,7 +67,13 @@ export function useScanner() {
 
         let consecutiveErrors = 0;
 
-        while (scanStatus.value.status === 'scanning') {
+        while (scanStatus.value.status === 'scanning' || scanStatus.value.status === 'paused') {
+            if (scanStatus.value.status === 'paused') {
+                // If paused, wait and poll status without terminating worker
+                await new Promise((r) => setTimeout(r, 600));
+                continue;
+            }
+
             try {
                 const res = await fetch('/api/scanner/process-batch', {
                     method: 'POST',
@@ -75,7 +81,7 @@ export function useScanner() {
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
                     },
-                    body: JSON.stringify({ batch_size: 2 }),
+                    body: JSON.stringify({ batch_size: 10 }),
                 });
 
                 if (res.ok) {
@@ -94,7 +100,7 @@ export function useScanner() {
                         await fetchStatus();
                         if (scanStatus.value.status !== 'scanning') break;
                     }
-                    await new Promise((r) => setTimeout(r, 1200));
+                    await new Promise((r) => setTimeout(r, 1000));
                 }
             } catch (e) {
                 consecutiveErrors++;
@@ -102,9 +108,10 @@ export function useScanner() {
                     await fetchStatus();
                     if (scanStatus.value.status !== 'scanning') break;
                 }
-                await new Promise((r) => setTimeout(r, 1200));
+                await new Promise((r) => setTimeout(r, 1000));
             }
-            await new Promise((r) => setTimeout(r, 150));
+
+            await new Promise((r) => setTimeout(r, 100));
         }
 
         isWorkerRunning.value = false;
@@ -192,6 +199,7 @@ export function useScanner() {
 
     const pauseScan = async () => {
         try {
+            scanStatus.value.status = 'paused';
             const res = await fetch('/api/scanner/pause', {
                 method: 'POST',
                 headers: {
@@ -209,6 +217,7 @@ export function useScanner() {
 
     const resumeScan = async () => {
         try {
+            scanStatus.value.status = 'scanning';
             const res = await fetch('/api/scanner/resume', {
                 method: 'POST',
                 headers: {
@@ -227,6 +236,7 @@ export function useScanner() {
 
     const cancelScan = async () => {
         try {
+            scanStatus.value.status = 'cancelled';
             const res = await fetch('/api/scanner/cancel', {
                 method: 'POST',
                 headers: {

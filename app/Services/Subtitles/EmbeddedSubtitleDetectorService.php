@@ -325,10 +325,12 @@ class EmbeddedSubtitleDetectorService
         if (!$raw) return 'und';
 
         // Detect and normalize encoding
-        $encoding = mb_detect_encoding($raw, ['UTF-8', 'Windows-1256', 'Windows-1252', 'ISO-8859-1', 'ASCII'], true);
-        if ($encoding && $encoding !== 'UTF-8') {
-            $raw = mb_convert_encoding($raw, 'UTF-8', $encoding);
-        }
+        try {
+            $encoding = @mb_detect_encoding($raw, ['UTF-8', 'CP1256', 'CP1252', 'ISO-8859-1', 'ASCII'], true);
+            if ($encoding && $encoding !== 'UTF-8') {
+                $raw = @mb_convert_encoding($raw, 'UTF-8', $encoding);
+            }
+        } catch (\Throwable $e) {}
 
         // Clean subtitle headers, timestamps, and formatting markup
         $clean = preg_replace('/\d{2}:\d{2}:\d{2}[,\.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,\.]\d{3}/', ' ', $raw);

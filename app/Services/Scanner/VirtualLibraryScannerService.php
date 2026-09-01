@@ -141,12 +141,12 @@ class VirtualLibraryScannerService
         ];
     }
 
-    public function processBatch(int $batchSize = 2): array
+    public function processBatch(int $batchSize = 10): array
     {
         return $this->processNextBatch($batchSize);
     }
 
-    public function processNextBatch(int $batchSize = 2): array
+    public function processNextBatch(int $batchSize = 10): array
     {
         $jobData = $this->getScanStatus();
 
@@ -179,7 +179,7 @@ class VirtualLibraryScannerService
 
         $batch = array_splice($queue, 0, $batchSize);
 
-        // Process files individually without holding long open transactions during network requests
+        // Process files with high performance
         foreach ($batch as $file) {
             try {
                 $jobData['current_file'] = $file['filename'];
@@ -204,14 +204,14 @@ class VirtualLibraryScannerService
                 $logs[] = [
                     'time' => now()->format('H:i:s'),
                     'level' => 'success',
-                    'message' => "Indexed: [{$mediaType}] {$title} {$subText}",
+                    'message' => "Indexed: [{$mediaType}] {$title}{$subText}",
                 ];
             } catch (\Throwable $e) {
                 $jobData['processed_files']++;
                 $logs[] = [
                     'time' => now()->format('H:i:s'),
                     'level' => 'error',
-                    'message' => "Failed to index {$file['filename']}: {$e->getMessage()}",
+                    'message' => "Failed to index {$file['filename']}: " . substr($e->getMessage(), 0, 80),
                 ];
             }
         }
@@ -244,8 +244,8 @@ class VirtualLibraryScannerService
             'processed_files' => $jobData['processed_files'],
             'total_files' => $jobData['total_files'],
             'current_file' => $jobData['current_file'],
-            'latest_scanned' => array_slice($scannedItems, -6),
-            'latest_logs' => array_slice($logs, -12),
+            'latest_scanned' => array_slice($scannedItems, -10),
+            'latest_logs' => array_slice($logs, -15),
         ];
     }
 
@@ -286,104 +286,6 @@ class VirtualLibraryScannerService
         Cache::put('virtual_scanner_job_status', $job, now()->addHours(6));
     }
 
-    public function enrichMissingMetadata(int $limit = 50): array
-    {
-        $enrichedCount = 0;
-
-        $movies = MediaItem::whereNull('poster_path')
-            ->orWhereNull('overview_ar')
-            ->orWhereNull('title_ar')
-            ->orWhere('overview', 'like', 'Enjoy watching%')
-            ->take($limit)
-            ->get();
-
-        foreach ($movies as $movie) {
-            try {
-                $meta = $this->metadata->aggregateMovieMetadata($movie->title, $movie->release_year);
-                $poster = $meta['poster_path'] ?? null;
-                if (empty($poster)) {
-                    $poster = $this->webArtwork->searchAndDownloadArtwork($movie->title, $movie->release_year, 'movie');
-                }
-
-                retry(3, function () use ($movie, $meta, $poster) {
-                    $movie->update([
-                        'title_ar' => $meta['title_ar'] ?? $movie->title_ar,
-                        'overview_ar' => $meta['overview_ar'] ?? $movie->overview_ar,
-                        'overview' => $meta['overview'] ?? $movie->overview,
-                        'tmdb_id' => $meta['tmdb_id'] ?? $movie->tmdb_id,
-                        'imdb_id' => $meta['imdb_id'] ?? $movie->imdb_id,
-                        'poster_path' => $poster ?? $movie->poster_path,
-                        'backdrop_path' => $meta['backdrop_path'] ?? $movie->backdrop_path,
-                        'rating' => $meta['rating'] ?? $movie->rating,
-                        'runtime_minutes' => $meta['runtime_minutes'] ?? ($meta['duration_minutes'] ?? $movie->runtime_minutes),
-                    ]);
-
-                    if (!empty($meta['genres'])) {
-                        $genreIds = [];
-                        foreach ($meta['genres'] as $gName) {
-                            $g = \App\Models\Genre::firstOrCreate(
-                                ['slug' => \Illuminate\Support\Str::slug($gName)],
-                                ['name_en' => $gName, 'name_ar' => $gName]
-                            );
-                            $genreIds[] = $g->id;
-                        }
-                        $movie->genres()->sync($genreIds);
-                    }
-                }, 100);
-                $enrichedCount++;
-            } catch (\Throwable $e) {}
-        }
-
-        $seriesList = Series::whereNull('poster_path')
-            ->orWhereNull('overview_ar')
-            ->orWhereNull('title_ar')
-            ->orWhere('overview', 'like', 'Experience the complete series%')
-            ->take($limit)
-            ->get();
-
-        foreach ($seriesList as $series) {
-            try {
-                $meta = $this->metadata->aggregateSeriesMetadata($series->title, $series->release_year);
-                $poster = $meta['poster_path'] ?? null;
-                if (empty($poster)) {
-                    $poster = $this->webArtwork->searchAndDownloadArtwork($series->title, $series->release_year, 'series');
-                }
-
-                retry(3, function () use ($series, $meta, $poster) {
-                    $series->update([
-                        'title_ar' => $meta['title_ar'] ?? $series->title_ar,
-                        'overview_ar' => $meta['overview_ar'] ?? $series->overview_ar,
-                        'overview' => $meta['overview'] ?? $series->overview,
-                        'tmdb_id' => $meta['tmdb_id'] ?? $series->tmdb_id,
-                        'imdb_id' => $meta['imdb_id'] ?? $series->imdb_id,
-                        'poster_path' => $poster ?? $series->poster_path,
-                        'backdrop_path' => $meta['backdrop_path'] ?? $series->backdrop_path,
-                        'rating' => $meta['rating'] ?? $series->rating,
-                    ]);
-
-                    if (!empty($meta['genres'])) {
-                        $genreIds = [];
-                        foreach ($meta['genres'] as $gName) {
-                            $g = \App\Models\Genre::firstOrCreate(
-                                ['slug' => \Illuminate\Support\Str::slug($gName)],
-                                ['name_en' => $gName, 'name_ar' => $gName]
-                            );
-                            $genreIds[] = $g->id;
-                        }
-                        $series->genres()->sync($genreIds);
-                    }
-                }, 100);
-                $enrichedCount++;
-            } catch (\Throwable $e) {}
-        }
-
-        return [
-            'enriched_count' => $enrichedCount,
-            'remaining_movies' => MediaItem::whereNull('overview_ar')->count(),
-            'remaining_series' => Series::whereNull('overview_ar')->count(),
-        ];
-    }
-
     public function processFileItem(array $file): mixed
     {
         $parsed = $file['parsed'] ?? $this->nameParser->parse($file['path']);
@@ -409,23 +311,29 @@ class VirtualLibraryScannerService
             return $existing;
         }
 
-        // Hardware probe for exact resolution (including 576p, 540p, 480p, 360p, 240p) and duration
-        $probed = $this->probeMediaSpecs($file['path']);
-        $resolution = $probed['resolution'] ?? ($parsed['resolution'] ?? '1080p FHD');
-        $videoCodec = $probed['video_codec'] ?? ($parsed['codec'] ?? 'H.264 / AVC');
-        $audioCodec = $probed['audio_codec'] ?? ($parsed['audio'] ?? 'AAC');
+        $resolution = $parsed['resolution'] ?? '1080p FHD';
+        $videoCodec = $parsed['codec'] ?? 'H.264 / AVC';
+        $audioCodec = $parsed['audio'] ?? 'AAC';
+        $runtimeMinutes = 110;
 
-        // 1. Perform Network & Artwork Search outside any database lock
-        $meta = $this->metadata->aggregateMovieMetadata($cleanTitle, $year);
-        $posterUrl = $meta['poster_path'] ?? ($file['local_poster'] ?? null);
-        if (empty($posterUrl)) {
-            $posterUrl = $this->webArtwork->searchAndDownloadArtwork($cleanTitle, $year, 'movie');
-        }
+        $posterUrl = $file['local_poster'] ?? null;
+        $backdropUrl = $file['local_backdrop'] ?? null;
 
-        $backdropUrl = $meta['backdrop_path'] ?? ($file['local_backdrop'] ?? null);
-        $runtimeMinutes = $probed['runtime_minutes'] ?? ($meta['runtime_minutes'] ?? ($meta['duration_minutes'] ?? 115));
+        // Perform rapid metadata search (TMDb / Online) with tight timeout
+        $meta = [];
+        try {
+            $meta = $this->metadata->aggregateMovieMetadata($cleanTitle, $year, 'en', true);
+            if (!empty($meta['poster_path']) && empty($posterUrl)) {
+                $posterUrl = $meta['poster_path'];
+            }
+            if (!empty($meta['backdrop_path']) && empty($backdropUrl)) {
+                $backdropUrl = $meta['backdrop_path'];
+            }
+            if (!empty($meta['runtime_minutes'])) {
+                $runtimeMinutes = $meta['runtime_minutes'];
+            }
+        } catch (\Throwable $e) {}
 
-        // 2. Perform SQLite write with automatic retry for busy lock resistance
         $movie = retry(4, function () use ($cleanTitle, $year, $meta, $file, $posterUrl, $backdropUrl, $resolution, $videoCodec, $audioCodec, $runtimeMinutes) {
             $m = MediaItem::create([
                 'title' => $meta['title'] ?? $cleanTitle,
@@ -434,6 +342,8 @@ class VirtualLibraryScannerService
                 'release_year' => $meta['release_year'] ?? ($meta['year'] ?? $year),
                 'overview' => $meta['overview'] ?? "Enjoy watching {$cleanTitle}.",
                 'overview_ar' => $meta['overview_ar'] ?? null,
+                'tmdb_id' => $meta['tmdb_id'] ?? null,
+                'imdb_id' => $meta['imdb_id'] ?? null,
                 'rating' => $meta['rating'] ?? 7.5,
                 'runtime_minutes' => $runtimeMinutes,
                 'file_path' => $file['path'],
@@ -490,77 +400,74 @@ class VirtualLibraryScannerService
                     'status' => 'Continuing',
                 ]);
             }, 150);
-        }
 
-        if (!$series->poster_path || !$series->overview || !$series->release_year || $series->overview === "Experience the complete series of {$showTitle}.") {
             try {
-                $meta = $this->metadata->aggregateSeriesMetadata($showTitle, $series->release_year ?? $year);
+                $meta = $this->metadata->aggregateSeriesMetadata($showTitle, $year, 'en', true);
                 $posterUrl = $meta['poster_path'] ?? ($file['local_poster'] ?? null);
-                if (empty($posterUrl)) {
-                    $posterUrl = $this->webArtwork->searchAndDownloadArtwork($showTitle, $series->release_year ?? $year, 'series');
-                }
-
                 $backdropUrl = $meta['backdrop_path'] ?? ($file['local_backdrop'] ?? null);
-                $seriesYear = $meta['release_year'] ?? ($meta['year'] ?? ($series->release_year ?? $year));
+                $seriesYear = $meta['release_year'] ?? ($meta['year'] ?? $year);
 
                 retry(3, function () use ($series, $meta, $posterUrl, $backdropUrl, $seriesYear) {
                     $series->update([
-                        'title_ar' => $meta['title_ar'] ?? $series->title_ar,
+                        'title_ar' => $meta['title_ar'] ?? null,
                         'overview' => $meta['overview'] ?? $series->overview,
-                        'overview_ar' => $meta['overview_ar'] ?? $series->overview_ar,
-                        'poster_path' => $posterUrl ?? $series->poster_path,
-                        'backdrop_path' => $backdropUrl ?? $series->backdrop_path,
-                        'rating' => $meta['rating'] ?? $series->rating,
-                        'release_year' => $seriesYear ?? $series->release_year,
+                        'overview_ar' => $meta['overview_ar'] ?? null,
+                        'tmdb_id' => $meta['tmdb_id'] ?? null,
+                        'imdb_id' => $meta['imdb_id'] ?? null,
+                        'poster_path' => $posterUrl,
+                        'backdrop_path' => $backdropUrl,
+                        'release_year' => $seriesYear,
+                        'rating' => $meta['rating'] ?? 8.0,
                     ]);
 
                     if (!empty($meta['genres'])) {
                         $genreIds = [];
                         foreach ($meta['genres'] as $gName) {
-                            $genre = Genre::firstOrCreate(
+                            $g = Genre::firstOrCreate(
                                 ['slug' => Str::slug($gName)],
                                 ['name_en' => $gName, 'name_ar' => $gName]
                             );
-                            $genreIds[] = $genre->id;
+                            $genreIds[] = $g->id;
                         }
                         $series->genres()->sync($genreIds);
                     }
-                }, 150);
+                }, 100);
             } catch (\Throwable $e) {}
         }
 
-        // Hardware probe for exact episode specs (including 576p, 540p, 480p, 360p, 240p)
-        $probed = $this->probeMediaSpecs($file['path']);
-        $resolution = $probed['resolution'] ?? ($parsed['resolution'] ?? '1080p FHD');
-        $videoCodec = $probed['video_codec'] ?? ($parsed['codec'] ?? 'H.264 / AVC');
-        $audioCodec = $probed['audio_codec'] ?? ($parsed['audio'] ?? 'AAC');
-        $runtimeMinutes = $probed['runtime_minutes'] ?? 45;
+        $season = Season::firstOrCreate(
+            ['series_id' => $series->id, 'season_number' => $seasonNum],
+            ['title' => "Season {$seasonNum}"]
+        );
 
-        $season = retry(4, function () use ($series, $seasonNum) {
-            return Season::firstOrCreate(
-                ['series_id' => $series->id, 'season_number' => $seasonNum],
-                ['title' => "Season {$seasonNum}"]
-            );
-        }, 150);
+        $existingEp = Episode::where('file_path', $file['path'])->first();
+        if ($existingEp) {
+            $this->attachAllSubtitles($existingEp, $file);
+            return $existingEp;
+        }
 
-        $episode = retry(4, function () use ($series, $season, $epNum, $epTitle, $seasonNum, $file, $resolution, $videoCodec, $audioCodec, $runtimeMinutes) {
-            return Episode::updateOrCreate(
-                [
-                    'series_id' => $series->id,
-                    'season_id' => $season->id,
-                    'episode_number' => $epNum,
-                ],
-                [
-                    'title' => $epTitle,
-                    'overview' => "Episode {$epNum} of Season {$seasonNum}.",
-                    'file_path' => $file['path'],
-                    'file_size_bytes' => $file['size_bytes'] ?? 0,
-                    'runtime_minutes' => $runtimeMinutes,
-                    'resolution' => $resolution,
-                    'video_codec' => $videoCodec,
-                    'audio_codec' => $audioCodec,
-                ]
-            );
+        $resolution = $parsed['resolution'] ?? '1080p FHD';
+        $videoCodec = $parsed['codec'] ?? 'H.264 / AVC';
+        $audioCodec = $parsed['audio'] ?? 'AAC';
+        $runtimeMinutes = 45;
+
+        $episode = retry(4, function () use ($series, $season, $epNum, $epTitle, $file, $resolution, $videoCodec, $audioCodec, $runtimeMinutes) {
+            $ep = Episode::create([
+                'series_id' => $series->id,
+                'season_id' => $season->id,
+                'episode_number' => $epNum,
+                'title' => $epTitle,
+                'overview' => "Episode {$epNum}",
+                'runtime_minutes' => $runtimeMinutes,
+                'file_path' => $file['path'],
+                'file_size_bytes' => $file['size_bytes'] ?? 0,
+                'resolution' => $resolution,
+                'video_codec' => $videoCodec,
+                'audio_codec' => $audioCodec,
+                'still_path' => null,
+            ]);
+
+                        return $ep;
         }, 150);
 
         $this->attachAllSubtitles($episode, $file);
@@ -568,165 +475,159 @@ class VirtualLibraryScannerService
         return $episode;
     }
 
-    /**
-     * Attach both external subtitle files and embedded container subtitle streams.
-     */
-        public function probeMediaSpecs(string $filePath): array
-    {
-        $specs = [
-            'duration_seconds' => null,
-            'runtime_minutes' => null,
-            'resolution' => null,
-            'video_codec' => null,
-            'audio_codec' => null,
-        ];
-
-        $ffprobe = \App\Services\Media\FfmpegLocatorService::getFfprobePath();
-        if (!$ffprobe || !\Illuminate\Support\Facades\File::exists($filePath)) {
-            return $specs;
-        }
-
-        try {
-            $escaped = escapeshellarg($filePath);
-            $cmd = escapeshellarg($ffprobe) . " -v quiet -print_format json -show_format -show_streams {$escaped}";
-            $output = @shell_exec($cmd);
-            if (!$output) {
-                return $specs;
-            }
-
-            $data = @json_decode($output, true);
-            if (empty($data) || !is_array($data)) {
-                return $specs;
-            }
-
-            // Duration
-            if (!empty($data['format']['duration']) && is_numeric($data['format']['duration'])) {
-                $dur = (float) $data['format']['duration'];
-                $specs['duration_seconds'] = (int) round($dur);
-                $specs['runtime_minutes'] = max(1, (int) round($dur / 60));
-            }
-
-            // Streams
-            if (!empty($data['streams']) && is_array($data['streams'])) {
-                foreach ($data['streams'] as $stream) {
-                    $codecType = strtolower($stream['codec_type'] ?? '');
-                    $codecName = strtolower($stream['codec_name'] ?? '');
-
-                    if ($codecType === 'video' && empty($specs['resolution'])) {
-                        $w = (int) ($stream['width'] ?? 0);
-                        $h = (int) ($stream['height'] ?? 0);
-                        if ($w > 0 && $h > 0) {
-                            $specs['resolution'] = $this->nameParser->calculateResolutionFromDimensions($w, $h);
-                        }
-
-                        $specs['video_codec'] = match ($codecName) {
-                            'hevc', 'h265' => 'HEVC / H.265',
-                            'h264', 'avc' => 'H.264 / AVC',
-                            'av01', 'av1' => 'AV1',
-                            'vp9' => 'VP9',
-                            'mpeg4', 'msmpeg4v3' => 'MPEG-4 / XviD',
-                            default => strtoupper($codecName) ?: 'H.264 / AVC',
-                        };
-                    }
-
-                    if ($codecType === 'audio' && empty($specs['audio_codec'])) {
-                        $specs['audio_codec'] = match ($codecName) {
-                            'eac3', 'ddp' => 'Dolby Digital Plus',
-                            'ac3' => 'Dolby Digital',
-                            'truehd' => 'Dolby TrueHD',
-                            'dts' => 'DTS',
-                            'flac' => 'FLAC',
-                            'aac' => 'AAC',
-                            'mp3' => 'MP3',
-                            'opus' => 'Opus',
-                            'vorbis' => 'Vorbis',
-                            default => strtoupper($codecName) ?: 'AAC',
-                        };
-                    }
-                }
-            }
-        } catch (\Throwable $e) {}
-
-        return $specs;
-    }
-
-    protected function probeDurationSeconds(string $filePath): ?int
-    {
-        $specs = $this->probeMediaSpecs($filePath);
-        return $specs['duration_seconds'];
-    }
-
     protected function attachAllSubtitles(mixed $model, array $file): void
     {
-        $filePath = $file['path'] ?? '';
-        $modelClass = get_class($model);
+        $existingSubPaths = $model->subtitles()->pluck('file_path')->toArray();
+        $isFirst = count($existingSubPaths) === 0;
 
-        // 1. External Subtitle Files (SRT, ASS, VTT, etc.)
+        // 1. External Subtitle Files matching video
         if (!empty($file['subtitles'])) {
             foreach ($file['subtitles'] as $sub) {
-                $lang = $sub['language'] ?? 'und';
-                $langName = match ($lang) {
-                    'ar' => 'Arabic',
-                    'en' => 'English',
-                    'fr' => 'French',
-                    'es' => 'Spanish',
-                    'de' => 'German',
-                    'it' => 'Italian',
-                    'ja' => 'Japanese',
-                    'ko' => 'Korean',
-                    'zh' => 'Chinese',
-                    'ru' => 'Russian',
-                    'pt' => 'Portuguese',
-                    default => strtoupper($lang),
-                };
+                $subPath = $sub['path'] ?? '';
+                if (in_array($subPath, $existingSubPaths, true)) continue;
 
-                retry(3, function () use ($modelClass, $model, $sub, $lang, $langName) {
-                    Subtitle::updateOrCreate(
-                        [
-                            'subtitlable_type' => $modelClass,
-                            'subtitlable_id' => $model->id,
-                            'file_path' => $sub['path'],
-                        ],
-                        [
-                            'language' => $lang,
-                            'language_name' => $langName . (!empty($sub['is_forced']) ? ' (Forced)' : ''),
-                            'format' => strtolower(pathinfo($sub['path'], PATHINFO_EXTENSION)) ?: 'srt',
-                            'is_embedded' => false,
-                            'is_default' => $lang === 'ar' || $lang === 'en',
-                        ]
-                    );
-                }, 150);
+                $lang = $sub['language'] ?? 'und';
+                $langName = $sub['language_name'] ?? 'Unknown';
+
+                if ($lang === 'und') {
+                    $detected = $this->embeddedSubDetector->resolveLanguageFromContext($lang, '', $subPath, 0);
+                    if ($detected !== 'und') {
+                        $lang = $detected;
+                        $langName = $this->embeddedSubDetector->getLanguageName($lang);
+                    }
+                }
+
+                $model->subtitles()->create([
+                    'language' => $lang,
+                    'language_name' => $langName,
+                    'format' => $sub['format'] ?? 'srt',
+                    'file_path' => $subPath,
+                    'is_embedded' => false,
+                    'is_default' => $isFirst,
+                ]);
+
+                $existingSubPaths[] = $subPath;
+                $isFirst = false;
             }
         }
 
-        // 2. Embedded Subtitle Tracks inside the video container
-        if (!empty($filePath) && file_exists($filePath) && filesize($filePath) > 1024) {
-            try {
-                $embeddedTracks = $this->embeddedSubDetector->detectEmbeddedSubtitles($filePath);
-                foreach ($embeddedTracks as $track) {
-                    $streamIdx = $track['stream_index'] ?? 0;
-                    $embeddedVirtualPath = "embedded:{$streamIdx}:{$filePath}";
-                    $langCode = $track['language'] ?? 'und';
-                    $langTitle = ($track['title'] ?: ($track['language_name'] ?? 'Track ' . ($streamIdx + 1))) . ' (Embedded)';
+        // 2. Embedded subtitle tracks from container header
+        try {
+            $embedded = $this->embeddedSubDetector->detectEmbeddedSubtitles($file['path']);
+            foreach ($embedded as $sub) {
+                $subKey = "embedded:{$sub['stream_index']}:{$file['path']}";
+                if (in_array($subKey, $existingSubPaths, true)) continue;
 
-                    retry(3, function () use ($modelClass, $model, $embeddedVirtualPath, $langCode, $langTitle, $track) {
-                        Subtitle::updateOrCreate(
-                            [
-                                'subtitlable_type' => $modelClass,
-                                'subtitlable_id' => $model->id,
-                                'file_path' => $embeddedVirtualPath,
-                            ],
-                            [
-                                'language' => $langCode,
-                                'language_name' => $langTitle,
-                                'format' => $track['codec'] ?? 'srt',
-                                'is_embedded' => true,
-                                'is_default' => (bool) ($track['is_default'] ?? false),
-                            ]
-                        );
-                    }, 150);
+                $model->subtitles()->create([
+                    'language' => $sub['language'] ?? 'und',
+                    'language_name' => $sub['language_name'] ?? 'Embedded Track',
+                    'format' => $sub['codec'] ?? 'subrip',
+                    'file_path' => $subKey,
+                    'is_embedded' => true,
+                    'is_default' => $isFirst,
+                ]);
+
+                $existingSubPaths[] = $subKey;
+                $isFirst = false;
+            }
+        } catch (\Throwable $e) {}
+    }
+
+    public function enrichMissingMetadata(int $limit = 50): array
+    {
+        $enrichedCount = 0;
+
+        $movies = MediaItem::whereNull('poster_path')
+            ->orWhereNull('overview_ar')
+            ->orWhereNull('title_ar')
+            ->orWhere('overview', 'like', 'Enjoy watching%')
+            ->take($limit)
+            ->get();
+
+        foreach ($movies as $movie) {
+            try {
+                $meta = $this->metadata->aggregateMovieMetadata($movie->title, $movie->release_year);
+                $poster = $meta['poster_path'] ?? null;
+                if (empty($poster)) {
+                    $poster = $this->webArtwork->searchAndDownloadArtwork($movie->title, $movie->release_year, 'movie');
                 }
+
+                retry(3, function () use ($movie, $meta, $poster) {
+                    $movie->update([
+                        'title_ar' => $meta['title_ar'] ?? $movie->title_ar,
+                        'overview_ar' => $meta['overview_ar'] ?? $movie->overview_ar,
+                        'overview' => $meta['overview'] ?? $movie->overview,
+                        'tmdb_id' => $meta['tmdb_id'] ?? $movie->tmdb_id,
+                        'imdb_id' => $meta['imdb_id'] ?? $movie->imdb_id,
+                        'poster_path' => $poster ?? $movie->poster_path,
+                        'backdrop_path' => $meta['backdrop_path'] ?? $movie->backdrop_path,
+                        'rating' => $meta['rating'] ?? $movie->rating,
+                        'runtime_minutes' => $meta['runtime_minutes'] ?? $movie->runtime_minutes,
+                    ]);
+
+                    if (!empty($meta['genres'])) {
+                        $genreIds = [];
+                        foreach ($meta['genres'] as $gName) {
+                            $g = Genre::firstOrCreate(
+                                ['slug' => Str::slug($gName)],
+                                ['name_en' => $gName, 'name_ar' => $gName]
+                            );
+                            $genreIds[] = $g->id;
+                        }
+                        $movie->genres()->sync($genreIds);
+                    }
+                }, 100);
+                $enrichedCount++;
             } catch (\Throwable $e) {}
         }
+
+        $seriesList = Series::whereNull('poster_path')
+            ->orWhereNull('overview_ar')
+            ->orWhereNull('title_ar')
+            ->orWhere('overview', 'like', 'Experience the complete series%')
+            ->take($limit)
+            ->get();
+
+        foreach ($seriesList as $series) {
+            try {
+                $meta = $this->metadata->aggregateSeriesMetadata($series->title, $series->release_year);
+                $poster = $meta['poster_path'] ?? null;
+                if (empty($poster)) {
+                    $poster = $this->webArtwork->searchAndDownloadArtwork($series->title, $series->release_year, 'series');
+                }
+
+                retry(3, function () use ($series, $meta, $poster) {
+                    $series->update([
+                        'title_ar' => $meta['title_ar'] ?? $series->title_ar,
+                        'overview_ar' => $meta['overview_ar'] ?? $series->overview_ar,
+                        'overview' => $meta['overview'] ?? $series->overview,
+                        'tmdb_id' => $meta['tmdb_id'] ?? $series->tmdb_id,
+                        'imdb_id' => $meta['imdb_id'] ?? $series->imdb_id,
+                        'poster_path' => $poster ?? $series->poster_path,
+                        'backdrop_path' => $meta['backdrop_path'] ?? $series->backdrop_path,
+                        'rating' => $meta['rating'] ?? $series->rating,
+                    ]);
+
+                    if (!empty($meta['genres'])) {
+                        $genreIds = [];
+                        foreach ($meta['genres'] as $gName) {
+                            $g = Genre::firstOrCreate(
+                                ['slug' => Str::slug($gName)],
+                                ['name_en' => $gName, 'name_ar' => $gName]
+                            );
+                            $genreIds[] = $g->id;
+                        }
+                        $series->genres()->sync($genreIds);
+                    }
+                }, 100);
+                $enrichedCount++;
+            } catch (\Throwable $e) {}
+        }
+
+        return [
+            'enriched_count' => $enrichedCount,
+            'remaining_movies' => MediaItem::whereNull('overview_ar')->count(),
+            'remaining_series' => Series::whereNull('overview_ar')->count(),
+        ];
     }
 }

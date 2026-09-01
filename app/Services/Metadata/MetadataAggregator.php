@@ -32,7 +32,7 @@ class MetadataAggregator
         $this->artwork = $artwork;
     }
 
-    public function aggregateMovieMetadata(string $title, ?int $year = null, string $lang = 'en'): array
+    public function aggregateMovieMetadata(string $title, ?int $year = null, string $lang = 'en', bool $fastScan = false): array
     {
         $default = [
             'title' => $title,
@@ -56,7 +56,7 @@ class MetadataAggregator
         ];
 
         // 1. Search across metadata chain (TMDb, OMDb, AniList, Wikipedia, Local)
-        $searchResults = $this->searchMovie($title, $year, $lang);
+        $searchResults = $this->searchMovie($title, $year, $lang, !$fastScan);
 
         if (!empty($searchResults)) {
             $first = $searchResults[0];
@@ -72,32 +72,35 @@ class MetadataAggregator
                 }
             }
 
-            // Fill missing fields from other providers in the waterfall
-            $this->fillMissingFieldsFromOtherProviders($merged, $title, $year, 'movie');
+            if (!$fastScan) {
+                // Fill missing fields from other providers in the waterfall
+                $this->fillMissingFieldsFromOtherProviders($merged, $title, $year, 'movie');
 
-            // Ensure Arabic metadata via multi-provider waterfall
-            $this->ensureArabicMetadata($merged, 'movie');
+                // Ensure Arabic metadata via multi-provider waterfall
+                $this->ensureArabicMetadata($merged, 'movie');
+
+                // Download & cache poster locally
+                if (!empty($merged['poster_path']) && filter_var($merged['poster_path'], FILTER_VALIDATE_URL)) {
+                    $merged['poster_path'] = $this->artwork->downloadPoster($merged['poster_path']);
+                }
+                if (!empty($merged['backdrop_path']) && filter_var($merged['backdrop_path'], FILTER_VALIDATE_URL)) {
+                    $merged['backdrop_path'] = $this->artwork->downloadBackdrop($merged['backdrop_path']);
+                }
+            }
 
             $merged['year'] = $merged['release_year'] ?? ($merged['year'] ?? $year);
             $merged['release_year'] = $merged['year'];
 
-            // Download & cache poster locally
-            if (!empty($merged['poster_path']) && filter_var($merged['poster_path'], FILTER_VALIDATE_URL)) {
-                $merged['poster_path'] = $this->artwork->downloadPoster($merged['poster_path']);
-            }
-            if (!empty($merged['backdrop_path']) && filter_var($merged['backdrop_path'], FILTER_VALIDATE_URL)) {
-                $merged['backdrop_path'] = $this->artwork->downloadBackdrop($merged['backdrop_path']);
-            }
-
             return $merged;
         }
 
-        // Even for default fallback, generate Arabic translations
-        $this->ensureArabicMetadata($default, 'movie');
+        if (!$fastScan) {
+            $this->ensureArabicMetadata($default, 'movie');
+        }
         return $default;
     }
 
-    public function aggregateSeriesMetadata(string $title, ?int $year = null, string $lang = 'en'): array
+    public function aggregateSeriesMetadata(string $title, ?int $year = null, string $lang = 'en', bool $fastScan = false): array
     {
         $default = [
             'title' => $title,
@@ -121,7 +124,7 @@ class MetadataAggregator
         ];
 
         // 1. Search across metadata chain (TMDb, TVMaze, OMDb, AniList, Wikipedia)
-        $searchResults = $this->searchSeries($title, $year, $lang);
+        $searchResults = $this->searchSeries($title, $year, $lang, !$fastScan);
 
         if (!empty($searchResults)) {
             $first = $searchResults[0];
@@ -137,32 +140,35 @@ class MetadataAggregator
                 }
             }
 
-            // Fill missing fields from other providers in the waterfall
-            $this->fillMissingFieldsFromOtherProviders($merged, $title, $year, 'series');
+            if (!$fastScan) {
+                // Fill missing fields from other providers in the waterfall
+                $this->fillMissingFieldsFromOtherProviders($merged, $title, $year, 'series');
 
-            // Ensure Arabic metadata via multi-provider waterfall
-            $this->ensureArabicMetadata($merged, 'series');
+                // Ensure Arabic metadata via multi-provider waterfall
+                $this->ensureArabicMetadata($merged, 'series');
+
+                // Download & cache poster locally
+                if (!empty($merged['poster_path']) && filter_var($merged['poster_path'], FILTER_VALIDATE_URL)) {
+                    $merged['poster_path'] = $this->artwork->downloadPoster($merged['poster_path']);
+                }
+                if (!empty($merged['backdrop_path']) && filter_var($merged['backdrop_path'], FILTER_VALIDATE_URL)) {
+                    $merged['backdrop_path'] = $this->artwork->downloadBackdrop($merged['backdrop_path']);
+                }
+            }
 
             $merged['year'] = $merged['release_year'] ?? ($merged['year'] ?? $year);
             $merged['release_year'] = $merged['year'];
 
-            // Download & cache poster locally
-            if (!empty($merged['poster_path']) && filter_var($merged['poster_path'], FILTER_VALIDATE_URL)) {
-                $merged['poster_path'] = $this->artwork->downloadPoster($merged['poster_path']);
-            }
-            if (!empty($merged['backdrop_path']) && filter_var($merged['backdrop_path'], FILTER_VALIDATE_URL)) {
-                $merged['backdrop_path'] = $this->artwork->downloadBackdrop($merged['backdrop_path']);
-            }
-
             return $merged;
         }
 
-        // Even for default fallback, generate Arabic translations
-        $this->ensureArabicMetadata($default, 'series');
+        if (!$fastScan) {
+            $this->ensureArabicMetadata($default, 'series');
+        }
         return $default;
     }
 
-    public function searchMovie(string $title, ?int $year = null, string $lang = 'en'): array
+    public function searchMovie(string $title, ?int $year = null, string $lang = 'en', bool $withArabicWaterfall = true): array
     {
         $chain = ['tmdb', 'omdb', 'anilist', 'wikipedia', 'local'];
         $results = [];
@@ -174,8 +180,10 @@ class MetadataAggregator
             try {
                 $res = $provider->searchMovie($title, $year, $lang);
                 if (!empty($res)) {
-                    foreach ($res as &$item) {
-                        $this->ensureArabicMetadata($item, 'movie', false);
+                    if ($withArabicWaterfall) {
+                        foreach ($res as &$item) {
+                            $this->ensureArabicMetadata($item, 'movie', false);
+                        }
                     }
                     $results = array_merge($results, $res);
                     if ($key === 'tmdb' || count($results) >= 6) {
@@ -190,7 +198,7 @@ class MetadataAggregator
         return $results;
     }
 
-    public function searchSeries(string $title, ?int $year = null, string $lang = 'en'): array
+    public function searchSeries(string $title, ?int $year = null, string $lang = 'en', bool $withArabicWaterfall = true): array
     {
         $chain = ['tmdb', 'omdb', 'tvmaze', 'anilist', 'wikipedia', 'local'];
         $results = [];
@@ -202,8 +210,10 @@ class MetadataAggregator
             try {
                 $res = $provider->searchSeries($title, $year, $lang);
                 if (!empty($res)) {
-                    foreach ($res as &$item) {
-                        $this->ensureArabicMetadata($item, 'series', false);
+                    if ($withArabicWaterfall) {
+                        foreach ($res as &$item) {
+                            $this->ensureArabicMetadata($item, 'series', false);
+                        }
                     }
                     $results = array_merge($results, $res);
                     if (count($results) >= 6) {
