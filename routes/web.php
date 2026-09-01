@@ -109,6 +109,12 @@ Route::post('/api/downloads/{id}/retry', [DownloadManagerController::class, 'ret
 Route::delete('/api/downloads/{id}', [DownloadManagerController::class, 'destroy'])->name('api.downloads.destroy');
 
 // System Settings & API Providers
+
+// Documentation Hub
+Route::get('/docs', function () {
+    return Inertia::render('Docs/Index');
+})->name('docs.index');
+
 Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
 Route::post('/api/settings', [SettingsController::class, 'update'])->name('api.settings.update');
 Route::post('/api/settings/test-provider', [SettingsController::class, 'testProvider'])->name('api.settings.test-provider');
