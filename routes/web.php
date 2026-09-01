@@ -77,13 +77,17 @@ Route::get('/subtitles', [SubtitleController::class, 'index'])->name('subtitles.
 Route::get('/api/subtitles/search', [SubtitleController::class, 'search'])->name('api.subtitles.search');
 Route::post('/api/subtitles/download', [SubtitleController::class, 'downloadForMedia'])->name('api.subtitles.download');
 Route::get('/api/subtitles/for-media', [SubtitleController::class, 'forMedia'])->name('api.subtitles.for-media');
+Route::get('/api/subtitles/list', [SubtitleController::class, 'forMedia'])->name('api.subtitles.list');
 Route::post('/api/subtitles/verify-engine', [SubtitleController::class, 'verifyEngine'])->name('api.subtitles.verify-engine');
 
 // Cinema Video & Subtitle Streaming Engine (HTTP 206 Partial Content + Audio Transcoding)
-Route::get('/stream/movie/{mediaItem}', [StreamController::class, 'streamMovie'])->name('stream.movie');
+
+
+    Route::get('/stream/movie/{mediaItem}', [StreamController::class, 'streamMovie'])->name('stream.movie');
 Route::get('/stream/episode/{episode}', [StreamController::class, 'streamEpisode'])->name('stream.episode');
 Route::get('/stream/subtitles/{subtitle}', [StreamController::class, 'streamSubtitle'])->name('stream.subtitle');
 Route::post('/api/playback/progress', [StreamController::class, 'saveProgress'])->name('api.playback.progress');
+Route::post('/api/watch-history/progress', [StreamController::class, 'saveProgress']);
 Route::get('/api/continue-watching', [StreamController::class, 'getContinueWatching'])->name('api.continue-watching');
 
 // Storage & Codec Analytics
@@ -103,3 +107,13 @@ Route::delete('/api/downloads/{id}', [DownloadManagerController::class, 'destroy
 Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
 Route::post('/api/settings', [SettingsController::class, 'update'])->name('api.settings.update');
 Route::post('/api/settings/test-provider', [SettingsController::class, 'testProvider'])->name('api.settings.test-provider');
+
+// Semantic Human-Readable Media Routes
+Route::get('/movie/{slug}', [MediaController::class, 'showBySlug'])->name('movies.show.slug');
+Route::get('/series/{seriesSlug}', [SeriesController::class, 'showBySlug'])->name('series.show.slug');
+Route::get('/series/{seriesSlug}/season/{seasonNumber}', [SeriesController::class, 'showSeason'])->name('series.season.show');
+Route::get('/series/{seriesSlug}/season/{seasonNumber}/episode/{episodeNumber}', [SeriesController::class, 'showEpisode'])->name('series.episode.show');
+
+// Server-Side Remux Streaming Routes (Instant on-the-fly AAC remuxing for unsupported formats)
+Route::get('/stream/remux/movie/{mediaItem}', [StreamController::class, 'streamRemuxMovie'])->name('stream.remux.movie');
+Route::get('/stream/remux/episode/{episode}', [StreamController::class, 'streamRemuxEpisode'])->name('stream.remux.episode');

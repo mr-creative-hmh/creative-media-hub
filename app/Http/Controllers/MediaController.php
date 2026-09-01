@@ -212,4 +212,28 @@ class MediaController extends Controller
             'series' => $person->series,
         ]);
     }
+
+    public function showBySlug(Request $request, string $slug)
+    {
+        $movie = is_numeric($slug)
+            ? MediaItem::with(['genres', 'subtitles', 'people'])->find($slug)
+            : MediaItem::with(['genres', 'subtitles', 'people'])->where('slug', $slug)->first();
+
+        if (!$movie) {
+            $movie = MediaItem::with(['genres', 'subtitles', 'people'])->where('title', str_replace('-', ' ', $slug))->firstOrFail();
+        }
+
+        $query = MediaItem::query()->with(['genres', 'subtitles']);
+        $movies = $query->paginate(24)->withQueryString();
+        $genres = Genre::orderBy('name_en')->get();
+
+        return Inertia::render('Movies/Index', [
+            'movies' => $movies,
+            'genres' => $genres,
+            'filters' => [],
+            'activeMovie' => $movie,
+            'autoPlay' => $request->boolean('play'),
+        ]);
+    }
+
 }

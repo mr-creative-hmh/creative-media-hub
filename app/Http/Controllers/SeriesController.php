@@ -182,4 +182,81 @@ class SeriesController extends Controller
             'series' => $series,
         ]);
     }
+
+    public function showBySlug(string $seriesSlug)
+    {
+        $series = is_numeric($seriesSlug)
+            ? Series::find($seriesSlug)
+            : Series::where('slug', $seriesSlug)->first();
+
+        if (!$series) {
+            $series = Series::where('title', str_replace('-', ' ', $seriesSlug))->firstOrFail();
+        }
+
+        $series->load([
+            'genres',
+            'people',
+            'seasons.episodes.subtitles',
+            'seasons.episodes.watchHistories'
+        ]);
+
+        return Inertia::render('Series/Show', [
+            'series' => $series,
+        ]);
+    }
+
+    public function showSeason(string $seriesSlug, int $seasonNumber)
+    {
+        $series = is_numeric($seriesSlug)
+            ? Series::find($seriesSlug)
+            : Series::where('slug', $seriesSlug)->first();
+
+        if (!$series) {
+            $series = Series::where('title', str_replace('-', ' ', $seriesSlug))->firstOrFail();
+        }
+
+        $series->load([
+            'genres',
+            'people',
+            'seasons.episodes.subtitles',
+            'seasons.episodes.watchHistories'
+        ]);
+
+        return Inertia::render('Series/Show', [
+            'series' => $series,
+            'initialSeasonNumber' => (int) $seasonNumber,
+        ]);
+    }
+
+    public function showEpisode(string $seriesSlug, int $seasonNumber, int $episodeNumber)
+    {
+        $series = is_numeric($seriesSlug)
+            ? Series::find($seriesSlug)
+            : Series::where('slug', $seriesSlug)->first();
+
+        if (!$series) {
+            $series = Series::where('title', str_replace('-', ' ', $seriesSlug))->firstOrFail();
+        }
+
+        $series->load([
+            'genres',
+            'people',
+            'seasons.episodes.subtitles',
+            'seasons.episodes.watchHistories'
+        ]);
+
+        $episode = \App\Models\Episode::where('series_id', $series->id)
+            ->where('episode_number', $episodeNumber)
+            ->whereHas('season', fn($q) => $q->where('season_number', $seasonNumber))
+            ->with(['subtitles'])
+            ->first();
+
+        return Inertia::render('Series/Show', [
+            'series' => $series,
+            'initialSeasonNumber' => (int) $seasonNumber,
+            'initialEpisode' => $episode,
+            'autoPlay' => true,
+        ]);
+    }
+
 }

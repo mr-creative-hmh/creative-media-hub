@@ -9,6 +9,18 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 class Series extends Model
 {
+    protected static function boot()
+    {
+        parent::boot();
+        static::saving(function ($model) {
+            if (empty($model->slug) && !empty($model->title)) {
+                $base = \Illuminate\Support\Str::slug($model->title . ($model->release_year ? " {$model->release_year}" : ''));
+                $model->slug = $base ?: 'series-' . uniqid();
+            }
+        });
+    }
+
+
     use HasFactory;
 
     protected $guarded = [];

@@ -94,27 +94,28 @@ class StreamController extends Controller
 
     public function saveProgress(Request $request)
     {
-        $validated = $request->validate([
-            'watchable_id' => 'required|integer',
-            'watchable_type' => 'required|string',
-            'progress_seconds' => 'required|integer|min:0',
-            'duration_seconds' => 'required|integer|min:1',
-        ]);
+        $prog = (int) $request->input('progress_seconds', $request->input('position_seconds', 0));
+        $dur = (int) $request->input('duration_seconds', 0);
+        $wId = (int) $request->input('watchable_id', $request->input('id', 0));
+        $wType = strtolower((string) $request->input('watchable_type', $request->input('type', 'movie')));
 
-        $modelClass = $validated['watchable_type'] === 'movie' ? MediaItem::class : Episode::class;
-        $isCompleted = ($validated['progress_seconds'] / max(1, $validated['duration_seconds'])) >= 0.92;
+        if ($wId <= 0 || $dur <= 0) {
+            return response()->json(['success' => false, 'message' => 'Invalid parameters'], 422);
+        }
 
+        $modelClass = ($wType === 'episode') ? Episode::class : MediaItem::class;
+        $isCompleted = ($prog / max(1, $dur)) >= 0.92;
         $userId = Auth::id();
 
         $watchHistory = WatchHistory::updateOrCreate(
             [
                 'user_id' => $userId,
                 'watchable_type' => $modelClass,
-                'watchable_id' => $validated['watchable_id'],
+                'watchable_id' => $wId,
             ],
             [
-                'progress_seconds' => $validated['progress_seconds'],
-                'duration_seconds' => $validated['duration_seconds'],
+                'progress_seconds' => $prog,
+                'duration_seconds' => $dur,
                 'is_completed' => $isCompleted,
                 'last_watched_at' => now(),
             ]
@@ -144,9 +145,17 @@ class StreamController extends Controller
             $item = $h->watchable;
             if (!$item) return null;
 
+            $percent = $h->duration_seconds > 0 ? min(100, round(($h->progress_seconds / $h->duration_seconds) * 100)) : 0;
+            $formatTime = function ($sec) {
+                $hrs = floor($sec / 3600);
+                $mins = floor(($sec % 3600) / 60);
+                $secs = $sec % 60;
+                return $hrs > 0 ? sprintf('%d:%02d:%02d', $hrs, $mins, $secs) : sprintf('%02d:%02d', $mins, $secs);
+            };
+
             if ($item instanceof MediaItem) {
                 $item->loadMissing('subtitles');
-                $percent = $h->duration_seconds > 0 ? min(100, round(($h->progress_seconds / $h->duration_seconds) * 100)) : 0;
+                $slug = $item->slug ?: "movie-{$item->id}";
                 return [
                     'id' => $item->id,
                     'watchable_id' => $item->id,
@@ -154,36 +163,52 @@ class StreamController extends Controller
                     'title' => $item->title,
                     'title_ar' => $item->title_ar,
                     'type' => 'movie',
+                    'slug' => $slug,
+                    'slug_url' => route('movies.show.slug', $slug),
                     'poster_path' => $item->poster_path,
                     'backdrop_path' => $item->backdrop_path,
                     'progress_seconds' => $h->progress_seconds,
+                    'initial_progress' => $h->progress_seconds,
                     'duration_seconds' => $h->duration_seconds,
                     'progress_percent' => $percent,
+                    'percent' => $percent,
+                    'current_time_formatted' => $formatTime($h->progress_seconds),
+                    'duration_formatted' => $formatTime($h->duration_seconds),
                     'subtitles' => $item->subtitles,
                     'last_watched_at' => $h->last_watched_at,
+                    'stream_url' => route('stream.movie', $item->id),
                 ];
             }
 
             if ($item instanceof Episode) {
-                $item->loadMissing(['series', 'subtitles']);
-                $series = $item->series;
-                $percent = $h->duration_seconds > 0 ? min(100, round(($h->progress_seconds / $h->duration_seconds) * 100)) : 0;
+                $item->loadMissing(['series', 'season', 'subtitles']);
+                $series = $item->series ?? ($item->season->series ?? null);
                 $seriesTitle = $series ? ($series->title_ar ?: $series->title) : 'Series';
                 $epTitle = $item->title_ar ?: $item->title;
+                $sNum = $item->season_number ?? ($item->season->season_number ?? 1);
+                $eNum = $item->episode_number;
+                $seriesSlug = $series ? ($series->slug ?: "series-{$series->id}") : "series-{$item->series_id}";
 
                 return [
                     'id' => $item->id,
                     'watchable_id' => $item->id,
                     'watchable_type' => 'episode',
-                    'title' => "{$seriesTitle} - S{$item->season_number}E{$item->episode_number} - {$epTitle}",
+                    'title' => "{$seriesTitle} - S" . str_pad($sNum, 2, '0', STR_PAD_LEFT) . "E" . str_pad($eNum, 2, '0', STR_PAD_LEFT) . " - {$epTitle}",
                     'type' => 'episode',
+                    'series_slug' => $seriesSlug,
+                    'slug_url' => route('series.episode.show', [$seriesSlug, $sNum, $eNum]),
                     'poster_path' => $item->still_path ?: ($series ? $series->poster_path : null),
                     'backdrop_path' => $series ? $series->backdrop_path : null,
                     'progress_seconds' => $h->progress_seconds,
+                    'initial_progress' => $h->progress_seconds,
                     'duration_seconds' => $h->duration_seconds,
                     'progress_percent' => $percent,
+                    'percent' => $percent,
+                    'current_time_formatted' => $formatTime($h->progress_seconds),
+                    'duration_formatted' => $formatTime($h->duration_seconds),
                     'subtitles' => $item->subtitles,
                     'last_watched_at' => $h->last_watched_at,
+                    'stream_url' => route('stream.episode', $item->id),
                 ];
             }
 
@@ -317,4 +342,71 @@ class StreamController extends Controller
 
         return $vtt . $normalized;
     }
+
+    public function streamRemuxMovie(MediaItem $mediaItem, Request $request)
+    {
+        return $this->streamRemuxFile($mediaItem->file_path, $request);
+    }
+
+    public function streamRemuxEpisode(Episode $episode, Request $request)
+    {
+        return $this->streamRemuxFile($episode->file_path, $request);
+    }
+
+    protected function streamRemuxFile(string $filePath, Request $request)
+    {
+        if (!file_exists($filePath)) {
+            abort(404, 'Media file not found');
+        }
+
+        $ffmpegPath = $this->ffmpegLocator->getFFmpegPath() ?? 'ffmpeg';
+        $startSeconds = max(0, (float) $request->query('start', 0));
+
+        $cmd = [
+            $ffmpegPath,
+            '-ss', (string) $startSeconds,
+            '-i', $filePath,
+            '-c:v', 'copy',
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-ac', '2',
+            '-f', 'mp4',
+            '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+            'pipe:1'
+        ];
+
+        return response()->stream(function () use ($cmd) {
+            $descriptors = [
+                0 => ['pipe', 'r'],
+                1 => ['pipe', 'w'],
+                2 => ['pipe', 'w'],
+            ];
+
+            $process = proc_open($cmd, $descriptors, $pipes);
+            if (is_resource($process)) {
+                fclose($pipes[0]);
+                fclose($pipes[2]);
+
+                while (!feof($pipes[1])) {
+                    $chunk = fread($pipes[1], 65536);
+                    if ($chunk !== false && strlen($chunk) > 0) {
+                        echo $chunk;
+                        flush();
+                    }
+                    if (connection_aborted()) {
+                        break;
+                    }
+                }
+
+                fclose($pipes[1]);
+                proc_terminate($process);
+                proc_close($process);
+            }
+        }, 200, [
+            'Content-Type' => 'video/mp4',
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
+            'X-Accel-Buffering' => 'no',
+        ]);
+    }
+
 }

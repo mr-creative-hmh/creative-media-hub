@@ -89,7 +89,19 @@ const strategies = [
         exampleMovie: 'Movies/1080p/Dune (2021) [HEVC].mkv',
         exampleSeries: 'TV Shows/1080p/The Last of Us/Season 01/The Last of Us - S01E01.mkv',
     },
-    {
+        {
+        id: 'genre',
+        tag: 'Genre Categorized',
+        nameAr: 'تصنيف حسب النوع (Action, Drama, Sci-Fi)',
+        nameEn: 'Genre Partitioned (Action, Drama, Sci-Fi)',
+        descAr: 'ينظم الأفلام والمسلسلات داخل مجلدات بحسب التصنيف الأساسي تلقائياً.',
+        descEn: 'Groups movies and series into folders based on their primary genres automatically.',
+        movie: '{Type}/{Genre}/{Title} ({Year})/{Title} ({Year}) [{Resolution}].{ext}',
+        series: '{Type}/{Genre}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} [{Resolution}].{ext}',
+        exampleMovie: 'Movies/Action/Inception (2010)/Inception (2010) [1080p].mkv',
+        exampleSeries: 'TV Shows/Animation/Rick and Morty (2013)/Season 01/Rick and Morty - S01E01 [1080p].mkv',
+    },
+{
         id: 'custom',
         tag: 'Dynamic Syntax',
         nameAr: 'تخصيص يدوي متقدم للرموز',

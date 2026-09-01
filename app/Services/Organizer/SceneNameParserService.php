@@ -228,10 +228,12 @@ class SceneNameParserService
             }
 
             if (!empty($rawAfterPart)) {
-                if (preg_match($qualityTokensRegex, $rawAfterPart, $qMatch, PREG_OFFSET_CAPTURE)) {
-                    $rawEp = substr($rawAfterPart, 0, $qMatch[0][1]);
+                // Remove bracketed content before truncating
+                $cleanedRaw = preg_replace('/\[[^\]]*\]/', '', $rawAfterPart);
+                if (preg_match($qualityTokensRegex, $cleanedRaw, $qMatch, PREG_OFFSET_CAPTURE)) {
+                    $rawEp = substr($cleanedRaw, 0, $qMatch[0][1]);
                 } else {
-                    $rawEp = $rawAfterPart;
+                    $rawEp = $cleanedRaw;
                 }
 
                 $cleanEp = $this->cleanEpisodeTitleString($rawEp);
@@ -438,12 +440,26 @@ class SceneNameParserService
 
     protected function cleanEpisodeTitleString(string $raw): string
     {
-        $s = preg_replace('/-(?:\[)?[a-zA-Z0-9_\.]+(?:\])?$/i', '', $raw);
-        $s = preg_replace('/\[[^\]]*\]/', '', $s);
-        $s = preg_replace('/\(.*?\)/', '', $s);
-        $s = preg_replace('/\b(2160p|1440p|1080p|720p|576p|540p|480p|360p|240p|4k|bluray|remux|web-dl|webdl|webrip|hdtv|dvdrip|x264|x265|hevc|aac|10bit|ddp5\.1|ddp|2\.0|5\.1)\b.*$/i', '', $s);
+        // 1. Remove bracketed blocks completely [1080p FHD], (2025), etc.
+        $s = preg_replace('/\[[^\]]*\]/', ' ', $raw);
+        $s = preg_replace('/\(.*?\)/', ' ', $s);
+        $s = preg_replace('/\{.*?\}/', ' ', $s);
+
+        // 2. Truncate at quality/codec tokens or release tags
+        $s = preg_replace('/\b(2160p|1440p|1080p|1080i|720p|576p|540p|480p|360p|240p|4k|2k|uhd|fhd|hd|sd|bluray|blu-ray|remux|bdrip|brrip|web-dl|webdl|webrip|web|hdtv|pdtv|dvdrip|dvd|x264|x265|h264|h265|hevc|avc|av1|xvid|divx|10bit|8bit|hdr|hdr10|dv|aac|ddp|ac3|dts|mp3)\b.*$/i', ' ', $s);
+
+        // 3. Remove trailing scene group or unclosed brackets
+        $s = preg_replace('/[-_.\s]*[\[\(\{].*$/', ' ', $s);
         $s = preg_replace('/[._\-]/', ' ', $s);
+
+        // 4. Strip surrounding symbols and whitespace
+        $s = trim($s, " \t\n\r\0\x0B-_:;,./\[]{}()");
         $s = trim(preg_replace('/\s+/', ' ', $s));
+
+        // 5. If it's just "Episode 1", "Episode 01", "Ep 1", "S01E01", or empty -> return empty string
+        if (empty($s) || preg_match('/^(episode|ep|part)\s*\d+$/i', $s) || preg_match('/^s\d+e\d+$/i', $s)) {
+            return '';
+        }
 
         return $this->toProperTitleCase($s);
     }

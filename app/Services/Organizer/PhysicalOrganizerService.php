@@ -5,6 +5,7 @@ namespace App\Services\Organizer;
 use App\Models\AppSetting;
 use App\Models\Episode;
 use App\Models\MediaItem;
+use App\Models\Genre;
 use App\Models\Subtitle;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
@@ -40,16 +41,40 @@ class PhysicalOrganizerService
             $year = !empty($parsed['year']) ? (string) $parsed['year'] : '';
             $seasonNum = isset($parsed['season']) ? (int) $parsed['season'] : 1;
             $episodeNum = isset($parsed['episode']) ? (int) $parsed['episode'] : 1;
-            $epTitle = $this->sanitizePathSegment(!empty($parsed['episode_title']) ? $parsed['episode_title'] : "Episode {$episodeNum}");
+            $epTitle = !empty($parsed['episode_title']) ? $this->sanitizePathSegment($parsed['episode_title']) : '';
+            if (preg_match('/^(episode|ep|part)\s*\d+$/i', $epTitle)) {
+                $epTitle = '';
+            }
             $resTag = $parsed['resolution'] ?: '1080p FHD';
 
             $firstChar = mb_strtoupper(mb_substr($cleanTitle, 0, 1));
             $firstLetter = preg_match('/^[A-Z0-9]$/i', $firstChar) ? $firstChar : '#';
 
+            // Resolve genres for {Genre} and {Genres} tokens
+            $genresList = $file['genres'] ?? [];
+            if (empty($genresList)) {
+                if ($isSeries) {
+                    $dbSeries = \App\Models\Series::where('title', 'like', "%{$cleanTitle}%")->with('genres')->first();
+                    if ($dbSeries && $dbSeries->genres->isNotEmpty()) {
+                        $genresList = $dbSeries->genres->pluck('name_en')->toArray();
+                    }
+                } else {
+                    $dbMovie = \App\Models\MediaItem::where('title', 'like', "%{$cleanTitle}%")->with('genres')->first();
+                    if ($dbMovie && $dbMovie->genres->isNotEmpty()) {
+                        $genresList = $dbMovie->genres->pluck('name_en')->toArray();
+                    }
+                }
+            }
+
+            $primaryGenre = !empty($genresList[0]) ? $this->sanitizePathSegment($genresList[0]) : 'General';
+            $joinedGenres = !empty($genresList) ? $this->sanitizePathSegment(implode(' & ', array_slice($genresList, 0, 2))) : $primaryGenre;
+
             $tokens = [
                 '{Type}' => $typeDir,
                 '{Title}' => $cleanTitle,
                 '{Year}' => $year,
+                '{Genre}' => $primaryGenre,
+                '{Genres}' => $joinedGenres,
                 '{Resolution}' => $this->sanitizePathSegment($resTag),
                 '{Codec}' => $this->sanitizePathSegment($parsed['codec'] ?: 'x264'),
                 '{Edition}' => $this->sanitizePathSegment($parsed['edition'] ?? ''),
@@ -61,10 +86,19 @@ class PhysicalOrganizerService
                 '{ext}' => strtolower(pathinfo($filePath, PATHINFO_EXTENSION) ?: ($parsed['extension'] ?? 'mkv')),
             ];
 
-            $relPath = str_replace(array_keys($tokens), array_values($tokens), $pattern);
-            // Clean double slashes, unknown years, or empty brackets
+            $relPath = $pattern;
+            if (empty($epTitle)) {
+                $relPath = str_replace(' - {EpisodeTitle}', '', $relPath);
+                $relPath = str_replace('{EpisodeTitle}', '', $relPath);
+            }
+            $relPath = str_replace(array_keys($tokens), array_values($tokens), $relPath);
+
+            // Clean double slashes, unknown years, or empty brackets/dangling delimiters
             $relPath = preg_replace('#/+#', '/', $relPath);
+            $relPath = preg_replace('/\s+-\s*\[/', ' [', $relPath);
+            $relPath = preg_replace('/\s+-\s*\./', '.', $relPath);
             $relPath = str_replace(['(Unknown Year)', '[Unknown Year]', 'Unknown Year', '()', '[]', '( )', '[ ]', ' - .', ' .'], ['', '', '', '', '', '', '', '.', '.'], $relPath);
+            $relPath = preg_replace('/\s+/', ' ', $relPath);
             $relPath = trim($relPath, '/');
 
             // Sanitize each directory level in relPath
@@ -379,53 +413,100 @@ class PhysicalOrganizerService
      */
     protected function cleanEmptyDirectories(array $sourceDirs, array &$logs): int
     {
-        $cleaned = 0;
+        $videoExtensions = ['mp4', 'mkv', 'avi', 'mov', 'm4v', 'webm', 'ts', 'wmv', 'flv', 'iso'];
+        $disposableJunk = [
+            'thumbs.db', 'desktop.ini', '.ds_store', 'ehthumbs.db',
+            'www.yts.mx.txt', 'www.yts.lt.txt', 'www.yts.bz.txt', 'www.yify-torrents.com.txt',
+            'yify.txt', 'torrent-downloaded-from.txt'
+        ];
+        $disposableExtensions = ['txt', 'nfo', 'url', 'website', 'lnk', 'ini', 'db', 'torrent', 'sample', 'log'];
+
+        $cleanedCount = 0;
+        $allDirs = [];
+
+        // 1. Gather all subdirectories recursively inside every source directory
+        foreach ($sourceDirs as $sourceDir) {
+            $sourceDir = rtrim(str_replace('\\', '/', $sourceDir), '/');
+            if (!File::isDirectory($sourceDir)) {
+                continue;
+            }
+
+            if (preg_match('#^[A-Za-z]:/?$#', $sourceDir) || in_array(strtolower($sourceDir), ['/var', '/usr', '/home', '/etc', 'c:/', 'd:/', 'c:', 'd:'])) {
+                continue;
+            }
+
+            try {
+                $iterator = new \RecursiveIteratorIterator(
+                    new \RecursiveDirectoryIterator($sourceDir, \RecursiveDirectoryIterator::SKIP_DOTS),
+                    \RecursiveIteratorIterator::CHILD_FIRST
+                );
+
+                foreach ($iterator as $item) {
+                    if ($item->isDir()) {
+                        $allDirs[] = str_replace('\\', '/', $item->getPathname());
+                    }
+                }
+            } catch (\Throwable $e) {}
+
+            $allDirs[] = $sourceDir;
+        }
+
+        $allDirs = array_unique($allDirs);
         // Sort by length descending so child subfolders are evaluated and deleted before parents
-        usort($sourceDirs, fn ($a, $b) => strlen($b) <=> strlen($a));
+        usort($allDirs, fn ($a, $b) => strlen($b) <=> strlen($a));
 
-        $junkFiles = ['.ds_store', 'thumbs.db', 'desktop.ini', '.nfo', '.txt', '.url', '.sample', 'www.yts.mx.txt', 'www.yts.lt.txt', 'www.yify-torrents.com.txt'];
-
-        foreach ($sourceDirs as $dir) {
-            $dir = rtrim(str_replace('\\', '/', $dir), '/');
+        foreach ($allDirs as $dir) {
             if (!File::isDirectory($dir)) {
                 continue;
             }
 
-            // Do not delete root drive (e.g. D:/ or C:/) or standard main directories
-            if (preg_match('#^[A-Za-z]:/?$#', $dir) || in_array($dir, ['/var', '/usr', '/home', '/etc'])) {
+            if (preg_match('#^[A-Za-z]:/?$#', $dir) || in_array(strtolower($dir), ['/var', '/usr', '/home', '/etc', 'c:/', 'd:/', 'c:', 'd:'])) {
                 continue;
             }
 
-            // Check contents
-            $files = @scandir($dir);
-            if ($files === false) {
+            $items = @scandir($dir);
+            if ($items === false) {
                 continue;
             }
 
-            $remaining = array_diff($files, ['.', '..']);
-            $isDeletable = true;
+            $entries = array_diff($items, ['.', '..']);
+            $hasEssentialFiles = false;
 
-            foreach ($remaining as $f) {
-                $full = "{$dir}/{$f}";
-                if (File::isDirectory($full)) {
-                    $isDeletable = false;
+            foreach ($entries as $entry) {
+                $fullPath = "{$dir}/{$entry}";
+                if (File::isDirectory($fullPath)) {
+                    $hasEssentialFiles = true;
                     break;
                 }
-                $ext = strtolower(pathinfo($f, PATHINFO_EXTENSION));
-                $name = strtolower($f);
-                if (!in_array($name, $junkFiles) && !in_array(".{$ext}", ['.nfo', '.txt', '.url', '.sample', '.ini', '.db'])) {
-                    $isDeletable = false;
+
+                $ext = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
+                $nameLower = strtolower($entry);
+
+                if (in_array($ext, $videoExtensions) || in_array($ext, ['srt', 'vtt', 'ass', 'sub'])) {
+                    $hasEssentialFiles = true;
+                    break;
+                }
+
+                $isJunk = in_array($nameLower, $disposableJunk)
+                    || in_array($ext, $disposableExtensions)
+                    || (in_array($ext, ['jpg', 'jpeg', 'png', 'webp']) && (str_contains($nameLower, 'yts') || str_contains($nameLower, 'poster') || str_contains($nameLower, 'cover') || str_contains($nameLower, 'banner') || @filesize($fullPath) < 500000));
+
+                if (!$isJunk) {
+                    $hasEssentialFiles = true;
                     break;
                 }
             }
 
-            if ($isDeletable) {
-                // Delete leftover junk files first if any
-                foreach ($remaining as $f) {
-                    @unlink("{$dir}/{$f}");
+            if (!$hasEssentialFiles) {
+                foreach ($entries as $entry) {
+                    $fullPath = "{$dir}/{$entry}";
+                    if (File::isFile($fullPath)) {
+                        @unlink($fullPath);
+                    }
                 }
-                if (@rmdir($dir) || !File::exists($dir)) {
-                    $cleaned++;
+
+                if (@rmdir($dir) || !File::isDirectory($dir)) {
+                    $cleanedCount++;
                     $logs[] = [
                         'time' => date('H:i:s'),
                         'type' => 'info',
@@ -435,7 +516,7 @@ class PhysicalOrganizerService
             }
         }
 
-        return $cleaned;
+        return $cleanedCount;
     }
 
     /**

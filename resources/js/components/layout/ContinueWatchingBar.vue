@@ -12,7 +12,8 @@ const loadItems = async () => {
     try {
         const res = await fetch('/api/continue-watching');
         if (res.ok) {
-            items.value = await res.json();
+            const data = await res.json();
+            items.value = Array.isArray(data) ? data : (data.items || []);
         }
     } catch (e) {
         console.error('Failed to load continue watching items', e);
