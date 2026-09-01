@@ -123,7 +123,6 @@ class MediaLibrarySeeder extends Seeder
 
         // 4. Sample Movies
         $interstellar = MediaItem::create([
-            'type' => 'movie',
             'title' => 'Interstellar',
             'original_title' => 'Interstellar',
             'title_ar' => 'بين النجوم',
@@ -132,8 +131,6 @@ class MediaLibrarySeeder extends Seeder
             'imdb_id' => 'tt0816692',
             'overview' => 'The adventures of a group of explorers who make use of a newly discovered wormhole to surpass the limitations on human space travel and conquer the vast distances involved in an interstellar voyage.',
             'overview_ar' => 'مغامرات فريق من المستكشفين الذين يستخدمون ثقباً دودياً تم اكتشافه حديثاً لتجاوز القيود المفروضة على السفر الفضائي البشري والتغلب على المسافات الشاسعة في رحلة بين النجوم لإنقاذ البشرية.',
-            'tagline' => 'Mankind was born on Earth. It was never meant to die here.',
-            'tagline_ar' => 'وُلدت البشرية على الأرض، لكن لم يُقصد لها أن تموت هنا.',
             'poster_path' => 'https://image.tmdb.org/t/p/w780/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
             'backdrop_path' => 'https://image.tmdb.org/t/p/original/xJHokMbljvjADYdit5fK5VQsXEG.jpg',
             'trailer_url' => 'https://www.youtube.com/watch?v=zSWdZVtXT7E',
@@ -173,7 +170,6 @@ class MediaLibrarySeeder extends Seeder
         ]);
 
         $inception = MediaItem::create([
-            'type' => 'movie',
             'title' => 'Inception',
             'original_title' => 'Inception',
             'title_ar' => 'ازدراع الأحلام',
@@ -182,8 +178,6 @@ class MediaLibrarySeeder extends Seeder
             'imdb_id' => 'tt1375666',
             'overview' => 'Cobb, a skilled thief who commits corporate espionage by infiltrating the subconscious of his targets is offered a chance to regain his old life as payment for a task considered to be impossible: "inception", the implantation of another person\'s idea into a target\'s subconscious.',
             'overview_ar' => 'كوب هو لص محترف يمارس التجسس التجاري من خلال التسلل إلى العقل الباطن لأهدافه أثناء نومهم، يُعرض عليه فرصة لاستعادة حياته القديمة مقابل تنفيذ مهمة تبدو مستحيلة: زرع فكرة داخل عقل شخص آخر.',
-            'tagline' => 'Your mind is the scene of the crime.',
-            'tagline_ar' => 'عقلك هو مسرح الجريمة.',
             'poster_path' => 'https://image.tmdb.org/t/p/w780/oYuLEt3zVCKq57qu2F8dT7NIa6f.jpg',
             'backdrop_path' => 'https://image.tmdb.org/t/p/original/8ZTVqvKDQ8emSGUEMjsS4yUmCGe.jpg',
             'trailer_url' => 'https://www.youtube.com/watch?v=YoHD9XEInc0',
@@ -205,7 +199,6 @@ class MediaLibrarySeeder extends Seeder
         $inception->people()->attach($peopleData['murphy']->id, ['role' => 'actor', 'character_name' => 'Robert Fischer', 'order' => 2]);
 
         $dune2 = MediaItem::create([
-            'type' => 'movie',
             'title' => 'Dune: Part Two',
             'original_title' => 'Dune: Part Two',
             'title_ar' => 'كثيب: الجزء الثاني',
@@ -214,8 +207,6 @@ class MediaLibrarySeeder extends Seeder
             'imdb_id' => 'tt15239678',
             'overview' => 'Follow the mythic journey of Paul Atreides as he unites with Chani and the Fremen while on a path of revenge against the conspirators who destroyed his family.',
             'overview_ar' => 'تتبع الرحلة الأسطورية لبول آتريديز بينما يتحد مع تشاني وشعب الفريمن على طريق الانتقام ضد المتآمرين الذين دمروا عائلته.',
-            'tagline' => 'Long live the fighters.',
-            'tagline_ar' => 'عاش المقاتلون.',
             'poster_path' => 'https://image.tmdb.org/t/p/w780/1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg',
             'backdrop_path' => 'https://image.tmdb.org/t/p/original/xOMo8BRK7PfcJv9JCnx7s5hj0PX.jpg',
             'trailer_url' => 'https://www.youtube.com/watch?v=Way9Dexny3w',
@@ -237,7 +228,6 @@ class MediaLibrarySeeder extends Seeder
         $dune2->people()->attach($peopleData['zendaya']->id, ['role' => 'actor', 'character_name' => 'Chani', 'order' => 2]);
 
         $oppenheimer = MediaItem::create([
-            'type' => 'movie',
             'title' => 'Oppenheimer',
             'original_title' => 'Oppenheimer',
             'title_ar' => 'أوبنهايمر',
@@ -246,8 +236,6 @@ class MediaLibrarySeeder extends Seeder
             'imdb_id' => 'tt15398776',
             'overview' => 'The story of J. Robert Oppenheimer’s role in the development of the atomic bomb during World War II.',
             'overview_ar' => 'قصة الفيزيائي الأمريكي روبرت أوبنهايمر ودوره المحوري في تطوير القنبلة الذرية ضمن مشروع مانهاتن خلال الحرب العالمية الثانية.',
-            'tagline' => 'The world forever changes.',
-            'tagline_ar' => 'العالم يتغير إلى الأبد.',
             'poster_path' => 'https://image.tmdb.org/t/p/w780/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg',
             'backdrop_path' => 'https://image.tmdb.org/t/p/original/fm6KqXpk3M2HVveHwCrBSSBaO0V.jpg',
             'trailer_url' => 'https://www.youtube.com/watch?v=uYPbbksJxIg',

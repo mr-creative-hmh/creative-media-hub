@@ -6,13 +6,17 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Database\Connection;
+use App\Database\WindowsResilientSQLiteConnection;
 use Illuminate\Validation\Rules\Password;
 
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        Connection::resolverFor('sqlite', function ($connection, $database, $prefix, $config) {
+            return new WindowsResilientSQLiteConnection($connection, $database, $prefix, $config);
+        });
     }
 
     public function boot(): void
