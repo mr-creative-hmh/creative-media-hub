@@ -3,6 +3,7 @@
 namespace App\Services\Metadata;
 
 use App\Services\Metadata\Contracts\MetadataProviderInterface;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class MetadataAggregator
@@ -54,7 +55,7 @@ class MetadataAggregator
             'available_backdrops' => [],
         ];
 
-        // 1. Search across metadata chain (TMDb first for rich Arabic & English data)
+        // 1. Search across metadata chain (TMDb, OMDb, AniList, Wikipedia, Local)
         $searchResults = $this->searchMovie($title, $year, $lang);
 
         if (!empty($searchResults)) {
@@ -71,6 +72,12 @@ class MetadataAggregator
                 }
             }
 
+            // Fill missing fields from other providers in the waterfall
+            $this->fillMissingFieldsFromOtherProviders($merged, $title, $year, 'movie');
+
+            // Ensure Arabic metadata via multi-provider waterfall
+            $this->ensureArabicMetadata($merged, 'movie');
+
             $merged['year'] = $merged['release_year'] ?? ($merged['year'] ?? $year);
             $merged['release_year'] = $merged['year'];
 
@@ -85,6 +92,8 @@ class MetadataAggregator
             return $merged;
         }
 
+        // Even for default fallback, generate Arabic translations
+        $this->ensureArabicMetadata($default, 'movie');
         return $default;
     }
 
@@ -111,7 +120,7 @@ class MetadataAggregator
             'available_backdrops' => [],
         ];
 
-        // 1. Search across metadata chain (TMDb prioritized for Arabic)
+        // 1. Search across metadata chain (TMDb, TVMaze, OMDb, AniList, Wikipedia)
         $searchResults = $this->searchSeries($title, $year, $lang);
 
         if (!empty($searchResults)) {
@@ -128,6 +137,12 @@ class MetadataAggregator
                 }
             }
 
+            // Fill missing fields from other providers in the waterfall
+            $this->fillMissingFieldsFromOtherProviders($merged, $title, $year, 'series');
+
+            // Ensure Arabic metadata via multi-provider waterfall
+            $this->ensureArabicMetadata($merged, 'series');
+
             $merged['year'] = $merged['release_year'] ?? ($merged['year'] ?? $year);
             $merged['release_year'] = $merged['year'];
 
@@ -142,6 +157,8 @@ class MetadataAggregator
             return $merged;
         }
 
+        // Even for default fallback, generate Arabic translations
+        $this->ensureArabicMetadata($default, 'series');
         return $default;
     }
 
@@ -157,6 +174,9 @@ class MetadataAggregator
             try {
                 $res = $provider->searchMovie($title, $year, $lang);
                 if (!empty($res)) {
+                    foreach ($res as &$item) {
+                        $this->ensureArabicMetadata($item, 'movie', false);
+                    }
                     $results = array_merge($results, $res);
                     if ($key === 'tmdb' || count($results) >= 6) {
                         break;
@@ -182,6 +202,9 @@ class MetadataAggregator
             try {
                 $res = $provider->searchSeries($title, $year, $lang);
                 if (!empty($res)) {
+                    foreach ($res as &$item) {
+                        $this->ensureArabicMetadata($item, 'series', false);
+                    }
                     $results = array_merge($results, $res);
                     if (count($results) >= 6) {
                         break;
@@ -198,45 +221,57 @@ class MetadataAggregator
     public function getMovieDetails(string|int $id, string $providerKey = 'tmdb', string $lang = 'en'): ?array
     {
         $providerKey = strtolower($providerKey);
+        $data = null;
         if (isset($this->providers[$providerKey])) {
             try {
                 $data = $this->providers[$providerKey]->getMovieDetails($id, $lang);
-                if ($data) return $data;
             } catch (\Throwable $e) {
                 Log::warning("Provider {$providerKey} getMovieDetails failed: " . $e->getMessage());
             }
         }
 
-        foreach ($this->providers as $p) {
-            try {
-                $data = $p->getMovieDetails($id, $lang);
-                if ($data) return $data;
-            } catch (\Throwable $e) {}
+        if (!$data) {
+            foreach ($this->providers as $p) {
+                try {
+                    $data = $p->getMovieDetails($id, $lang);
+                    if ($data) break;
+                } catch (\Throwable $e) {}
+            }
         }
 
-        return null;
+        if ($data) {
+            $this->ensureArabicMetadata($data, 'movie');
+        }
+
+        return $data;
     }
 
     public function getSeriesDetails(string|int $id, string $providerKey = 'tmdb', string $lang = 'en'): ?array
     {
         $providerKey = strtolower($providerKey);
+        $data = null;
         if (isset($this->providers[$providerKey])) {
             try {
                 $data = $this->providers[$providerKey]->getSeriesDetails($id, $lang);
-                if ($data) return $data;
             } catch (\Throwable $e) {
                 Log::warning("Provider {$providerKey} getSeriesDetails failed: " . $e->getMessage());
             }
         }
 
-        foreach ($this->providers as $p) {
-            try {
-                $data = $p->getSeriesDetails($id, $lang);
-                if ($data) return $data;
-            } catch (\Throwable $e) {}
+        if (!$data) {
+            foreach ($this->providers as $p) {
+                try {
+                    $data = $p->getSeriesDetails($id, $lang);
+                    if ($data) break;
+                } catch (\Throwable $e) {}
+            }
         }
 
-        return null;
+        if ($data) {
+            $this->ensureArabicMetadata($data, 'series');
+        }
+
+        return $data;
     }
 
     public function getSeasonEpisodes(string|int $seriesId, int $seasonNumber, string $providerKey = 'tmdb', string $lang = 'en'): array
@@ -256,6 +291,142 @@ class MetadataAggregator
         }
 
         return [];
+    }
+
+    /**
+     * Multi-Provider Waterfall: Fills any missing fields (cast, ratings, poster, backdrop, overview) from secondary providers
+     */
+    protected function fillMissingFieldsFromOtherProviders(array &$data, string $title, ?int $year, string $type): void
+    {
+        $needsPoster = empty($data['poster_path']);
+        $needsBackdrop = empty($data['backdrop_path']);
+        $needsOverview = empty($data['overview']) || str_starts_with($data['overview'], 'Enjoy watching') || str_starts_with($data['overview'], 'Experience the complete');
+        $needsImdb = empty($data['imdb_id']);
+
+        if (!$needsPoster && !$needsBackdrop && !$needsOverview && !$needsImdb) {
+            return;
+        }
+
+        $chain = $type === 'movie' ? ['omdb', 'wikipedia', 'anilist'] : ['tvmaze', 'omdb', 'wikipedia'];
+        foreach ($chain as $key) {
+            $provider = $this->providers[$key] ?? null;
+            if (!$provider) continue;
+
+            try {
+                $results = $type === 'movie'
+                    ? $provider->searchMovie($title, $year)
+                    : $provider->searchSeries($title, $year);
+
+                if (!empty($results[0])) {
+                    $match = $results[0];
+                    if ($needsPoster && !empty($match['poster_path'])) {
+                        $data['poster_path'] = $match['poster_path'];
+                        $needsPoster = false;
+                    }
+                    if ($needsBackdrop && !empty($match['backdrop_path'])) {
+                        $data['backdrop_path'] = $match['backdrop_path'];
+                        $needsBackdrop = false;
+                    }
+                    if ($needsOverview && !empty($match['overview']) && !str_starts_with($match['overview'], 'Enjoy watching')) {
+                        $data['overview'] = $match['overview'];
+                        $needsOverview = false;
+                    }
+                    if ($needsImdb && !empty($match['imdb_id'])) {
+                        $data['imdb_id'] = $match['imdb_id'];
+                        $needsImdb = false;
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
+    }
+
+    /**
+     * Robust Multi-Provider Arabic Metadata Waterfall:
+     * 1. TMDb translations
+     * 2. Wikipedia / Wikidata LangLinks & Summary
+     * 3. MyMemory Translated API
+     */
+    public function ensureArabicMetadata(array &$data, string $type = 'movie', bool $translateOverview = true): void
+    {
+        $title = $data['title'] ?? ($data['name'] ?? '');
+        if (empty($title)) return;
+
+        $hasArabicTitle = !empty($data['title_ar']);
+        $hasArabicOverview = !empty($data['overview_ar']);
+
+        if ($hasArabicTitle && ($hasArabicOverview || !$translateOverview)) {
+            return;
+        }
+
+        // 1. Check Wikipedia / Wikidata LangLinks
+        try {
+            $res = Http::withHeaders(['User-Agent' => 'CreativeMediaLibrary/1.0 (contact@creativemedia.test)'])
+                ->timeout(5)
+                ->get("https://en.wikipedia.org/w/api.php", [
+                    'action' => 'query',
+                    'prop' => 'langlinks',
+                    'titles' => $title,
+                    'lllang' => 'ar',
+                    'format' => 'json',
+                ]);
+
+            if ($res->successful()) {
+                $pages = $res->json('query.pages', []);
+                foreach ($pages as $p) {
+                    if (!empty($p['langlinks'][0]['*'])) {
+                        $wikiArTitle = $p['langlinks'][0]['*'];
+                        if (!$hasArabicTitle) {
+                            $data['title_ar'] = $wikiArTitle;
+                            $hasArabicTitle = true;
+                        }
+
+                        if (!$hasArabicOverview && $translateOverview) {
+                            $arSummary = Http::withHeaders(['User-Agent' => 'CreativeMediaLibrary/1.0 (contact@creativemedia.test)'])
+                                ->timeout(5)
+                                ->get("https://ar.wikipedia.org/api/rest_v1/page/summary/" . urlencode($wikiArTitle));
+                            if ($arSummary->successful() && !empty($arSummary->json('extract'))) {
+                                $data['overview_ar'] = $arSummary->json('extract');
+                                $hasArabicOverview = true;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        // 2. MyMemory Translation for Title
+        if (!$hasArabicTitle) {
+            try {
+                $res = Http::timeout(5)->get("https://api.mymemory.translated.net/get", [
+                    'q' => $title,
+                    'langpair' => 'en|ar',
+                ]);
+                $trans = $res->json('responseData.translatedText');
+                if ($trans && strtolower(trim($trans)) !== strtolower(trim($title)) && !str_contains($trans, 'MYMEMORY WARNING')) {
+                    $data['title_ar'] = $trans;
+                    $hasArabicTitle = true;
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        // 3. MyMemory Translation for Overview
+        if (!$hasArabicOverview && $translateOverview && !empty($data['overview'])) {
+            try {
+                $cleanOverview = substr(strip_tags($data['overview']), 0, 450);
+                if (!str_starts_with($cleanOverview, 'Enjoy watching') && !str_starts_with($cleanOverview, 'Experience the complete')) {
+                    $res = Http::timeout(5)->get("https://api.mymemory.translated.net/get", [
+                        'q' => $cleanOverview,
+                        'langpair' => 'en|ar',
+                    ]);
+                    $trans = $res->json('responseData.translatedText');
+                    if ($trans && !str_contains($trans, 'MYMEMORY WARNING')) {
+                        $data['overview_ar'] = $trans;
+                        $hasArabicOverview = true;
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
     }
 
     public function getArtworkService(): ArtworkDownloadService

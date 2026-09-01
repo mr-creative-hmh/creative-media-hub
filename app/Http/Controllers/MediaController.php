@@ -146,6 +146,7 @@ class MediaController extends Controller
     {
         $validated = $request->validate([
             'title' => 'required|string',
+            'title_ar' => 'nullable|string',
             'provider' => 'nullable|string',
             'id' => 'nullable|string',
             'year' => 'nullable|numeric',
@@ -157,14 +158,44 @@ class MediaController extends Controller
             'runtime_minutes' => 'nullable|numeric',
         ]);
 
+        $providerKey = strtolower($validated['provider'] ?? 'tmdb');
+        $providerId = $validated['id'] ?? null;
+        $titleAr = $validated['title_ar'] ?? null;
+        $overviewAr = $validated['overview_ar'] ?? null;
+        $tmdbId = $mediaItem->tmdb_id;
+        $imdbId = $mediaItem->imdb_id;
+
+        if ($providerId) {
+            $details = $this->metadata->getMovieDetails($providerId, $providerKey);
+            if ($details) {
+                $titleAr = $titleAr ?: ($details['title_ar'] ?? null);
+                $overviewAr = $overviewAr ?: ($details['overview_ar'] ?? null);
+                $tmdbId = $details['tmdb_id'] ?? $tmdbId;
+                $imdbId = $details['imdb_id'] ?? $imdbId;
+            }
+        }
+
+        $metaDataPayload = [
+            'title' => $validated['title'],
+            'title_ar' => $titleAr,
+            'overview' => $validated['overview'] ?? $mediaItem->overview,
+            'overview_ar' => $overviewAr,
+        ];
+        $this->metadata->ensureArabicMetadata($metaDataPayload, 'movie');
+        $titleAr = $metaDataPayload['title_ar'] ?? $titleAr;
+        $overviewAr = $metaDataPayload['overview_ar'] ?? $overviewAr;
+
         $posterUrl = $this->artwork->downloadPoster($validated['poster_path'] ?? null);
         $backdropUrl = $this->artwork->downloadBackdrop($validated['backdrop_path'] ?? null);
 
         $mediaItem->update([
             'title' => $validated['title'],
+            'title_ar' => $titleAr ?? $mediaItem->title_ar,
             'release_year' => $validated['year'] ?? $mediaItem->release_year,
             'overview' => $validated['overview'] ?? $mediaItem->overview,
-            'overview_ar' => $validated['overview_ar'] ?? $mediaItem->overview_ar,
+            'overview_ar' => $overviewAr ?? $mediaItem->overview_ar,
+            'tmdb_id' => $tmdbId,
+            'imdb_id' => $imdbId,
             'poster_path' => $posterUrl ?? $mediaItem->poster_path,
             'backdrop_path' => $backdropUrl ?? $mediaItem->backdrop_path,
             'rating' => $validated['rating'] ?? $mediaItem->rating,
@@ -175,7 +206,7 @@ class MediaController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Metadata successfully matched and saved!',
+            'message' => 'Metadata successfully matched and saved with bilingual details!',
             'media' => $mediaItem,
         ]);
     }

@@ -146,8 +146,19 @@ class SeriesController extends Controller
                 $titleAr = $titleAr ?: ($details['title_ar'] ?? null);
                 $overviewAr = $overviewAr ?: ($details['overview_ar'] ?? null);
                 $tmdbId = $details['tmdb_id'] ?? $tmdbId;
+                $imdbId = $details['imdb_id'] ?? $imdbId;
             }
         }
+
+        $metaDataPayload = [
+            'title' => $validated['title'],
+            'title_ar' => $titleAr,
+            'overview' => $validated['overview'] ?? $series->overview,
+            'overview_ar' => $overviewAr,
+        ];
+        $this->metadata->ensureArabicMetadata($metaDataPayload, 'series');
+        $titleAr = $metaDataPayload['title_ar'] ?? $titleAr;
+        $overviewAr = $metaDataPayload['overview_ar'] ?? $overviewAr;
 
         $posterUrl = $this->artwork->downloadPoster($validated['poster_path'] ?? null);
         $backdropUrl = $this->artwork->downloadBackdrop($validated['backdrop_path'] ?? null);
@@ -158,17 +169,18 @@ class SeriesController extends Controller
             'release_year' => $validated['year'] ?? $series->release_year,
             'overview' => $validated['overview'] ?? $series->overview,
             'overview_ar' => $overviewAr ?? $series->overview_ar,
+            'tmdb_id' => $tmdbId,
+            'imdb_id' => $imdbId,
             'poster_path' => $posterUrl ?? $series->poster_path,
             'backdrop_path' => $backdropUrl ?? $series->backdrop_path,
             'rating' => $validated['rating'] ?? $series->rating,
-            'tmdb_id' => $tmdbId,
         ]);
 
         $series->load(['genres', 'seasons.episodes.subtitles']);
 
         return response()->json([
             'success' => true,
-            'message' => 'TV Series metadata successfully matched and saved!',
+            'message' => 'Series metadata successfully matched and saved with bilingual details!',
             'series' => $series,
         ]);
     }

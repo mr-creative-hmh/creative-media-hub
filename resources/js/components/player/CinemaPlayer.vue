@@ -396,6 +396,12 @@ const updateBufferProgress = () => {
             bufferedPercent.value = calc;
         }
     }
+    if (isRemuxStream.value && isPlaying.value) {
+        const streamEst = Math.min(100, progressPercent.value + 6);
+        if (streamEst > bufferedPercent.value) {
+            bufferedPercent.value = streamEst;
+        }
+    }
 };
 
 // Check server background transcode cache progress
@@ -403,9 +409,17 @@ const checkServerCacheStatus = async () => {
     try {
         const type = isEpisode.value ? 'episode' : 'movie';
         const res = await fetch(`/api/stream/cache-status?type=${type}&id=${props.item.id}`);
-        const data = await res.json();
-        if (data.cached_percent && data.cached_percent > bufferedPercent.value) {
-            bufferedPercent.value = data.cached_percent;
+        if (res.ok) {
+            const data = await res.json();
+            if (data.is_cached) {
+                bufferedPercent.value = 100;
+                if (serverCachePollInterval) {
+                    clearInterval(serverCachePollInterval);
+                    serverCachePollInterval = null;
+                }
+            } else if (typeof data.cached_percent === 'number' && data.cached_percent > bufferedPercent.value) {
+                bufferedPercent.value = data.cached_percent;
+            }
         }
     } catch (e) {}
 };
@@ -430,16 +444,10 @@ const fetchSubtitles = async () => {
         const data = await res.json();
         if (data.subtitles) {
             availableSubtitles.value = data.subtitles;
-            // Auto-select Arabic if available, else first English subtitle
-            const arSub = data.subtitles.find((s: any) => s.language === 'ara' || s.language === 'ar');
-            const enSub = data.subtitles.find((s: any) => s.language === 'eng' || s.language === 'en');
-            if (arSub) {
-                selectedSubtitleId.value = arSub.id;
-                loadSubtitleTrack(arSub.id);
-            } else if (enSub) {
-                selectedSubtitleId.value = enSub.id;
-                loadSubtitleTrack(enSub.id);
-            }
+            // Subtitles default to OFF as requested by user
+            selectedSubtitleId.value = 'off';
+            currentCues.value = [];
+            activeCueText.value = '';
         }
     } catch (e) {}
 };
@@ -992,7 +1000,7 @@ onBeforeUnmount(() => {
         <div
             v-if="selectedSubtitleId !== 'off' && activeCueText"
             class="absolute inset-x-0 z-30 flex items-center justify-center px-4 sm:px-8 pointer-events-none transition-all duration-200 ease-out"
-            :style="{ bottom: isControlsVisible ? '13%' : '5.5%' }"
+            :style="{ bottom: isControlsVisible ? '5.5rem' : '1.75rem' }"
         >
             <div
                 class="subtitle-pill px-4 py-1.5 sm:px-5 sm:py-2 rounded-lg bg-black/75 text-white text-center font-bold tracking-wide shadow-2xl backdrop-blur-xs transition-all duration-100 max-w-4xl pointer-events-none border border-white/5"
