@@ -5,6 +5,42 @@ namespace App\Services\Organizer;
 class SceneNameParserService
 {
     /**
+     * Map of Arabic ordinal words to integer values.
+     */
+    protected array $arabicNumerals = [
+        'الاولى' => 1, 'الاول' => 1, 'الأولى' => 1, 'الأول' => 1,
+        'الثانية' => 2, 'الثاني' => 2,
+        'الثالثة' => 3, 'الثالث' => 3,
+        'الرابعة' => 4, 'الرابع' => 4,
+        'الخامسة' => 5, 'الخامس' => 5,
+        'السادسة' => 6, 'السادس' => 6,
+        'السابعة' => 7, 'السابع' => 7,
+        'الثامنة' => 8, 'الثامن' => 8,
+        'التاسعة' => 9, 'التاسع' => 9,
+        'العاشرة' => 10, 'العاشر' => 10,
+        'الحادية عشرة' => 11, 'الحادي عشر' => 11,
+        'الثانية عشرة' => 12, 'الثاني عشر' => 12,
+        'الثالثة عشرة' => 13, 'الثالث عشر' => 13,
+        'الرابعة عشرة' => 14, 'الرابع عشر' => 14,
+        'الخامسة عشرة' => 15, 'الخامس عشر' => 15,
+        'السادسة عشرة' => 16, 'السادس عشر' => 16,
+        'السابعة عشرة' => 17, 'السابع عشر' => 17,
+        'الثامنة عشرة' => 18, 'الثامن عشر' => 18,
+        'التاسعة عشرة' => 19, 'التاسع عشر' => 19,
+        'العشرون' => 20, 'العشرين' => 20,
+    ];
+
+    /**
+     * Generic folder names that should not be used as media titles.
+     */
+    protected array $genericFolderNames = [
+        'movies', 'movie', 'films', 'film', 'cinema', 'افلام', 'أفلام', 'فلم', 'فيلم',
+        'series', 'tv', 'tv shows', 'tv-shows', 'shows', 'مسلسلات', 'مسلسل', 'برامج',
+        'media', 'videos', 'video', 'downloads', 'download', 'incoming', 'completed',
+        'new folder', 'temp', 'desktop', 'documents', 'hard drive', 'usb', 'external'
+    ];
+
+    /**
      * Parse any filename or full path into structured metadata.
      */
     public function parse(string $filenameOrPath): array
@@ -14,6 +50,11 @@ class SceneNameParserService
         $filename = end($parts) ?: '';
         $parentFolder = count($parts) > 1 ? $parts[count($parts) - 2] : '';
         $grandparentFolder = count($parts) > 2 ? $parts[count($parts) - 3] : '';
+
+        // Normalize eastern Arabic digits (١, ٢, ٣...) to standard (1, 2, 3...)
+        $filename = $this->convertArabicDigits($filename);
+        $parentFolder = $this->convertArabicDigits($parentFolder);
+        $grandparentFolder = $this->convertArabicDigits($grandparentFolder);
 
         $rawExt = pathinfo($filename, PATHINFO_EXTENSION);
         $baseName = pathinfo($filename, PATHINFO_FILENAME);
@@ -48,6 +89,15 @@ class SceneNameParserService
 
         $working = $baseName;
 
+        // Check if path indicates series library ancestor (e.g. /Series/ or /مسلسلات/)
+        $isInsideSeriesTree = false;
+        foreach ($parts as $p) {
+            if (in_array(strtolower(trim($p)), ['series', 'tv', 'tv shows', 'tv-shows', 'shows', 'مسلسلات', 'مسلسل', 'برامج'])) {
+                $isInsideSeriesTree = true;
+                break;
+            }
+        }
+
         // 1. Check 3D
         if (preg_match('/\b(3d|mvc|sbs|tab|half-sbs|half-ou|3d-hsbs)\b/i', $working . ' ' . $parentFolder)) {
             $is3D = true;
@@ -57,7 +107,7 @@ class SceneNameParserService
         $editionPatterns = [
             '/(?:\[|\()?(director\'?s\s*cut)(?:\]|\))?/i' => "Director's Cut",
             '/(?:\[|\()?(extended(?:\s*edition|\s*cut)?)(?:\]|\))?/i' => 'Extended Edition',
-            '/(?:\[|\()?(final\s*cut)(?:\]|\))?/i' => 'Final Cut',
+            '/(?:\[|\()?(ultimate(?:\s*edition|\s*cut)?)(?:\]|\))?/i' => 'Ultimate Edition',
             '/(?:\[|\()?(richard\s*donner\s*cut)(?:\]|\))?/i' => "Richard Donner Cut",
             '/(?:\[|\()?(theatrical(?:\s*cut|\s*edition)?)(?:\]|\))?/i' => 'Theatrical Cut',
             '/(?:\[|\()?(unrated(?:\s*edition|\s*cut)?)(?:\]|\))?/i' => 'Unrated',
@@ -65,6 +115,7 @@ class SceneNameParserService
             '/(?:\[|\()?(special\s*edition)(?:\]|\))?/i' => 'Special Edition',
             '/(?:\[|\()?(criterion(?:\s*edition|\s*collection)?)(?:\]|\))?/i' => 'Criterion Collection',
             '/(?:\[|\()?(imax(?:\s*edition)?)(?:\]|\))?/i' => 'IMAX Edition',
+            '/(?:\[|\(|\b)(final\s*cut)(?:\]|\)|\b)/i' => 'Final Cut',
             '/(?:\[|\()?(ova|oad)(?:\]|\))?/i' => 'OVA',
         ];
 
@@ -76,11 +127,11 @@ class SceneNameParserService
         }
 
         // 3. Multi-Part Movie
-        if (preg_match('/(?:\[|\(|\b)(?:part|pt|cd|disc)\s*(\d{1,2})(?:\]|\)|\b)/i', $working, $pMatches)) {
+        if (preg_match('/(?:\[|\(|\b)(?:part|pt|cd|disc|جزء|الجزء)\s*(\d{1,2})(?:\]|\)|\b)/ui', $working, $pMatches)) {
             $part = (int) $pMatches[1];
         }
 
-        // 4. Extract Date-based daily shows FIRST (e.g. The Daily Show 2023-01-15.mkv)
+        // 4. Extract Date-based daily shows (e.g. The Daily Show 2023-01-15.mkv)
         if (preg_match('/^(.*?)[._\-\s]+(20\d\d|19\d\d)[.\-_](\d{2})[.\-_](\d{2})(?:[._\-\s]*(.*?))?$/i', $working, $tvMatch)) {
             $type = 'series';
             $rawSeriesPart = $tvMatch[1];
@@ -116,14 +167,11 @@ class SceneNameParserService
             ];
         }
 
-        // 5. Extract Year:
-        // Priority 1: Year at beginning (2020 Movie Title.mkv)
+        // 5. Extract Year
         if (preg_match('/^(19\d\d|20\d\d)\s*[-_.]?\s*(.*)$/', $working, $yMatches)) {
             $year = (int) $yMatches[1];
             $working = $yMatches[2];
-        }
-        // Priority 2: Year in parentheses or brackets in filename
-        elseif (preg_match_all('/[\[\(]?\b(19\d\d|20\d\d)\b[\]\)]?/', $working, $yMatchesAll)) {
+        } elseif (preg_match_all('/[\[\(]?\b(19\d\d|20\d\d)\b[\]\)]?/', $working, $yMatchesAll)) {
             $foundYears = $yMatchesAll[1];
             $year = (int) end($foundYears);
         }
@@ -140,11 +188,14 @@ class SceneNameParserService
             $working = substr($working, 0, -strlen($gMatches[0]));
         }
 
-        // 7. Detect Folder-based Series context
-        if ($parentFolder && preg_match('/^(?:Season|Series|Staffel|Saison)\s*(\d{1,2})$/i', trim($parentFolder), $sMatches)) {
+        // 7. Detect Parent Folder Season context (English & Arabic)
+        // Matches: Season 1, Season 01, S1, S01, الموسم الأول, الموسم 1, موسم 2, الجزء 1, etc.
+        $seasonFolderRegex = '/^(?:Season|Series|Staffel|Saison|الموسم|موسم|الجزء|جزء)\s*(\d{1,2}|الاولى|الاول|الأولى|الأول|الثانية|الثاني|الثالثة|الثالث|الرابعة|الرابع|الخامسة|الخامس|السادسة|السادس|السابعة|السابع|الثامنة|الثامن|التاسعة|التاسع|العاشرة|العاشر)$/ui';
+        
+        if ($parentFolder && preg_match($seasonFolderRegex, trim($parentFolder), $sMatches)) {
             $type = 'series';
             $isParentSeasonFolder = true;
-            $season = (int) $sMatches[1];
+            $season = $this->resolveNumber($sMatches[1]);
         } elseif ($parentFolder && preg_match('/^[sS](\d{1,2})$/i', trim($parentFolder), $sMatches)) {
             $type = 'series';
             $isParentSeasonFolder = true;
@@ -156,7 +207,7 @@ class SceneNameParserService
         $rawSeriesPart = '';
         $rawAfterPart = '';
 
-        // S00E00 Specials / Multi-episode S01E01E02 / S01E01-E02
+        // Pattern A: S00E00 Specials / Multi-episode S01E01E02 / S01E01-E02
         if (preg_match('/^(.*?)[._\-\s]+[sS](\d{1,2})[eE](\d{1,3})(?:(?:[eE]|[-_ ])(\d{1,3}))[._\-\s]*(.*?)$/i', $working, $tvMatch)) {
             $type = 'series';
             $isSeriesDetected = true;
@@ -166,7 +217,7 @@ class SceneNameParserService
             $episodeEnd = (int) $tvMatch[4];
             $rawAfterPart = $tvMatch[5];
         }
-        // Standard S01E02 / S00E01 / S00E00
+        // Pattern B: Standard S01E02 / S00E01 / S00E00
         elseif (preg_match('/^(.*?)(?:[._\-\s]|^)[sS](\d{1,2})[eE](\d{1,3})[._\-\s]*(.*?)$/i', $working, $tvMatch)) {
             $type = 'series';
             $isSeriesDetected = true;
@@ -175,7 +226,7 @@ class SceneNameParserService
             $episode = (int) $tvMatch[3];
             $rawAfterPart = $tvMatch[4];
         }
-        // 1x02 (X format, e.g. Show-Name-1x01-Episode_Title)
+        // Pattern C: 1x02 (X format)
         elseif (preg_match('/^(.*?)[._\-\s]+(\d{1,2})x(\d{1,3})[._\-\s]*(.*?)$/i', $working, $tvMatch)) {
             $type = 'series';
             $isSeriesDetected = true;
@@ -184,7 +235,25 @@ class SceneNameParserService
             $episode = (int) $tvMatch[3];
             $rawAfterPart = $tvMatch[4];
         }
-        // Season 1 Episode 2
+        // Pattern D: Arabic Season & Episode in filename (e.g. مسلسل الاختيار الموسم 1 الحلقة 05)
+        elseif (preg_match('/^(.*?)(?:[._\-\s]+|^)(?:الموسم|موسم|الجزء|جزء)\s*(\d+|[\p{Arabic}]+)[._\-\s]+(?:الحلقة|حلقة|ح)\s*(\d+|[\p{Arabic}]+)[._\-\s]*(.*?)$/ui', $working, $tvMatch)) {
+            $type = 'series';
+            $isSeriesDetected = true;
+            $rawSeriesPart = $tvMatch[1];
+            $season = $this->resolveNumber($tvMatch[2]);
+            $episode = $this->resolveNumber($tvMatch[3]);
+            $rawAfterPart = $tvMatch[4];
+        }
+        // Pattern E: Arabic Episode in filename (e.g. مسلسل الاختيار الحلقة 01 or الحلقة 05 or حلقة 12)
+        elseif (preg_match('/^(.*?)(?:[._\-\s]+|^)(?:الحلقة|حلقة|ح)\s*(\d+|[\p{Arabic}]+)[._\-\s]*(.*?)$/ui', $working, $tvMatch)) {
+            $type = 'series';
+            $isSeriesDetected = true;
+            $rawSeriesPart = $tvMatch[1];
+            $season = $season ?? 1;
+            $episode = $this->resolveNumber($tvMatch[2]);
+            $rawAfterPart = $tvMatch[3];
+        }
+        // Pattern F: English Season & Episode text (e.g. Show Name Season 1 Episode 2)
         elseif (preg_match('/^(.*?)[._\-\s]+Season\s*(\d{1,2})\s*Episode\s*(\d{1,3})[._\-\s]*(.*?)$/i', $working, $tvMatch)) {
             $type = 'series';
             $isSeriesDetected = true;
@@ -193,16 +262,31 @@ class SceneNameParserService
             $episode = (int) $tvMatch[3];
             $rawAfterPart = $tvMatch[4];
         }
-        // Numbered episode filename inside Season folder: 05 - Kissed by Fire.mkv or 05.mkv
-        elseif ($isParentSeasonFolder && preg_match('/^(\d{1,3})\s*[-_.]?\s*(.*?)$/', $working, $epMatch)) {
+        // Pattern G: English Episode only in filename (e.g. Episode 04 or Ep 04 or E04)
+        elseif (preg_match('/^(.*?)(?:[._\-\s]+|^)(?:Episode|Ep|E)\s*(\d{1,3})[._\-\s]*(.*?)$/i', $working, $tvMatch)) {
             $type = 'series';
             $isSeriesDetected = true;
-            $episode = (int) $epMatch[1];
-            $rawAfterPart = $epMatch[2];
-            $seriesTitle = $grandparentFolder ? $this->cleanTitleString($grandparentFolder) : 'Unknown Series';
+            $rawSeriesPart = $tvMatch[1];
+            $season = $season ?? 1;
+            $episode = (int) $tvMatch[2];
+            $rawAfterPart = $tvMatch[3];
         }
-        // Series folder with single named episode (e.g. Breaking Bad/Pilot.mkv)
-        elseif ($parentFolder && !in_array(strtolower($parentFolder), ['movies', 'films', 'downloads', 'media', 'videos', 'incoming']) && !preg_match('/\b(19\d\d|20\d\d)\b/', $baseName)) {
+        // Pattern H: Pure numeric or simple episode number (e.g. "01.mp4", "1.mp4", "05 - Title.mkv")
+        // Triggered when in a Season folder, Series folder, or when parent folder is a specific show name!
+        elseif (preg_match('/^(?:E)?(\d{1,3})(?:\s*[-_.]\s*(.*?))?$/i', trim($working), $epMatch)) {
+            $candidateEp = (int) $epMatch[1];
+            $isParentGeneric = in_array(strtolower(trim($parentFolder)), $this->genericFolderNames);
+            
+            if ($isParentSeasonFolder || $isInsideSeriesTree || (!$isParentGeneric && !empty($parentFolder))) {
+                $type = 'series';
+                $isSeriesDetected = true;
+                $episode = $candidateEp;
+                $season = $season ?? 1;
+                $rawAfterPart = $epMatch[2] ?? '';
+            }
+        }
+        // Pattern I: Known pilot/special named episode
+        elseif ($parentFolder && !in_array(strtolower($parentFolder), $this->genericFolderNames) && !preg_match('/\b(19\d\d|20\d\d)\b/', $baseName)) {
             $knownEpisodeNames = ['pilot', 'winter is coming', 'the duel', 'finale', 'prologue', 'special', 'ova'];
             $cleanBaseLower = strtolower(trim(preg_replace('/[._\-]/', ' ', $baseName)));
             if (in_array($cleanBaseLower, $knownEpisodeNames) || $edition === 'OVA') {
@@ -215,42 +299,35 @@ class SceneNameParserService
             }
         }
 
-        // 9. Quality and Codec Delimiters
-        $qualityTokensRegex = '/\b(2160p|1440p|1080p|1080i|720p|576p|540p|480p|360p|240p|4k|2k|uhd|fhd|hd|sd|pal|ntsc|bluray|blu-ray|remux|bdrip|brrip|web-dl|webdl|webrip|web|hdtv|pdtv|dvdrip|dvd|vhsrip|vhs|x264|x265|h264|h265|hevc|avc|av1|xvid|divx|10bit|8bit|12bit|hdr|hdr10|hdr10\+|dv|dovi|dolbyvision|aac|aac2\.0|aac5\.1|ddp|ddp5\.1|ddp7\.1|ddp2\.0|dd\+|eac3|ac3|dts|dts-hd|dts-ma|atmos|truehd|flac|mp3|2\.0|5\.1|7\.1)\b/i';
+        // Quality and Codec Delimiters
+        $qualityTokensRegex = '/\b(2160p|1440p|1080p|1080i|720p|576p|540p|480p|360p|240p|4k|2k|uhd|fhd|hd|sd|pal|ntsc|bluray|blu-ray|remux|bdrip|brrip|web-dl|webdl|webrip|web|hdtv|pdtv|dvdrip|dvd|vhsrip|vhs|x264|x265|h264|h265|hevc|avc|av1|xvid|divx|10bit|8bit|12bit|hdr|hdr10|hdr10\+|dv|dovi|dolbyvision|aac|aac2\.0|aac5\.1|ddp|ddp5\.1|ddp7\.1|ddp2\.0|dd\+|eac3|ac3|dts|dts-hd|dts-ma|atmos|truehd|flac|mp3|2\.0|5\.1|7\.1|مترجم|مدبلج|نسخة|بلوراي)\b/ui';
 
         if ($isSeriesDetected) {
+            // Determine Series Title
             if (!empty($rawSeriesPart)) {
-                if (preg_match('/^(.*?)[._\-\s]+(19\d\d|20\d\d)$/i', $rawSeriesPart, $yMatch)) {
-                    $rawSeriesPart = $yMatch[1];
-                    $year = $year ?: (int) $yMatch[2];
-                }
                 $seriesTitle = $this->cleanTitleString($rawSeriesPart);
             }
 
-            if (!empty($rawAfterPart)) {
-                // Remove bracketed content before truncating
-                $cleanedRaw = preg_replace('/\[[^\]]*\]/', '', $rawAfterPart);
-                if (preg_match($qualityTokensRegex, $cleanedRaw, $qMatch, PREG_OFFSET_CAPTURE)) {
-                    $rawEp = substr($cleanedRaw, 0, $qMatch[0][1]);
-                } else {
-                    $rawEp = $cleanedRaw;
+            // If seriesTitle is missing or generic (e.g. file was just "01.mp4" or "Episode 05.mkv"), resolve from folder hierarchy
+            if (empty($seriesTitle) || is_numeric($seriesTitle) || strtolower($seriesTitle) === 'unknown series' || in_array(strtolower($seriesTitle), $this->genericFolderNames)) {
+                if ($isParentSeasonFolder && $grandparentFolder && !in_array(strtolower($grandparentFolder), $this->genericFolderNames)) {
+                    $seriesTitle = $this->cleanTitleString($grandparentFolder);
+                } elseif ($parentFolder && !in_array(strtolower($parentFolder), $this->genericFolderNames)) {
+                    $seriesTitle = $this->cleanTitleString($parentFolder);
+                } elseif ($grandparentFolder && !in_array(strtolower($grandparentFolder), $this->genericFolderNames)) {
+                    $seriesTitle = $this->cleanTitleString($grandparentFolder);
                 }
+            }
 
-                $cleanEp = $this->cleanEpisodeTitleString($rawEp);
-                if (!empty($cleanEp)) {
+            // Episode Title from remaining string
+            if ($rawAfterPart && !$episodeTitle) {
+                $cleanEp = $this->cleanTitleString($rawAfterPart);
+                if (!empty($cleanEp) && !is_numeric($cleanEp) && !preg_match($qualityTokensRegex, $cleanEp)) {
                     $episodeTitle = $cleanEp;
                 }
             }
 
-            if (empty($seriesTitle) || is_numeric($seriesTitle) || strtolower($seriesTitle) === 'unknown series') {
-                if ($isParentSeasonFolder && $grandparentFolder) {
-                    $seriesTitle = $this->cleanTitleString($grandparentFolder);
-                } elseif ($parentFolder && !in_array(strtolower($parentFolder), ['downloads', 'movies', 'media', 'tv shows', 'incoming', 'videos'])) {
-                    $seriesTitle = $this->cleanTitleString($parentFolder);
-                }
-            }
-
-            // Also check parent/grandparent directory for series year if still missing (e.g. "Rick and Morty (2013)")
+            // Check parent/grandparent directory for series year if missing
             if (!$year) {
                 $dirToCheck = $isParentSeasonFolder ? $grandparentFolder : $parentFolder;
                 if ($dirToCheck && preg_match('/\b(19\d\d|20\d\d)\b/', $dirToCheck, $dirYMatch)) {
@@ -261,19 +338,29 @@ class SceneNameParserService
             $cleanTitle = $seriesTitle ?: 'Unknown Series';
         } else {
             // Movie Title Extraction
-            if (preg_match('/\b(19\d\d|20\d\d)\b/', $working, $yMatch, PREG_OFFSET_CAPTURE)) {
-                $year = $year ?: (int) $yMatch[1][0];
-                $beforeYear = substr($working, 0, $yMatch[0][1]);
-                $cleanTitle = $this->cleanTitleString($beforeYear);
-            } elseif (preg_match($qualityTokensRegex, $working, $qMatch, PREG_OFFSET_CAPTURE)) {
-                $beforeQuality = substr($working, 0, $qMatch[0][1]);
-                $cleanTitle = $this->cleanTitleString($beforeQuality);
-            } else {
-                $cleanTitle = $this->cleanTitleString($working);
-            }
+            $isGenericMovieFile = in_array(strtolower(trim($baseName)), ['movie', 'film', 'video', 'main', 'cd1', 'cd2', 'فيلم', 'فلم', 'فيديو']);
 
-            if (!$year && $parentFolder && preg_match('/\b(19\d\d|20\d\d)\b/', $parentFolder, $dirYMatch)) {
-                $year = (int) $dirYMatch[1];
+            if ($isGenericMovieFile && $parentFolder && !in_array(strtolower($parentFolder), $this->genericFolderNames)) {
+                // Use folder name as movie title (e.g. The Godfather (1972)/movie.mp4)
+                $cleanTitle = $this->cleanTitleString($parentFolder);
+                if (preg_match('/\b(19\d\d|20\d\d)\b/', $parentFolder, $dirYMatch)) {
+                    $year = (int) $dirYMatch[1];
+                }
+            } else {
+                if (preg_match('/\b(19\d\d|20\d\d)\b/', $working, $yMatch, PREG_OFFSET_CAPTURE)) {
+                    $year = $year ?: (int) $yMatch[1][0];
+                    $beforeYear = substr($working, 0, $yMatch[0][1]);
+                    $cleanTitle = $this->cleanTitleString($beforeYear);
+                } elseif (preg_match($qualityTokensRegex, $working, $qMatch, PREG_OFFSET_CAPTURE)) {
+                    $beforeQuality = substr($working, 0, $qMatch[0][1]);
+                    $cleanTitle = $this->cleanTitleString($beforeQuality);
+                } else {
+                    $cleanTitle = $this->cleanTitleString($working);
+                }
+
+                if (!$year && $parentFolder && preg_match('/\b(19\d\d|20\d\d)\b/', $parentFolder, $dirYMatch)) {
+                    $year = (int) $dirYMatch[1];
+                }
             }
         }
 
@@ -304,7 +391,6 @@ class SceneNameParserService
             $resolution = '240p';
         }
 
-        // Dimension based resolution fallback (e.g. 1920x1080, 1280x720, 720x480, 640x360)
         if (!$resolution && preg_match('/\b(\d{3,4})x(\d{3,4})\b/i', $fullSpecsString, $dimMatch)) {
             $resolution = $this->calculateResolutionFromDimensions((int) $dimMatch[1], (int) $dimMatch[2]);
         }
@@ -371,6 +457,39 @@ class SceneNameParserService
         ];
     }
 
+    /**
+     * Resolve string or Arabic word to integer.
+     */
+    protected function resolveNumber(string|int $val): int
+    {
+        if (is_numeric($val)) {
+            return (int) $val;
+        }
+
+        $trimmed = trim($val);
+        if (isset($this->arabicNumerals[$trimmed])) {
+            return $this->arabicNumerals[$trimmed];
+        }
+
+        // Try stripping 'ال' if present
+        $withoutAl = preg_replace('/^ال/', '', $trimmed);
+        if (isset($this->arabicNumerals[$withoutAl])) {
+            return $this->arabicNumerals[$withoutAl];
+        }
+
+        return 1;
+    }
+
+    /**
+     * Convert Eastern Arabic numerals (١, ٢, ٣...) to Western (1, 2, 3...)
+     */
+    public function convertArabicDigits(string $str): string
+    {
+        $arabic = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+        $latin  = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        return str_replace($arabic, $latin, $str);
+    }
+
     public function calculateResolutionFromDimensions(int $w, int $h): string
     {
         $minDim = min($w, $h);
@@ -406,109 +525,82 @@ class SceneNameParserService
     public function cleanTitleString(string $raw): string
     {
         $s = preg_replace('/[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}]/u', '', $raw);
-        $s = preg_replace('/\[[^\]]*\]/', ' ', $s);
-        $s = preg_replace('/\([^\)]*\)/', ' ', $s);
-        $s = preg_replace('/\{[^\}]*\}/', ' ', $s);
-        $s = preg_replace('/[\[\]\(\)\{\}]/', ' ', $s);
-        $s = str_replace(['"', "'", '“', '”'], '', $s);
+        $s = preg_replace('/\[[^\]]*\]/u', ' ', $s);
+        $s = preg_replace('/\([^\)]*\)/u', ' ', $s);
+        $s = preg_replace('/\{[^\}]*\}/u', ' ', $s);
+        $s = preg_replace('/[\[\]\(\)\{\}]/u', ' ', $s);
+        $s = str_replace(['"', "'", '', ''], '', $s);
 
-        $s = preg_replace('/\b(?:Season|Series|Staffel|Saison)\s*\d{1,2}\b/i', ' ', $s);
+        // Strip leading Arabic prefix words: مسلسل, فيلم, برنامج
+        $s = preg_replace('/^(?:مسلسل|فيلم|فلم|برنامج)\s+/ui', '', trim($s));
+
+        // Strip season and episode markers
+        $s = preg_replace('/\b(?:Season|Series|Staffel|Saison|الموسم|موسم|الجزء|جزء)\s*(\d+|[\p{Arabic}]+)?\b/ui', ' ', $s);
+        $s = preg_replace('/\b(?:الحلقة|حلقة|ح)\s*(\d+|[\p{Arabic}]+)?\b/ui', ' ', $s);
         $s = preg_replace('/\bS\d{1,2}\b/i', ' ', $s);
         $s = preg_replace('/\b(?:2160p|1440p|1080p|1080i|720p|576p|540p|480p|360p|240p|4k|2k|bluray|remux|web-dl|webdl|webrip|hdtv|dvdrip|dvd|x264|x265|hevc|aac|dts|ac3|atmos|hdr|10bit|8bit|ddp5\.1|ddp)\b/i', ' ', $s);
+        
+        // Strip Arabic release tags
+        $s = preg_replace('/\b(?:مترجم|مدبلج|نسخة\s*اصلية|نسخة\s*أصلية|نسخة|حصريا|جودة\s*عالية|عالي\s*الجودة|كامل|بلوراي|دي\s*في\s*دي|اونلاين|مشاهدة|تحميل)\b/ui', ' ', $s);
+        
         $s = preg_replace('/\b(19\d\d|20\d\d)\b/', ' ', $s);
 
         // Protect hyphenated names (Spider-Man, X-Men, Ant-Man, Iron-Man)
-        $protected = [
-            'Spider-Man' => 'XPROTECTEDSPIDERMANX',
-            'X-Men' => 'XPROTECTEDXMENX',
-            'Ant-Man' => 'XPROTECTEDANTMANX',
-            'Iron-Man' => 'XPROTECTEDIRONMANX',
-        ];
-        foreach ($protected as $orig => $token) {
-            $s = preg_replace('/\b' . preg_quote($orig, '/') . '\b/i', $token, $s);
+        $s = preg_replace('/\b(spider)-(man)\b/i', 'Spider###Man', $s);
+        $s = preg_replace('/\b(x)-(men)\b/i', 'X###Men', $s);
+        $s = preg_replace('/\b(ant)-(man)\b/i', 'Ant###Man', $s);
+        $s = preg_replace('/\b(iron)-(man)\b/i', 'Iron###Man', $s);
+
+        // Convert dots, underscores, plus signs, and hyphens to spaces
+        $s = preg_replace('/[._+\-]/u', ' ', $s);
+        $s = str_replace('###', '-', $s);
+
+        // Collapse whitespace
+        $s = preg_replace('/\s+/u', ' ', $s);
+        $s = trim($s, " \t\n\r\0\x0B-_.:");
+
+        // Only apply English Title Case if there are Latin letters and not primarily Arabic
+        if (preg_match('/[a-zA-Z]/', $s) && !preg_match('/[\p{Arabic}]/u', $s)) {
+            $s = $this->toProperTitleCase($s);
         }
 
-        $s = preg_replace('/[._\-@#$]/u', ' ', $s);
-        $s = trim(preg_replace('/\s+/u', ' ', $s));
-
-        foreach ($protected as $orig => $token) {
-            $s = str_replace($token, $orig, $s);
-        }
-
-        return $this->toProperTitleCase($s);
-    }
-
-    protected function cleanEpisodeTitleString(string $raw): string
-    {
-        // 1. Remove bracketed blocks completely [1080p FHD], (2025), etc.
-        $s = preg_replace('/\[[^\]]*\]/', ' ', $raw);
-        $s = preg_replace('/\(.*?\)/', ' ', $s);
-        $s = preg_replace('/\{.*?\}/', ' ', $s);
-
-        // 2. Truncate at quality/codec tokens or release tags
-        $s = preg_replace('/\b(2160p|1440p|1080p|1080i|720p|576p|540p|480p|360p|240p|4k|2k|uhd|fhd|hd|sd|bluray|blu-ray|remux|bdrip|brrip|web-dl|webdl|webrip|web|hdtv|pdtv|dvdrip|dvd|x264|x265|h264|h265|hevc|avc|av1|xvid|divx|10bit|8bit|hdr|hdr10|dv|aac|ddp|ac3|dts|mp3)\b.*$/i', ' ', $s);
-
-        // 3. Remove trailing scene group or unclosed brackets
-        $s = preg_replace('/[-_.\s]*[\[\(\{].*$/', ' ', $s);
-        $s = preg_replace('/[._\-]/', ' ', $s);
-
-        // 4. Strip surrounding symbols and whitespace
-        $s = trim($s, " \t\n\r\0\x0B-_:;,./\[]{}()");
-        $s = trim(preg_replace('/\s+/', ' ', $s));
-
-        // 5. If it's just "Episode 1", "Episode 01", "Ep 1", "S01E01", or empty -> return empty string
-        if (empty($s) || preg_match('/^(episode|ep|part)\s*\d+$/i', $s) || preg_match('/^s\d+e\d+$/i', $s)) {
-            return '';
-        }
-
-        return $this->toProperTitleCase($s);
+        return $s;
     }
 
     public function toProperTitleCase(string $title): string
     {
-        $words = preg_split('/\s+/', strtolower($title));
-        if (empty($words) || empty($words[0])) return '';
+        $rawWords = explode(' ', $title);
+        $minorWords = ['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of', 'on', 'or', 'so', 'the', 'to', 'up', 'yet', 'with', 'from'];
 
-        $lowercaseWords = [
-            'a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor', 'on', 'at', 'to', 'from',
-            'by', 'with', 'in', 'of', 'over', 'into'
-        ];
+        $result = [];
+        foreach ($rawWords as $idx => $word) {
+            $prevWordEndedWithColon = ($idx > 0 && str_ends_with($rawWords[$idx - 1], ':'));
 
-        $capitalized = [];
-        $afterColon = false;
-
-        foreach ($words as $idx => $w) {
-            $hasTrailingColon = str_ends_with($w, ':');
-            $cleanWord = rtrim($w, ':');
-
-            if ($cleanWord === 'xprotectedspidermanx' || str_contains($cleanWord, 'spider-man')) {
-                $capitalized[] = 'Spider-Man' . ($hasTrailingColon ? ':' : '');
-                $afterColon = $hasTrailingColon;
-                continue;
-            }
-            if ($cleanWord === 'xprotectedxmenx' || str_contains($cleanWord, 'x-men')) {
-                $capitalized[] = 'X-Men' . ($hasTrailingColon ? ':' : '');
-                $afterColon = $hasTrailingColon;
-                continue;
-            }
-
-            $wCap = ucfirst($cleanWord) . ($hasTrailingColon ? ':' : '');
-
-            if ($idx === 0 || $afterColon || !in_array($cleanWord, $lowercaseWords)) {
-                $capitalized[] = $wCap;
+            // Handle hyphenated words (e.g. Spider-Man)
+            if (str_contains($word, '-')) {
+                $parts = explode('-', $word);
+                $capitalizedParts = array_map(function($p) use ($minorWords, $idx) {
+                    if (empty($p)) return $p;
+                    return ucfirst(strtolower($p));
+                }, $parts);
+                $word = implode('-', $capitalizedParts);
             } else {
-                $capitalized[] = $w;
+                $lower = strtolower($word);
+                if ($idx === 0 || $prevWordEndedWithColon || !in_array($lower, $minorWords)) {
+                    $word = ucfirst($lower);
+                } else {
+                    $word = $lower;
+                }
             }
-
-            $afterColon = $hasTrailingColon;
+            $result[] = $word;
         }
 
-        return implode(' ', $capitalized);
+        return implode(' ', $result);
     }
 
     public function isSampleOrExtra(string $filename, string $parentFolder): bool
     {
-        $lower = strtolower($filename . ' ' . $parentFolder);
-        return preg_match('/\b(sample|trailer|trailers|featurette|featurettes|extras|behindthescenes|deletedscenes|short)\b/i', $lower) === 1;
+        $combined = strtolower($filename . ' ' . $parentFolder);
+        return (bool) preg_match('/\b(sample|trailer|trailers|featurette|featurettes|behindthescenes|deleted|deletedscenes|extra|extras|preview|bonus|interview|short)\b/i', $combined);
     }
 }
