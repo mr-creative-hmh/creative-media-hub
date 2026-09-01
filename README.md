@@ -19,6 +19,20 @@
 
 ---
 
+## 📚 Complete Technical Documentation Suite
+
+For deep architectural specifications, internal pipeline lifecycles, directory layouts, developer setup, and REST APIs, explore our modular documentation suite:
+
+| Document | Description |
+| :--- | :--- |
+| 🏛️ **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Deep Clean Layered Architecture, Ports & Adapters, Hexagonal boundaries, and SQLite WAL concurrency model. |
+| 📁 **[docs/STRUCTURE.md](docs/STRUCTURE.md)** | Full directory tree, controller responsibilities, service boundaries, domain models, and Vue 3 components map. |
+| ⚙️ **[docs/PROCESSES.md](docs/PROCESSES.md)** | In-depth walkthrough of all 9 core pipelines (Virtual Scanner, Scene Parser, Metadata Waterfall, Boxsets Clustering, Remuxer, Hardlinks). |
+| 🛠️ **[docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)** | Contributor guide, local setup, running PHPUnit/Pest automated tests, adding new metadata providers, and coding standards. |
+| 📡 **[docs/API_REFERENCE.md](docs/API_REFERENCE.md)** | Complete REST & Streaming API reference with query parameters, request payloads, and response structures. |
+
+---
+
 ## 🌟 Visual Showcase
 
 <div align="center">
@@ -26,162 +40,135 @@
 ### 🖥️ Dashboard & Cinema Hero Showcase
 ![Dashboard Showcase](docs/screenshots/dashboard.png)
 
-### 🎬 4K Movies Collection & Intelligent Grid
-![Movies Grid](docs/screenshots/movies.png)
+### 🎬 4K Movies Catalog with Regional Cinema Filters
+![Movies Showcase](docs/screenshots/movies.png)
 
-### 📺 TV Series, Seasons & Multi-Episode Hub
-![Series Hub](docs/screenshots/series.png)
+### 🍿 Movie Boxsets & Franchise Sagas (2+ Films Verified)
+![Collections Showcase](docs/screenshots/collections.png)
 
-### 📂 Smart Media Organizer & Precision Renamer
-![Organizer](docs/screenshots/organizer.png)
+### 📺 TV Series & Episodic Hub
+![Series Showcase](docs/screenshots/series.png)
 
-### 🌐 Subtitle Management & Arabic Translation Waterfall
-![Subtitles](docs/screenshots/subtitles.png)
+### 🎯 Fix Match & Error Resolution Studio
+![Metadata Fix Match](docs/screenshots/metadata.png)
 
-### 🔍 Metadata Engine & Live Fix Match
-![Metadata Management](docs/screenshots/metadata.png)
+### ⚡ Zero-Copy NTFS Hardlink Physical Organizer
+![Organizer Showcase](docs/screenshots/organizer.png)
 
-### 📊 Library Analytics & Codec Insights
-![Analytics](docs/screenshots/analytics.png)
+### 💬 Subtitle Synchronization & Download Center
+![Subtitles Showcase](docs/screenshots/subtitles.png)
 
 </div>
 
 ---
 
-## ⚡ Key Features
+## ✨ Key Features & Capabilities
 
-- **🚀 Ultra-Fast Non-Blocking Scanner**:
-  - Scans 200+ movies and episodes in **< 45 seconds** without freezing.
-  - Multi-worker asynchronous architecture with non-blocking network queries.
-  - Live progress feedback with real-time Pause, Resume, and Cancel actions.
+### 1. 🍿 Movie Boxsets & Franchise Sagas
+- Clusters multi-film movie franchises (e.g. *Harry Potter (9 films)*, *Fast & Furious (11 films)*, *The Dark Knight Trilogy*, *Knives Out*, *Ip Man Collection*) with chronological release timelines.
+- Intelligent **`count >= 2`** threshold eliminates solitary 1-movie false positives from `/collections`.
 
-- **🍿 Seamless Cinema Video Player**:
-  - Hardware-accelerated HLS adaptive streaming + instant direct remux playback.
-  - Native support for MP4, MKV, AVI, MOV, WebM, and HEVC formats.
-  - Continue Watching resume state saved per-user with millisecond precision.
-  - Full keyboard controls (Space, Left/Right Seek, F for Fullscreen, M for Mute).
+### 2. 🌍 Regional Cinema Origin Filtering
+- 1-Click regional filtering:
+  - **Arabic Cinema (عربي)**: Egypt, Saudi Arabia, UAE, Syria, Lebanon, Jordan, Maghreb.
+  - **Bollywood (بوليوود)**: Hindi, Tamil, Telugu cinema.
+  - **Asian Cinema (آسيوي)**: Japan (Anime), South Korea, Hong Kong, China, Thailand.
+  - **Turkish Cinema (تركي)**: Turkish dramas and feature films.
+  - **Hollywood & Western**: US, UK, Australia, Canada.
+  - **European Cinema**: France, Germany, Italy, Spain, Scandinavia.
 
-- **🌍 Intelligent Subtitle & Translation Engine**:
-  - Embedded subtitle extraction directly from MKV/MP4 streams (SubRip, ASS/SSA, WebVTT).
-  - OpenSubtitles v3 automated search and synchronization.
-  - Arabic Waterfall pipeline: Instant subtitle translation via LibreTranslate and DeepL engines.
-  - Multi-encoding Arabic detector (`CP1256`, `CP1252`, `UTF-8`) with zero corruption.
+### 3. 🎯 Fix Match & Error Resolution Studio
+- Instant online metadata search with automated query cleaning (strips scene tags and dots).
+- **Direct ID Lookup**: Instantly fetch and apply full bilingual metadata by exact TMDb numeric ID (e.g. `27205`) or IMDb ID (`tt1375666`).
+- **1-Click Movie ↔ Series Converter**: Instantly fixes accidental type classification.
+- **Intelligent Scene Re-Parser**: Re-evaluates raw filenames on demand.
 
-- **🗂️ Smart Disk Organizer & Mass Renamer**:
-  - Live preview of renaming changes before applying.
-  - Industry-standard naming conventions (`Title (Year)` and `Show Name S01E02 - Episode Title`).
-  - Automated directory restructuring, clean presets, and conflict handling.
+### 4. 🧠 Intelligent Scene Name Parser (Arabic & Multilingual Engine)
+- Normalizes Eastern Arabic numerals (`١, ٢, ٣ → 1, 2, 3`).
+- Folder ancestor context inheritance: resolves episode numbers from nested structures (`Breaking Bad/Season 01/01.mp4`).
+- Distinguishes movie franchise sequence numbers from TV episodes inside movie folders (`1.Ip.Man.2008.mp4` → Movie Part 1).
 
-- **💻 Windows Portable Mode & Standalone App**:
-  - **Zero-installation portable executable** (`Creative Media Hub 1.0.0.exe`) for external hard drives.
-  - Windows NSIS installer with desktop integration (`Creative Media Hub Setup 1.0.0.exe`).
-  - Batch scripts (`Start-CreativeMediaHub.bat` & `Stop-CreativeMediaHub.bat`) for instant plug-and-play.
+### 5. ⚡ Hybrid Video Streaming & Remuxing
+- **Direct Stream (HTTP 206 Partial Content)**: Zero-CPU byte-range streaming for MP4 / H.264 / AAC.
+- **On-The-Fly FFmpeg Remuxer**: Real-time stdout remuxing for legacy containers (AVI, MKV, MPEG-4, DTS) into fragmented MP4.
+- **FastStart Disk Caching**: Transcode-caches remuxed streams in background for instantaneous seeking upon replay.
 
----
-
-## 🏗️ Architecture & Technology Stack
-
-```
-Creative Media Hub
-├── Backend: Laravel 12 / PHP 8.2+
-│   ├── Services: VirtualLibraryScanner, EmbeddedSubtitleDetector, MetadataAggregator
-│   ├── Streaming: StreamController (Chunked byte-range & on-the-fly MP4 remuxing)
-│   └── Database: SQLite / MySQL with dynamic indexed search
-├── Frontend: Vue 3 (Composition API) + TypeScript
-│   ├── Framework: Inertia.js 3.0 (SPA seamless navigation)
-│   ├── Styling: Tailwind CSS v4 (Pure Cinema Dark Aesthetic)
-│   ├── Icons: Lucide Vue Next & Custom SVG Vector Cinema Branding
-│   └── Internationalization: Custom Vue i18n (English & Arabic RTL/LTR)
-└── Desktop: Electron 34 + electron-builder
-    ├── Hardware Video Acceleration
-    └── Self-contained background server lifecycle management
-```
+### 6. 🔗 Zero-Copy NTFS Hardlink Organizer
+- Restructures chaotic folders into pristine paths (`Movies/Title (Year)/Title (Year) [1080p].ext`) using NTFS hardlinks (`mklink /H`).
+- **0 bytes** duplicated on disk and continuous torrent seeding remains 100% active.
+- Includes side-by-side Dry-Run simulation before execution.
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Quick Start & Installation
 
-### Prerequisites
-- PHP 8.2+ with `pdo_sqlite`, `mbstring`, `fileinfo`, `curl` extensions enabled
-- Composer 2.x
-- Node.js 20+ & npm
-- FFmpeg (optional, recommended for MKV/AVI instant remuxing)
+### 1. Prerequisites
+- **PHP 8.2+** with extensions: `pdo_sqlite`, `fileinfo`, `curl`, `mbstring`, `openssl`.
+- **Node.js 20+** and **npm 10+**.
+- **Composer 2.x**.
+- **FFmpeg & FFprobe 6.x / 7.x** (detected from PATH or Herd).
 
-### Installation
-
+### 2. Setup Commands
 ```bash
 # 1. Clone repository
 git clone https://github.com/mr-creative-hmh/creative-media-hub.git
 cd creative-media-hub
 
-# 2. Install PHP & JavaScript dependencies
+# 2. Install PHP and JS dependencies
 composer install
 npm install
 
-# 3. Configure environment
+# 3. Environment & Key Generation
 cp .env.example .env
 php artisan key:generate
 
-# 4. Run database migrations and seed default presets
-php artisan migrate --seed
+# 4. Database Initialization & Schema Migration
+touch database/database.sqlite
+php artisan migrate
 
-# 5. Build frontend assets
+# 5. Build Assets & Start Server
+npm run build
+php artisan serve
+```
+
+---
+
+## 🧪 Testing & Verification
+
+Creative Media Hub comes with a test suite covering parsers, streaming responses, and metadata cascades.
+
+```bash
+# Run all automated tests
+php artisan test
+
+# Verify frontend assets compilation
 npm run build
 ```
 
 ---
 
-## 💻 Running the Application
+## 💻 Windows Desktop App (Electron Standalone)
 
-### Option 1: Web Mode (Local Dev Server)
+Run Creative Media Hub as a standalone desktop cinema application:
+
 ```bash
-php artisan serve
-```
-Visit `http://127.0.0.1:8000` in your web browser.
+# Start in Electron development mode
+npm run electron:dev
 
-### Option 2: Desktop Mode (Electron Dev)
-```bash
-npm run desktop:dev
+# Package as a portable Windows executable (.exe)
+npm run electron:build
 ```
-
-### Option 3: Windows Portable Mode (External Drive)
-Double click `Start-CreativeMediaHub.bat` in the root folder.
-
-### Option 4: Build Windows Standalone Executables
-```bash
-npm run desktop:build
-```
-This produces:
-- `dist/Creative Media Hub 1.0.0.exe` (Standalone Portable Executable)
-- `dist/Creative Media Hub Setup 1.0.0.exe` (Windows NSIS Installer)
 
 ---
 
-## 🧪 Testing & Quality Assurance
+## 👨‍💻 Author & Lead Architect
 
-Run the comprehensive test suite:
-```bash
-php artisan test
-```
-*61/61 test suites passing (428 assertions verified).*
+**Eng. Hasan Mohammad Hasan**  
+- GitHub: [@mr-creative-hmh](https://github.com/mr-creative-hmh)  
+- Project: [Creative Media Hub](https://github.com/mr-creative-hmh/creative-media-hub)  
 
 ---
 
-## 👨‍💻 Creator & Lead Developer
+## 📜 License
 
-<div align="center">
-
-### **Eng. Hasan Mohammad Hasan**
-**م. حسن محمد حسن**
-
-*Created & Developed with Passion by Eng. Hasan Mohammad Hasan*  
-*تم التصميم والتطوير وبرمجة النظام بالكامل بواسطة المهندس حسن محمد حسن*
-
-[![GitHub](https://img.shields.io/badge/GitHub-mr--creative--hmh-181717?style=for-the-badge&logo=github)](https://github.com/mr-creative-hmh)
-
-</div>
-
----
-
-## 📄 License
-This project is open-sourced under the [MIT License](LICENSE).
+Creative Media Hub is open-source software licensed under the **[MIT License](LICENSE)**.

@@ -167,15 +167,27 @@ class MediaController extends Controller
 
     public function searchMetadata(Request $request): JsonResponse
     {
-        $query = $request->input('query');
+        $query = trim((string) $request->input('query', ''));
         $year = $request->input('year') ? (int) $request->input('year') : null;
 
         if (empty($query)) {
             return response()->json(['results' => []]);
         }
 
-        $results = $this->metadata->searchMovie($query, $year);
-        return response()->json(['results' => $results]);
+        // Clean dots and common tags for cleaner search queries
+        $cleanQuery = preg_replace('/[._-]+/', ' ', $query);
+        $cleanQuery = trim(preg_replace('/\s+/', ' ', $cleanQuery));
+
+        try {
+            $results = $this->metadata->searchMovie($cleanQuery, $year);
+            if (empty($results) && $cleanQuery !== $query) {
+                $results = $this->metadata->searchMovie($query, $year);
+            }
+            return response()->json(['results' => $results]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('searchMetadata error: ' . $e->getMessage());
+            return response()->json(['results' => []]);
+        }
     }
 
     public function fixMatch(Request $request, MediaItem $mediaItem): JsonResponse
