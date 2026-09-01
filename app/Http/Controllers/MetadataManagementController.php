@@ -5,24 +5,41 @@ namespace App\Http\Controllers;
 use App\Models\Genre;
 use App\Models\MediaItem;
 use App\Models\Series;
+use App\Models\Season;
+use App\Models\Episode;
+use App\Services\Metadata\ArtworkDownloadService;
+use App\Services\Metadata\MetadataAggregator;
+use App\Services\Metadata\TmdbProvider;
+use App\Services\Organizer\SceneNameParserService;
 use App\Services\Scanner\VirtualLibraryScannerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class MetadataManagementController extends Controller
 {
     protected VirtualLibraryScannerService $scannerService;
+    protected MetadataAggregator $metadata;
+    protected ArtworkDownloadService $artwork;
+    protected SceneNameParserService $parser;
 
-    public function __construct(VirtualLibraryScannerService $scannerService)
-    {
+    public function __construct(
+        VirtualLibraryScannerService $scannerService,
+        MetadataAggregator $metadata,
+        ArtworkDownloadService $artwork,
+        SceneNameParserService $parser
+    ) {
         $this->scannerService = $scannerService;
+        $this->metadata = $metadata;
+        $this->artwork = $artwork;
+        $this->parser = $parser;
     }
 
     public function index(Request $request): Response
     {
-        $filter = $request->input('filter', 'all'); // all, missing_posters, missing_arabic, movies, series, low_rated
+        $filter = $request->input('filter', 'all'); // all, unmatched, missing_posters, missing_arabic, movies, series
         $search = $request->input('search');
 
         $moviesQuery = MediaItem::query()->with(['genres', 'subtitles']);
@@ -31,15 +48,29 @@ class MetadataManagementController extends Controller
         if ($search) {
             $moviesQuery->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('title_ar', 'like', "%{$search}%");
+                  ->orWhere('title_ar', 'like', "%{$search}%")
+                  ->orWhere('file_path', 'like', "%{$search}%");
             });
             $seriesQuery->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('title_ar', 'like', "%{$search}%");
+                  ->orWhere('title_ar', 'like', "%{$search}%")
+                  ->orWhere('folder_path', 'like', "%{$search}%");
             });
         }
 
         match ($filter) {
+            'unmatched' => [
+                $moviesQuery->where(function ($q) {
+                    $q->whereNull('tmdb_id')
+                      ->orWhereNull('poster_path')
+                      ->orWhere('overview', 'like', 'Enjoy watching%');
+                }),
+                $seriesQuery->where(function ($q) {
+                    $q->whereNull('tmdb_id')
+                      ->orWhereNull('poster_path')
+                      ->orWhere('overview', 'like', 'Experience the complete series%');
+                }),
+            ],
             'missing_posters' => [
                 $moviesQuery->whereNull('poster_path'),
                 $seriesQuery->whereNull('poster_path'),
@@ -57,31 +88,37 @@ class MetadataManagementController extends Controller
             default => null,
         };
 
-        $movies = $moviesQuery->orderByDesc('created_at')->limit(40)->get()->map(function ($m) {
+        $movies = $moviesQuery->orderByDesc('created_at')->limit(50)->get()->map(function ($m) {
             return [
                 'id' => $m->id,
                 'title' => $m->title,
                 'title_ar' => $m->title_ar,
+                'original_title' => $m->original_title,
                 'type' => 'movie',
                 'release_year' => $m->release_year,
                 'rating' => $m->rating,
+                'collection_name' => $m->collection_name,
                 'poster_path' => $m->poster_path,
                 'backdrop_path' => $m->backdrop_path,
                 'overview' => $m->overview,
                 'overview_ar' => $m->overview_ar,
+                'tmdb_id' => $m->tmdb_id,
+                'imdb_id' => $m->imdb_id,
                 'has_poster' => !empty($m->poster_path),
                 'has_arabic' => !empty($m->title_ar) || !empty($m->overview_ar),
+                'is_matched' => !empty($m->tmdb_id),
                 'subtitles_count' => $m->subtitles->count(),
                 'file_path' => $m->file_path,
             ];
         });
 
-        $seriesList = $seriesQuery->orderByDesc('created_at')->limit(40)->get()->map(function ($s) {
+        $seriesList = $seriesQuery->orderByDesc('created_at')->limit(50)->get()->map(function ($s) {
             $episodesCount = $s->seasons->sum(fn ($sea) => $sea->episodes->count());
             return [
                 'id' => $s->id,
                 'title' => $s->title,
                 'title_ar' => $s->title_ar,
+                'original_title' => $s->original_title,
                 'type' => 'series',
                 'release_year' => $s->release_year,
                 'rating' => $s->rating,
@@ -89,11 +126,14 @@ class MetadataManagementController extends Controller
                 'backdrop_path' => $s->backdrop_path,
                 'overview' => $s->overview,
                 'overview_ar' => $s->overview_ar,
+                'tmdb_id' => $s->tmdb_id,
+                'imdb_id' => $s->imdb_id,
                 'has_poster' => !empty($s->poster_path),
                 'has_arabic' => !empty($s->title_ar) || !empty($s->overview_ar),
+                'is_matched' => !empty($s->tmdb_id),
                 'seasons_count' => $s->seasons->count(),
                 'episodes_count' => $episodesCount,
-                'seasons' => $s->seasons,
+                'file_path' => $s->folder_path,
             ];
         });
 
@@ -101,6 +141,7 @@ class MetadataManagementController extends Controller
 
         $stats = [
             'total_items' => MediaItem::count() + Series::count(),
+            'unmatched_count' => MediaItem::whereNull('tmdb_id')->count() + Series::whereNull('tmdb_id')->count(),
             'missing_posters_count' => MediaItem::whereNull('poster_path')->count() + Series::whereNull('poster_path')->count(),
             'missing_arabic_count' => MediaItem::whereNull('overview_ar')->count() + Series::whereNull('overview_ar')->count(),
             'movies_count' => MediaItem::count(),
@@ -117,13 +158,170 @@ class MetadataManagementController extends Controller
         ]);
     }
 
+    public function lookupId(Request $request): JsonResponse
+    {
+        $id = trim((string) $request->input('id'));
+        $type = strtolower((string) $request->input('type', 'movie'));
+
+        if (empty($id)) {
+            return response()->json(['success' => false, 'message' => 'Please provide an ID.'], 422);
+        }
+
+        // Clean up prefixes (e.g. tmdb:123 or tt0241527)
+        $cleanId = preg_replace('/^(tmdb:|imdb:)/i', '', $id);
+
+        if ($type === 'series' || $type === 'tv') {
+            $details = $this->metadata->getSeriesDetails($cleanId, 'tmdb');
+        } else {
+            $details = $this->metadata->getMovieDetails($cleanId, 'tmdb');
+        }
+
+        if (!$details) {
+            return response()->json(['success' => false, 'message' => 'No media found with that ID.'], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'details' => $details,
+        ]);
+    }
+
+    public function reparseItem(Request $request, string $type, int $id): JsonResponse
+    {
+        if ($type === 'movie') {
+            $item = MediaItem::findOrFail($id);
+            $parsed = $this->parser->parse($item->file_path ?? $item->title);
+            $cleanTitle = $parsed['clean_title'] ?? $parsed['title'];
+            $year = $parsed['year'] ?? $item->release_year;
+
+            $meta = $this->metadata->aggregateMovieMetadata($cleanTitle, $year);
+
+            $item->update([
+                'title' => $meta['title'] ?? $cleanTitle,
+                'title_ar' => $meta['title_ar'] ?? $item->title_ar,
+                'release_year' => $meta['release_year'] ?? $year,
+                'overview' => $meta['overview'] ?? $item->overview,
+                'overview_ar' => $meta['overview_ar'] ?? $item->overview_ar,
+                'tmdb_id' => $meta['tmdb_id'] ?? $item->tmdb_id,
+                'imdb_id' => $meta['imdb_id'] ?? $item->imdb_id,
+                'poster_path' => $meta['poster_path'] ?? $item->poster_path,
+                'backdrop_path' => $meta['backdrop_path'] ?? $item->backdrop_path,
+                'collection_name' => $meta['collection_name'] ?? TmdbProvider::inferCollectionFromTitle($cleanTitle),
+                'rating' => $meta['rating'] ?? $item->rating,
+                'runtime_minutes' => $meta['runtime_minutes'] ?? $item->runtime_minutes,
+            ]);
+
+            return response()->json(['success' => true, 'message' => "Reparsed as: {$cleanTitle} ({$year})", 'item' => $item]);
+        } else {
+            $item = Series::findOrFail($id);
+            $parsed = $this->parser->parse($item->title);
+            $cleanTitle = $parsed['series_title'] ?? ($parsed['clean_title'] ?? $item->title);
+            $year = $parsed['year'] ?? $item->release_year;
+
+            $meta = $this->metadata->aggregateSeriesMetadata($cleanTitle, $year);
+
+            $item->update([
+                'title' => $meta['title'] ?? $cleanTitle,
+                'title_ar' => $meta['title_ar'] ?? $item->title_ar,
+                'release_year' => $meta['release_year'] ?? $year,
+                'overview' => $meta['overview'] ?? $item->overview,
+                'overview_ar' => $meta['overview_ar'] ?? $item->overview_ar,
+                'tmdb_id' => $meta['tmdb_id'] ?? $item->tmdb_id,
+                'imdb_id' => $meta['imdb_id'] ?? $item->imdb_id,
+                'poster_path' => $meta['poster_path'] ?? $item->poster_path,
+                'backdrop_path' => $meta['backdrop_path'] ?? $item->backdrop_path,
+                'rating' => $meta['rating'] ?? $item->rating,
+            ]);
+
+            return response()->json(['success' => true, 'message' => "Reparsed as: {$cleanTitle} ({$year})", 'item' => $item]);
+        }
+    }
+
+    public function convertType(Request $request, string $type, int $id): JsonResponse
+    {
+        if ($type === 'movie') {
+            // Convert Movie to Series
+            $movie = MediaItem::findOrFail($id);
+            $filePath = $movie->file_path;
+            $title = $movie->title;
+
+            $series = Series::create([
+                'title' => $title,
+                'title_ar' => $movie->title_ar,
+                'release_year' => $movie->release_year,
+                'overview' => $movie->overview,
+                'overview_ar' => $movie->overview_ar,
+                'rating' => $movie->rating,
+                'poster_path' => $movie->poster_path,
+                'backdrop_path' => $movie->backdrop_path,
+                'status' => 'Continuing',
+            ]);
+
+            $season = Season::create([
+                'series_id' => $series->id,
+                'season_number' => 1,
+                'name' => 'Season 1',
+            ]);
+
+            Episode::create([
+                'season_id' => $season->id,
+                'episode_number' => 1,
+                'title' => $title,
+                'file_path' => $filePath,
+                'resolution' => $movie->resolution,
+                'video_codec' => $movie->video_codec,
+                'audio_codec' => $movie->audio_codec,
+                'runtime_minutes' => $movie->runtime_minutes,
+            ]);
+
+            $movie->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Converted '{$title}' to Series.",
+                'new_type' => 'series',
+                'new_id' => $series->id,
+            ]);
+        } else {
+            // Convert Series to Movie
+            $series = Series::with('episodes')->findOrFail($id);
+            $firstEp = $series->episodes->first();
+            $filePath = $firstEp?->file_path ?? '';
+
+            $movie = MediaItem::create([
+                'title' => $series->title,
+                'title_ar' => $series->title_ar,
+                'release_year' => $series->release_year,
+                'overview' => $series->overview,
+                'overview_ar' => $series->overview_ar,
+                'rating' => $series->rating,
+                'poster_path' => $series->poster_path,
+                'backdrop_path' => $series->backdrop_path,
+                'file_path' => $filePath,
+                'resolution' => $firstEp?->resolution ?? '1080p FHD',
+                'video_codec' => $firstEp?->video_codec ?? 'H.264',
+                'audio_codec' => $firstEp?->audio_codec ?? 'AAC',
+                'runtime_minutes' => $firstEp?->runtime_minutes ?? 110,
+            ]);
+
+            $series->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Converted '{$series->title}' to Movie.",
+                'new_type' => 'movie',
+                'new_id' => $movie->id,
+            ]);
+        }
+    }
+
     public function batchEnrich(Request $request): JsonResponse
     {
         $limit = max(10, min(100, (int) $request->input('limit', 50)));
         $result = $this->scannerService->enrichMissingMetadata($limit);
         return response()->json([
             'success' => true,
-            'message' => "Successfully enriched {$result['enriched_count']} items with bilingual metadata and artwork.",
+            'message' => "Successfully enriched {$result['enriched_count']} items with bilingual metadata, collections, and artwork.",
             'result' => $result,
         ]);
     }

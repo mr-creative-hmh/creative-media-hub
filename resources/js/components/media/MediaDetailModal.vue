@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
-import { X, Play, Star, Film, Clock, Heart, Users, Subtitles, Download, Check, HardDrive, Cpu, Video, Sparkles, SlidersHorizontal } from 'lucide-vue-next';
+import { X, Play, Star, Film, Clock, Heart, Users, Subtitles, Download, Check, HardDrive, Cpu, Video, Sparkles, SlidersHorizontal, Layers } from 'lucide-vue-next';
 import FixMatchModal from './FixMatchModal.vue';
 
 const props = defineProps<{
@@ -138,6 +138,27 @@ const handleMetadataUpdated = (updatedItem: any) => {
                     <p class="text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
                         {{ (isRTL && item.overview_ar) ? item.overview_ar : item.overview }}
                     </p>
+                </div>
+
+                                <!-- Collection Saga Banner -->
+                <div v-if="item.collection_name" class="p-3.5 rounded-2xl bg-gradient-to-r from-cyan-950/40 to-purple-950/30 border border-cyan-500/30 flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <Layers class="w-4 h-4 text-cyan-400 shrink-0" />
+                        <div class="min-w-0">
+                            <span class="text-[10px] uppercase font-bold text-cyan-300 tracking-wider block">
+                                {{ isRTL ? 'جزء من سلسلة أفلام' : 'Part of Movie Collection' }}
+                            </span>
+                            <span class="text-xs font-black text-white truncate block">
+                                {{ item.collection_name }}
+                            </span>
+                        </div>
+                    </div>
+                    <a
+                        :href="`/collections/${item.collection_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`"
+                        class="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-xs font-bold transition-all border border-cyan-500/30 shrink-0"
+                    >
+                        {{ isRTL ? 'عرض جميع أجزاء السلسلة' : 'View Full Saga' }}
+                    </a>
                 </div>
 
                 <!-- Technical Specs Box -->

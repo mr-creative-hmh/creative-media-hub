@@ -4,7 +4,7 @@ import { useI18n } from '@/i18n/useI18n';
 import { useScanner } from '@/composables/useScanner';
 import { useDownloader } from '@/composables/useDownloader';
 import {
-    LayoutDashboard, Film, Tv, ScanLine, FolderSync,
+    LayoutDashboard, Film, Layers, Tv, ScanLine, FolderSync,
     Subtitles, BarChart3, DownloadCloud, Settings, Sparkles,
     RefreshCw, Pause, Play, HardDrive, BookOpen
 } from 'lucide-vue-next';
@@ -16,6 +16,7 @@ const { activeDownloads } = useDownloader();
 const navItems = [
     { nameKey: 'nav.dashboard', href: '/', icon: LayoutDashboard, pattern: '^/$|^/dashboard' },
     { nameKey: 'nav.movies', href: '/movies', icon: Film, pattern: '^/movies' },
+    { nameKey: 'nav.collections', href: '/collections', icon: Layers, pattern: '^/collections' },
     { nameKey: 'nav.series', href: '/series', icon: Tv, pattern: '^/series' },
     { nameKey: 'nav.metadata', href: '/metadata', icon: Sparkles, pattern: '^/metadata' },
     { nameKey: 'nav.scanner', href: '/scanner', icon: ScanLine, pattern: '^/scanner' },

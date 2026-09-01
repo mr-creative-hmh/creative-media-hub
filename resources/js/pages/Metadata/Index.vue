@@ -9,13 +9,15 @@ import {
     Sparkles, Search, Image as ImageIcon, Globe, Film, Tv,
     Star, RefreshCw, CheckCircle2, AlertCircle, Play,
     SlidersHorizontal, Edit, ExternalLink, Check, X, Trash2,
-    Database, Filter, ArrowRight, Wand2
+    Database, Filter, ArrowRight, Wand2, Repeat, ArrowRightLeft,
+    AlertTriangle, HelpCircle, Layers
 } from 'lucide-vue-next';
 
 const props = defineProps<{
     items: Array<any>;
     stats: {
         total_items: number;
+        unmatched_count?: number;
         missing_posters_count: number;
         missing_arabic_count: number;
         movies_count: number;
@@ -32,7 +34,7 @@ const { t, isRTL } = useI18n();
 const activeFilter = ref(props.filters?.filter || 'all');
 const searchQuery = ref(props.filters?.search || '');
 const isBatchEnriching = ref(false);
-const isClearing = ref(false);
+const isOperating = ref(false);
 const toastMessage = ref('');
 
 // Fix Match Modal State
@@ -87,6 +89,52 @@ const handleItemUpdated = (updatedItem: any) => {
     }, 4000);
 };
 
+const quickReparse = async (item: any) => {
+    isOperating.value = true;
+    try {
+        const res = await fetch(`/api/metadata/${item.type}/${item.id}/reparse`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+        });
+        if (res.ok) {
+            const data = await res.json();
+            toastMessage.value = isRTL.value ? `تمت إعادة التحليل: ${data.message}` : data.message;
+            Object.assign(item, data.item);
+        }
+    } catch (e) {
+        toastMessage.value = isRTL.value ? 'فشل إعادة تحليل الملف.' : 'Failed to reparse file.';
+    } finally {
+        isOperating.value = false;
+        setTimeout(() => { toastMessage.value = ''; }, 4000);
+    }
+};
+
+const quickConvert = async (item: any) => {
+    isOperating.value = true;
+    try {
+        const res = await fetch(`/api/metadata/${item.type}/${item.id}/convert-type`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+        });
+        if (res.ok) {
+            const data = await res.json();
+            toastMessage.value = isRTL.value ? `تم التحويل: ${data.message}` : data.message;
+            setTimeout(() => { router.reload({ preserveState: false }); }, 1000);
+        }
+    } catch (e) {
+        toastMessage.value = isRTL.value ? 'فشل تحويل النوع.' : 'Failed to convert media type.';
+    } finally {
+        isOperating.value = false;
+        setTimeout(() => { toastMessage.value = ''; }, 4000);
+    }
+};
+
 const enrichAllMissing = async () => {
     isBatchEnriching.value = true;
     try {
@@ -101,14 +149,14 @@ const enrichAllMissing = async () => {
         if (res.ok) {
             const data = await res.json();
             toastMessage.value = isRTL.value
-                ? `تم جلب وتحديث البيانات السحابية لـ ${data.result?.enriched_count || 0} عنصراً بنجاح!`
+                ? `تم بنجاح جلب وتحديث بيانات ${data.result?.enriched_count || 0} عنصراً مع البوسترات!`
                 : `Enriched ${data.result?.enriched_count || 0} items with Arabic metadata & artwork!`;
             setTimeout(() => {
                 router.reload({ preserveState: false });
             }, 1200);
         }
     } catch (e) {
-        toastMessage.value = isRTL.value ? 'حدث خطأ أثناء جلب البيانات.' : 'Error during metadata enrichment.';
+        toastMessage.value = isRTL.value ? 'حدث خطأ أثناء المعالجة الجماعية.' : 'Error during metadata enrichment.';
     } finally {
         isBatchEnriching.value = false;
     }
@@ -118,333 +166,339 @@ const deleteItem = (item: any) => {
     confirmModal.value = {
         show: true,
         title: isRTL.value ? 'حذف من المكتبة' : 'Delete from Library',
-        message: isRTL.value ? `هل أنت متأكد من حذف "${item.title}" من الفهرس وقاعدة البيانات؟` : `Are you sure you want to remove "${item.title}" from library database?`,
-        confirmText: isRTL.value ? 'حذف' : 'Delete',
+        message: isRTL.value 
+            ? `هل أنت متأكد من حذف "${item.title}" من قاعدة البيانات؟ (لن يتم حذف الملف الفعلي من القرص)`
+            : `Are you sure you want to remove "${item.title}" from the library index? (Original file will not be deleted)`,
+        confirmText: isRTL.value ? 'نعم، حذف' : 'Yes, Delete',
         type: 'danger',
         action: async () => {
+            const endpoint = item.type === 'series' ? `/api/series/${item.id}` : `/api/media/${item.id}`;
             try {
-                const res = await fetch(`/api/scanner/media/${item.id}`, {
+                const res = await fetch(endpoint, {
                     method: 'DELETE',
                     headers: {
                         'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
                     },
                 });
                 if (res.ok) {
-                    router.reload({ preserveState: true });
+                    confirmModal.value.show = false;
+                    toastMessage.value = isRTL.value ? `تم حذف "${item.title}"` : `Deleted "${item.title}"`;
+                    setTimeout(() => { router.reload({ preserveState: false }); }, 800);
                 }
             } catch (e) {}
-            confirmModal.value.show = false;
-        },
+        }
     };
 };
 </script>
 
 <template>
     <AppLayout>
-        <Head :title="isRTL ? 'استوديو البيانات والأغلفة - Creative Stream' : 'Metadata & Cover Studio - Creative Stream'" />
+        <Head :title="isRTL ? 'استوديو البيانات الوصفية ومعالجة أخطاء الفهرسة' : 'Metadata Studio & Error Triage'" />
 
-        <div class="min-h-screen pb-20 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8" :dir="isRTL ? 'rtl' : 'ltr'">
-            <!-- Studio Hero Banner -->
-            <div class="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 relative overflow-hidden bg-gradient-to-br from-slate-900/90 via-slate-900/60 to-cyan-950/30 shadow-2xl">
-                <div class="absolute -right-20 -top-20 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
-                <div class="absolute -left-20 -bottom-20 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="space-y-8 pb-16">
+            <!-- Toast Feedback Banner -->
+            <div
+                v-if="toastMessage"
+                class="fixed bottom-6 z-50 p-4 rounded-2xl glass-panel border border-cyan-500/40 bg-slate-950/95 text-cyan-300 font-bold text-xs shadow-2xl flex items-center gap-3 animate-slide-up"
+                :class="isRTL ? 'left-6' : 'right-6'"
+            >
+                <CheckCircle2 class="w-4 h-4 text-cyan-400 shrink-0" />
+                <span>{{ toastMessage }}</span>
+            </div>
 
-                <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div class="space-y-2">
-                        <div class="flex items-center gap-2">
-                            <span class="px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5 shadow-sm">
-                                <Sparkles class="w-3 h-3 text-cyan-400" />
-                                <span>{{ isRTL ? 'استوديو البيانات الذكي' : 'Smart Metadata Studio' }}</span>
-                            </span>
-                            <span class="px-2.5 py-1 rounded-full text-[10px] font-mono bg-white/5 text-slate-400 border border-white/10">
-                                TMDb & OMDb Online
-                            </span>
+            <!-- Header Banner -->
+            <section class="relative rounded-3xl overflow-hidden glass-panel border border-cyan-500/20 p-6 lg:p-10 bg-gradient-to-br from-cyan-950/40 via-slate-900/60 to-purple-950/30">
+                <div class="ambient-glow bg-cyan-500/10 w-96 h-96 -top-20 -left-20 pointer-events-none"></div>
+
+                <div class="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                    <div class="space-y-3 max-w-2xl">
+                        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-bold uppercase tracking-wider">
+                            <Wand2 class="w-3.5 h-3.5" />
+                            <span>{{ isRTL ? 'استوديو المعالجة وتصحيح المطابقة' : 'Fix Match & Metadata Studio' }}</span>
                         </div>
-                        <h1 class="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                            {{ isRTL ? 'إدارة البيانات الوصفية والأغلفة' : 'Library Metadata & Cover Studio' }}
+                        <h1 class="text-3xl lg:text-4xl font-black text-white tracking-tight">
+                            {{ isRTL ? 'إدارة البيانات الوصفية وحل أخطاء الفهرسة' : 'Metadata Management & Error Triage' }}
                         </h1>
-                        <p class="text-xs sm:text-sm text-slate-400 max-w-2xl leading-relaxed">
-                            {{ isRTL
-                                ? 'فحص ومعاينة بطاقات الأفلام والمسلسلات، جلب العناوين والملخصات العربية، استبدال البوسترات والخلفيات بدقة سينمائية فائقة عبر TMDb و OMDb.'
-                                : 'Inspect and curate your media library cards, enrich Arabic & English synopses, download high-res posters and backdrops with dual API providers.'
+                        <p class="text-sm text-slate-300 leading-relaxed">
+                            {{ isRTL 
+                                ? 'تحكم كامل في أسماء وتصنيفات الوسائط، تصحيح المطابقات الخاطئة، تحويل الأفلام إلى مسلسلات بنقرة واحدة، وتحديث البوسترات والترجمة العربية.' 
+                                : 'Fix unmatched files, resolve scanner misidentifications, convert between movies and series with 1-click, and auto-fetch posters and Arabic plots.' 
                             }}
                         </p>
                     </div>
 
-                    <!-- Batch Actions -->
-                    <div class="flex items-center gap-3 shrink-0 flex-wrap">
+                    <!-- Batch Action Button -->
+                    <div class="shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                         <button
-                            type="button"
                             @click="enrichAllMissing"
                             :disabled="isBatchEnriching"
-                            class="px-5 py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs sm:text-sm flex items-center gap-2.5 shadow-lg shadow-cyan-500/25 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                            class="px-5 py-3 rounded-2xl bg-cyan-500 text-slate-950 font-black text-xs hover:bg-cyan-400 flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                         >
-                            <RefreshCw class="w-4 h-4" :class="isBatchEnriching ? 'animate-spin' : ''" />
+                            <RefreshCw v-if="isBatchEnriching" class="w-4 h-4 animate-spin" />
+                            <Sparkles v-else class="w-4 h-4" />
                             <span>
-                                {{ isBatchEnriching
-                                    ? (isRTL ? 'جاري الجلب السحابي...' : 'Enriching via TMDb...')
-                                    : (isRTL ? 'جلب وتحديث البيانات السحابية' : 'Enrich Missing Metadata')
+                                {{ isBatchEnriching 
+                                    ? (isRTL ? 'جاري التحديث التلقائي...' : 'Enriching in Background...') 
+                                    : (isRTL ? 'معالجة وتحديث تلقائي جماعي' : 'Batch Auto-Resolve & Fix') 
                                 }}
                             </span>
                         </button>
                     </div>
                 </div>
 
-                <!-- Studio Stats Bar -->
-                <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-8 pt-6 border-t border-white/10">
-                    <div class="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1">
-                        <div class="text-[11px] text-slate-400 font-medium flex items-center gap-1.5">
-                            <Database class="w-3.5 h-3.5 text-cyan-400" />
-                            <span>{{ isRTL ? 'إجمالي العناصر' : 'Total Items' }}</span>
-                        </div>
+                <!-- Stats Counters Grid -->
+                <div class="relative z-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-8 pt-6 border-t border-white/10">
+                    <div class="p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 text-center">
                         <div class="text-xl font-black text-white">{{ stats.total_items }}</div>
+                        <div class="text-[10px] text-slate-400 font-semibold uppercase mt-0.5">{{ isRTL ? 'إجمالي العناصر' : 'Total Items' }}</div>
                     </div>
-
-                    <div class="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1">
-                        <div class="text-[11px] text-slate-400 font-medium flex items-center gap-1.5">
-                            <Film class="w-3.5 h-3.5 text-blue-400" />
-                            <span>{{ isRTL ? 'الأفلام' : 'Movies' }}</span>
-                        </div>
-                        <div class="text-xl font-black text-white">{{ stats.movies_count }}</div>
-                    </div>
-
-                    <div class="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1">
-                        <div class="text-[11px] text-slate-400 font-medium flex items-center gap-1.5">
-                            <Tv class="w-3.5 h-3.5 text-indigo-400" />
-                            <span>{{ isRTL ? 'المسلسلات' : 'Series' }}</span>
-                        </div>
-                        <div class="text-xl font-black text-white">{{ stats.series_count }}</div>
-                    </div>
-
-                    <div class="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1" :class="stats.missing_arabic_count > 0 ? 'border-amber-500/30 bg-amber-500/5' : ''">
-                        <div class="text-[11px] font-medium flex items-center gap-1.5" :class="stats.missing_arabic_count > 0 ? 'text-amber-400' : 'text-slate-400'">
-                            <Globe class="w-3.5 h-3.5" />
-                            <span>{{ isRTL ? 'بحاجة لبيانات عربية' : 'Missing Arabic' }}</span>
-                        </div>
-                        <div class="text-xl font-black" :class="stats.missing_arabic_count > 0 ? 'text-amber-300' : 'text-white'">
-                            {{ stats.missing_arabic_count }}
+                    <div 
+                        @click="applyFilter('unmatched')"
+                        class="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-center cursor-pointer hover:bg-amber-500/20 transition-colors"
+                    >
+                        <div class="text-xl font-black text-amber-400">{{ stats.unmatched_count ?? 0 }}</div>
+                        <div class="text-[10px] text-amber-300 font-bold uppercase mt-0.5 flex items-center justify-center gap-1">
+                            <AlertTriangle class="w-3 h-3" />
+                            <span>{{ isRTL ? 'أخطاء / غير مطابق' : 'Unmatched / Errors' }}</span>
                         </div>
                     </div>
-
-                    <div class="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1" :class="stats.missing_posters_count > 0 ? 'border-rose-500/30 bg-rose-500/5' : ''">
-                        <div class="text-[11px] font-medium flex items-center gap-1.5" :class="stats.missing_posters_count > 0 ? 'text-rose-400' : 'text-slate-400'">
-                            <ImageIcon class="w-3.5 h-3.5" />
-                            <span>{{ isRTL ? 'أغلفة مفقودة' : 'Missing Posters' }}</span>
-                        </div>
-                        <div class="text-xl font-black" :class="stats.missing_posters_count > 0 ? 'text-rose-300' : 'text-white'">
-                            {{ stats.missing_posters_count }}
-                        </div>
+                    <div 
+                        @click="applyFilter('missing_posters')"
+                        class="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-center cursor-pointer hover:bg-rose-500/20 transition-colors"
+                    >
+                        <div class="text-xl font-black text-rose-400">{{ stats.missing_posters_count }}</div>
+                        <div class="text-[10px] text-rose-300 font-semibold uppercase mt-0.5">{{ isRTL ? 'بدون بوستر' : 'No Artwork' }}</div>
+                    </div>
+                    <div 
+                        @click="applyFilter('missing_arabic')"
+                        class="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/30 text-center cursor-pointer hover:bg-purple-500/20 transition-colors"
+                    >
+                        <div class="text-xl font-black text-purple-400">{{ stats.missing_arabic_count }}</div>
+                        <div class="text-[10px] text-purple-300 font-semibold uppercase mt-0.5">{{ isRTL ? 'بدون عربي' : 'No Arabic Plot' }}</div>
+                    </div>
+                    <div class="p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 text-center">
+                        <div class="text-xl font-black text-cyan-400">{{ stats.movies_count }}</div>
+                        <div class="text-[10px] text-slate-400 font-semibold uppercase mt-0.5">{{ isRTL ? 'أفلام' : 'Movies' }}</div>
+                    </div>
+                    <div class="p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 text-center">
+                        <div class="text-xl font-black text-purple-400">{{ stats.series_count }}</div>
+                        <div class="text-[10px] text-slate-400 font-semibold uppercase mt-0.5">{{ isRTL ? 'مسلسلات' : 'Series' }}</div>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <!-- Toast Notification -->
-            <div v-if="toastMessage" class="p-4 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-200 text-xs sm:text-sm font-semibold flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-300 shadow-xl">
-                <CheckCircle2 class="w-5 h-5 text-cyan-400 shrink-0" />
-                <span>{{ toastMessage }}</span>
-            </div>
-
-            <!-- Filters & Search Toolbar -->
-            <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+            <!-- Filters Bar & Search -->
+            <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
                 <!-- Filter Pills -->
-                <div class="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 custom-scrollbar">
+                <div class="flex flex-wrap items-center gap-2">
                     <button
-                        type="button"
                         @click="applyFilter('all')"
-                        class="px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer border"
-                        :class="activeFilter === 'all' ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md shadow-cyan-500/20' : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'"
+                        class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        :class="activeFilter === 'all' ? 'bg-cyan-500 text-slate-950 shadow-md font-black' : 'bg-white/[0.05] text-slate-300 hover:text-white border border-white/10'"
                     >
-                        {{ isRTL ? 'الكل' : 'All Media' }} ({{ stats.total_items }})
+                        {{ isRTL ? 'الكل' : 'All Items' }}
                     </button>
-
                     <button
-                        type="button"
-                        @click="applyFilter('missing_arabic')"
-                        class="px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer border flex items-center gap-1.5"
-                        :class="activeFilter === 'missing_arabic' ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20' : 'bg-white/5 text-amber-300 border-white/10 hover:bg-white/10'"
+                        @click="applyFilter('unmatched')"
+                        class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                        :class="activeFilter === 'unmatched' ? 'bg-amber-500 text-slate-950 shadow-md font-black' : 'bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/30'"
                     >
-                        <Globe class="w-3.5 h-3.5" />
-                        <span>{{ isRTL ? 'بيانات عربية ناقصة' : 'Missing Arabic' }}</span>
-                        <span class="px-1.5 py-0.2 rounded-full text-[10px]" :class="activeFilter === 'missing_arabic' ? 'bg-black/20' : 'bg-amber-500/20 text-amber-300'">
-                            {{ stats.missing_arabic_count }}
-                        </span>
+                        <AlertTriangle class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'أخطاء الفهرسة وغير المطابق' : 'Unmatched & Errors' }}</span>
+                        <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-black/40 font-mono">{{ stats.unmatched_count ?? 0 }}</span>
                     </button>
-
                     <button
-                        type="button"
                         @click="applyFilter('missing_posters')"
-                        class="px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer border flex items-center gap-1.5"
-                        :class="activeFilter === 'missing_posters' ? 'bg-rose-500 text-slate-950 border-rose-400 shadow-md shadow-rose-500/20' : 'bg-white/5 text-rose-300 border-white/10 hover:bg-white/10'"
+                        class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        :class="activeFilter === 'missing_posters' ? 'bg-rose-500 text-white shadow-md font-black' : 'bg-white/[0.05] text-slate-300 hover:text-white border border-white/10'"
                     >
-                        <ImageIcon class="w-3.5 h-3.5" />
-                        <span>{{ isRTL ? 'أغلفة مفقودة' : 'Missing Posters' }}</span>
-                        <span class="px-1.5 py-0.2 rounded-full text-[10px]" :class="activeFilter === 'missing_posters' ? 'bg-black/20' : 'bg-rose-500/20 text-rose-300'">
-                            {{ stats.missing_posters_count }}
-                        </span>
+                        {{ isRTL ? 'بدون بوستر' : 'Missing Artwork' }}
                     </button>
-
                     <button
-                        type="button"
+                        @click="applyFilter('missing_arabic')"
+                        class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        :class="activeFilter === 'missing_arabic' ? 'bg-purple-500 text-white shadow-md font-black' : 'bg-white/[0.05] text-slate-300 hover:text-white border border-white/10'"
+                    >
+                        {{ isRTL ? 'بدون لغة عربية' : 'Missing Arabic' }}
+                    </button>
+                    <button
                         @click="applyFilter('movies')"
-                        class="px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer border flex items-center gap-1.5"
-                        :class="activeFilter === 'movies' ? 'bg-blue-500 text-slate-950 border-blue-400' : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'"
+                        class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        :class="activeFilter === 'movies' ? 'bg-cyan-500 text-slate-950 shadow-md font-black' : 'bg-white/[0.05] text-slate-300 hover:text-white border border-white/10'"
                     >
-                        <Film class="w-3.5 h-3.5" />
-                        <span>{{ isRTL ? 'أفلام' : 'Movies' }}</span>
+                        {{ isRTL ? 'أفلام فقط' : 'Movies Only' }}
                     </button>
-
                     <button
-                        type="button"
                         @click="applyFilter('series')"
-                        class="px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer border flex items-center gap-1.5"
-                        :class="activeFilter === 'series' ? 'bg-indigo-500 text-slate-950 border-indigo-400' : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'"
+                        class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        :class="activeFilter === 'series' ? 'bg-purple-500 text-white shadow-md font-black' : 'bg-white/[0.05] text-slate-300 hover:text-white border border-white/10'"
                     >
-                        <Tv class="w-3.5 h-3.5" />
-                        <span>{{ isRTL ? 'مسلسلات' : 'Series' }}</span>
+                        {{ isRTL ? 'مسلسلات فقط' : 'Series Only' }}
                     </button>
                 </div>
 
                 <!-- Search Input -->
-                <form @submit.prevent="handleSearch" class="relative w-full md:w-72 shrink-0">
+                <div class="relative w-full md:w-72">
+                    <Search class="absolute top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" :class="isRTL ? 'right-3' : 'left-3'" />
                     <input
                         v-model="searchQuery"
+                        @keyup.enter="handleSearch"
                         type="text"
-                        :placeholder="isRTL ? 'ابحث بالعنوان الإنجليزي أو العربي...' : 'Search title or Arabic name...'"
-                        class="w-full pl-4 pr-10 py-2.5 rounded-2xl bg-white/5 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
-                        :class="isRTL ? 'text-right' : 'text-left'"
+                        :placeholder="isRTL ? 'بحث بالاسم أو المسار...' : 'Search title or path...'"
+                        class="w-full py-2 rounded-xl bg-slate-900/80 border border-white/10 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-cyan-400 transition-colors"
+                        :class="isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'"
                     />
-                    <button type="submit" class="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-white cursor-pointer">
-                        <Search class="w-4 h-4" />
-                    </button>
-                </form>
+                </div>
             </div>
 
-            <!-- Media Grid Cards -->
-            <div v-if="items.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            <!-- Items List -->
+            <div v-if="items.length > 0" class="space-y-3">
                 <div
                     v-for="item in items"
-                    :key="`${item.type}_${item.id}`"
-                    class="glass-panel rounded-3xl border border-white/10 bg-slate-900/60 overflow-hidden flex flex-col justify-between hover:border-cyan-500/40 hover:shadow-xl transition-all group duration-300"
+                    :key="`${item.type}-${item.id}`"
+                    class="group rounded-2xl glass-panel border border-white/10 hover:border-cyan-500/30 p-4 transition-all duration-200 bg-slate-900/40 hover:bg-slate-900/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
                 >
-                    <div>
-                        <!-- Media Card Artwork Header -->
-                        <div class="relative aspect-video w-full overflow-hidden bg-slate-950">
+                    <!-- Left: Poster + Info -->
+                    <div class="flex items-center gap-4 flex-1 min-w-0">
+                        <!-- Poster Preview -->
+                        <div class="w-14 aspect-[2/3] rounded-xl overflow-hidden bg-slate-950 shrink-0 border border-white/10 relative">
                             <img
-                                :src="item.backdrop_path || item.poster_path || '/placeholder.jpg'"
+                                v-if="item.poster_path"
+                                :src="item.poster_path"
                                 :alt="item.title"
-                                class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                class="w-full h-full object-cover"
+                                loading="lazy"
                             />
-                            <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent"></div>
+                            <div v-else class="w-full h-full flex items-center justify-center text-slate-700">
+                                <Film v-if="item.type === 'movie'" class="w-5 h-5" />
+                                <Tv v-else class="w-5 h-5" />
+                            </div>
 
-                            <!-- Floating Badges -->
-                            <div class="absolute top-3 left-3 flex items-center gap-1.5">
-                                <span class="cinema-badge bg-black/70 backdrop-blur-md text-[10px] uppercase font-bold text-white border-white/15">
-                                    {{ item.type === 'series' ? (isRTL ? 'مسلسل' : 'Series') : (isRTL ? 'فيلم' : 'Movie') }}
+                            <!-- Match Status Dot -->
+                            <div
+                                class="absolute top-1 right-1 w-2.5 h-2.5 rounded-full border border-black/80"
+                                :class="item.is_matched ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-amber-400 animate-pulse'"
+                                :title="item.is_matched ? 'TMDb Matched' : 'Unmatched / Pending Fix'"
+                            ></div>
+                        </div>
+
+                        <!-- Details & Path -->
+                        <div class="space-y-1 min-w-0 flex-1">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span
+                                    class="text-[10px] font-black uppercase px-2 py-0.5 rounded-md"
+                                    :class="item.type === 'series' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'"
+                                >
+                                    {{ item.type }}
                                 </span>
-                                <span v-if="item.release_year" class="cinema-badge bg-black/70 backdrop-blur-md text-[10px] text-slate-300 border-white/15">
+
+                                <h3 class="text-sm font-bold text-white truncate group-hover:text-cyan-400 transition-colors">
+                                    {{ item.title }}
+                                </h3>
+
+                                <span v-if="item.title_ar" class="text-xs text-slate-400 truncate" dir="rtl">
+                                    ({{ item.title_ar }})
+                                </span>
+
+                                <span v-if="item.release_year" class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white/[0.06] text-slate-300">
                                     {{ item.release_year }}
                                 </span>
                             </div>
 
-                            <div class="absolute top-3 right-3 flex items-center gap-1.5">
-                                <span v-if="item.rating" class="cinema-badge bg-amber-500/90 text-slate-950 font-black text-[10px] flex items-center gap-0.5">
-                                    <Star class="w-3 h-3 fill-current" />
-                                    {{ item.rating }}
-                                </span>
-                            </div>
-
-                            <!-- Poster Overlay Thumbnail -->
-                            <div class="absolute bottom-3 left-3 w-12 h-16 rounded-xl overflow-hidden border border-white/20 shadow-2xl bg-slate-900 shrink-0">
-                                <img
-                                    :src="item.poster_path || '/placeholder.jpg'"
-                                    :alt="item.title"
-                                    class="w-full h-full object-cover"
-                                />
-                            </div>
-
-                            <!-- Arabic Badge Indicator -->
-                            <div class="absolute bottom-3 right-3">
-                                <span
-                                    v-if="item.has_arabic"
-                                    class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1"
-                                >
-                                    <Check class="w-3 h-3" />
-                                    <span>{{ isRTL ? 'بيانات عربية متوفرة' : 'Arabic Ready' }}</span>
-                                </span>
-                                <span
-                                    v-else
-                                    class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1"
-                                >
-                                    <AlertCircle class="w-3 h-3" />
-                                    <span>{{ isRTL ? 'بحاجة لتعريب' : 'No Arabic' }}</span>
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- Card Details -->
-                        <div class="p-4 space-y-2.5">
-                            <div>
-                                <h3 class="font-bold text-sm text-white truncate group-hover:text-cyan-400 transition-colors">
-                                    {{ item.title }}
-                                </h3>
-                                <p v-if="item.title_ar" class="text-xs font-semibold text-cyan-300 truncate" dir="rtl">
-                                    {{ item.title_ar }}
+                            <!-- Physical File Path & Collection Tag -->
+                            <div class="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                                <p class="truncate font-mono text-[10px] text-slate-400 max-w-md">
+                                    {{ item.file_path }}
                                 </p>
+                                <span v-if="item.collection_name" class="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                                    <Layers class="w-2.5 h-2.5" />
+                                    <span>{{ item.collection_name }}</span>
+                                </span>
                             </div>
 
-                            <p class="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
-                                {{ item.overview_ar || item.overview || (isRTL ? 'لا يتوفر وصف موجز بعد.' : 'No overview available.') }}
-                            </p>
+                            <!-- Badges Status -->
+                            <div class="flex flex-wrap items-center gap-2 pt-0.5">
+                                <span
+                                    class="text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1"
+                                    :class="item.is_matched ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'"
+                                >
+                                    <CheckCircle2 v-if="item.is_matched" class="w-3 h-3" />
+                                    <AlertTriangle v-else class="w-3 h-3" />
+                                    <span>{{ item.is_matched ? 'TMDb Matched' : (isRTL ? 'غير مطابق' : 'Unmatched') }}</span>
+                                </span>
+
+                                <span
+                                    class="text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1"
+                                    :class="item.has_arabic ? 'bg-purple-500/10 text-purple-300 border border-purple-500/20' : 'bg-white/[0.05] text-slate-400 border border-white/10'"
+                                >
+                                    <Globe class="w-3 h-3" />
+                                    <span>{{ item.has_arabic ? (isRTL ? 'عربي متوفر' : 'Arabic Ready') : (isRTL ? 'بدون عربي' : 'No Arabic') }}</span>
+                                </span>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Card Actions Footer -->
-                    <div class="p-4 pt-0 border-t border-white/5 mt-2 flex items-center justify-between gap-2">
+                    <!-- Right: Direct Interactive Actions -->
+                    <div class="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-white/5 w-full md:w-auto justify-end">
+                        <!-- Quick Re-Parse -->
                         <button
-                            type="button"
-                            @click="openFixMatch(item)"
-                            class="flex-1 px-3.5 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-slate-950 border border-cyan-500/20 font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm"
+                            @click="quickReparse(item)"
+                            :disabled="isOperating"
+                            class="p-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-slate-300 hover:text-cyan-300 text-xs font-bold transition-all cursor-pointer"
+                            :title="isRTL ? 'إعادة تحليل اسم الملف بالخوارزمية الذكية' : 'Re-parse file with intelligent parser'"
                         >
-                            <Sparkles class="w-3.5 h-3.5" />
-                            <span>{{ isRTL ? 'استوديو المطابقة' : 'Fix Match' }}</span>
+                            <Repeat class="w-4 h-4" />
                         </button>
 
+                        <!-- Quick Convert Type -->
                         <button
-                            type="button"
-                            @click="deleteItem(item)"
-                            class="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-white/10 flex items-center justify-center transition-colors cursor-pointer"
-                            :title="isRTL ? 'حذف من المكتبة' : 'Delete from Library'"
+                            @click="quickConvert(item)"
+                            :disabled="isOperating"
+                            class="p-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-300 text-xs font-bold transition-all cursor-pointer"
+                            :title="item.type === 'movie' ? (isRTL ? 'تحويل لمسلسل' : 'Convert to Series') : (isRTL ? 'تحويل لفيلم' : 'Convert to Movie')"
                         >
-                            <Trash2 class="w-3.5 h-3.5" />
+                            <ArrowRightLeft class="w-4 h-4" />
+                        </button>
+
+                        <!-- Fix Match Modal Trigger -->
+                        <button
+                            @click="openFixMatch(item)"
+                            class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md shadow-cyan-500/10 transition-all cursor-pointer"
+                        >
+                            <Wand2 class="w-3.5 h-3.5" />
+                            <span>{{ isRTL ? 'تصحيح المطابقة' : 'Fix Match' }}</span>
+                        </button>
+
+                        <!-- Delete Button -->
+                        <button
+                            @click="deleteItem(item)"
+                            class="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 text-xs font-bold transition-all cursor-pointer"
+                            :title="isRTL ? 'حذف من الفهرس' : 'Remove from Index'"
+                        >
+                            <Trash2 class="w-4 h-4" />
                         </button>
                     </div>
                 </div>
             </div>
 
             <!-- Empty State -->
-            <div v-else class="glass-panel p-12 rounded-3xl border border-white/10 text-center space-y-4 max-w-md mx-auto">
-                <div class="w-14 h-14 rounded-2xl bg-white/5 text-slate-400 flex items-center justify-center mx-auto">
-                    <Database class="w-6 h-6" />
+            <div v-else class="text-center py-16 px-4 rounded-3xl glass-panel border border-white/10 space-y-4 max-w-lg mx-auto">
+                <div class="w-16 h-16 mx-auto rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+                    <CheckCircle2 class="w-8 h-8" />
                 </div>
-                <div class="space-y-1">
-                    <h3 class="text-base font-bold text-white">
-                        {{ isRTL ? 'لم يتم العثور على عناصر تطابق هذا الفلتر' : 'No items match your filter' }}
-                    </h3>
-                    <p class="text-xs text-slate-400">
-                        {{ isRTL ? 'جرب البحث باسم آخر أو إعادة ضبط الفلاتر.' : 'Try changing search terms or switching the category filter.' }}
-                    </p>
-                </div>
-                <button
-                    type="button"
-                    @click="applyFilter('all'); searchQuery = ''; handleSearch()"
-                    class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all cursor-pointer"
-                >
-                    {{ isRTL ? 'عرض جميع العناصر' : 'Show All Media' }}
-                </button>
+                <h3 class="text-lg font-bold text-white">
+                    {{ isRTL ? 'المكتبة في أفضل حالاتها' : 'No Items Need Fixing' }}
+                </h3>
+                <p class="text-xs text-slate-400 leading-relaxed">
+                    {{ isRTL 
+                        ? 'جميع عناصر الوسائط تمت مطابقتها وتزويدها بالبوسترات والبيانات الوصفية بنجاح.' 
+                        : 'All media files in this filter have verified metadata, artwork, and clean titles.' 
+                    }}
+                </p>
             </div>
         </div>
 
-        <!-- Modals -->
+        <!-- Fix Match Modal -->
         <FixMatchModal
             :show="showFixModal"
             :item="selectedItemForFix"
@@ -453,28 +507,15 @@ const deleteItem = (item: any) => {
             @updated="handleItemUpdated"
         />
 
+        <!-- Confirm Action Modal -->
         <ConfirmModal
             :show="confirmModal.show"
             :title="confirmModal.title"
             :message="confirmModal.message"
             :confirm-text="confirmModal.confirmText"
             :type="confirmModal.type"
+            @close="confirmModal.show = false"
             @confirm="confirmModal.action"
-            @cancel="confirmModal.show = false"
         />
     </AppLayout>
 </template>
-
-<style scoped>
-.custom-scrollbar::-webkit-scrollbar {
-    height: 4px;
-    width: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 9999px;
-}
-</style>

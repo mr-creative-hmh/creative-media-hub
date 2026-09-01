@@ -335,6 +335,10 @@ class VirtualLibraryScannerService
         } catch (\Throwable $e) {}
 
         $movie = retry(4, function () use ($cleanTitle, $year, $meta, $file, $posterUrl, $backdropUrl, $resolution, $videoCodec, $audioCodec, $runtimeMinutes) {
+            $colName = $meta['collection_name'] ?? \App\Services\Metadata\TmdbProvider::inferCollectionFromTitle($meta['title'] ?? $cleanTitle);
+            $origLang = $meta['original_language'] ?? (preg_match('/\p{Arabic}/u', $cleanTitle) ? 'ar' : 'en');
+            $origCountry = $meta['origin_country'] ?? (preg_match('/\p{Arabic}/u', $cleanTitle) ? 'EG' : null);
+
             $m = MediaItem::create([
                 'title' => $meta['title'] ?? $cleanTitle,
                 'original_title' => $meta['original_title'] ?? $cleanTitle,
@@ -342,6 +346,11 @@ class VirtualLibraryScannerService
                 'release_year' => $meta['release_year'] ?? ($meta['year'] ?? $year),
                 'overview' => $meta['overview'] ?? "Enjoy watching {$cleanTitle}.",
                 'overview_ar' => $meta['overview_ar'] ?? null,
+                'collection_name' => $colName,
+                'collection_id' => $meta['collection_id'] ?? null,
+                'collection_poster' => $meta['collection_poster'] ?? null,
+                'original_language' => $origLang,
+                'origin_country' => $origCountry,
                 'tmdb_id' => $meta['tmdb_id'] ?? null,
                 'imdb_id' => $meta['imdb_id'] ?? null,
                 'rating' => $meta['rating'] ?? 7.5,

@@ -6,6 +6,7 @@ use App\Http\Controllers\DiskOrganizerController;
 use App\Http\Controllers\DownloadManagerController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\MetadataManagementController;
+use App\Http\Controllers\CollectionController;
 use App\Http\Controllers\ScannerController;
 use App\Http\Controllers\SeriesController;
 use App\Http\Controllers\SettingsController;
@@ -30,6 +31,11 @@ Route::delete('/api/media/{id}', [ScannerController::class, 'deleteSingleMedia']
 Route::get('/api/vibes', [MediaController::class, 'getVibes'])->name('api.vibes');
 Route::get('/api/person/{person}', [MediaController::class, 'getCastExplorer'])->name('api.person');
 
+
+// Movie Collections & Boxsets (Harry Potter, MCU, Lord of the Rings, etc.)
+Route::get('/collections', [CollectionController::class, 'index'])->name('collections.index');
+Route::get('/collections/{slug}', [CollectionController::class, 'show'])->name('collections.show');
+
 // Virtual TV Series Hub & Metadata Management (Supports ID, Slug, and Season/Episode deep links)
 Route::get('/series', [SeriesController::class, 'index'])->name('series.index');
 Route::get('/series/{series}', [SeriesController::class, 'show'])->name('series.show');
@@ -44,6 +50,9 @@ Route::post('/api/series/{series}/update-metadata', [SeriesController::class, 'u
 // Metadata & Cover Studio
 Route::get('/metadata', [MetadataManagementController::class, 'index'])->name('metadata.index');
 Route::post('/api/metadata/batch-enrich', [MetadataManagementController::class, 'batchEnrich'])->name('api.metadata.batch-enrich');
+Route::post('/api/metadata/lookup-id', [MetadataManagementController::class, 'lookupId'])->name('api.metadata.lookup-id');
+Route::post('/api/metadata/{type}/{id}/reparse', [MetadataManagementController::class, 'reparseItem'])->name('api.metadata.reparse');
+Route::post('/api/metadata/{type}/{id}/convert-type', [MetadataManagementController::class, 'convertType'])->name('api.metadata.convert-type');
 
 // Virtual Media Scanner & Background Job Control Center
 Route::get('/scanner', [ScannerController::class, 'index'])->name('scanner.index');

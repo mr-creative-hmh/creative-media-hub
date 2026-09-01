@@ -14,7 +14,8 @@
         "metadata": "Metadata Studio",
         "docs": "Documentation & Guides",
         "manage_library": "Library Management",
-        "overview": "Overview"
+        "overview": "Overview",
+        "collections": "Collections"
     },
     "common": {
         "continue_watching": "Continue Watching",

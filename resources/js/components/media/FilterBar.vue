@@ -4,7 +4,7 @@ import { useI18n } from '@/i18n/useI18n';
 import { router } from '@inertiajs/vue3';
 import {
     Filter, Sparkles, Star, Calendar, Clock,
-    Layers, Check, RotateCcw, Heart, Film, ArrowUpDown, Tv
+    Layers, Check, RotateCcw, Heart, Film, ArrowUpDown, Tv, Globe
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -16,24 +16,31 @@ const props = defineProps<{
 const { t, isRTL } = useI18n();
 
 const selectedGenre = ref(props.filters.genre || '');
+const selectedOrigin = ref(props.filters.origin || '');
 const selectedResolution = ref(props.filters.resolution || '');
 const selectedSort = ref(props.filters.sort || 'rating');
 const selectedVibe = ref(props.filters.vibe || '');
 const favoriteOnly = ref(props.filters.favorite_only === '1' || props.filters.favorite_only === 1 || props.filters.favorite_only === true);
 
 const hasActiveFilters = computed(() => {
-    return !!(selectedGenre.value || selectedResolution.value || (selectedSort.value && selectedSort.value !== 'rating') || selectedVibe.value || favoriteOnly.value);
+    return !!(selectedGenre.value || selectedOrigin.value || selectedResolution.value || (selectedSort.value && selectedSort.value !== 'rating') || selectedVibe.value || favoriteOnly.value);
 });
 
 const applyFilters = () => {
     router.get(window.location.pathname, {
         ...props.filters,
         genre: selectedGenre.value || undefined,
+        origin: selectedOrigin.value || undefined,
         resolution: selectedResolution.value || undefined,
         sort: selectedSort.value || undefined,
         vibe: selectedVibe.value || undefined,
         favorite_only: favoriteOnly.value ? 1 : undefined,
     }, { preserveState: true, preserveScroll: true });
+};
+
+const selectOrigin = (orig: string) => {
+    selectedOrigin.value = selectedOrigin.value === orig ? '' : orig;
+    applyFilters();
 };
 
 const selectGenre = (slug: string) => {
@@ -63,12 +70,23 @@ const toggleFavorite = () => {
 
 const resetAllFilters = () => {
     selectedGenre.value = '';
+    selectedOrigin.value = '';
     selectedResolution.value = '';
     selectedSort.value = 'rating';
     selectedVibe.value = '';
     favoriteOnly.value = false;
     router.get(window.location.pathname, {}, { preserveState: true, preserveScroll: true });
 };
+
+const regionalOrigins = [
+    { id: '', label_en: 'All Regions', label_ar: 'جميع الدول', flag: '🌍' },
+    { id: 'arabic', label_en: 'Arabic Cinema', label_ar: 'سينما ومسلسلات عربية', flag: '🇸🇦' },
+    { id: 'indian', label_en: 'Bollywood & Indian', label_ar: 'سينما هندية (بوليوود)', flag: '🇮🇳' },
+    { id: 'asian', label_en: 'Anime & Asian', label_ar: 'إنيمي وسينما آسيوية', flag: '🇯🇵' },
+    { id: 'turkish', label_en: 'Turkish Cinema', label_ar: 'سينما وأعمال تركية', flag: '🇹🇷' },
+    { id: 'hollywood', label_en: 'Hollywood & Western', label_ar: 'سينما هوليوود وعالمي', flag: '🇺🇸' },
+    { id: 'european', label_en: 'European Cinema', label_ar: 'سينما أوروبية', flag: '🇪🇺' },
+];
 
 const curatedVibes = [
     { id: 'Mind-Bending', label_en: 'Mind-Bending Sci-Fi', label_ar: 'خيال علمي مشوق' },
@@ -81,12 +99,12 @@ const curatedVibes = [
 
 <template>
     <div class="glass-panel rounded-3xl p-5 mb-8 border border-slate-200 dark:border-white/10 space-y-4 shadow-sm relative overflow-hidden">
-        <!-- 1. Genres Pill Carousel -->
+        <!-- 0. Regional Origin Carousel (Arabic, Indian/Bollywood, Anime/Asian, Turkish, Hollywood, European) -->
         <div class="space-y-2">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">
-                    <Layers class="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
-                    <span>{{ t('common.genres') }}</span>
+                    <Globe class="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                    <span>{{ isRTL ? 'التصنيف حسب الدولة والإنتاج (سينما عالمية)' : 'Regional Origin & World Cinema' }}</span>
                 </div>
 
                 <button
@@ -97,6 +115,30 @@ const curatedVibes = [
                     <RotateCcw class="w-3.5 h-3.5" />
                     <span>{{ t('common.clear_filters') }}</span>
                 </button>
+            </div>
+
+            <div class="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                <button
+                    v-for="orig in regionalOrigins"
+                    :key="orig.id"
+                    @click="selectOrigin(orig.id)"
+                    class="px-3.5 py-1.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
+                    :class="selectedOrigin === orig.id
+                        ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 font-black shadow-cyan-500/20'
+                        : 'bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10'"
+                >
+                    <span class="text-sm">{{ orig.flag }}</span>
+                    <span>{{ isRTL ? orig.label_ar : orig.label_en }}</span>
+                    <Check v-if="selectedOrigin === orig.id" class="w-3.5 h-3.5 stroke-[3]" />
+                </button>
+            </div>
+        </div>
+
+        <!-- 1. Genres Pill Carousel -->
+        <div class="space-y-2 pt-2 border-t border-slate-200 dark:border-white/5">
+            <div class="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">
+                <Layers class="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                <span>{{ t('common.genres') }}</span>
             </div>
 
             <div class="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
@@ -126,7 +168,7 @@ const curatedVibes = [
         </div>
 
         <!-- 2. AI Mood & Vibe Segmented Chips -->
-        <div class="space-y-2 pt-2 border-t border-slate-200 dark:border-white/5">
+        <div v-if="showVibes" class="space-y-2 pt-2 border-t border-slate-200 dark:border-white/5">
             <div class="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">
                 <Sparkles class="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                 <span>{{ t('common.vibe') }}</span>
@@ -149,7 +191,7 @@ const curatedVibes = [
             </div>
         </div>
 
-        <!-- 3. Quality & Sorting Interactive Segmented Controls (No Dropdowns!) -->
+        <!-- 3. Quality & Sorting Interactive Segmented Controls -->
         <div class="flex items-center justify-between flex-wrap gap-4 pt-3 border-t border-slate-200 dark:border-white/5">
             <!-- Quality Segmented Control -->
             <div class="flex items-center gap-2 flex-wrap">

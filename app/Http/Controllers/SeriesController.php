@@ -38,6 +38,41 @@ class SeriesController extends Controller
             $query->whereHas('genres', fn($q) => $q->where('slug', $genre));
         }
 
+        if ($origin = $request->input('origin')) {
+            match ($origin) {
+                'arabic' => $query->where(function ($q) {
+                    $q->where('original_language', 'ar')
+                      ->orWhereIn('origin_country', ['EG', 'SA', 'SY', 'LB', 'AE', 'KW', 'JO', 'MA', 'IQ', 'TN', 'DZ', 'SD', 'YE', 'OM', 'QA', 'BH'])
+                      ->orWhereNotNull('title_ar')
+                      ->orWhere('title', 'like', '%مسلسل%');
+                }),
+                'indian' => $query->where(function ($q) {
+                    $q->whereIn('original_language', ['hi', 'te', 'ta', 'ml', 'kn', 'mr', 'bn', 'pa', 'ur'])
+                      ->orWhere('origin_country', 'IN');
+                }),
+                'asian' => $query->where(function ($q) {
+                    $q->whereIn('original_language', ['ja', 'ko', 'zh', 'cn', 'hk', 'tw', 'th'])
+                      ->orWhereIn('origin_country', ['JP', 'KR', 'CN', 'HK', 'TW', 'TH'])
+                      ->orWhereHas('genres', fn($g) => $g->where('slug', 'like', '%anime%'));
+                }),
+                'turkish' => $query->where(function ($q) {
+                    $q->where('original_language', 'tr')
+                      ->orWhere('origin_country', 'TR');
+                }),
+                'hollywood' => $query->where(function ($q) {
+                    $q->where(function ($sub) {
+                        $sub->where('original_language', 'en')
+                            ->orWhereIn('origin_country', ['US', 'GB', 'CA', 'AU']);
+                    });
+                }),
+                'european' => $query->where(function ($q) {
+                    $q->whereIn('original_language', ['fr', 'de', 'it', 'es', 'pt', 'ru', 'sv', 'da', 'no', 'nl', 'pl'])
+                      ->orWhereIn('origin_country', ['FR', 'DE', 'IT', 'ES', 'SE', 'DK', 'NO', 'NL', 'PL', 'RU']);
+                }),
+                default => null,
+            };
+        }
+
         if ($request->boolean('favorite_only')) {
             $query->favorites();
         }

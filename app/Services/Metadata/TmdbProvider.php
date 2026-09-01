@@ -9,6 +9,104 @@ use Illuminate\Support\Facades\Log;
 
 class TmdbProvider implements MetadataProviderInterface
 {
+    public static function inferCollectionFromTitle(string $title): ?string
+    {
+        $titleLower = strtolower($title);
+        $knownCollections = [
+            'harry potter' => 'Harry Potter Collection',
+            'lord of the rings' => 'The Lord of the Rings Collection',
+            'hobbit' => 'The Hobbit Collection',
+            'star wars' => 'Star Wars Collection',
+            'fast & furious' => 'The Fast and the Furious Collection',
+            'fast and furious' => 'The Fast and the Furious Collection',
+            'fast five' => 'The Fast and the Furious Collection',
+            'tokyo drift' => 'The Fast and the Furious Collection',
+            'furious 7' => 'The Fast and the Furious Collection',
+            'the fate of the furious' => 'The Fast and the Furious Collection',
+            'mission: impossible' => 'Mission: Impossible Collection',
+            'mission impossible' => 'Mission: Impossible Collection',
+            'john wick' => 'John Wick Collection',
+            'the matrix' => 'The Matrix Collection',
+            'matrix re' => 'The Matrix Collection',
+            'matrix resurrection' => 'The Matrix Collection',
+            'pirates of the caribbean' => 'Pirates of the Caribbean Collection',
+            'the dark knight' => 'The Dark Knight Trilogy',
+            'batman begins' => 'The Dark Knight Trilogy',
+            'avengers' => 'The Avengers Collection',
+            'iron man' => 'Iron Man Collection',
+            'captain america' => 'Captain America Collection',
+            'thor' => 'Thor Collection',
+            'guardians of the galaxy' => 'Guardians of the Galaxy Collection',
+            'spider-man' => 'Spider-Man Collection',
+            'spiderman' => 'Spider-Man Collection',
+            'hunger games' => 'The Hunger Games Collection',
+            'jurassic park' => 'Jurassic Park Collection',
+            'jurassic world' => 'Jurassic Park Collection',
+            'transformers' => 'Transformers Collection',
+            'twilight' => 'The Twilight Saga Collection',
+            'james bond' => 'James Bond 007 Collection',
+            'die hard' => 'Die Hard Collection',
+            'indiana jones' => 'Indiana Jones Collection',
+            'shrek' => 'Shrek Collection',
+            'despicable me' => 'Despicable Me Collection',
+            'minions' => 'Despicable Me Collection',
+            'toy story' => 'Toy Story Collection',
+            'the godfather' => 'The Godfather Trilogy',
+            'terminator' => 'Terminator Collection',
+            'alien' => 'Alien Collection',
+            'predator' => 'Predator Collection',
+            'planet of the apes' => 'Planet of the Apes Collection',
+            'x-men' => 'X-Men Collection',
+            'wolverine' => 'X-Men Collection',
+            'deadpool' => 'Deadpool Collection',
+            'ice age' => 'Ice Age Collection',
+            'madagascar' => 'Madagascar Collection',
+            'kung fu panda' => 'Kung Fu Panda Collection',
+            'how to train your dragon' => 'How to Train Your Dragon Collection',
+            'bad boys' => 'Bad Boys Collection',
+            'rush hour' => 'Rush Hour Collection',
+            'blade runner' => 'Blade Runner Collection',
+            'dune' => 'Dune Collection',
+            'godzilla' => 'MonsterVerse Collection',
+            'kong' => 'MonsterVerse Collection',
+            'back to the future' => 'Back to the Future Trilogy',
+            'ip man' => 'Ip Man Collection',
+            'rocky' => 'Rocky & Creed Collection',
+            'creed' => 'Rocky & Creed Collection',
+            "ocean's" => "Ocean's Collection",
+            'the mummy' => 'The Mummy Collection',
+            'saw' => 'Saw Collection',
+            'scream' => 'Scream Collection',
+            'final destination' => 'Final Destination Collection',
+            'the conjuring' => 'The Conjuring Universe',
+            'insidious' => 'Insidious Collection',
+            'after' => 'After Collection',
+            'kingsman' => 'Kingsman Collection',
+            'fifty shades' => 'Fifty Shades Collection',
+            'hotel transylvania' => 'Hotel Transylvania Collection',
+            'cars' => 'Cars Collection',
+            'the incredibles' => 'The Incredibles Collection',
+            'monsters, inc.' => 'Monsters, Inc. Collection',
+            'monsters university' => 'Monsters, Inc. Collection',
+            'fantastic beasts' => 'Fantastic Beasts Collection',
+            'star trek' => 'Star Trek Movies',
+            'top gun' => 'Top Gun Collection',
+            'gladiator' => 'Gladiator Collection',
+            'knives out' => 'Knives Out Collection',
+            'glass onion' => 'Knives Out Collection',
+            'venom' => 'Venom Collection',
+            'ghostbusters' => 'Ghostbusters Collection',
+        ];
+
+        foreach ($knownCollections as $pattern => $colName) {
+            if (str_contains($titleLower, $pattern)) {
+                return $colName;
+            }
+        }
+
+        return null;
+    }
+
     protected string $baseUrl = 'https://api.themoviedb.org/3';
     protected ?string $apiKey;
 
@@ -133,6 +231,25 @@ class TmdbProvider implements MetadataProviderInterface
                     }
                 }
 
+                $collectionName = null;
+                $collectionId = null;
+                $collectionPoster = null;
+                if (!empty($data['belongs_to_collection'])) {
+                    $collectionId = $data['belongs_to_collection']['id'] ?? null;
+                    $collectionName = $data['belongs_to_collection']['name'] ?? null;
+                    if (!empty($data['belongs_to_collection']['poster_path'])) {
+                        $collectionPoster = "https://image.tmdb.org/t/p/w780" . $data['belongs_to_collection']['poster_path'];
+                    }
+                }
+                if (empty($collectionName)) {
+                    $collectionName = self::inferCollectionFromTitle($data['title'] ?? ($data['original_title'] ?? ''));
+                }
+
+                $origLang = $data['original_language'] ?? null;
+                $originCountry = !empty($data['production_countries'][0]['iso_3166_1']) 
+                    ? $data['production_countries'][0]['iso_3166_1'] 
+                    : (!empty($data['origin_country'][0]) ? $data['origin_country'][0] : null);
+
                 return [
                     'provider' => 'TMDb',
                     'id' => (string) $data['id'],
@@ -145,6 +262,11 @@ class TmdbProvider implements MetadataProviderInterface
                     'overview_ar' => $overviewAr,
                     'tagline' => $data['tagline'] ?? null,
                     'tagline_ar' => $taglineAr,
+                    'collection_name' => $collectionName,
+                    'collection_id' => $collectionId,
+                    'collection_poster' => $collectionPoster,
+                    'original_language' => $origLang,
+                    'origin_country' => $originCountry,
                     'release_year' => isset($data['release_date']) ? (int) substr($data['release_date'], 0, 4) : null,
                     'rating' => round($data['vote_average'] ?? 0, 1),
                     'vote_count' => $data['vote_count'] ?? 0,
