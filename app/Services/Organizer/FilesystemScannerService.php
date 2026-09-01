@@ -169,37 +169,19 @@ class FilesystemScannerService
 
     public function parseSubtitleMetadata(string $filename): array
     {
-        $lower = strtolower($filename);
-        $cleanSearch = ' ' . preg_replace('/[^a-z0-9\p{Arabic}\p{Hebrew}\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}\p{Cyrillic}]/u', ' ', $lower) . ' ';
+        $clean = preg_replace('/[._\-\[\]\(\)]+/', ' ', strtolower($filename));
+        $clean = ' ' . trim($clean) . ' ';
 
-        $isForced = (bool) preg_match('/\b(forced|force)\b/i', $cleanSearch);
-        $isSDH = (bool) preg_match('/\b(sdh|cc|hi)\b/i', $cleanSearch);
+        $isForced = (bool) preg_match('/\b(forced|force)\b/i', $clean);
+        $isSDH = (bool) preg_match('/\b(sdh|cc|hi)\b/i', $clean);
+        $isCommentary = (bool) preg_match('/\b(commentary|director)\b/i', $clean);
 
-        $lang = 'und';
-        $langName = 'Unknown';
+        $detector = app(\App\Services\Subtitles\EmbeddedSubtitleDetectorService::class);
+        $lang = $detector->resolveLanguageFromContext('und', '', $filename);
+        $langName = $detector->getLanguageName($lang);
 
-        $langMap = [
-            'ar' => ['code' => 'ar', 'name' => 'Arabic', 'pattern' => '/\b(ar|ara|arabic|عربي)\b/u'],
-            'en' => ['code' => 'en', 'name' => 'English', 'pattern' => '/\b(en|eng|english|en\s*us|en\s*gb)\b/i'],
-            'fr' => ['code' => 'fr', 'name' => 'French', 'pattern' => '/\b(fr|fre|fra|french|français)\b/u'],
-            'es' => ['code' => 'es', 'name' => 'Spanish', 'pattern' => '/\b(es|spa|spanish|español)\b/u'],
-            'de' => ['code' => 'de', 'name' => 'German', 'pattern' => '/\b(de|ger|deu|german|deutsch)\b/i'],
-            'it' => ['code' => 'it', 'name' => 'Italian', 'pattern' => '/\b(it|ita|italian|italiano)\b/i'],
-            'ru' => ['code' => 'ru', 'name' => 'Russian', 'pattern' => '/\b(ru|rus|russian|русский)\b/u'],
-            'ja' => ['code' => 'ja', 'name' => 'Japanese', 'pattern' => '/\b(ja|jpn|japanese|日本語)\b/u'],
-            'ko' => ['code' => 'ko', 'name' => 'Korean', 'pattern' => '/\b(ko|kor|korean|한국어)\b/u'],
-            'zh' => ['code' => 'zh', 'name' => 'Chinese', 'pattern' => '/\b(zh|chi|zho|chinese|中文)\b/u'],
-            'he' => ['code' => 'he', 'name' => 'Hebrew', 'pattern' => '/\b(he|heb|hebrew|עברית)\b/u'],
-            'tr' => ['code' => 'tr', 'name' => 'Turkish', 'pattern' => '/\b(tr|tur|turkish|türkçe)\b/u'],
-            'fa' => ['code' => 'fa', 'name' => 'Persian', 'pattern' => '/\b(fa|fas|per|farsi|persian|فارسی)\b/u'],
-        ];
-
-        foreach ($langMap as $key => $info) {
-            if (preg_match($info['pattern'], $cleanSearch) || str_contains($lower, ".{$key}.") || str_ends_with($lower, ".{$key}.srt") || str_ends_with($lower, ".{$key}.vtt")) {
-                $lang = $info['code'];
-                $langName = $info['name'];
-                break;
-            }
+        if ($lang === 'und') {
+            $langName = 'Track';
         }
 
         return [
@@ -207,6 +189,7 @@ class FilesystemScannerService
             'language_name' => $langName,
             'is_forced' => $isForced,
             'is_sdh' => $isSDH,
+            'is_commentary' => $isCommentary,
         ];
     }
 

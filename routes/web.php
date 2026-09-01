@@ -67,6 +67,10 @@ Route::get('/api/organizer/load-virtual', [DiskOrganizerController::class, 'load
 Route::post('/api/organizer/scan', [DiskOrganizerController::class, 'scan'])->name('api.organizer.scan');
 Route::post('/api/organizer/dry-run', [DiskOrganizerController::class, 'dryRun'])->name('api.organizer.dry-run');
 Route::post('/api/organizer/execute', [DiskOrganizerController::class, 'execute'])->name('api.organizer.execute');
+Route::post('/api/organizer/execute/init', [DiskOrganizerController::class, 'initExecution'])->name('api.organizer.execute-init');
+Route::post('/api/organizer/execute/batch', [DiskOrganizerController::class, 'processBatch'])->name('api.organizer.execute-batch');
+Route::get('/api/organizer/execute/status', [DiskOrganizerController::class, 'getExecutionStatus'])->name('api.organizer.execute-status');
+Route::post('/api/organizer/execute/cancel', [DiskOrganizerController::class, 'cancelExecution'])->name('api.organizer.execute-cancel');
 
 // Free Subtitles Hub, Live Scraper Diagnostic & Downloader
 Route::get('/subtitles', [SubtitleController::class, 'index'])->name('subtitles.index');

@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Log;
 
 class EmbeddedSubtitleDetectorService
 {
-    protected static array $languageMap = [
+    public static array $languageMap = [
         'ar' => ['name' => 'Arabic', 'ar' => 'العربية', 'flag' => '🇸🇦'],
         'en' => ['name' => 'English', 'ar' => 'الإنجليزية', 'flag' => '🇬🇧'],
         'es' => ['name' => 'Spanish', 'ar' => 'الإسبانية', 'flag' => '🇪🇸'],
@@ -23,25 +23,61 @@ class EmbeddedSubtitleDetectorService
         'ko' => ['name' => 'Korean', 'ar' => 'الكورية', 'flag' => '🇰🇷'],
         'zh' => ['name' => 'Chinese', 'ar' => 'الصينية', 'flag' => '🇨🇳'],
         'hi' => ['name' => 'Hindi', 'ar' => 'الهندية', 'flag' => '🇮🇳'],
-        'id' => ['name' => 'Indonesian', 'ar' => 'الإندونيسية', 'flag' => '🇮🇩'],
-        'nl' => ['name' => 'Dutch', 'ar' => 'الهولندية', 'flag' => '🇳🇱'],
-        'pl' => ['name' => 'Polish', 'ar' => 'البولندية', 'flag' => '🇵🇱'],
-        'sv' => ['name' => 'Swedish', 'ar' => 'السويدية', 'flag' => '🇸🇪'],
+        'hr' => ['name' => 'Croatian', 'ar' => 'الكرواتية', 'flag' => '🇭🇷'],
+        'cs' => ['name' => 'Czech', 'ar' => 'التشيكية', 'flag' => '🇨🇿'],
         'da' => ['name' => 'Danish', 'ar' => 'الدانماركية', 'flag' => '🇩🇰'],
-        'no' => ['name' => 'Norwegian', 'ar' => 'النرويجية', 'flag' => '🇳🇴'],
+        'nl' => ['name' => 'Dutch', 'ar' => 'الهولندية', 'flag' => '🇳🇱'],
+        'tl' => ['name' => 'Filipino', 'ar' => 'الفلبينية', 'flag' => '🇵🇭'],
         'fi' => ['name' => 'Finnish', 'ar' => 'الفنلندية', 'flag' => '🇫🇮'],
         'el' => ['name' => 'Greek', 'ar' => 'اليونانية', 'flag' => '🇬🇷'],
         'he' => ['name' => 'Hebrew', 'ar' => 'العبرية', 'flag' => '🇮🇱'],
-        'vi' => ['name' => 'Vietnamese', 'ar' => 'الفيتنامية', 'flag' => '🇻🇳'],
-        'th' => ['name' => 'Thai', 'ar' => 'التايلاندية', 'flag' => '🇹🇭'],
-        'ur' => ['name' => 'Urdu', 'ar' => 'الأردية', 'flag' => '🇵🇰'],
-        'ro' => ['name' => 'Romanian', 'ar' => 'الرومانية', 'flag' => '🇷🇴'],
-        'cs' => ['name' => 'Czech', 'ar' => 'التشيكية', 'flag' => '🇨🇿'],
         'hu' => ['name' => 'Hungarian', 'ar' => 'المجرية', 'flag' => '🇭🇺'],
-        'uk' => ['name' => 'Ukrainian', 'ar' => 'الأوكرانية', 'flag' => '🇺🇦'],
+        'id' => ['name' => 'Indonesian', 'ar' => 'الإندونيسية', 'flag' => '🇮🇩'],
         'ms' => ['name' => 'Malay', 'ar' => 'الماليزية', 'flag' => '🇲🇾'],
+        'no' => ['name' => 'Norwegian', 'ar' => 'النرويجية', 'flag' => '🇳🇴'],
+        'pl' => ['name' => 'Polish', 'ar' => 'البولندية', 'flag' => '🇵🇱'],
+        'ro' => ['name' => 'Romanian', 'ar' => 'الرومانية', 'flag' => '🇷🇴'],
+        'sv' => ['name' => 'Swedish', 'ar' => 'السويدية', 'flag' => '🇸🇪'],
+        'th' => ['name' => 'Thai', 'ar' => 'التايلاندية', 'flag' => '🇹🇭'],
+        'uk' => ['name' => 'Ukrainian', 'ar' => 'الأوكرانية', 'flag' => '🇺🇦'],
+        'vi' => ['name' => 'Vietnamese', 'ar' => 'الفيتنامية', 'flag' => '🇻🇳'],
+        'ur' => ['name' => 'Urdu', 'ar' => 'الأردية', 'flag' => '🇵🇰'],
         'bn' => ['name' => 'Bengali', 'ar' => 'البنغالية', 'flag' => '🇧🇩'],
-        'tl' => ['name' => 'Tagalog', 'ar' => 'الفلبينية', 'flag' => '🇵🇭'],
+    ];
+
+    public static array $langDefinitions = [
+        'ar' => ['ar', 'ara', 'arabic', 'arabi', '3arabi', 'عربي', 'العربية', 'مترجم'],
+        'zh' => ['zh', 'chi', 'zho', 'chinese', 'chs', 'cht', 'mandarin', '中文', '简体', '繁體'],
+        'es' => ['es', 'spa', 'spanish', 'latino', 'castellano', 'español', 'espanol'],
+        'fr' => ['fr', 'fre', 'fra', 'french', 'français', 'francais'],
+        'de' => ['de', 'ger', 'deu', 'german', 'deutsch'],
+        'it' => ['it', 'ita', 'italian', 'italiano'],
+        'pt' => ['pt', 'por', 'portuguese', 'português', 'portugues', 'brazil', 'brasileiro', 'portugal'],
+        'ru' => ['ru', 'rus', 'russian', 'русский'],
+        'tr' => ['tr', 'tur', 'turkish', 'türkçe', 'turkce'],
+        'fa' => ['fa', 'fas', 'per', 'persian', 'farsi', 'فارسی'],
+        'ja' => ['ja', 'jpn', 'japanese', '日本語'],
+        'ko' => ['ko', 'kor', 'korean', '한국어'],
+        'hi' => ['hi', 'hin', 'hindi', 'हिन्दी'],
+        'hr' => ['hr', 'hrv', 'croatian', 'hrvatski'],
+        'cs' => ['cs', 'cze', 'ces', 'czech', 'cesky', 'česky'],
+        'da' => ['da', 'dan', 'danish', 'dansk'],
+        'nl' => ['nl', 'dut', 'nld', 'dutch', 'nederlands'],
+        'tl' => ['tl', 'fil', 'tgl', 'filipino', 'tagalog'],
+        'fi' => ['fi', 'fin', 'finnish', 'suomi'],
+        'el' => ['el', 'gre', 'ell', 'greek', 'ελληνικά'],
+        'hu' => ['hu', 'hun', 'hungarian', 'magyar'],
+        'id' => ['id', 'ind', 'indonesian', 'bahasa'],
+        'ms' => ['ms', 'may', 'msa', 'malay', 'melayu'],
+        'no' => ['no', 'nob', 'nno', 'nor', 'norwegian', 'norsk'],
+        'pl' => ['pl', 'pol', 'polish', 'polski'],
+        'ro' => ['ro', 'rum', 'ron', 'romanian', 'română', 'romana'],
+        'sv' => ['sv', 'swe', 'swedish', 'svenska'],
+        'th' => ['th', 'tha', 'thai', 'ไทย'],
+        'uk' => ['uk', 'ukr', 'ukrainian', 'українська'],
+        'vi' => ['vi', 'vie', 'vietnamese', 'tiếng việt', 'tieng viet'],
+        'he' => ['he', 'heb', 'hebrew', 'עבריت'],
+        'en' => ['en', 'eng', 'english'],
     ];
 
     public function detectEmbeddedSubtitles(string $videoPath): array
@@ -118,7 +154,6 @@ class EmbeddedSubtitleDetectorService
             $title = $stream['tags']['title'] ?? ($stream['tags']['handler_name'] ?? '');
             $codec = $stream['codec_name'] ?? 'srt';
 
-            // Smart language deduction from title/handler if lang is und
             $resolvedLang = $this->resolveLanguageFromContext($lang, $title, $videoPath, $idx);
             $langName = $this->getLanguageName($resolvedLang);
 
@@ -180,7 +215,7 @@ class EmbeddedSubtitleDetectorService
                 $context = substr($headerChunk, max(0, $pos - 150), 300);
 
                 $lang = 'und';
-                if (preg_match('/\b(ara|eng|fre|fra|spa|ger|deu|ita|jpn|kor|chi|zho|rus|por|tur|fas|hin|ind|nld|pol|swe|dan|nor|fin|ell|heb|vie|tha|urd|ron|ces|hun|ukr|und)\b/i', $context, $lMatch)) {
+                if (preg_match('/\b([a-z]{2,3})\b/i', $context, $lMatch)) {
                     $lang = strtolower($lMatch[1]);
                 }
 
@@ -219,10 +254,6 @@ class EmbeddedSubtitleDetectorService
 
         if (str_contains($headerChunk, 'sbtl') || str_contains($headerChunk, 'subt') || str_contains($headerChunk, 'tx3g')) {
             $lang = 'und';
-            if (preg_match('/\b(ara|eng|fre|spa|ger|ita|por|rus|tur|jpn|kor|chi|und)\b/i', $headerChunk, $lMatch)) {
-                $lang = strtolower($lMatch[1]);
-            }
-
             $resolvedLang = $this->resolveLanguageFromContext($lang, '', $videoPath, $streamIndex);
             $langName = $this->getLanguageName($resolvedLang);
 
@@ -263,68 +294,37 @@ class EmbeddedSubtitleDetectorService
 
     public function resolveLanguageFromContext(string $rawLang, string $title = '', string $filePath = '', int $trackIndex = 0): string
     {
-        $norm = $this->normalizeLanguageCode($rawLang);
-        if ($norm !== 'und') {
-            return $norm;
-        }
-
+        $lang = strtolower(trim($rawLang));
         $haystack = strtolower("{$title} " . basename($filePath));
+        $haystack = preg_replace('/[._\-\[\]\(\)]+/', ' ', $haystack);
 
-        // Arabic patterns
-        if (preg_match('/\b(ar|ara|arabic|arabi|3arabi)\b/i', $haystack) || str_contains($haystack, 'عربي') || str_contains($haystack, 'مترجم')) {
-            return 'ar';
+        // 1. Direct language code matching
+        foreach (self::$langDefinitions as $code => $keywords) {
+            if (in_array($lang, $keywords, true)) {
+                return $code;
+            }
         }
-        // English patterns
-        if (preg_match('/\b(en|eng|english|sdh|cc|full)\b/i', $haystack)) {
+
+        // 2. Keyword check in title / filename
+        foreach (self::$langDefinitions as $code => $keywords) {
+            foreach ($keywords as $kw) {
+                if (preg_match('/(?:^|\s)' . preg_quote($kw, '/') . '(?:$|\s)/iu', $haystack)) {
+                    return $code;
+                }
+            }
+        }
+
+        // 3. SDH / CC fallback to English if no other language found
+        if (preg_match('/\b(sdh|cc|full)\b/i', $haystack)) {
             return 'en';
         }
-        // Spanish patterns
-        if (preg_match('/\b(es|spa|spanish|latino|castellano|español)\b/i', $haystack)) {
-            return 'es';
-        }
-        // French patterns
-        if (preg_match('/\b(fr|fre|fra|french|français)\b/i', $haystack)) {
-            return 'fr';
-        }
-        // German patterns
-        if (preg_match('/\b(de|ger|deu|german|deutsch)\b/i', $haystack)) {
-            return 'de';
-        }
-        // Italian patterns
-        if (preg_match('/\b(it|ita|italian|italiano)\b/i', $haystack)) {
-            return 'it';
-        }
-        // Portuguese patterns
-        if (preg_match('/\b(pt|por|portuguese|português|brazil|brasileiro)\b/i', $haystack)) {
-            return 'pt';
-        }
-        // Russian patterns
-        if (preg_match('/\b(ru|rus|russian|русский)\b/i', $haystack)) {
-            return 'ru';
-        }
-        // Turkish patterns
-        if (preg_match('/\b(tr|tur|turkish|türkçe)\b/i', $haystack)) {
-            return 'tr';
-        }
-        // Persian patterns
-        if (preg_match('/\b(fa|fas|per|persian|farsi)\b/i', $haystack) || str_contains($haystack, 'فارسی')) {
-            return 'fa';
-        }
-        // Japanese patterns
-        if (preg_match('/\b(ja|jpn|japanese)\b/i', $haystack)) {
-            return 'ja';
-        }
-        // Korean patterns
-        if (preg_match('/\b(ko|kor|korean)\b/i', $haystack)) {
-            return 'ko';
-        }
-        // Chinese patterns
-        if (preg_match('/\b(zh|chi|zho|chinese|chs|cht)\b/i', $haystack)) {
-            return 'zh';
-        }
 
-        // If Track 0 in western releases and no tags, default to English
-        if ($trackIndex === 0 && (str_contains($haystack, 'bluray') || str_contains($haystack, 'webrip') || str_contains($haystack, 'web-dl'))) {
+        // 4. Default single-file release / series episode fallback
+        if (str_contains($haystack, 'yts') 
+            || str_contains($haystack, 'webrip') 
+            || str_contains($haystack, 'bluray') 
+            || str_contains($haystack, 'web dl')
+            || preg_match('/\b(s\d{1,2}e\d{1,2}|season|episode|ep\d{1,2})\b/i', $haystack)) {
             return 'en';
         }
 
@@ -342,7 +342,6 @@ class EmbeddedSubtitleDetectorService
             return "{$langName}";
         }
 
-        // Undefined track - make it friendly instead of 'und'
         if ($title && trim($title) !== '') {
             return "{$title} (Track " . ($idx + 1) . ")";
         }
@@ -353,43 +352,12 @@ class EmbeddedSubtitleDetectorService
     public function normalizeLanguageCode(string $code): string
     {
         $code = strtolower(trim($code));
-        $map = [
-            'ara' => 'ar', 'arabic' => 'ar', 'ar' => 'ar',
-            'eng' => 'en', 'english' => 'en', 'en' => 'en',
-            'spa' => 'es', 'spanish' => 'es', 'es' => 'es',
-            'fre' => 'fr', 'fra' => 'fr', 'french' => 'fr', 'fr' => 'fr',
-            'ger' => 'de', 'deu' => 'de', 'german' => 'de', 'de' => 'de',
-            'ita' => 'it', 'italian' => 'it', 'it' => 'it',
-            'por' => 'pt', 'portuguese' => 'pt', 'pt' => 'pt',
-            'rus' => 'ru', 'russian' => 'ru', 'ru' => 'ru',
-            'tur' => 'tr', 'turkish' => 'tr', 'tr' => 'tr',
-            'fas' => 'fa', 'per' => 'fa', 'persian' => 'fa', 'fa' => 'fa', 'farsi' => 'fa',
-            'jpn' => 'ja', 'japanese' => 'ja', 'ja' => 'ja',
-            'kor' => 'ko', 'korean' => 'ko', 'ko' => 'ko',
-            'zho' => 'zh', 'chi' => 'zh', 'chinese' => 'zh', 'zh' => 'zh',
-            'hin' => 'hi', 'hindi' => 'hi', 'hi' => 'hi',
-            'ind' => 'id', 'indonesian' => 'id', 'id' => 'id',
-            'nld' => 'nl', 'dut' => 'nl', 'dutch' => 'nl', 'nl' => 'nl',
-            'pol' => 'pl', 'polish' => 'pl', 'pl' => 'pl',
-            'swe' => 'sv', 'swedish' => 'sv', 'sv' => 'sv',
-            'dan' => 'da', 'danish' => 'da', 'da' => 'da',
-            'nor' => 'no', 'norwegian' => 'no', 'no' => 'no',
-            'fin' => 'fi', 'finnish' => 'fi', 'fi' => 'fi',
-            'ell' => 'el', 'gre' => 'el', 'greek' => 'el', 'el' => 'el',
-            'heb' => 'he', 'hebrew' => 'he', 'he' => 'he',
-            'vie' => 'vi', 'vietnamese' => 'vi', 'vi' => 'vi',
-            'tha' => 'th', 'thai' => 'th', 'th' => 'th',
-            'urd' => 'ur', 'urdu' => 'ur', 'ur' => 'ur',
-            'ron' => 'ro', 'rum' => 'ro', 'romanian' => 'ro', 'ro' => 'ro',
-            'ces' => 'cs', 'cze' => 'cs', 'czech' => 'cs', 'cs' => 'cs',
-            'hun' => 'hu', 'hungarian' => 'hu', 'hu' => 'hu',
-            'ukr' => 'uk', 'ukrainian' => 'uk', 'uk' => 'uk',
-            'msa' => 'ms', 'may' => 'ms', 'malay' => 'ms', 'ms' => 'ms',
-            'ben' => 'bn', 'bengali' => 'bn', 'bn' => 'bn',
-            'tgl' => 'tl', 'fil' => 'tl', 'tagalog' => 'tl', 'tl' => 'tl',
-        ];
-
-        return $map[$code] ?? (strlen($code) === 2 ? $code : 'und');
+        foreach (self::$langDefinitions as $canonical => $keywords) {
+            if (in_array($code, $keywords, true)) {
+                return $canonical;
+            }
+        }
+        return strlen($code) === 2 ? $code : 'und';
     }
 
     public function getLanguageName(string $code): string

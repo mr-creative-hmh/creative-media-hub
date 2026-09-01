@@ -4,11 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Episode;
 use App\Models\MediaItem;
+use App\Models\Subtitle;
+use App\Services\Subtitles\EmbeddedSubtitleDetectorService;
 use App\Services\Subtitles\OpenSubtitlesService;
 use App\Services\Subtitles\SubDlService;
 use App\Services\Subtitles\SubtitleManagerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -17,15 +20,18 @@ class SubtitleController extends Controller
     protected SubtitleManagerService $manager;
     protected OpenSubtitlesService $openSubtitles;
     protected SubDlService $subDl;
+    protected EmbeddedSubtitleDetectorService $detector;
 
     public function __construct(
         SubtitleManagerService $manager,
         OpenSubtitlesService $openSubtitles,
-        SubDlService $subDl
+        SubDlService $subDl,
+        EmbeddedSubtitleDetectorService $detector
     ) {
         $this->manager = $manager;
         $this->openSubtitles = $openSubtitles;
         $this->subDl = $subDl;
+        $this->detector = $detector;
     }
 
     public function index(): Response
@@ -61,13 +67,11 @@ class SubtitleController extends Controller
         $title = $request->input('query', 'Inception');
         $lang = $request->input('language', 'ar');
 
-        $results = [];
         $subDl = $this->subDl->searchSubtitles($title, null, [strtoupper($lang)]);
         $openSubs = $this->openSubtitles->searchSubtitles(['query' => $title, 'languages' => $lang]);
 
         $combined = array_merge($subDl, $openSubs);
 
-        // Fallback demo items if external APIs throttle
         if (empty($combined)) {
             $combined = [
                 [
@@ -140,6 +144,60 @@ class SubtitleController extends Controller
         }
 
         $subtitles = $model->subtitles()->get();
+
+        // If subtitles are empty or missing embedded tracks, detect and attach on the fly
+        if ($subtitles->isEmpty() && $model->file_path && File::exists($model->file_path)) {
+            $embedded = $this->detector->detectEmbeddedSubtitles($model->file_path);
+            foreach ($embedded as $track) {
+                Subtitle::updateOrCreate(
+                    [
+                        'subtitlable_type' => get_class($model),
+                        'subtitlable_id' => $model->id,
+                        'file_path' => "embedded:{$track['stream_index']}:{$model->file_path}",
+                    ],
+                    [
+                        'language' => $track['language'],
+                        'language_name' => $track['language_name'],
+                        'is_embedded' => true,
+                        'format' => $track['codec'] ?? 'srt',
+                    ]
+                );
+            }
+
+            // Also check adjacent local files
+            $dir = dirname($model->file_path);
+            if (File::isDirectory($dir)) {
+                $files = File::files($dir);
+                $subsDir = "{$dir}/Subs";
+                if (File::isDirectory($subsDir)) {
+                    $files = array_merge($files, File::files($subsDir));
+                }
+
+                foreach ($files as $f) {
+                    $ext = strtolower($f->getExtension());
+                    if (in_array($ext, ['srt', 'vtt', 'ass', 'ssa'])) {
+                        $resolvedLang = $this->detector->resolveLanguageFromContext('und', '', $f->getFilename());
+                        $langName = $this->detector->getLanguageName($resolvedLang);
+
+                        Subtitle::updateOrCreate(
+                            [
+                                'subtitlable_type' => get_class($model),
+                                'subtitlable_id' => $model->id,
+                                'file_path' => str_replace('\\', '/', $f->getRealPath()),
+                            ],
+                            [
+                                'language' => $resolvedLang,
+                                'language_name' => $langName,
+                                'is_embedded' => false,
+                                'format' => $ext,
+                            ]
+                        );
+                    }
+                }
+            }
+
+            $subtitles = $model->subtitles()->get();
+        }
 
         return response()->json([
             'success' => true,

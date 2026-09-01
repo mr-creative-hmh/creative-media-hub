@@ -369,4 +369,39 @@ class ComprehensiveSceneParserTest extends TestCase
         $res9 = $this->parser->parse('Show 📺 S01E01.mkv');
         $this->assertEquals('Show', $res9['series_title']);
     }
+
+    public function test_sub_720p_resolutions_detection(): void
+    {
+        $cases = [
+            'Show.S01E01.576p.PAL.mkv' => '576p SD',
+            'Movie.1999.540p.WEBRip.mkv' => '540p',
+            'Classic.Show.S01E01.480p.DVD.mkv' => '480p SD',
+            'Anime.S01E01.360p.mp4' => '360p',
+            'Old.Clip.240p.avi' => '240p',
+            'Film.1998.720x480.DVDRip.mkv' => '480p SD',
+            'LowRes.640x360.mp4' => '360p',
+        ];
+
+        foreach ($cases as $filename => $expectedRes) {
+            $parsed = $this->parser->parse($filename);
+            $this->assertEquals($expectedRes, $parsed['resolution'], "Failed for {$filename}");
+        }
+    }
+
+    public function test_series_year_extraction_from_parent_folder_and_name(): void
+    {
+        $path1 = 'D:/Downloads/TV Shows/Rick and Morty (2013)/Season 01/Rick.and.Morty.S01E01.480p.DVD.mkv';
+        $p1 = $this->parser->parse($path1);
+        $this->assertEquals('series', $p1['type']);
+        $this->assertEquals('Rick and Morty', $p1['clean_title']);
+        $this->assertEquals(2013, $p1['year']);
+        $this->assertEquals('480p SD', $p1['resolution']);
+
+        $path2 = 'D:/Downloads/Breaking Bad (2008) S01E01 576p.mkv';
+        $p2 = $this->parser->parse($path2);
+        $this->assertEquals('series', $p2['type']);
+        $this->assertEquals('Breaking Bad', $p2['clean_title']);
+        $this->assertEquals(2008, $p2['year']);
+        $this->assertEquals('576p SD', $p2['resolution']);
+    }
 }

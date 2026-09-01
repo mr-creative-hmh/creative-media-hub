@@ -87,7 +87,6 @@ class SceneNameParserService
             $airDate = "{$tvMatch[2]}-{$tvMatch[3]}-{$tvMatch[4]}";
             $season = (int) $tvMatch[2];
             $episode = (int) ($tvMatch[3] . $tvMatch[4]);
-            $rawAfterPart = $tvMatch[5] ?? '';
             $seriesTitle = $this->cleanTitleString($rawSeriesPart);
             $cleanTitle = $seriesTitle;
 
@@ -123,7 +122,7 @@ class SceneNameParserService
             $year = (int) $yMatches[1];
             $working = $yMatches[2];
         }
-        // Priority 2: Year in parentheses or brackets (take last year if multiple)
+        // Priority 2: Year in parentheses or brackets in filename
         elseif (preg_match_all('/[\[\(]?\b(19\d\d|20\d\d)\b[\]\)]?/', $working, $yMatchesAll)) {
             $foundYears = $yMatchesAll[1];
             $year = (int) end($foundYears);
@@ -132,7 +131,7 @@ class SceneNameParserService
         // 6. Extract Release Group at end
         if (preg_match('/-(?:\[)?([a-zA-Z0-9\.]+)(?:\])?$/i', $working, $gMatches)) {
             $groupCandidate = $gMatches[1];
-            if (!preg_match('/^(?:x264|x265|h264|h265|hevc|1080p|720p|2160p|4k|aac|ddp|mp4|mkv|\d+)$/i', $groupCandidate)) {
+            if (!preg_match('/^(?:x264|x265|h264|h265|hevc|1080p|720p|576p|540p|480p|360p|240p|2160p|4k|aac|ddp|mp4|mkv|\d+)$/i', $groupCandidate)) {
                 $group = $groupCandidate;
                 $working = substr($working, 0, -strlen($gMatches[0]));
             }
@@ -168,7 +167,7 @@ class SceneNameParserService
             $rawAfterPart = $tvMatch[5];
         }
         // Standard S01E02 / S00E01 / S00E00
-        elseif (preg_match('/^(.*?)[._\-\s]+[sS](\d{1,2})[eE](\d{1,3})[._\-\s]*(.*?)$/i', $working, $tvMatch)) {
+        elseif (preg_match('/^(.*?)(?:[._\-\s]|^)[sS](\d{1,2})[eE](\d{1,3})[._\-\s]*(.*?)$/i', $working, $tvMatch)) {
             $type = 'series';
             $isSeriesDetected = true;
             $rawSeriesPart = $tvMatch[1];
@@ -217,13 +216,13 @@ class SceneNameParserService
         }
 
         // 9. Quality and Codec Delimiters
-        $qualityTokensRegex = '/\b(2160p|1080p|1080i|720p|480p|576p|4k|uhd|fhd|hd|sd|bluray|blu-ray|remux|bdrip|brrip|web-dl|webdl|webrip|web|hdtv|pdtv|dvdrip|dvd|x264|x265|h264|h265|hevc|avc|av1|xvid|divx|10bit|8bit|12bit|hdr|hdr10|hdr10\+|dv|dovi|dolbyvision|aac|aac2\.0|aac5\.1|ddp|ddp5\.1|ddp7\.1|ddp2\.0|dd\+|eac3|ac3|dts|dts-hd|dts-ma|atmos|truehd|flac|mp3|2\.0|5\.1|7\.1)\b/i';
+        $qualityTokensRegex = '/\b(2160p|1440p|1080p|1080i|720p|576p|540p|480p|360p|240p|4k|2k|uhd|fhd|hd|sd|pal|ntsc|bluray|blu-ray|remux|bdrip|brrip|web-dl|webdl|webrip|web|hdtv|pdtv|dvdrip|dvd|vhsrip|vhs|x264|x265|h264|h265|hevc|avc|av1|xvid|divx|10bit|8bit|12bit|hdr|hdr10|hdr10\+|dv|dovi|dolbyvision|aac|aac2\.0|aac5\.1|ddp|ddp5\.1|ddp7\.1|ddp2\.0|dd\+|eac3|ac3|dts|dts-hd|dts-ma|atmos|truehd|flac|mp3|2\.0|5\.1|7\.1)\b/i';
 
         if ($isSeriesDetected) {
             if (!empty($rawSeriesPart)) {
                 if (preg_match('/^(.*?)[._\-\s]+(19\d\d|20\d\d)$/i', $rawSeriesPart, $yMatch)) {
                     $rawSeriesPart = $yMatch[1];
-                    $year = (int) $yMatch[2];
+                    $year = $year ?: (int) $yMatch[2];
                 }
                 $seriesTitle = $this->cleanTitleString($rawSeriesPart);
             }
@@ -241,11 +240,19 @@ class SceneNameParserService
                 }
             }
 
-            if (empty($seriesTitle) || is_numeric($seriesTitle)) {
+            if (empty($seriesTitle) || is_numeric($seriesTitle) || strtolower($seriesTitle) === 'unknown series') {
                 if ($isParentSeasonFolder && $grandparentFolder) {
                     $seriesTitle = $this->cleanTitleString($grandparentFolder);
-                } elseif ($parentFolder && !in_array(strtolower($parentFolder), ['downloads', 'movies', 'media', 'tv shows'])) {
+                } elseif ($parentFolder && !in_array(strtolower($parentFolder), ['downloads', 'movies', 'media', 'tv shows', 'incoming', 'videos'])) {
                     $seriesTitle = $this->cleanTitleString($parentFolder);
+                }
+            }
+
+            // Also check parent/grandparent directory for series year if still missing (e.g. "Rick and Morty (2013)")
+            if (!$year) {
+                $dirToCheck = $isParentSeasonFolder ? $grandparentFolder : $parentFolder;
+                if ($dirToCheck && preg_match('/\b(19\d\d|20\d\d)\b/', $dirToCheck, $dirYMatch)) {
+                    $year = (int) $dirYMatch[1];
                 }
             }
 
@@ -262,23 +269,42 @@ class SceneNameParserService
             } else {
                 $cleanTitle = $this->cleanTitleString($working);
             }
+
+            if (!$year && $parentFolder && preg_match('/\b(19\d\d|20\d\d)\b/', $parentFolder, $dirYMatch)) {
+                $year = (int) $dirYMatch[1];
+            }
         }
 
         if (empty($cleanTitle)) {
             $cleanTitle = $this->cleanTitleString($baseName);
         }
 
-        // 10. Detect Technical Specs
-        $fullSpecsString = $working . ' ' . $filename . ' ' . $parentFolder;
+        // 10. Detect Technical Specs across full path & filename
+        $fullSpecsString = $working . ' ' . $filename . ' ' . $parentFolder . ' ' . $grandparentFolder;
 
         if (preg_match('/\b(2160p|4k|uhd)\b/i', $fullSpecsString)) {
             $resolution = '4K UHD';
+        } elseif (preg_match('/\b(1440p|2k|qhd)\b/i', $fullSpecsString)) {
+            $resolution = '1440p 2K';
         } elseif (preg_match('/\b(1080p|1080i|fhd)\b/i', $fullSpecsString)) {
             $resolution = '1080p FHD';
-        } elseif (preg_match('/\b(720p|hd)\b/i', $fullSpecsString)) {
+        } elseif (preg_match('/\b(720p|720i|hd)\b/i', $fullSpecsString)) {
             $resolution = '720p HD';
-        } elseif (preg_match('/\b(480p|sd|576p)\b/i', $fullSpecsString)) {
+        } elseif (preg_match('/\b(576p|576i|pal)\b/i', $fullSpecsString)) {
+            $resolution = '576p SD';
+        } elseif (preg_match('/\b(540p|qhd)\b/i', $fullSpecsString)) {
+            $resolution = '540p';
+        } elseif (preg_match('/\b(480p|480i|ntsc|sd|dvdrip|dvd|vhsrip|vhs)\b/i', $fullSpecsString)) {
             $resolution = '480p SD';
+        } elseif (preg_match('/\b(360p)\b/i', $fullSpecsString)) {
+            $resolution = '360p';
+        } elseif (preg_match('/\b(240p)\b/i', $fullSpecsString)) {
+            $resolution = '240p';
+        }
+
+        // Dimension based resolution fallback (e.g. 1920x1080, 1280x720, 720x480, 640x360)
+        if (!$resolution && preg_match('/\b(\d{3,4})x(\d{3,4})\b/i', $fullSpecsString, $dimMatch)) {
+            $resolution = $this->calculateResolutionFromDimensions((int) $dimMatch[1], (int) $dimMatch[2]);
         }
 
         if (preg_match('/\b(x265|h265|hevc)\b/i', $fullSpecsString)) {
@@ -343,6 +369,38 @@ class SceneNameParserService
         ];
     }
 
+    public function calculateResolutionFromDimensions(int $w, int $h): string
+    {
+        $minDim = min($w, $h);
+        $maxDim = max($w, $h);
+
+        if ($minDim >= 2000 || $maxDim >= 3800) {
+            return '4K UHD';
+        }
+        if ($minDim >= 1400 || $maxDim >= 2500) {
+            return '1440p 2K';
+        }
+        if ($minDim >= 1000 || $maxDim >= 1900) {
+            return '1080p FHD';
+        }
+        if ($minDim >= 700 || $maxDim >= 1200) {
+            return '720p HD';
+        }
+        if ($minDim >= 560) {
+            return '576p SD';
+        }
+        if ($minDim >= 500) {
+            return '540p';
+        }
+        if ($minDim >= 440 || ($minDim >= 400 && $maxDim >= 700)) {
+            return '480p SD';
+        }
+        if ($minDim >= 320) {
+            return '360p';
+        }
+        return '240p';
+    }
+
     public function cleanTitleString(string $raw): string
     {
         $s = preg_replace('/[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}]/u', '', $raw);
@@ -354,7 +412,7 @@ class SceneNameParserService
 
         $s = preg_replace('/\b(?:Season|Series|Staffel|Saison)\s*\d{1,2}\b/i', ' ', $s);
         $s = preg_replace('/\bS\d{1,2}\b/i', ' ', $s);
-        $s = preg_replace('/\b(?:2160p|1080p|1080i|720p|480p|4k|bluray|remux|web-dl|webdl|webrip|hdtv|dvdrip|x264|x265|hevc|aac|dts|ac3|atmos|hdr|10bit|8bit|ddp5\.1|ddp)\b/i', ' ', $s);
+        $s = preg_replace('/\b(?:2160p|1440p|1080p|1080i|720p|576p|540p|480p|360p|240p|4k|2k|bluray|remux|web-dl|webdl|webrip|hdtv|dvdrip|dvd|x264|x265|hevc|aac|dts|ac3|atmos|hdr|10bit|8bit|ddp5\.1|ddp)\b/i', ' ', $s);
         $s = preg_replace('/\b(19\d\d|20\d\d)\b/', ' ', $s);
 
         // Protect hyphenated names (Spider-Man, X-Men, Ant-Man, Iron-Man)
@@ -383,7 +441,7 @@ class SceneNameParserService
         $s = preg_replace('/-(?:\[)?[a-zA-Z0-9_\.]+(?:\])?$/i', '', $raw);
         $s = preg_replace('/\[[^\]]*\]/', '', $s);
         $s = preg_replace('/\(.*?\)/', '', $s);
-        $s = preg_replace('/\b(2160p|1080p|720p|480p|4k|bluray|remux|web-dl|webdl|webrip|hdtv|dvdrip|x264|x265|hevc|aac|10bit|ddp5\.1|ddp|2\.0|5\.1)\b.*$/i', '', $s);
+        $s = preg_replace('/\b(2160p|1440p|1080p|720p|576p|540p|480p|360p|240p|4k|bluray|remux|web-dl|webdl|webrip|hdtv|dvdrip|x264|x265|hevc|aac|10bit|ddp5\.1|ddp|2\.0|5\.1)\b.*$/i', '', $s);
         $s = preg_replace('/[._\-]/', ' ', $s);
         $s = trim(preg_replace('/\s+/', ' ', $s));
 

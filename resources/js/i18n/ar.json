@@ -22,7 +22,7 @@
         "play_now": "تشغيل الآن",
         "details": "التفاصيل",
         "trailer": "الإعلان الترويجي",
-        "seasons": "المواسم",
+        "seasons": "مواسم",
         "episodes": "الحلقات",
         "cast": "طاقم العمل والتمثيل",
         "audio": "الصوت",
@@ -86,7 +86,12 @@
         "file_location": "مسار الملف",
         "added_date": "تاريخ الفهرسة",
         "featured": "مميز",
-        "spotlight": "عرض الأضواء"
+        "spotlight": "عرض الأضواء",
+        "vibes": "الأجواء والطابع السينمائي",
+        "audio_codec": "ترميز الصوت",
+        "video_codec": "ترميز الفيديو",
+        "resolution": "الدقة والجودة",
+        "overview": "قصة العمل والنبذة"
     },
     "scanner_view": {
         "title": "الفاحص الذكي للمكتبة",
@@ -133,7 +138,8 @@
         "tmdb_api_key": "مفتاح TMDB API",
         "omdb_api_key": "مفتاح OMDb API",
         "enable_arabic_enrichment": "تفعيل جلب البيانات العربية تلقائياً",
-        "save_settings": "حفظ جميع التفضيلات"
+        "save_settings": "حفظ جميع التفضيلات",
+        "save": "حفظ الإعدادات"
     },
     "analytics_view": {
         "title": "تحليلات واستهلاك التخزين",
@@ -141,7 +147,10 @@
         "total_storage": "إجمالي المساحة المفهرسة",
         "space_saved": "المساحة الموفرة",
         "resolution_breakdown": "توزيع دقات العرض",
-        "audio_breakdown": "توزيع الصيغ الصوتية"
+        "audio_breakdown": "توزيع الصيغ الصوتية",
+        "total_movies": "إجمالي الأفلام",
+        "total_series": "إجمالي المسلسلات",
+        "storage_used": "المساحة التخزينية المستهلكة"
     },
     "organizer": {
         "title": "منظم الأقراص",
@@ -154,5 +163,21 @@
         "by_decade": "تنظيم حسب العقد الزمني (2020s, 2010s, 2000s...)",
         "by_initial": "تنظيم أبجدي (أ - ي / A - Z)",
         "custom": "قالب تعبيري مخصص"
+    },
+    "cancel": "إلغاء",
+    "close": "إغلاق",
+    "confirm": "تأكيد",
+    "success": "تمت العملية بنجاح",
+    "series": {
+        "title": "المسلسلات",
+        "seasons": "مواسم",
+        "season": "الموسم",
+        "episodes": "حلقات",
+        "episode": "الحلقة",
+        "eps": "حلقة",
+        "no_episodes": "لا توجد حلقات مفهرسة لهذا الموسم حالياً.",
+        "ready_to_stream": "جاهز للمشاهدة",
+        "experience": "استمتع بمشاهدة حلقات هذا المسلسل بجودة سينمائية.",
+        "fix_match": "تصحيح مطابقة المسلسل"
     }
 }

@@ -372,6 +372,12 @@ class VirtualLibraryScannerService
             return $existing;
         }
 
+        // Hardware probe for exact resolution (including 576p, 540p, 480p, 360p, 240p) and duration
+        $probed = $this->probeMediaSpecs($file['path']);
+        $resolution = $probed['resolution'] ?? ($parsed['resolution'] ?? '1080p FHD');
+        $videoCodec = $probed['video_codec'] ?? ($parsed['codec'] ?? 'H.264 / AVC');
+        $audioCodec = $probed['audio_codec'] ?? ($parsed['audio'] ?? 'AAC');
+
         // 1. Perform Network & Artwork Search outside any database lock
         $meta = $this->metadata->aggregateMovieMetadata($cleanTitle, $year);
         $posterUrl = $meta['poster_path'] ?? ($file['local_poster'] ?? null);
@@ -380,23 +386,24 @@ class VirtualLibraryScannerService
         }
 
         $backdropUrl = $meta['backdrop_path'] ?? ($file['local_backdrop'] ?? null);
+        $runtimeMinutes = $probed['runtime_minutes'] ?? ($meta['runtime_minutes'] ?? ($meta['duration_minutes'] ?? 115));
 
         // 2. Perform SQLite write with automatic retry for busy lock resistance
-        $movie = retry(4, function () use ($cleanTitle, $year, $meta, $file, $parsed, $posterUrl, $backdropUrl) {
+        $movie = retry(4, function () use ($cleanTitle, $year, $meta, $file, $posterUrl, $backdropUrl, $resolution, $videoCodec, $audioCodec, $runtimeMinutes) {
             $m = MediaItem::create([
                 'title' => $meta['title'] ?? $cleanTitle,
                 'original_title' => $meta['original_title'] ?? $cleanTitle,
                 'title_ar' => $meta['title_ar'] ?? null,
-                'release_year' => $meta['year'] ?? $year,
+                'release_year' => $meta['release_year'] ?? ($meta['year'] ?? $year),
                 'overview' => $meta['overview'] ?? "Enjoy watching {$cleanTitle}.",
                 'overview_ar' => $meta['overview_ar'] ?? null,
                 'rating' => $meta['rating'] ?? 7.5,
-                'runtime_minutes' => $meta['runtime_minutes'] ?? ($meta['duration_minutes'] ?? 115),
+                'runtime_minutes' => $runtimeMinutes,
                 'file_path' => $file['path'],
                 'file_size_bytes' => $file['size_bytes'] ?? 0,
-                'resolution' => $parsed['resolution'] ?? '1080p',
-                'video_codec' => $parsed['codec'] ?? 'x264',
-                'audio_codec' => $parsed['audio'] ?? 'AAC',
+                'resolution' => $resolution,
+                'video_codec' => $videoCodec,
+                'audio_codec' => $audioCodec,
                 'poster_path' => $posterUrl,
                 'backdrop_path' => $backdropUrl,
                 'is_favorite' => false,
@@ -429,17 +436,18 @@ class VirtualLibraryScannerService
         $seasonNum = (int) ($parsed['season'] ?? 1);
         $epNum = (int) ($parsed['episode'] ?? 1);
         $epTitle = $parsed['episode_title'] ?? "Episode {$epNum}";
+        $year = $parsed['year'] ?? null;
 
         $series = Series::where('title', 'like', $showTitle)
             ->orWhere('original_title', 'like', $showTitle)
             ->first();
 
         if (!$series) {
-            $series = retry(4, function () use ($showTitle, $parsed) {
+            $series = retry(4, function () use ($showTitle, $year) {
                 return Series::create([
                     'title' => $showTitle,
                     'original_title' => $showTitle,
-                    'release_year' => $parsed['year'] ?? null,
+                    'release_year' => $year,
                     'overview' => "Experience the complete series of {$showTitle}.",
                     'rating' => 8.0,
                     'status' => 'Continuing',
@@ -447,17 +455,18 @@ class VirtualLibraryScannerService
             }, 150);
         }
 
-        if (!$series->poster_path || !$series->overview || $series->overview === "Experience the complete series of {$showTitle}.") {
+        if (!$series->poster_path || !$series->overview || !$series->release_year || $series->overview === "Experience the complete series of {$showTitle}.") {
             try {
-                $meta = $this->metadata->aggregateSeriesMetadata($showTitle, $parsed['year'] ?? null);
+                $meta = $this->metadata->aggregateSeriesMetadata($showTitle, $series->release_year ?? $year);
                 $posterUrl = $meta['poster_path'] ?? ($file['local_poster'] ?? null);
                 if (empty($posterUrl)) {
-                    $posterUrl = $this->webArtwork->searchAndDownloadArtwork($showTitle, $parsed['year'] ?? null, 'series');
+                    $posterUrl = $this->webArtwork->searchAndDownloadArtwork($showTitle, $series->release_year ?? $year, 'series');
                 }
 
                 $backdropUrl = $meta['backdrop_path'] ?? ($file['local_backdrop'] ?? null);
+                $seriesYear = $meta['release_year'] ?? ($meta['year'] ?? ($series->release_year ?? $year));
 
-                retry(3, function () use ($series, $meta, $posterUrl, $backdropUrl) {
+                retry(3, function () use ($series, $meta, $posterUrl, $backdropUrl, $seriesYear) {
                     $series->update([
                         'title_ar' => $meta['title_ar'] ?? $series->title_ar,
                         'overview' => $meta['overview'] ?? $series->overview,
@@ -465,7 +474,7 @@ class VirtualLibraryScannerService
                         'poster_path' => $posterUrl ?? $series->poster_path,
                         'backdrop_path' => $backdropUrl ?? $series->backdrop_path,
                         'rating' => $meta['rating'] ?? $series->rating,
-                        'release_year' => $meta['year'] ?? $series->release_year,
+                        'release_year' => $seriesYear ?? $series->release_year,
                     ]);
 
                     if (!empty($meta['genres'])) {
@@ -483,6 +492,13 @@ class VirtualLibraryScannerService
             } catch (\Throwable $e) {}
         }
 
+        // Hardware probe for exact episode specs (including 576p, 540p, 480p, 360p, 240p)
+        $probed = $this->probeMediaSpecs($file['path']);
+        $resolution = $probed['resolution'] ?? ($parsed['resolution'] ?? '1080p FHD');
+        $videoCodec = $probed['video_codec'] ?? ($parsed['codec'] ?? 'H.264 / AVC');
+        $audioCodec = $probed['audio_codec'] ?? ($parsed['audio'] ?? 'AAC');
+        $runtimeMinutes = $probed['runtime_minutes'] ?? 45;
+
         $season = retry(4, function () use ($series, $seasonNum) {
             return Season::firstOrCreate(
                 ['series_id' => $series->id, 'season_number' => $seasonNum],
@@ -490,7 +506,7 @@ class VirtualLibraryScannerService
             );
         }, 150);
 
-        $episode = retry(4, function () use ($series, $season, $epNum, $epTitle, $seasonNum, $file, $parsed) {
+        $episode = retry(4, function () use ($series, $season, $epNum, $epTitle, $seasonNum, $file, $resolution, $videoCodec, $audioCodec, $runtimeMinutes) {
             return Episode::updateOrCreate(
                 [
                     'series_id' => $series->id,
@@ -502,10 +518,10 @@ class VirtualLibraryScannerService
                     'overview' => "Episode {$epNum} of Season {$seasonNum}.",
                     'file_path' => $file['path'],
                     'file_size_bytes' => $file['size_bytes'] ?? 0,
-                    'runtime_minutes' => 45,
-                    'resolution' => $parsed['resolution'] ?? '1080p',
-                    'video_codec' => $parsed['codec'] ?? 'x264',
-                    'audio_codec' => $parsed['audio'] ?? 'AAC',
+                    'runtime_minutes' => $runtimeMinutes,
+                    'resolution' => $resolution,
+                    'video_codec' => $videoCodec,
+                    'audio_codec' => $audioCodec,
                 ]
             );
         }, 150);
@@ -518,6 +534,91 @@ class VirtualLibraryScannerService
     /**
      * Attach both external subtitle files and embedded container subtitle streams.
      */
+        public function probeMediaSpecs(string $filePath): array
+    {
+        $specs = [
+            'duration_seconds' => null,
+            'runtime_minutes' => null,
+            'resolution' => null,
+            'video_codec' => null,
+            'audio_codec' => null,
+        ];
+
+        $ffprobe = \App\Services\Media\FfmpegLocatorService::getFfprobePath();
+        if (!$ffprobe || !\Illuminate\Support\Facades\File::exists($filePath)) {
+            return $specs;
+        }
+
+        try {
+            $escaped = escapeshellarg($filePath);
+            $cmd = escapeshellarg($ffprobe) . " -v quiet -print_format json -show_format -show_streams {$escaped}";
+            $output = @shell_exec($cmd);
+            if (!$output) {
+                return $specs;
+            }
+
+            $data = @json_decode($output, true);
+            if (empty($data) || !is_array($data)) {
+                return $specs;
+            }
+
+            // Duration
+            if (!empty($data['format']['duration']) && is_numeric($data['format']['duration'])) {
+                $dur = (float) $data['format']['duration'];
+                $specs['duration_seconds'] = (int) round($dur);
+                $specs['runtime_minutes'] = max(1, (int) round($dur / 60));
+            }
+
+            // Streams
+            if (!empty($data['streams']) && is_array($data['streams'])) {
+                foreach ($data['streams'] as $stream) {
+                    $codecType = strtolower($stream['codec_type'] ?? '');
+                    $codecName = strtolower($stream['codec_name'] ?? '');
+
+                    if ($codecType === 'video' && empty($specs['resolution'])) {
+                        $w = (int) ($stream['width'] ?? 0);
+                        $h = (int) ($stream['height'] ?? 0);
+                        if ($w > 0 && $h > 0) {
+                            $specs['resolution'] = $this->nameParser->calculateResolutionFromDimensions($w, $h);
+                        }
+
+                        $specs['video_codec'] = match ($codecName) {
+                            'hevc', 'h265' => 'HEVC / H.265',
+                            'h264', 'avc' => 'H.264 / AVC',
+                            'av01', 'av1' => 'AV1',
+                            'vp9' => 'VP9',
+                            'mpeg4', 'msmpeg4v3' => 'MPEG-4 / XviD',
+                            default => strtoupper($codecName) ?: 'H.264 / AVC',
+                        };
+                    }
+
+                    if ($codecType === 'audio' && empty($specs['audio_codec'])) {
+                        $specs['audio_codec'] = match ($codecName) {
+                            'eac3', 'ddp' => 'Dolby Digital Plus',
+                            'ac3' => 'Dolby Digital',
+                            'truehd' => 'Dolby TrueHD',
+                            'dts' => 'DTS',
+                            'flac' => 'FLAC',
+                            'aac' => 'AAC',
+                            'mp3' => 'MP3',
+                            'opus' => 'Opus',
+                            'vorbis' => 'Vorbis',
+                            default => strtoupper($codecName) ?: 'AAC',
+                        };
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        return $specs;
+    }
+
+    protected function probeDurationSeconds(string $filePath): ?int
+    {
+        $specs = $this->probeMediaSpecs($filePath);
+        return $specs['duration_seconds'];
+    }
+
     protected function attachAllSubtitles(mixed $model, array $file): void
     {
         $filePath = $file['path'] ?? '';

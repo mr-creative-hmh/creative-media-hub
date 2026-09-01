@@ -12,6 +12,8 @@ const emit = defineEmits(['close', 'play', 'downloadSub', 'updated']);
 
 const { t, isRTL } = useI18n();
 
+
+
 const showFixMatch = ref(false);
 const isDownloadingAr = ref(false);
 const isDownloadingEn = ref(false);

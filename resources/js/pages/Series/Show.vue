@@ -1,22 +1,55 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
-import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import FixMatchModal from '@/components/media/FixMatchModal.vue';
-import { Play, Star, ArrowLeft, ArrowRight, Layers, Users, Subtitles, Film, CheckCircle2, Sparkles } from 'lucide-vue-next';
+import { useI18n } from '@/i18n/useI18n';
+import { Play, Star, ArrowLeft, ArrowRight, Layers, Users, Subtitles, Film, Sparkles, SlidersHorizontal, Clock } from 'lucide-vue-next';
 
 const props = defineProps<{
-    series: any;
+    series: {
+        id: number;
+        title: string;
+        title_ar?: string;
+        overview?: string;
+        overview_ar?: string;
+        poster_path?: string;
+        backdrop_path?: string;
+        release_year?: number;
+        end_year?: number;
+        rating?: number;
+        genres?: Array<{ id: number; name_en: string; name_ar?: string }>;
+        seasons?: Array<{
+            id: number;
+            season_number: number;
+            title?: string;
+            title_ar?: string;
+            episodes?: Array<{
+                id: number;
+                episode_number: number;
+                title: string;
+                title_ar?: string;
+                overview?: string;
+                overview_ar?: string;
+                still_path?: string;
+                air_date?: string;
+                runtime_minutes?: number;
+                resolution?: string;
+                video_codec?: string;
+                audio_codec?: string;
+                subtitles?: any[];
+            }>;
+        }>;
+    };
 }>();
 
 const { t, isRTL } = useI18n();
 
+const selectedSeasonId = ref<number>(props.series.seasons?.[0]?.id || 0);
 const showFixMatch = ref(false);
-const selectedSeasonId = ref<number>(props.series.seasons?.[0]?.id || 1);
 
 const selectedSeason = () => {
-    return props.series.seasons?.find((s: any) => s.id === selectedSeasonId.value) || props.series.seasons?.[0];
+    return props.series.seasons?.find(s => s.id === selectedSeasonId.value) || props.series.seasons?.[0];
 };
 
 const handleMetadataUpdated = (updatedItem: any) => {
@@ -25,85 +58,91 @@ const handleMetadataUpdated = (updatedItem: any) => {
 </script>
 
 <template>
-    <Head :title="series.title" />
+    <Head :title="isRTL && series.title_ar ? series.title_ar : series.title" />
 
     <AppLayout v-slot="{ play }">
-        <!-- Back navigation & Actions Bar -->
-        <div class="mb-4 flex items-center justify-between">
-            <Link href="/series" class="inline-flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">
-                <component :is="isRTL ? ArrowRight : ArrowLeft" class="w-4 h-4" />
-                <span>{{ isRTL ? 'العودة للمسلسلات' : 'Back to TV Series' }}</span>
+        <!-- Top Back Bar & Actions -->
+        <div class="flex items-center justify-between mb-6">
+            <Link
+                href="/series"
+                class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 text-xs font-bold transition-colors border border-slate-200 dark:border-white/10"
+            >
+                <ArrowLeft v-if="!isRTL" class="w-4 h-4" />
+                <ArrowRight v-else class="w-4 h-4" />
+                <span>{{ t('series.title') }}</span>
             </Link>
 
             <button
                 @click="showFixMatch = true"
-                class="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-white/10 transition-all cursor-pointer shadow-sm"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold transition-colors border border-slate-200 dark:border-white/10 cursor-pointer"
             >
-                <Sparkles class="w-3.5 h-3.5 text-cyan-500" />
-                <span>{{ isRTL ? 'تعديل البيانات والغلاف (Fix Match)' : 'Fix Match & Metadata' }}</span>
+                <SlidersHorizontal class="w-3.5 h-3.5" />
+                <span>{{ t('series.fix_match') }}</span>
             </button>
         </div>
 
-        <!-- Series Backdrop Hero -->
-        <div class="relative rounded-3xl overflow-hidden mb-8 border border-slate-200 dark:border-white/10 shadow-2xl">
-            <div class="relative aspect-[21/9] w-full min-h-[320px] bg-slate-950">
+        <!-- Series Hero Banner Card -->
+        <div class="relative rounded-3xl overflow-hidden mb-8 border border-slate-200 dark:border-white/10 min-h-[320px] sm:min-h-[420px] flex items-end shadow-2xl bg-slate-900">
+            <div class="absolute inset-0 z-0">
                 <img
                     :src="series.backdrop_path || series.poster_path || '/placeholder.jpg'"
                     :alt="series.title"
-                    class="w-full h-full object-cover opacity-80"
+                    class="w-full h-full object-cover opacity-75"
                 />
                 <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/70 to-transparent"></div>
             </div>
 
             <!-- Content Header -->
-            <div class="absolute bottom-0 inset-x-0 p-6 sm:p-10 flex flex-col sm:flex-row gap-6 items-end">
+            <div class="relative z-10 p-6 sm:p-10 flex flex-col sm:flex-row gap-6 items-end w-full">
                 <img
                     :src="series.poster_path || '/placeholder.jpg'"
                     :alt="series.title"
-                    class="w-28 sm:w-40 rounded-2xl border-2 border-white/20 shadow-2xl shrink-0 hidden sm:block bg-slate-800"
+                    class="w-28 sm:w-44 rounded-2xl border-2 border-white/20 shadow-2xl shrink-0 hidden sm:block bg-slate-800 object-cover aspect-[2/3]"
                 />
-                <div class="flex-1 space-y-2">
+                <div class="flex-1 space-y-3">
                     <div class="flex items-center gap-2 flex-wrap">
-                        <span class="cinema-badge bg-black/60 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                        <span class="cinema-badge bg-black/60 text-amber-300 border border-amber-500/30 flex items-center gap-1 font-bold">
                             <Star class="w-3.5 h-3.5 fill-current" />
                             {{ series.rating || '8.0' }}
                         </span>
-                        <span v-if="series.release_year" class="cinema-badge bg-black/60 text-slate-200 border border-white/15">
-                            {{ series.release_year }}
+                        <span v-if="series.release_year" class="cinema-badge bg-black/60 text-slate-200 border border-white/15 font-mono">
+                            {{ series.release_year }}<template v-if="series.end_year && series.end_year !== series.release_year"> - {{ series.end_year }}</template>
                         </span>
-                        <span class="cinema-badge bg-black/60 text-cyan-300 border border-cyan-500/30">
-                            {{ series.seasons?.length || 1 }} {{ isRTL ? 'مواسم' : 'Seasons' }}
+                        <span class="cinema-badge bg-black/60 text-cyan-300 border border-cyan-500/30 font-bold">
+                            {{ series.seasons?.length || 1 }} {{ t('series.seasons') }}
                         </span>
-                        <span v-for="g in series.genres?.slice(0, 3)" :key="g.id" class="cinema-badge bg-black/60 text-slate-200 border border-white/10">
+                        <span v-for="g in series.genres?.slice(0, 4)" :key="g.id" class="cinema-badge bg-black/60 text-slate-200 border border-white/10">
                             {{ isRTL && g.name_ar ? g.name_ar : g.name_en }}
                         </span>
                     </div>
 
-                    <h1 class="text-3xl sm:text-5xl font-black text-white drop-shadow-md">
+                    <h1 class="text-3xl sm:text-5xl font-black text-white drop-shadow-md tracking-tight">
                         {{ isRTL && series.title_ar ? series.title_ar : series.title }}
                     </h1>
 
                     <p class="text-xs sm:text-sm text-slate-200 max-w-3xl leading-relaxed drop-shadow line-clamp-3">
-                        {{ isRTL && series.overview_ar ? series.overview_ar : (series.overview || 'Experience this complete series.') }}
+                        {{ (isRTL && series.overview_ar) ? series.overview_ar : (series.overview || t('series.experience')) }}
                     </p>
                 </div>
             </div>
         </div>
 
-        <!-- Seasons Tabs -->
+        <!-- Seasons Navigation Tabs -->
         <div class="mb-6 border-b border-slate-200 dark:border-white/10 pb-4">
-            <div class="flex items-center gap-2 overflow-x-auto">
+            <div class="flex items-center gap-2 overflow-x-auto pb-1">
                 <button
                     v-for="s in series.seasons"
                     :key="s.id"
                     @click="selectedSeasonId = s.id"
-                    class="px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer"
+                    class="px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-2"
                     :class="selectedSeasonId === s.id
-                        ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
+                        ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20 font-black'
                         : 'bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10'"
                 >
-                    {{ isRTL && s.title_ar ? s.title_ar : (s.title || `Season ${s.season_number}`) }}
-                    <span class="text-[10px] ml-1 opacity-70">({{ s.episodes?.length || 0 }} {{ isRTL ? 'حلقات' : 'eps' }})</span>
+                    <span>{{ isRTL && s.title_ar ? s.title_ar : (s.title || `${t('series.season')} ${s.season_number}`) }}</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-md bg-black/20 font-mono font-normal">
+                        {{ s.episodes?.length || 0 }} {{ t('series.eps') }}
+                    </span>
                 </button>
             </div>
         </div>
@@ -113,7 +152,17 @@ const handleMetadataUpdated = (updatedItem: any) => {
             <div
                 v-for="ep in selectedSeason()?.episodes"
                 :key="ep.id"
-                @click="play({ ...ep, watchable_id: ep.id, watchable_type: 'episode', subtitles: ep.subtitles || [], title: `${series.title} - S${selectedSeason().season_number}E${ep.episode_number} - ${ep.title}` })"
+                @click="play({
+                    ...ep,
+                    id: ep.id,
+                    type: 'episode',
+                    watchable_id: ep.id,
+                    watchable_type: 'episode',
+                    runtime_minutes: ep.runtime_minutes || 22,
+                    duration_seconds: (ep.runtime_minutes ? ep.runtime_minutes * 60 : 1320),
+                    subtitles: ep.subtitles || [],
+                    title: `${isRTL && series.title_ar ? series.title_ar : series.title} - S${selectedSeason()?.season_number || 1}E${ep.episode_number} - ${isRTL && ep.title_ar ? ep.title_ar : ep.title}`
+                })"
                 class="glass-panel group rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 hover:border-cyan-500/50 transition-all flex flex-col shadow-sm bg-white dark:bg-[#121622]"
             >
                 <div class="relative aspect-video w-full overflow-hidden bg-slate-900">
@@ -132,7 +181,7 @@ const handleMetadataUpdated = (updatedItem: any) => {
                     </div>
 
                     <!-- Episode Number Badge -->
-                    <span class="absolute top-2.5 left-2.5 cinema-badge bg-black/80 text-cyan-300 border border-cyan-500/40 text-[10px]">
+                    <span class="absolute top-2.5 left-2.5 cinema-badge bg-black/80 text-cyan-300 border border-cyan-500/40 text-[10px] font-bold">
                         EP {{ ep.episode_number }}
                     </span>
 
@@ -140,7 +189,7 @@ const handleMetadataUpdated = (updatedItem: any) => {
                     <div class="absolute top-2.5 right-2.5 flex items-center gap-1">
                         <span v-if="ep.subtitles && ep.subtitles.length > 0" class="cinema-badge bg-black/80 text-emerald-400 border border-emerald-500/40 text-[9px] flex items-center gap-0.5">
                             <Subtitles class="w-2.5 h-2.5" />
-                            <span>{{ ep.subtitles.length }} Sub</span>
+                            <span>{{ ep.subtitles.length }} CC</span>
                         </span>
                         <span class="cinema-badge bg-black/80 text-cyan-400 border border-cyan-500/40 text-[9px]">
                             {{ ep.resolution || '1080p' }}
@@ -154,12 +203,15 @@ const handleMetadataUpdated = (updatedItem: any) => {
                             {{ isRTL && ep.title_ar ? ep.title_ar : ep.title }}
                         </h4>
                         <p class="text-xs text-slate-600 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed">
-                            {{ (isRTL && ep.overview_ar) ? ep.overview_ar : (ep.overview || `Season ${selectedSeason().season_number} Episode ${ep.episode_number}`) }}
+                            {{ (isRTL && ep.overview_ar) ? ep.overview_ar : (ep.overview || `${t('series.season')} ${selectedSeason()?.season_number} ${t('series.episode')} ${ep.episode_number}`) }}
                         </p>
                     </div>
 
                     <div class="flex items-center justify-between mt-3 text-[11px] text-slate-500 dark:text-slate-400 font-semibold border-t border-slate-100 dark:border-white/5 pt-2">
-                        <span>{{ ep.air_date || (isRTL ? 'جاهز للمشاهدة' : 'Ready to stream') }}</span>
+                        <span class="flex items-center gap-1">
+                            <Clock class="w-3 h-3 text-cyan-500" />
+                            <span>{{ ep.runtime_minutes ? ep.runtime_minutes + ' min' : t('series.ready_to_stream') }}</span>
+                        </span>
                         <span class="font-mono text-[10px]">{{ ep.video_codec || 'HEVC' }}</span>
                     </div>
                 </div>
@@ -167,7 +219,7 @@ const handleMetadataUpdated = (updatedItem: any) => {
         </div>
 
         <div v-else class="glass-panel rounded-3xl p-12 text-center text-slate-500 dark:text-slate-400 text-sm my-8">
-            {{ isRTL ? 'لا توجد حلقات مفهرسة لهذا الموسم حالياً.' : 'No episodes indexed for this season yet.' }}
+            {{ t('series.no_episodes') }}
         </div>
 
         <!-- Fix Match Modal -->

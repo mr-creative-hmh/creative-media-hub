@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue';
-import { AlertTriangle, Trash2, RotateCcw, X, ShieldAlert } from 'lucide-vue-next';
+import { AlertTriangle, Trash2, RotateCcw, X, ShieldAlert, Sparkles } from 'lucide-vue-next';
 import { useI18n } from '@/i18n/useI18n';
 
 const props = withDefaults(
@@ -16,18 +16,23 @@ const props = withDefaults(
     {
         confirmText: '',
         cancelText: '',
-        type: 'danger',
+        type: 'info',
         loading: false,
     }
 );
 
-const emit = defineEmits(['confirm', 'cancel']);
+const emit = defineEmits(['confirm', 'cancel', 'close']);
 
 const { isRTL } = useI18n();
 
+const handleClose = () => {
+    emit('cancel');
+    emit('close');
+};
+
 const handleKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Escape' && props.show) {
-        emit('cancel');
+        handleClose();
     }
 };
 
@@ -39,9 +44,9 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
     <div
         v-if="show"
         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-all duration-300 animate-in fade-in"
-        @click.self="emit('cancel')"
+        @click.self="handleClose"
     >
-        <div class="relative w-full max-w-md rounded-3xl bg-[#080B12] border p-6 shadow-2xl space-y-5 overflow-hidden"
+        <div class="relative w-full max-w-lg rounded-3xl bg-[#080B12] border p-6 shadow-2xl space-y-5 overflow-hidden"
             :class="{
                 'border-rose-500/40 shadow-rose-500/10': type === 'danger',
                 'border-amber-500/40 shadow-amber-500/10': type === 'warning',
@@ -70,7 +75,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
                 >
                     <Trash2 v-if="type === 'danger'" class="w-5 h-5" />
                     <RotateCcw v-else-if="type === 'warning'" class="w-5 h-5" />
-                    <ShieldAlert v-else class="w-5 h-5" />
+                    <Sparkles v-else class="w-5 h-5" />
                 </div>
 
                 <div class="min-w-0 flex-1">
@@ -83,23 +88,32 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
                 </div>
 
                 <button
-                    @click="emit('cancel')"
+                    type="button"
+                    @click="handleClose"
                     class="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer shrink-0"
                 >
                     <X class="w-4 h-4" />
                 </button>
             </div>
 
+            <!-- Extra Slot Content (e.g. Move vs Copy Selector) -->
+            <div v-if="$slots.extra || $slots.default" class="relative z-10">
+                <slot name="extra" />
+                <slot />
+            </div>
+
             <!-- Footer Actions -->
-            <div class="flex items-center justify-end gap-2.5 pt-2 border-t border-white/10 relative z-10">
+            <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-white/10 relative z-10">
                 <button
-                    @click="emit('cancel')"
+                    type="button"
+                    @click="handleClose"
                     class="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-xs font-bold transition-all cursor-pointer"
                 >
                     {{ cancelText || (isRTL ? 'إلغاء' : 'Cancel') }}
                 </button>
 
                 <button
+                    type="button"
                     @click="emit('confirm')"
                     :disabled="loading"
                     class="px-5 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer shadow-lg"

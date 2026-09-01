@@ -117,8 +117,50 @@ class DiskOrganizerController extends Controller
         return response()->json([
             'plan' => $plan,
             'total_items' => count($plan),
-            'ready_count' => count(array_filter($plan, fn ($i) => $i['status'] === 'ready')),
+            'ready_count' => count(array_filter($plan, fn ($i) => ($i['status'] ?? '') === 'ready')),
         ]);
+    }
+
+    public function initExecution(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'plan' => 'required|array',
+            'mode' => 'required|in:move,copy',
+            'cleanup_empty_folders' => 'nullable|boolean',
+        ]);
+
+        $state = $this->organizer->initExecution(
+            $validated['plan'],
+            $validated['mode'],
+            $validated['cleanup_empty_folders'] ?? true
+        );
+
+        return response()->json([
+            'success' => true,
+            'status' => $state,
+        ]);
+    }
+
+    public function processBatch(Request $request): JsonResponse
+    {
+        $batchSize = (int) $request->input('batch_size', 2);
+        $result = $this->organizer->processNextBatch($batchSize);
+
+        return response()->json([
+            'success' => true,
+            'has_more' => $result['has_more'],
+            'status' => $result['status'],
+        ]);
+    }
+
+    public function getExecutionStatus(): JsonResponse
+    {
+        return response()->json($this->organizer->getExecutionStatus());
+    }
+
+    public function cancelExecution(): JsonResponse
+    {
+        return response()->json($this->organizer->cancelExecution());
     }
 
     public function execute(Request $request): JsonResponse

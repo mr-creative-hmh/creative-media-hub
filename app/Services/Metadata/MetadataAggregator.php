@@ -70,6 +70,9 @@ class MetadataAggregator
                 }
             }
 
+            $merged['year'] = $merged['release_year'] ?? ($merged['year'] ?? $year);
+            $merged['release_year'] = $merged['year'];
+
             // Download & cache poster locally
             if (!empty($merged['poster_path'])) {
                 $merged['poster_path'] = $this->artwork->downloadPoster($merged['poster_path']);
@@ -121,6 +124,9 @@ class MetadataAggregator
                     $merged = array_merge($merged, $details);
                 }
             }
+
+            $merged['year'] = $merged['release_year'] ?? ($merged['year'] ?? $year);
+            $merged['release_year'] = $merged['year'];
 
             // Download & cache poster locally
             if (!empty($merged['poster_path'])) {

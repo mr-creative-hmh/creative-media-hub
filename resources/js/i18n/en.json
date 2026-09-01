@@ -86,7 +86,12 @@
         "file_location": "File Location",
         "added_date": "Date Indexed",
         "featured": "Featured",
-        "spotlight": "Spotlight Presentation"
+        "spotlight": "Spotlight Presentation",
+        "vibes": "Vibes & Atmosphere",
+        "audio_codec": "Audio Codec",
+        "video_codec": "Video Codec",
+        "resolution": "Resolution",
+        "overview": "Story Overview"
     },
     "scanner_view": {
         "title": "Virtual Library Scanner",
@@ -133,7 +138,8 @@
         "tmdb_api_key": "TMDB API Key",
         "omdb_api_key": "OMDb API Key",
         "enable_arabic_enrichment": "Enable Automatic Arabic Metadata",
-        "save_settings": "Save All Preferences"
+        "save_settings": "Save All Preferences",
+        "save": "Save Settings"
     },
     "analytics_view": {
         "title": "Storage Analytics & Insights",
@@ -141,7 +147,10 @@
         "total_storage": "Total Indexed Storage",
         "space_saved": "Space Optimized",
         "resolution_breakdown": "Resolution Distribution",
-        "audio_breakdown": "Audio Format Distribution"
+        "audio_breakdown": "Audio Format Distribution",
+        "total_movies": "Total Movies",
+        "total_series": "Total TV Series",
+        "storage_used": "Storage Space Used"
     },
     "organizer": {
         "title": "Disk Organizer",
@@ -154,5 +163,21 @@
         "by_decade": "Organize by Decade (2020s, 2010s, 2000s...)",
         "by_initial": "Alphabetical A-Z Buckets",
         "custom": "Custom Expression Pattern"
+    },
+    "cancel": "Cancel",
+    "close": "Close",
+    "confirm": "Confirm",
+    "success": "Success",
+    "series": {
+        "title": "TV Series",
+        "seasons": "Seasons",
+        "season": "Season",
+        "episodes": "Episodes",
+        "episode": "Episode",
+        "eps": "eps",
+        "no_episodes": "No episodes indexed for this season yet.",
+        "ready_to_stream": "Ready to stream",
+        "experience": "Experience this complete series.",
+        "fix_match": "Fix Series Match"
     }
 }
