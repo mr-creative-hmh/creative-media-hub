@@ -361,7 +361,7 @@ class MetadataAggregator
         // 1. Check Wikipedia / Wikidata LangLinks
         try {
             $res = Http::withHeaders(['User-Agent' => 'CreativeMediaLibrary/1.0 (contact@creativemedia.test)'])
-                ->timeout(5)
+                ->timeout(3)
                 ->get("https://en.wikipedia.org/w/api.php", [
                     'action' => 'query',
                     'prop' => 'langlinks',
@@ -382,7 +382,7 @@ class MetadataAggregator
 
                         if (!$hasArabicOverview && $translateOverview) {
                             $arSummary = Http::withHeaders(['User-Agent' => 'CreativeMediaLibrary/1.0 (contact@creativemedia.test)'])
-                                ->timeout(5)
+                                ->timeout(3)
                                 ->get("https://ar.wikipedia.org/api/rest_v1/page/summary/" . urlencode($wikiArTitle));
                             if ($arSummary->successful() && !empty($arSummary->json('extract'))) {
                                 $data['overview_ar'] = $arSummary->json('extract');

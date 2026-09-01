@@ -141,12 +141,12 @@ class VirtualLibraryScannerService
         ];
     }
 
-    public function processBatch(int $batchSize = 4): array
+    public function processBatch(int $batchSize = 2): array
     {
         return $this->processNextBatch($batchSize);
     }
 
-    public function processNextBatch(int $batchSize = 4): array
+    public function processNextBatch(int $batchSize = 2): array
     {
         $jobData = $this->getScanStatus();
 

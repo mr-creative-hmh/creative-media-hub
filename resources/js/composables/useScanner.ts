@@ -65,6 +65,8 @@ export function useScanner() {
         if (isWorkerRunning.value) return;
         isWorkerRunning.value = true;
 
+        let consecutiveErrors = 0;
+
         while (scanStatus.value.status === 'scanning') {
             try {
                 const res = await fetch('/api/scanner/process-batch', {
@@ -73,10 +75,11 @@ export function useScanner() {
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
                     },
-                    body: JSON.stringify({ batch_size: 6 }),
+                    body: JSON.stringify({ batch_size: 2 }),
                 });
 
                 if (res.ok) {
+                    consecutiveErrors = 0;
                     const data = await res.json();
                     if (data.status && typeof data.status === 'object') {
                         scanStatus.value = data.status;
@@ -86,12 +89,22 @@ export function useScanner() {
                         break;
                     }
                 } else {
-                    break;
+                    consecutiveErrors++;
+                    if (consecutiveErrors >= 6) {
+                        await fetchStatus();
+                        if (scanStatus.value.status !== 'scanning') break;
+                    }
+                    await new Promise((r) => setTimeout(r, 1200));
                 }
             } catch (e) {
-                break;
+                consecutiveErrors++;
+                if (consecutiveErrors >= 6) {
+                    await fetchStatus();
+                    if (scanStatus.value.status !== 'scanning') break;
+                }
+                await new Promise((r) => setTimeout(r, 1200));
             }
-            await new Promise((r) => setTimeout(r, 400));
+            await new Promise((r) => setTimeout(r, 150));
         }
 
         isWorkerRunning.value = false;
