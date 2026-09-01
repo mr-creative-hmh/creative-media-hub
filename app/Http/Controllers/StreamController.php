@@ -242,9 +242,10 @@ class StreamController extends Controller
         $cacheDir = storage_path('app/cache/media_streams');
         $cacheKey = "stream_{$type}_{$id}_{$mtime}";
         $cachedFile = "{$cacheDir}/{$cacheKey}.mp4";
-        $partFile = "{$cacheDir}/{$cacheKey}.mp4.part";
+        $partFile1 = "{$cacheDir}/{$cacheKey}.part.mp4";
+        $partFile2 = "{$cacheDir}/{$cacheKey}.mp4.part";
 
-        if (file_exists($cachedFile)) {
+        if (file_exists($cachedFile) && filesize($cachedFile) > 1024 * 1024) {
             return response()->json([
                 'is_cached' => true,
                 'cached_percent' => 100,
@@ -252,10 +253,11 @@ class StreamController extends Controller
             ]);
         }
 
-        if (file_exists($partFile)) {
+        $activePart = file_exists($partFile1) ? $partFile1 : (file_exists($partFile2) ? $partFile2 : null);
+        if ($activePart) {
             $origSize = filesize($model->file_path);
-            $partSize = filesize($partFile);
-            $pct = $origSize > 0 ? min(99, round(($partSize / $origSize) * 100)) : 0;
+            $partSize = filesize($activePart);
+            $pct = $origSize > 0 ? min(99, max(5, round(($partSize / $origSize) * 100))) : 0;
             return response()->json([
                 'is_cached' => false,
                 'cached_percent' => $pct,
@@ -477,6 +479,7 @@ class StreamController extends Controller
         }
 
         // Launch background transcode worker to cache the full file to disk so caching continues even when paused
+        $partFile = "{$cacheDir}/{$cacheKey}.part.mp4";
         if (!file_exists($lockFile) && !file_exists($cachedFile)) {
             @file_put_contents($lockFile, date('Y-m-d H:i:s'));
             $bgCmd = array_merge(
@@ -497,16 +500,24 @@ class StreamController extends Controller
                     '-ac', '2',
                     '-sn',
                     '-movflags', '+faststart',
-                    escapeshellarg($cachedFile . '.part')
+                    '-f', 'mp4',
+                    escapeshellarg($partFile)
                 ]
             );
 
             $bgCmdStr = implode(' ', $bgCmd);
             if ($isWin) {
-                $finalBgCmd = 'cmd /c "' . $bgCmdStr . ' && move /Y "' . $cachedFile . '.part" "' . $cachedFile . '" && del /F /Q "' . $lockFile . '"' . '"';
-                @pclose(popen("start /B " . $finalBgCmd, "r"));
+                $batFile = "{$cacheDir}/run_{$cacheKey}.bat";
+                $batWinCached = str_replace('/', '\\', $cachedFile);
+                $batWinPart = str_replace('/', '\\', $partFile);
+                $batWinLock = str_replace('/', '\\', $lockFile);
+                $batWinBat = str_replace('/', '\\', $batFile);
+                
+                $batContent = "@echo off\r\n" . $bgCmdStr . "\r\nmove /Y \"{$batWinPart}\" \"{$batWinCached}\" > NUL 2>&1\r\ndel /F /Q \"{$batWinLock}\" \"{$batWinBat}\" > NUL 2>&1\r\n";
+                @file_put_contents($batFile, $batContent);
+                @pclose(popen("start \"\" /B cmd /c \"\"{$batFile}\"\"", "r"));
             } else {
-                $finalBgCmd = "({$bgCmdStr} && mv '{$cachedFile}.part' '{$cachedFile}' && rm -f '{$lockFile}') > /dev/null 2>&1 &";
+                $finalBgCmd = "({$bgCmdStr} && mv '{$partFile}' '{$cachedFile}' && rm -f '{$lockFile}') > /dev/null 2>&1 &";
                 @exec($finalBgCmd);
             }
         }

@@ -292,24 +292,61 @@ class EmbeddedSubtitleDetectorService
         return $vtt;
     }
 
+    /**
+     * Inspect file contents on disk to accurately classify language (Arabic, English, etc.)
+     */
     public function detectLanguageFromFileContent(string $filePath): string
     {
         if (!file_exists($filePath) || filesize($filePath) === 0) {
             return 'und';
         }
 
-        $handle = @fopen($filePath, 'r');
-        if (!$handle) return 'und';
-        $sample = fread($handle, 4096);
-        fclose($handle);
+        $filename = strtolower(basename($filePath));
 
-        // Detect Arabic Unicode Script
-        if (preg_match('/[\x{0600}-\x{06FF}\x{0750}-\x{077F}\x{08A0}-\x{08FF}\x{FB50}-\x{FDFF}\x{FE70}-\x{FEFF}]/u', $sample)) {
+        // 1. Explicit extension check takes highest precedence (e.g., .en.srt, .ar.srt, .en-US.srt, .en.forced.srt)
+        $baseNameWithoutExt = preg_replace('/\.(?:srt|vtt|ass|ssa|sub)$/i', '', $filename);
+        $tokens = preg_split('/[\._\-\s]+/', $baseNameWithoutExt);
+        foreach (array_reverse($tokens) as $tok) {
+            $tok = trim($tok);
+            if (in_array($tok, ['forced', 'sdh', 'cc', 'default', 'sub', 'subs'], true)) continue;
+            if (str_contains($tok, '-')) {
+                $subtoks = explode('-', $tok);
+                $tok = $subtoks[0];
+            }
+            foreach (self::$langDefinitions as $code => $names) {
+                if ($tok === $code || in_array($tok, $names, true)) {
+                    return $code;
+                }
+            }
+        }
+
+        // 2. Statistical content analysis for untagged files (.srt, .vtt)
+        $raw = @file_get_contents($filePath, false, null, 0, 8192);
+        if (!$raw) return 'und';
+
+        // Detect and normalize encoding
+        $encoding = mb_detect_encoding($raw, ['UTF-8', 'Windows-1256', 'Windows-1252', 'ISO-8859-1', 'ASCII'], true);
+        if ($encoding && $encoding !== 'UTF-8') {
+            $raw = mb_convert_encoding($raw, 'UTF-8', $encoding);
+        }
+
+        // Clean subtitle headers, timestamps, and formatting markup
+        $clean = preg_replace('/\d{2}:\d{2}:\d{2}[,\.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,\.]\d{3}/', ' ', $raw);
+        $clean = preg_replace('/<[^>]+>|\{[^\}]+\}/', ' ', $clean);
+        $clean = preg_replace('/[0-9]+/', ' ', $clean);
+
+        // Count Arabic vs Latin letters
+        preg_match_all('/[\x{0600}-\x{06FF}\x{0750}-\x{077F}\x{FB50}-\x{FDFF}\x{FE70}-\x{FEFF}]/u', $clean, $arMatches);
+        $arabicCount = count($arMatches[0] ?? []);
+
+        preg_match_all('/[a-zA-Z]/', $clean, $latinMatches);
+        $latinCount = count($latinMatches[0] ?? []);
+
+        if ($arabicCount > 25 && $arabicCount > ($latinCount * 0.35)) {
             return 'ar';
         }
 
-        // Detect Latin/English Script
-        if (preg_match('/[a-zA-Z]{3,}/', $sample)) {
+        if ($latinCount > 40) {
             return 'en';
         }
 
@@ -318,48 +355,57 @@ class EmbeddedSubtitleDetectorService
 
     public function resolveLanguageFromContext(string $rawLang, string $title = '', string $filePath = '', int $trackIndex = 0): string
     {
-        // 0. If local subtitle file exists on disk, inspect its actual text contents first
-        if (!empty($filePath) && file_exists($filePath) && in_array(strtolower(pathinfo($filePath, PATHINFO_EXTENSION)), ['srt', 'vtt', 'ass', 'ssa', 'sub'])) {
-            $contentLang = $this->detectLanguageFromFileContent($filePath);
-            if ($contentLang !== 'und') {
-                return $contentLang;
+        $filename = !empty($filePath) ? strtolower(basename($filePath)) : '';
+
+        // 1. Explicit filename extension pattern takes priority
+        if (!empty($filename)) {
+            $baseNameWithoutExt = preg_replace('/\.(?:srt|vtt|ass|ssa|sub)$/i', '', $filename);
+            $tokens = preg_split('/[\._\-\s]+/', $baseNameWithoutExt);
+            foreach (array_reverse($tokens) as $tok) {
+                $tok = trim($tok);
+                if (in_array($tok, ['forced', 'sdh', 'cc', 'default', 'sub', 'subs'], true)) continue;
+                if (str_contains($tok, '-')) {
+                    $subtoks = explode('-', $tok);
+                    $tok = $subtoks[0];
+                }
+                foreach (self::$langDefinitions as $code => $names) {
+                    if ($tok === $code || in_array($tok, $names, true)) {
+                        return $code;
+                    }
+                }
             }
         }
+
+        // 2. Direct language code matching from container track metadata
         $lang = strtolower(trim($rawLang));
-        $haystack = strtolower("{$title} " . basename($filePath));
-        $haystack = preg_replace('/[._\-\[\]\(\)]+/', ' ', $haystack);
-
-        // 1. Direct language code matching
-        foreach (self::$langDefinitions as $code => $keywords) {
-            if (in_array($lang, $keywords, true)) {
-                return $code;
-            }
-        }
-
-        // 2. Keyword check in title / filename
-        foreach (self::$langDefinitions as $code => $keywords) {
-            foreach ($keywords as $kw) {
-                if (preg_match('/(?:^|\s)' . preg_quote($kw, '/') . '(?:$|\s)/iu', $haystack)) {
+        if (!empty($lang) && $lang !== 'und') {
+            foreach (self::$langDefinitions as $code => $names) {
+                if ($lang === $code || in_array($lang, $names, true)) {
                     return $code;
                 }
             }
         }
 
-        // 3. SDH / CC fallback to English if no other language found
-        if (preg_match('/\b(sdh|cc|full)\b/i', $haystack)) {
-            return 'en';
+        // 3. Inspect file contents on disk if available
+        if (!empty($filePath) && file_exists($filePath)) {
+            $contentLang = $this->detectLanguageFromFileContent($filePath);
+            if ($contentLang !== 'und') {
+                return $contentLang;
+            }
         }
 
-        // 4. Default single-file release / series episode fallback
-        if (str_contains($haystack, 'yts') 
-            || str_contains($haystack, 'webrip') 
-            || str_contains($haystack, 'bluray') 
-            || str_contains($haystack, 'web dl')
-            || preg_match('/\b(s\d{1,2}e\d{1,2}|season|episode|ep\d{1,2})\b/i', $haystack)) {
-            return 'en';
+        $haystack = strtolower("{$title} {$filename}");
+        $haystack = preg_replace('/[._\-\[\]\(\)]+/', ' ', $haystack);
+
+        foreach (self::$langDefinitions as $code => $names) {
+            foreach ($names as $name) {
+                if (preg_match('/\b' . preg_quote($name, '/') . '\b/i', $haystack)) {
+                    return $code;
+                }
+            }
         }
 
-        return 'und';
+        return !empty($rawLang) ? $rawLang : 'und';
     }
 
     protected function buildHumanTrackLabel(string $langCode, string $langName, string $title, int $idx, string $codec): string

@@ -35,40 +35,74 @@ class DashboardController extends Controller
         // 2. Continue Watching items (polymorphic watchable)
         $continueWatching = WatchHistory::with(['watchable'])
             ->where('is_completed', false)
+            ->where('progress_seconds', '>', 3)
             ->orderByDesc('last_watched_at')
             ->limit(6)
             ->get()
             ->map(function ($h) {
                 $item = $h->watchable;
+                if (!$item) return null;
+
+                $percent = $h->duration_seconds > 0 ? min(100, round(($h->progress_seconds / $h->duration_seconds) * 100)) : 0;
+                $hrs = floor($h->progress_seconds / 3600);
+                $mins = floor(($h->progress_seconds % 3600) / 60);
+                $secs = $h->progress_seconds % 60;
+                $timeFormatted = $hrs > 0 ? sprintf('%d:%02d:%02d', $hrs, $mins, $secs) : sprintf('%02d:%02d', $mins, $secs);
+
                 if ($item instanceof MediaItem) {
                     $item->loadMissing('subtitles');
+                    $slug = $item->slug ?: "movie-{$item->id}";
                     return [
                         'id' => $item->id,
+                        'watchable_id' => $item->id,
+                        'watchable_type' => 'movie',
                         'title' => $item->title,
-                        'title_ar' => $item->title_ar,
+                        'title_ar' => $item->title_ar ?: $item->title,
                         'type' => 'movie',
+                        'slug' => $slug,
                         'poster_path' => $item->poster_path,
                         'backdrop_path' => $item->backdrop_path,
                         'subtitles' => $item->subtitles,
-                        'progress_percent' => $h->progress_percentage,
-                        'current_time_formatted' => gmdate('H:i:s', $h->progress_seconds),
+                        'progress_seconds' => $h->progress_seconds,
+                        'initial_progress' => $h->progress_seconds,
+                        'duration_seconds' => $h->duration_seconds,
+                        'progress_percent' => $percent,
+                        'percent' => $percent,
+                        'current_time_formatted' => $timeFormatted,
                         'stream_url' => route('stream.movie', $item->id),
                     ];
                 } elseif ($item instanceof Episode) {
-                    $item->loadMissing(['subtitles', 'season.series']);
-                    $series = $item->season->series ?? null;
+                    $item->loadMissing(['subtitles', 'season.series', 'series']);
+                    $series = $item->series ?? ($item->season->series ?? null);
+                    $sNameEn = $series ? $series->title : 'Series';
+                    $sNameAr = $series ? ($series->title_ar ?: $series->title) : 'مسلسل';
+                    $sNum = $item->season_number ?? ($item->season->season_number ?? 1);
+                    $eNum = $item->episode_number ?? 1;
+                    $seriesSlug = $series ? ($series->slug ?: "series-{$series->id}") : "series-{$item->series_id}";
+
                     return [
                         'id' => $item->id,
                         'watchable_id' => $item->id,
                         'watchable_type' => 'episode',
-                        'title' => ($series ? $series->title . ' - ' : '') . 'S' . ($item->season->season_number ?? 1) . 'E' . $item->episode_number . ' ' . $item->title,
-                        'title_ar' => ($series ? $series->title_ar . ' - ' : '') . $item->title_ar,
+                        'series' => $series,
+                        'series_id' => $series?->id ?? $item->series_id,
+                        'series_title' => $sNameEn,
+                        'series_title_ar' => $sNameAr,
+                        'season_number' => $sNum,
+                        'episode_number' => $eNum,
+                        'title' => "{$sNameEn} - Season {$sNum} - Episode {$eNum}",
+                        'title_ar' => "{$sNameAr} - الموسم {$sNum} - الحلقة {$eNum}",
                         'type' => 'episode',
-                        'poster_path' => $series->poster_path ?? null,
-                        'backdrop_path' => $item->still_path ?? ($series->backdrop_path ?? null),
+                        'series_slug' => $seriesSlug,
+                        'poster_path' => $item->still_path ?: ($series ? $series->poster_path : null),
+                        'backdrop_path' => $series ? $series->backdrop_path : null,
                         'subtitles' => $item->subtitles,
-                        'progress_percent' => $h->progress_percentage,
-                        'current_time_formatted' => gmdate('H:i:s', $h->progress_seconds),
+                        'progress_seconds' => $h->progress_seconds,
+                        'initial_progress' => $h->progress_seconds,
+                        'duration_seconds' => $h->duration_seconds,
+                        'progress_percent' => $percent,
+                        'percent' => $percent,
+                        'current_time_formatted' => $timeFormatted,
                         'stream_url' => route('stream.episode', $item->id),
                     ];
                 }

@@ -62,7 +62,7 @@ const isPlaying = ref(false);
 const isMuted = ref(false);
 const volume = ref(1.0);
 
-// Initialize initial progress from prop, item, or localStorage
+// Initialize initial progress from prop, item, or watchable metadata
 const initialSec = Number(props.initialProgress) || Number(props.item?.progress_seconds) || Number(props.item?.initial_progress) || 0;
 const currentTime = ref(initialSec > 0 ? initialSec : 0);
 
@@ -86,7 +86,7 @@ const playbackRate = ref(1.0);
 // Subtitles State & Cue Engine
 const availableSubtitles = ref<SubtitleItem[]>([]);
 const selectedSubtitleId = ref<number | string>('off');
-const subtitleDelay = ref<number>(0); // in seconds
+const subtitleDelay = ref<number>(0);
 const subtitleFontSize = ref<'sm' | 'md' | 'lg' | 'xl'>('md');
 const parsedCues = ref<CueItem[]>([]);
 const activeCueText = ref<string>('');
@@ -224,24 +224,48 @@ const displayYear = computed(() => {
     return props.item?.release_year || props.item?.year || (props.item?.series?.release_year ?? '');
 });
 
-// Clean Header Title (Strictly respect locale: Arabic in Arabic mode only, English in English mode only. Format: Series - Season X - Episode Y)
+// Extract Series Name, Season Number, and Episode Number robustly
 const playerHeaderTitle = computed(() => {
     if (isEpisode.value) {
         let sName = '';
         if (isRTL.value) {
-            sName = props.item?.series?.title_ar || props.item?.series_title_ar || props.item?.title_ar || props.item?.series?.title || props.item?.series_title || props.item?.title || 'مسلسل';
+            sName = props.item?.series?.title_ar || props.item?.series_title_ar || props.item?.series_name_ar || props.item?.series?.title || props.item?.series_title || '';
         } else {
-            sName = props.item?.series?.title || props.item?.series_title || props.item?.title || 'Series';
+            sName = props.item?.series?.title || props.item?.series_title || props.item?.series_name || '';
         }
-        
-        // Clean out raw codes or suffixes
-        sName = sName.replace(/\s*-\s*S\d+E\d+\s*-\s*Episode\s*\d+/gi, '')
-                     .replace(/\s*-\s*S\d+E\d+/gi, '')
-                     .replace(/\s*-\s*(?:Season|الموسم)\s*\d+\s*-\s*(?:Episode|الحلقة)\s*\d+/gi, '')
+
+        // If sName is still empty, parse from item.title or fallback
+        if (!sName && props.item?.title) {
+            const parts = props.item.title.split(/\s*-\s*(?:Season|الموسم|S\d+)/i);
+            if (parts[0] && !parts[0].toLowerCase().startsWith('episode') && !parts[0].toLowerCase().startsWith('الحلقة')) {
+                sName = parts[0].trim();
+            }
+        }
+
+        // Clean out raw season/episode codes or suffixes
+        sName = sName.replace(/\s*-\s*S\d+E\d+.*$/gi, '')
+                     .replace(/\s*-\s*(?:Season|الموسم)\s*\d+.*$/gi, '')
+                     .replace(/^(?:Episode|الحلقة)\s*\d+\s*-\s*/gi, '')
                      .trim();
 
-        const s = props.item?.season_number ?? (props.item?.season?.season_number ?? 1);
-        const e = props.item?.episode_number ?? 1;
+        if (!sName) {
+            sName = isRTL.value ? 'مسلسل' : 'Series';
+        }
+
+        // Determine Season Number
+        let s = props.item?.season_number;
+        if (!s && props.item?.season?.season_number) s = props.item.season.season_number;
+        if (!s) {
+            const m = (props.item?.file_path || props.item?.title || '').match(/S(\d+)E\d+/i);
+            s = m ? parseInt(m[1], 10) : 1;
+        }
+
+        // Determine Episode Number
+        let e = props.item?.episode_number;
+        if (!e) {
+            const m = (props.item?.file_path || props.item?.title || '').match(/S\d+E(\d+)/i);
+            e = m ? parseInt(m[1], 10) : 1;
+        }
 
         const seasonLabel = isRTL.value ? `الموسم ${s}` : `Season ${s}`;
         const episodeLabel = isRTL.value ? `الحلقة ${e}` : `Episode ${e}`;
@@ -817,7 +841,7 @@ onMounted(() => {
         }
     }, 12000);
 
-    // Track YouTube-Style Buffer Line continuously (even when paused)
+    // Track YouTube-Style Buffer Line continuously
     bufferTrackInterval = setInterval(() => {
         updateBufferProgress();
     }, 400);
@@ -827,7 +851,7 @@ onMounted(() => {
         checkServerCacheStatus();
         serverCachePollInterval = setInterval(() => {
             checkServerCacheStatus();
-        }, 2000);
+        }, 1500);
     }
 });
 
@@ -1023,7 +1047,7 @@ onBeforeUnmount(() => {
                         <div class="absolute inset-x-0 h-2 group-hover/track:h-3 bg-white/20 rounded-full overflow-hidden transition-all pointer-events-none shadow-inner">
                             <!-- High-Contrast Light Gray YouTube-Style Buffered Bar -->
                             <div
-                                class="absolute inset-y-0 left-0 bg-slate-200/60 dark:bg-white/50 rounded-full transition-all duration-300 shadow-[0_0_8px_rgba(255,255,255,0.4)]"
+                                class="absolute inset-y-0 left-0 bg-slate-200/75 dark:bg-white/60 rounded-full transition-all duration-300 shadow-[0_0_8px_rgba(255,255,255,0.4)]"
                                 :style="{ width: `${bufferedPercent}%` }"
                             ></div>
                             <!-- Active Played Gradient Fill -->
