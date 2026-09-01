@@ -286,11 +286,13 @@ class VirtualLibraryScannerService
         Cache::put('virtual_scanner_job_status', $job, now()->addHours(6));
     }
 
-    public function enrichMissingMetadata(int $limit = 25): array
+    public function enrichMissingMetadata(int $limit = 50): array
     {
         $enrichedCount = 0;
 
         $movies = MediaItem::whereNull('poster_path')
+            ->orWhereNull('overview_ar')
+            ->orWhereNull('title_ar')
             ->orWhere('overview', 'like', 'Enjoy watching%')
             ->take($limit)
             ->get();
@@ -305,18 +307,36 @@ class VirtualLibraryScannerService
 
                 retry(3, function () use ($movie, $meta, $poster) {
                     $movie->update([
+                        'title_ar' => $meta['title_ar'] ?? $movie->title_ar,
+                        'overview_ar' => $meta['overview_ar'] ?? $movie->overview_ar,
+                        'overview' => $meta['overview'] ?? $movie->overview,
+                        'tmdb_id' => $meta['tmdb_id'] ?? $movie->tmdb_id,
+                        'imdb_id' => $meta['imdb_id'] ?? $movie->imdb_id,
                         'poster_path' => $poster ?? $movie->poster_path,
                         'backdrop_path' => $meta['backdrop_path'] ?? $movie->backdrop_path,
-                        'overview' => $meta['overview'] ?? $movie->overview,
                         'rating' => $meta['rating'] ?? $movie->rating,
                         'runtime_minutes' => $meta['runtime_minutes'] ?? ($meta['duration_minutes'] ?? $movie->runtime_minutes),
                     ]);
+
+                    if (!empty($meta['genres'])) {
+                        $genreIds = [];
+                        foreach ($meta['genres'] as $gName) {
+                            $g = \App\Models\Genre::firstOrCreate(
+                                ['slug' => \Illuminate\Support\Str::slug($gName)],
+                                ['name_en' => $gName, 'name_ar' => $gName]
+                            );
+                            $genreIds[] = $g->id;
+                        }
+                        $movie->genres()->sync($genreIds);
+                    }
                 }, 100);
                 $enrichedCount++;
             } catch (\Throwable $e) {}
         }
 
         $seriesList = Series::whereNull('poster_path')
+            ->orWhereNull('overview_ar')
+            ->orWhereNull('title_ar')
             ->orWhere('overview', 'like', 'Experience the complete series%')
             ->take($limit)
             ->get();
@@ -331,11 +351,27 @@ class VirtualLibraryScannerService
 
                 retry(3, function () use ($series, $meta, $poster) {
                     $series->update([
+                        'title_ar' => $meta['title_ar'] ?? $series->title_ar,
+                        'overview_ar' => $meta['overview_ar'] ?? $series->overview_ar,
+                        'overview' => $meta['overview'] ?? $series->overview,
+                        'tmdb_id' => $meta['tmdb_id'] ?? $series->tmdb_id,
+                        'imdb_id' => $meta['imdb_id'] ?? $series->imdb_id,
                         'poster_path' => $poster ?? $series->poster_path,
                         'backdrop_path' => $meta['backdrop_path'] ?? $series->backdrop_path,
-                        'overview' => $meta['overview'] ?? $series->overview,
                         'rating' => $meta['rating'] ?? $series->rating,
                     ]);
+
+                    if (!empty($meta['genres'])) {
+                        $genreIds = [];
+                        foreach ($meta['genres'] as $gName) {
+                            $g = \App\Models\Genre::firstOrCreate(
+                                ['slug' => \Illuminate\Support\Str::slug($gName)],
+                                ['name_en' => $gName, 'name_ar' => $gName]
+                            );
+                            $genreIds[] = $g->id;
+                        }
+                        $series->genres()->sync($genreIds);
+                    }
                 }, 100);
                 $enrichedCount++;
             } catch (\Throwable $e) {}
@@ -343,7 +379,8 @@ class VirtualLibraryScannerService
 
         return [
             'enriched_count' => $enrichedCount,
-            'message' => "Enriched metadata for {$enrichedCount} library items.",
+            'remaining_movies' => MediaItem::whereNull('overview_ar')->count(),
+            'remaining_series' => Series::whereNull('overview_ar')->count(),
         ];
     }
 

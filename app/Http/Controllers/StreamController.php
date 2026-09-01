@@ -345,47 +345,91 @@ class StreamController extends Controller
 
     public function streamRemuxMovie(MediaItem $mediaItem, Request $request)
     {
-        return $this->streamRemuxFile($mediaItem->file_path, $request);
+        return $this->streamRemuxFile($mediaItem->file_path, $request, $mediaItem->video_codec);
     }
 
     public function streamRemuxEpisode(Episode $episode, Request $request)
     {
-        return $this->streamRemuxFile($episode->file_path, $request);
+        return $this->streamRemuxFile($episode->file_path, $request, $episode->video_codec);
     }
 
-    protected function streamRemuxFile(string $filePath, Request $request)
+    protected function streamRemuxFile(string $filePath, Request $request, ?string $videoCodec = null)
     {
         if (!file_exists($filePath)) {
             abort(404, 'Media file not found');
         }
 
-        $ffmpegPath = $this->ffmpegLocator->getFFmpegPath() ?? 'ffmpeg';
+        $ffmpegPath = FfmpegLocatorService::getFfmpegPath() ?? 'ffmpeg';
         $startSeconds = max(0, (float) $request->query('start', 0));
 
-        $cmd = [
-            $ffmpegPath,
-            '-ss', (string) $startSeconds,
-            '-i', $filePath,
-            '-c:v', 'copy',
-            '-c:a', 'aac',
-            '-b:a', '192k',
-            '-ac', '2',
-            '-f', 'mp4',
-            '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-            'pipe:1'
-        ];
+        $isWin = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+        $nullDevice = $isWin ? 'NUL' : '/dev/null';
 
-        return response()->stream(function () use ($cmd) {
+        $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+        $vc = strtolower($videoCodec ?? '');
+
+        // Native H.264 (AVC) in MP4 or MKV can be copied directly with 0 CPU overhead.
+        // All legacy formats (AVI, MPEG-4 / XviD, DivX, WMV, VC-1, MPEG-2) and 10-bit HEVC (H.265)
+        // must be transcoded to standard 8-bit H.264 (yuv420p) so every browser can render video frames.
+        $isNativeH264 = (
+            str_contains($vc, 'h.264') ||
+            str_contains($vc, 'h264') ||
+            str_contains($vc, 'avc')
+        ) && !str_contains($vc, 'hevc') && ($ext !== 'avi');
+
+        if ($isNativeH264 && $request->query('transcode') !== '1') {
+            $videoArgs = ['-c:v', 'copy'];
+        } else {
+            $videoArgs = [
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',
+                '-tune', 'zerolatency',
+                '-crf', '22',
+                '-pix_fmt', 'yuv420p'
+            ];
+        }
+
+        $cmd = array_merge(
+            [
+                $ffmpegPath,
+                '-nostdin',
+                '-hide_banner',
+                '-loglevel', 'error',
+                '-ss', (string) $startSeconds,
+                '-i', $filePath,
+                '-map', '0:v:0',
+                '-map', '0:a:0?',
+            ],
+            $videoArgs,
+            [
+                '-c:a', 'aac',
+                '-b:a', '192k',
+                '-ac', '2',
+                '-sn',
+                '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+                '-flush_packets', '1',
+                '-f', 'mp4',
+                'pipe:1'
+            ]
+        );
+
+        return response()->stream(function () use ($cmd, $nullDevice) {
             $descriptors = [
                 0 => ['pipe', 'r'],
                 1 => ['pipe', 'w'],
-                2 => ['pipe', 'w'],
+                2 => ['file', $nullDevice, 'w'],
             ];
+
+            // Increase PHP execution time limit for long video playback streams
+            @set_time_limit(0);
+            if (function_exists('apache_setenv')) {
+                @apache_setenv('no-gzip', '1');
+            }
+            @ini_set('zlib.output_compression', 'Off');
 
             $process = proc_open($cmd, $descriptors, $pipes);
             if (is_resource($process)) {
                 fclose($pipes[0]);
-                fclose($pipes[2]);
 
                 while (!feof($pipes[1])) {
                     $chunk = fread($pipes[1], 65536);
@@ -404,9 +448,9 @@ class StreamController extends Controller
             }
         }, 200, [
             'Content-Type' => 'video/mp4',
-            'Cache-Control' => 'no-cache, no-store, must-revalidate',
+            'Cache-Control' => 'public, max-age=86400',
             'X-Accel-Buffering' => 'no',
+            'Accept-Ranges' => 'bytes',
         ]);
     }
-
 }

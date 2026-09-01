@@ -3,7 +3,6 @@
 namespace App\Services\Metadata;
 
 use App\Services\Metadata\Contracts\MetadataProviderInterface;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 
 class MetadataAggregator
@@ -23,8 +22,8 @@ class MetadataAggregator
     ) {
         $this->providers = [
             'tmdb' => $tmdb,
-            'tvmaze' => $tvmaze,
             'omdb' => $omdb,
+            'tvmaze' => $tvmaze,
             'anilist' => $anilist,
             'wikipedia' => $wikipedia,
             'local' => $local,
@@ -51,9 +50,11 @@ class MetadataAggregator
             'director' => null,
             'cast' => [],
             'trailer_url' => null,
+            'available_posters' => [],
+            'available_backdrops' => [],
         ];
 
-        // 1. Search across metadata chain
+        // 1. Search across metadata chain (TMDb first for rich Arabic & English data)
         $searchResults = $this->searchMovie($title, $year, $lang);
 
         if (!empty($searchResults)) {
@@ -74,10 +75,10 @@ class MetadataAggregator
             $merged['release_year'] = $merged['year'];
 
             // Download & cache poster locally
-            if (!empty($merged['poster_path'])) {
+            if (!empty($merged['poster_path']) && filter_var($merged['poster_path'], FILTER_VALIDATE_URL)) {
                 $merged['poster_path'] = $this->artwork->downloadPoster($merged['poster_path']);
             }
-            if (!empty($merged['backdrop_path'])) {
+            if (!empty($merged['backdrop_path']) && filter_var($merged['backdrop_path'], FILTER_VALIDATE_URL)) {
                 $merged['backdrop_path'] = $this->artwork->downloadBackdrop($merged['backdrop_path']);
             }
 
@@ -106,15 +107,17 @@ class MetadataAggregator
             'genres' => ['Drama', 'Thriller'],
             'cast' => [],
             'seasons' => [],
+            'available_posters' => [],
+            'available_backdrops' => [],
         ];
 
-        // 1. Search across metadata chain
+        // 1. Search across metadata chain (TMDb prioritized for Arabic)
         $searchResults = $this->searchSeries($title, $year, $lang);
 
         if (!empty($searchResults)) {
             $first = $searchResults[0];
-            $providerKey = strtolower($first['provider'] ?? 'tvmaze');
-            $id = $first['id'] ?? ($first['tvmaze_id'] ?? ($first['tmdb_id'] ?? null));
+            $providerKey = strtolower($first['provider'] ?? 'tmdb');
+            $id = $first['id'] ?? ($first['tmdb_id'] ?? ($first['tvmaze_id'] ?? null));
 
             $merged = array_merge($default, $first);
 
@@ -129,10 +132,10 @@ class MetadataAggregator
             $merged['release_year'] = $merged['year'];
 
             // Download & cache poster locally
-            if (!empty($merged['poster_path'])) {
+            if (!empty($merged['poster_path']) && filter_var($merged['poster_path'], FILTER_VALIDATE_URL)) {
                 $merged['poster_path'] = $this->artwork->downloadPoster($merged['poster_path']);
             }
-            if (!empty($merged['backdrop_path'])) {
+            if (!empty($merged['backdrop_path']) && filter_var($merged['backdrop_path'], FILTER_VALIDATE_URL)) {
                 $merged['backdrop_path'] = $this->artwork->downloadBackdrop($merged['backdrop_path']);
             }
 
@@ -155,7 +158,7 @@ class MetadataAggregator
                 $res = $provider->searchMovie($title, $year, $lang);
                 if (!empty($res)) {
                     $results = array_merge($results, $res);
-                    if ($key === 'tmdb' || count($results) >= 5) {
+                    if ($key === 'tmdb' || count($results) >= 6) {
                         break;
                     }
                 }
@@ -169,7 +172,7 @@ class MetadataAggregator
 
     public function searchSeries(string $title, ?int $year = null, string $lang = 'en'): array
     {
-        $chain = ['tvmaze', 'tmdb', 'omdb', 'anilist', 'wikipedia', 'local'];
+        $chain = ['tmdb', 'omdb', 'tvmaze', 'anilist', 'wikipedia', 'local'];
         $results = [];
 
         foreach ($chain as $key) {
@@ -180,7 +183,7 @@ class MetadataAggregator
                 $res = $provider->searchSeries($title, $year, $lang);
                 if (!empty($res)) {
                     $results = array_merge($results, $res);
-                    if (count($results) >= 5) {
+                    if (count($results) >= 6) {
                         break;
                     }
                 }
@@ -214,7 +217,7 @@ class MetadataAggregator
         return null;
     }
 
-    public function getSeriesDetails(string|int $id, string $providerKey = 'tvmaze', string $lang = 'en'): ?array
+    public function getSeriesDetails(string|int $id, string $providerKey = 'tmdb', string $lang = 'en'): ?array
     {
         $providerKey = strtolower($providerKey);
         if (isset($this->providers[$providerKey])) {

@@ -2,6 +2,7 @@
 
 namespace App\Services\Metadata;
 
+use App\Models\AppSetting;
 use App\Services\Metadata\Contracts\MetadataProviderInterface;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -13,7 +14,12 @@ class OmdbProvider implements MetadataProviderInterface
 
     public function __construct(?string $apiKey = null)
     {
-        $this->apiKey = $apiKey ?: config('services.omdb.key', 'trilogy');
+        $this->apiKey = $apiKey;
+    }
+
+    protected function getApiKey(): ?string
+    {
+        return $this->apiKey ?: AppSetting::get('omdb_api_key', config('services.omdb.key', 'trilogy'));
     }
 
     public function getName(): string
@@ -23,11 +29,12 @@ class OmdbProvider implements MetadataProviderInterface
 
     public function searchMovie(string $title, ?int $year = null, string $lang = 'en'): array
     {
-        if (empty($this->apiKey)) return [];
+        $key = $this->getApiKey();
+        if (empty($key)) return [];
 
         try {
-            $response = Http::timeout(5)->get($this->baseUrl, [
-                'apikey' => $this->apiKey,
+            $response = Http::timeout(6)->get($this->baseUrl, [
+                'apikey' => $key,
                 's' => $title,
                 'y' => $year,
                 'type' => 'movie',
@@ -54,11 +61,12 @@ class OmdbProvider implements MetadataProviderInterface
 
     public function searchSeries(string $title, ?int $year = null, string $lang = 'en'): array
     {
-        if (empty($this->apiKey)) return [];
+        $key = $this->getApiKey();
+        if (empty($key)) return [];
 
         try {
-            $response = Http::timeout(5)->get($this->baseUrl, [
-                'apikey' => $this->apiKey,
+            $response = Http::timeout(6)->get($this->baseUrl, [
+                'apikey' => $key,
                 's' => $title,
                 'y' => $year,
                 'type' => 'series',
@@ -85,48 +93,13 @@ class OmdbProvider implements MetadataProviderInterface
 
     public function getMovieDetails(string|int $id, string $lang = 'en'): ?array
     {
-        return $this->fetchByImdbId($id);
-    }
-
-    public function getSeriesDetails(string|int $id, string $lang = 'en'): ?array
-    {
-        return $this->fetchByImdbId($id);
-    }
-
-    public function getSeasonEpisodes(string|int $seriesId, int $seasonNumber, string $lang = 'en'): array
-    {
-        if (empty($this->apiKey)) return [];
+        $key = $this->getApiKey();
+        if (empty($key)) return null;
 
         try {
-            $response = Http::timeout(5)->get($this->baseUrl, [
-                'apikey' => $this->apiKey,
-                'i' => $seriesId,
-                'Season' => $seasonNumber,
-            ]);
-
-            if ($response->successful() && ($response['Response'] ?? '') === 'True') {
-                return array_map(fn($ep) => [
-                    'episode_number' => (int) ($ep['Episode'] ?? 1),
-                    'title' => $ep['Title'] ?? '',
-                    'air_date' => $ep['Released'] !== 'N/A' ? $ep['Released'] : null,
-                    'rating' => is_numeric($ep['imdbRating'] ?? null) ? (float) $ep['imdbRating'] : null,
-                ], $response['Episodes'] ?? []);
-            }
-        } catch (\Exception $e) {
-            Log::warning("OMDb getSeasonEpisodes failed: " . $e->getMessage());
-        }
-
-        return [];
-    }
-
-    protected function fetchByImdbId(string $imdbId): ?array
-    {
-        if (empty($this->apiKey)) return null;
-
-        try {
-            $response = Http::timeout(5)->get($this->baseUrl, [
-                'apikey' => $this->apiKey,
-                'i' => $imdbId,
+            $response = Http::timeout(6)->get($this->baseUrl, [
+                'apikey' => $key,
+                'i' => $id,
                 'plot' => 'full',
             ]);
 
@@ -134,21 +107,57 @@ class OmdbProvider implements MetadataProviderInterface
                 $data = $response->json();
                 return [
                     'provider' => 'OMDb',
-                    'imdb_id' => $data['imdbID'],
+                    'imdb_id' => $data['imdbID'] ?? null,
                     'title' => $data['Title'] ?? '',
-                    'overview' => $data['Plot'] !== 'N/A' ? $data['Plot'] : '',
-                    'release_year' => is_numeric(substr($data['Year'] ?? '', 0, 4)) ? (int) substr($data['Year'], 0, 4) : null,
-                    'rating' => is_numeric($data['imdbRating'] ?? null) ? (float) $data['imdbRating'] : null,
+                    'release_year' => isset($data['Year']) ? (int) substr($data['Year'], 0, 4) : null,
+                    'rating' => isset($data['imdbRating']) && is_numeric($data['imdbRating']) ? (float) $data['imdbRating'] : 7.0,
+                    'vote_count' => isset($data['imdbVotes']) ? (int) str_replace(',', '', $data['imdbVotes']) : 0,
+                    'runtime_minutes' => isset($data['Runtime']) ? (int) filter_var($data['Runtime'], FILTER_SANITIZE_NUMBER_INT) : null,
+                    'overview' => ($data['Plot'] ?? 'N/A') !== 'N/A' ? $data['Plot'] : '',
                     'poster_path' => ($data['Poster'] ?? 'N/A') !== 'N/A' ? $data['Poster'] : null,
-                    'genres' => explode(', ', $data['Genre'] ?? ''),
-                    'director' => $data['Director'] !== 'N/A' ? $data['Director'] : null,
-                    'actors' => explode(', ', $data['Actors'] ?? ''),
+                    'genres' => isset($data['Genre']) ? array_map('trim', explode(',', $data['Genre'])) : [],
+                    'director' => ($data['Director'] ?? 'N/A') !== 'N/A' ? $data['Director'] : null,
+                    'actors' => isset($data['Actors']) ? array_map('trim', explode(',', $data['Actors'])) : [],
                 ];
             }
         } catch (\Exception $e) {
-            Log::warning("OMDb fetchByImdbId failed: " . $e->getMessage());
+            Log::warning("OMDb getMovieDetails failed: " . $e->getMessage());
         }
 
         return null;
+    }
+
+    public function getSeriesDetails(string|int $id, string $lang = 'en'): ?array
+    {
+        return $this->getMovieDetails($id, $lang);
+    }
+
+    public function getSeasonEpisodes(string|int $seriesId, int $seasonNumber, string $lang = 'en'): array
+    {
+        $key = $this->getApiKey();
+        if (empty($key)) return [];
+
+        try {
+            $response = Http::timeout(6)->get($this->baseUrl, [
+                'apikey' => $key,
+                'i' => $seriesId,
+                'Season' => $seasonNumber,
+            ]);
+
+            if ($response->successful() && ($response['Response'] ?? '') === 'True') {
+                return array_map(function ($ep) {
+                    return [
+                        'episode_number' => (int) ($ep['Episode'] ?? 1),
+                        'title' => $ep['Title'] ?? "Episode {$ep['Episode']}",
+                        'air_date' => ($ep['Released'] ?? 'N/A') !== 'N/A' ? $ep['Released'] : null,
+                        'rating' => isset($ep['imdbRating']) && is_numeric($ep['imdbRating']) ? (float) $ep['imdbRating'] : 7.5,
+                    ];
+                }, $response['Episodes'] ?? []);
+            }
+        } catch (\Exception $e) {
+            Log::warning("OMDb getSeasonEpisodes failed: " . $e->getMessage());
+        }
+
+        return [];
     }
 }

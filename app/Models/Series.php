@@ -64,4 +64,17 @@ class Series extends Model
     {
         return $query->where('is_favorite', true);
     }
+
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if (is_numeric($value)) {
+            $item = $this->where('id', $value)->first();
+            if ($item) return $item;
+        }
+
+        $item = $this->where('slug', $value)->first();
+        if ($item) return $item;
+
+        return $this->where('title', str_replace('-', ' ', $value))->firstOrFail();
+    }
 }

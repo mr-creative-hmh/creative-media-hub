@@ -14,7 +14,12 @@ class TmdbProvider implements MetadataProviderInterface
 
     public function __construct(?string $apiKey = null)
     {
-        $this->apiKey = $apiKey ?: AppSetting::get('tmdb_api_key', config('services.tmdb.key'));
+        $this->apiKey = $apiKey;
+    }
+
+    protected function getApiKey(): ?string
+    {
+        return $this->apiKey ?: AppSetting::get('tmdb_api_key', config('services.tmdb.key'));
     }
 
     public function getName(): string
@@ -24,19 +29,20 @@ class TmdbProvider implements MetadataProviderInterface
 
     public function isConfigured(): bool
     {
-        return !empty($this->apiKey);
+        $key = $this->getApiKey();
+        return !empty($key);
     }
 
     public function searchMovie(string $title, ?int $year = null, string $lang = 'en'): array
     {
-        if (!$this->isConfigured()) return [];
+        $key = $this->getApiKey();
+        if (!$key) return [];
 
         try {
-            $response = Http::timeout(6)->get("{$this->baseUrl}/search/movie", [
-                'api_key' => $this->apiKey,
+            $response = Http::timeout(8)->get("{$this->baseUrl}/search/movie", [
+                'api_key' => $key,
                 'query' => $title,
                 'year' => $year,
-                'language' => $lang === 'ar' ? 'ar-SA' : 'en-US',
                 'include_adult' => false,
             ]);
 
@@ -52,14 +58,14 @@ class TmdbProvider implements MetadataProviderInterface
 
     public function searchSeries(string $title, ?int $year = null, string $lang = 'en'): array
     {
-        if (!$this->isConfigured()) return [];
+        $key = $this->getApiKey();
+        if (!$key) return [];
 
         try {
-            $response = Http::timeout(6)->get("{$this->baseUrl}/search/tv", [
-                'api_key' => $this->apiKey,
+            $response = Http::timeout(8)->get("{$this->baseUrl}/search/tv", [
+                'api_key' => $key,
                 'query' => $title,
                 'first_air_date_year' => $year,
-                'language' => $lang === 'ar' ? 'ar-SA' : 'en-US',
                 'include_adult' => false,
             ]);
 
@@ -75,31 +81,78 @@ class TmdbProvider implements MetadataProviderInterface
 
     public function getMovieDetails(string|int $id, string $lang = 'en'): ?array
     {
-        if (!$this->isConfigured()) return null;
+        $key = $this->getApiKey();
+        if (!$key) return null;
 
         try {
-            $response = Http::timeout(6)->get("{$this->baseUrl}/movie/{$id}", [
-                'api_key' => $this->apiKey,
-                'language' => $lang === 'ar' ? 'ar-SA' : 'en-US',
-                'append_to_response' => 'credits,videos,keywords',
+            $response = Http::timeout(10)->get("{$this->baseUrl}/movie/{$id}", [
+                'api_key' => $key,
+                'append_to_response' => 'credits,videos,keywords,translations,images',
             ]);
 
             if ($response->successful()) {
                 $data = $response->json();
+
+                // Extract Arabic Title & Overview from translations
+                $titleAr = null;
+                $overviewAr = null;
+                $taglineAr = null;
+                if (!empty($data['translations']['translations'])) {
+                    foreach ($data['translations']['translations'] as $tr) {
+                        if (($tr['iso_639_1'] ?? '') === 'ar') {
+                            $trData = $tr['data'] ?? [];
+                            if (!empty($trData['title'])) {
+                                $titleAr = $trData['title'];
+                            }
+                            if (!empty($trData['overview'])) {
+                                $overviewAr = $trData['overview'];
+                            }
+                            if (!empty($trData['tagline'])) {
+                                $taglineAr = $trData['tagline'];
+                            }
+                        }
+                    }
+                }
+
+                // Available alternative artwork for Cover Studio
+                $availablePosters = [];
+                if (!empty($data['images']['posters'])) {
+                    foreach (array_slice($data['images']['posters'], 0, 12) as $img) {
+                        if (!empty($img['file_path'])) {
+                            $availablePosters[] = "https://image.tmdb.org/t/p/w780{$img['file_path']}";
+                        }
+                    }
+                }
+
+                $availableBackdrops = [];
+                if (!empty($data['images']['backdrops'])) {
+                    foreach (array_slice($data['images']['backdrops'], 0, 10) as $img) {
+                        if (!empty($img['file_path'])) {
+                            $availableBackdrops[] = "https://image.tmdb.org/t/p/original{$img['file_path']}";
+                        }
+                    }
+                }
+
                 return [
                     'provider' => 'TMDb',
+                    'id' => (string) $data['id'],
                     'tmdb_id' => (string) $data['id'],
                     'imdb_id' => $data['imdb_id'] ?? null,
                     'title' => $data['title'] ?? '',
                     'original_title' => $data['original_title'] ?? '',
+                    'title_ar' => $titleAr,
                     'overview' => $data['overview'] ?? '',
+                    'overview_ar' => $overviewAr,
                     'tagline' => $data['tagline'] ?? null,
+                    'tagline_ar' => $taglineAr,
                     'release_year' => isset($data['release_date']) ? (int) substr($data['release_date'], 0, 4) : null,
                     'rating' => round($data['vote_average'] ?? 0, 1),
                     'vote_count' => $data['vote_count'] ?? 0,
                     'runtime_minutes' => $data['runtime'] ?? null,
                     'poster_path' => isset($data['poster_path']) ? "https://image.tmdb.org/t/p/w780{$data['poster_path']}" : null,
                     'backdrop_path' => isset($data['backdrop_path']) ? "https://image.tmdb.org/t/p/original{$data['backdrop_path']}" : null,
+                    'available_posters' => $availablePosters,
+                    'available_backdrops' => $availableBackdrops,
                     'genres' => array_column($data['genres'] ?? [], 'name'),
                     'trailer_url' => $this->extractTrailer($data['videos']['results'] ?? []),
                     'cast' => array_slice(array_map(fn($c) => [
@@ -123,23 +176,62 @@ class TmdbProvider implements MetadataProviderInterface
 
     public function getSeriesDetails(string|int $id, string $lang = 'en'): ?array
     {
-        if (!$this->isConfigured()) return null;
+        $key = $this->getApiKey();
+        if (!$key) return null;
 
         try {
-            $response = Http::timeout(6)->get("{$this->baseUrl}/tv/{$id}", [
-                'api_key' => $this->apiKey,
-                'language' => $lang === 'ar' ? 'ar-SA' : 'en-US',
-                'append_to_response' => 'credits,videos',
+            $response = Http::timeout(10)->get("{$this->baseUrl}/tv/{$id}", [
+                'api_key' => $key,
+                'append_to_response' => 'credits,videos,translations,images',
             ]);
 
             if ($response->successful()) {
                 $data = $response->json();
+
+                // Extract Arabic Title & Overview from translations
+                $titleAr = null;
+                $overviewAr = null;
+                if (!empty($data['translations']['translations'])) {
+                    foreach ($data['translations']['translations'] as $tr) {
+                        if (($tr['iso_639_1'] ?? '') === 'ar') {
+                            $trData = $tr['data'] ?? [];
+                            if (!empty($trData['name'])) {
+                                $titleAr = $trData['name'];
+                            }
+                            if (!empty($trData['overview'])) {
+                                $overviewAr = $trData['overview'];
+                            }
+                        }
+                    }
+                }
+
+                $availablePosters = [];
+                if (!empty($data['images']['posters'])) {
+                    foreach (array_slice($data['images']['posters'], 0, 12) as $img) {
+                        if (!empty($img['file_path'])) {
+                            $availablePosters[] = "https://image.tmdb.org/t/p/w780{$img['file_path']}";
+                        }
+                    }
+                }
+
+                $availableBackdrops = [];
+                if (!empty($data['images']['backdrops'])) {
+                    foreach (array_slice($data['images']['backdrops'], 0, 10) as $img) {
+                        if (!empty($img['file_path'])) {
+                            $availableBackdrops[] = "https://image.tmdb.org/t/p/original{$img['file_path']}";
+                        }
+                    }
+                }
+
                 return [
                     'provider' => 'TMDb',
+                    'id' => (string) $data['id'],
                     'tmdb_id' => (string) $data['id'],
                     'title' => $data['name'] ?? '',
                     'original_title' => $data['original_name'] ?? '',
+                    'title_ar' => $titleAr,
                     'overview' => $data['overview'] ?? '',
+                    'overview_ar' => $overviewAr,
                     'release_year' => isset($data['first_air_date']) ? (int) substr($data['first_air_date'], 0, 4) : null,
                     'rating' => round($data['vote_average'] ?? 0, 1),
                     'status' => $data['status'] ?? 'Returning Series',
@@ -147,6 +239,8 @@ class TmdbProvider implements MetadataProviderInterface
                     'total_seasons' => $data['number_of_seasons'] ?? 1,
                     'poster_path' => isset($data['poster_path']) ? "https://image.tmdb.org/t/p/w780{$data['poster_path']}" : null,
                     'backdrop_path' => isset($data['backdrop_path']) ? "https://image.tmdb.org/t/p/original{$data['backdrop_path']}" : null,
+                    'available_posters' => $availablePosters,
+                    'available_backdrops' => $availableBackdrops,
                     'genres' => array_column($data['genres'] ?? [], 'name'),
                     'trailer_url' => $this->extractTrailer($data['videos']['results'] ?? []),
                     'seasons' => array_map(fn($s) => [
@@ -168,12 +262,12 @@ class TmdbProvider implements MetadataProviderInterface
 
     public function getSeasonEpisodes(string|int $seriesId, int $seasonNumber, string $lang = 'en'): array
     {
-        if (!$this->isConfigured()) return [];
+        $key = $this->getApiKey();
+        if (!$key) return [];
 
         try {
-            $response = Http::timeout(6)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
-                'api_key' => $this->apiKey,
-                'language' => $lang === 'ar' ? 'ar-SA' : 'en-US',
+            $response = Http::timeout(8)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
+                'api_key' => $key,
             ]);
 
             if ($response->successful()) {

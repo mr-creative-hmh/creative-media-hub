@@ -121,6 +121,7 @@ class SeriesController extends Controller
     {
         $validated = $request->validate([
             'title' => 'required|string',
+            'title_ar' => 'nullable|string',
             'provider' => 'nullable|string',
             'id' => 'nullable|string',
             'year' => 'nullable|numeric',
@@ -131,17 +132,36 @@ class SeriesController extends Controller
             'rating' => 'nullable|numeric',
         ]);
 
+        $providerKey = strtolower($validated['provider'] ?? 'tmdb');
+        $providerId = $validated['id'] ?? null;
+
+        $titleAr = $validated['title_ar'] ?? null;
+        $overviewAr = $validated['overview_ar'] ?? null;
+        $tmdbId = $series->tmdb_id;
+        $imdbId = $series->imdb_id;
+
+        if ($providerId) {
+            $details = $this->metadata->getSeriesDetails($providerId, $providerKey);
+            if ($details) {
+                $titleAr = $titleAr ?: ($details['title_ar'] ?? null);
+                $overviewAr = $overviewAr ?: ($details['overview_ar'] ?? null);
+                $tmdbId = $details['tmdb_id'] ?? $tmdbId;
+            }
+        }
+
         $posterUrl = $this->artwork->downloadPoster($validated['poster_path'] ?? null);
         $backdropUrl = $this->artwork->downloadBackdrop($validated['backdrop_path'] ?? null);
 
         $series->update([
             'title' => $validated['title'],
+            'title_ar' => $titleAr ?? $series->title_ar,
             'release_year' => $validated['year'] ?? $series->release_year,
             'overview' => $validated['overview'] ?? $series->overview,
-            'overview_ar' => $validated['overview_ar'] ?? $series->overview_ar,
+            'overview_ar' => $overviewAr ?? $series->overview_ar,
             'poster_path' => $posterUrl ?? $series->poster_path,
             'backdrop_path' => $backdropUrl ?? $series->backdrop_path,
             'rating' => $validated['rating'] ?? $series->rating,
+            'tmdb_id' => $tmdbId,
         ]);
 
         $series->load(['genres', 'seasons.episodes.subtitles']);
@@ -183,38 +203,8 @@ class SeriesController extends Controller
         ]);
     }
 
-    public function showBySlug(string $seriesSlug)
+    public function showSeason(Series $series, int $seasonNumber)
     {
-        $series = is_numeric($seriesSlug)
-            ? Series::find($seriesSlug)
-            : Series::where('slug', $seriesSlug)->first();
-
-        if (!$series) {
-            $series = Series::where('title', str_replace('-', ' ', $seriesSlug))->firstOrFail();
-        }
-
-        $series->load([
-            'genres',
-            'people',
-            'seasons.episodes.subtitles',
-            'seasons.episodes.watchHistories'
-        ]);
-
-        return Inertia::render('Series/Show', [
-            'series' => $series,
-        ]);
-    }
-
-    public function showSeason(string $seriesSlug, int $seasonNumber)
-    {
-        $series = is_numeric($seriesSlug)
-            ? Series::find($seriesSlug)
-            : Series::where('slug', $seriesSlug)->first();
-
-        if (!$series) {
-            $series = Series::where('title', str_replace('-', ' ', $seriesSlug))->firstOrFail();
-        }
-
         $series->load([
             'genres',
             'people',
@@ -228,16 +218,8 @@ class SeriesController extends Controller
         ]);
     }
 
-    public function showEpisode(string $seriesSlug, int $seasonNumber, int $episodeNumber)
+    public function showEpisode(Series $series, int $seasonNumber, int $episodeNumber)
     {
-        $series = is_numeric($seriesSlug)
-            ? Series::find($seriesSlug)
-            : Series::where('slug', $seriesSlug)->first();
-
-        if (!$series) {
-            $series = Series::where('title', str_replace('-', ' ', $seriesSlug))->firstOrFail();
-        }
-
         $series->load([
             'genres',
             'people',

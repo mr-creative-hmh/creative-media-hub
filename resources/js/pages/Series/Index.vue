@@ -59,7 +59,7 @@ const { t, isRTL } = useI18n();
                 <Link
                     v-for="s in seriesList.data"
                     :key="s.id"
-                    :href="`/series/${s.id}`"
+                    :href="`/series/${s.slug || s.id}`"
                     class="glass-card group relative rounded-2xl overflow-hidden cursor-pointer flex flex-col border border-slate-200 dark:border-white/10 hover:border-indigo-500/50 transition-all duration-300 shadow-sm hover:shadow-lg"
                 >
                     <div class="relative aspect-[2/3] w-full overflow-hidden bg-slate-200 dark:bg-slate-900">

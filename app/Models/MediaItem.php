@@ -91,4 +91,17 @@ class MediaItem extends Model
     {
         return $query->whereBetween('release_year', [$fromYear, $toYear]);
     }
+
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if (is_numeric($value)) {
+            $item = $this->where('id', $value)->first();
+            if ($item) return $item;
+        }
+
+        $item = $this->where('slug', $value)->first();
+        if ($item) return $item;
+
+        return $this->where('title', str_replace('-', ' ', $value))->firstOrFail();
+    }
 }

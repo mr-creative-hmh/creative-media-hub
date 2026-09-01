@@ -244,7 +244,7 @@ const openDetail = (item: any) => {
                     <div
                         v-for="item in activeVibe.matches"
                         :key="`${item.type}-${item.id}`"
-                        @click="item.type === 'series' ? $inertia.visit(`/series/${item.id}`) : play(item)"
+                        @click="item.type === 'series' ? $inertia.visit(`/series/${item.slug || item.id}`) : play(item)"
                         class="glass-card group relative rounded-2xl overflow-hidden cursor-pointer flex flex-col border border-slate-200 dark:border-white/10 hover:border-cyan-500/50 transition-all duration-300 shadow-sm hover:shadow-lg hover:-translate-y-1"
                     >
                         <div class="relative aspect-[2/3] w-full overflow-hidden bg-slate-900">
@@ -341,7 +341,7 @@ const openDetail = (item: any) => {
                 <Link
                     v-for="s in popularSeries"
                     :key="`s-${s.id}`"
-                    :href="`/series/${s.id}`"
+                    :href="`/series/${s.slug || s.id}`"
                     class="glass-card group relative rounded-2xl overflow-hidden cursor-pointer flex flex-col border border-slate-200 dark:border-white/10 hover:border-indigo-500/50 transition-all duration-300 shadow-sm hover:shadow-lg hover:-translate-y-1"
                 >
                     <div class="relative aspect-[2/3] w-full overflow-hidden bg-slate-900">

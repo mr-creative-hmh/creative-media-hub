@@ -158,10 +158,15 @@ const handleMetadataUpdated = (updatedItem: any) => {
                     type: 'episode',
                     watchable_id: ep.id,
                     watchable_type: 'episode',
+                    series: series,
+                    series_id: series.id,
+                    season_number: selectedSeason()?.season_number || 1,
+                    episode_number: ep.episode_number,
                     runtime_minutes: ep.runtime_minutes || 22,
                     duration_seconds: (ep.runtime_minutes ? ep.runtime_minutes * 60 : 1320),
                     subtitles: ep.subtitles || [],
-                    title: `${isRTL && series.title_ar ? series.title_ar : series.title} - S${selectedSeason()?.season_number || 1}E${ep.episode_number} - ${isRTL && ep.title_ar ? ep.title_ar : ep.title}`
+                    title: ep.title,
+                    title_ar: ep.title_ar
                 })"
                 class="glass-panel group rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 hover:border-cyan-500/50 transition-all flex flex-col shadow-sm bg-white dark:bg-[#121622]"
             >

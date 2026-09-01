@@ -98,11 +98,25 @@ class MediaController extends Controller
         ]);
     }
 
-    public function show(MediaItem $mediaItem)
+    public function show(Request $request, MediaItem $mediaItem)
     {
         $mediaItem->load(['genres', 'people', 'subtitles', 'watchHistories']);
 
-        return response()->json($mediaItem);
+        if ($request->wantsJson()) {
+            return response()->json($mediaItem);
+        }
+
+        $query = MediaItem::query()->with(['genres', 'subtitles']);
+        $movies = $query->paginate(24)->withQueryString();
+        $genres = Genre::orderBy('name_en')->get();
+
+        return Inertia::render('Movies/Index', [
+            'movies' => $movies,
+            'genres' => $genres,
+            'filters' => [],
+            'activeMovie' => $mediaItem,
+            'autoPlay' => $request->boolean('play'),
+        ]);
     }
 
     public function toggleFavorite(MediaItem $mediaItem)

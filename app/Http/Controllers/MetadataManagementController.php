@@ -117,11 +117,13 @@ class MetadataManagementController extends Controller
         ]);
     }
 
-    public function batchEnrich(): JsonResponse
+    public function batchEnrich(Request $request): JsonResponse
     {
-        $result = $this->scannerService->enrichMissingMetadata(35);
+        $limit = max(10, min(100, (int) $request->input('limit', 50)));
+        $result = $this->scannerService->enrichMissingMetadata($limit);
         return response()->json([
             'success' => true,
+            'message' => "Successfully enriched {$result['enriched_count']} items with bilingual metadata and artwork.",
             'result' => $result,
         ]);
     }

@@ -14,21 +14,14 @@ use App\Http\Controllers\SubtitleController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-// Cinema Dashboard & Overview Hub
+// Home & Media Discovery Dashboard
 Route::get('/', [DashboardController::class, 'index'])->name('home');
 Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
-// Documentation & User Guide
-Route::get('/docs', function () { return Inertia::render('Docs/Index'); })->name('docs.index');
-Route::get('/guide', function () { return Inertia::render('Docs/Index'); })->name('guide.index');
-
-// Standalone Library Metadata Management Studio
-Route::get('/metadata', [MetadataManagementController::class, 'index'])->name('metadata.index');
-Route::post('/api/metadata/batch-enrich', [MetadataManagementController::class, 'batchEnrich'])->name('api.metadata.batch-enrich');
-
-// Virtual Movies Hub & Metadata Management
+// Virtual Movies Hub & Cinema Streaming
 Route::get('/movies', [MediaController::class, 'index'])->name('movies.index');
 Route::get('/movies/{mediaItem}', [MediaController::class, 'show'])->name('movies.show');
+Route::get('/movie/{mediaItem}', [MediaController::class, 'show'])->name('movies.show.slug');
 Route::post('/movies/{mediaItem}/favorite', [MediaController::class, 'toggleFavorite'])->name('movies.favorite');
 Route::get('/api/media/search-metadata', [MediaController::class, 'searchMetadata'])->name('api.media.search-metadata');
 Route::post('/api/media/{mediaItem}/fix-match', [MediaController::class, 'fixMatch'])->name('api.media.fix-match');
@@ -37,13 +30,20 @@ Route::delete('/api/media/{id}', [ScannerController::class, 'deleteSingleMedia']
 Route::get('/api/vibes', [MediaController::class, 'getVibes'])->name('api.vibes');
 Route::get('/api/person/{person}', [MediaController::class, 'getCastExplorer'])->name('api.person');
 
-// Virtual TV Series Hub & Metadata Management
+// Virtual TV Series Hub & Metadata Management (Supports ID, Slug, and Season/Episode deep links)
 Route::get('/series', [SeriesController::class, 'index'])->name('series.index');
 Route::get('/series/{series}', [SeriesController::class, 'show'])->name('series.show');
+Route::get('/series/{series}/season/{seasonNumber}', [SeriesController::class, 'showSeason'])->name('series.season.show');
+Route::get('/series/{series}/season/{seasonNumber}/episode/{episodeNumber}', [SeriesController::class, 'showEpisode'])->name('series.episode.show');
+Route::get('/series/{series}/s/{seasonNumber}/e/{episodeNumber}', [SeriesController::class, 'showEpisode'])->name('series.episode.short');
 Route::post('/series/{series}/favorite', [SeriesController::class, 'toggleFavorite'])->name('series.favorite');
 Route::get('/api/series/search-metadata', [SeriesController::class, 'searchMetadata'])->name('api.series.search-metadata');
 Route::post('/api/series/{series}/fix-match', [SeriesController::class, 'fixMatch'])->name('api.series.fix-match');
 Route::post('/api/series/{series}/update-metadata', [SeriesController::class, 'updateMetadata'])->name('api.series.update-metadata');
+
+// Metadata & Cover Studio
+Route::get('/metadata', [MetadataManagementController::class, 'index'])->name('metadata.index');
+Route::post('/api/metadata/batch-enrich', [MetadataManagementController::class, 'batchEnrich'])->name('api.metadata.batch-enrich');
 
 // Virtual Media Scanner & Background Job Control Center
 Route::get('/scanner', [ScannerController::class, 'index'])->name('scanner.index');
@@ -81,14 +81,17 @@ Route::get('/api/subtitles/list', [SubtitleController::class, 'forMedia'])->name
 Route::post('/api/subtitles/verify-engine', [SubtitleController::class, 'verifyEngine'])->name('api.subtitles.verify-engine');
 
 // Cinema Video & Subtitle Streaming Engine (HTTP 206 Partial Content + Audio Transcoding)
-
-
-    Route::get('/stream/movie/{mediaItem}', [StreamController::class, 'streamMovie'])->name('stream.movie');
+Route::get('/stream/movie/{mediaItem}', [StreamController::class, 'streamMovie'])->name('stream.movie');
 Route::get('/stream/episode/{episode}', [StreamController::class, 'streamEpisode'])->name('stream.episode');
 Route::get('/stream/subtitles/{subtitle}', [StreamController::class, 'streamSubtitle'])->name('stream.subtitle');
 Route::post('/api/playback/progress', [StreamController::class, 'saveProgress'])->name('api.playback.progress');
 Route::post('/api/watch-history/progress', [StreamController::class, 'saveProgress']);
 Route::get('/api/continue-watching', [StreamController::class, 'getContinueWatching'])->name('api.continue-watching');
+Route::get('/api/media/duration', [StreamController::class, 'getMediaDuration'])->name('api.media.duration');
+
+// Server-Side Remux Streaming Routes (Instant on-the-fly AAC remuxing for unsupported formats)
+Route::get('/stream/remux/movie/{mediaItem}', [StreamController::class, 'streamRemuxMovie'])->name('stream.remux.movie');
+Route::get('/stream/remux/episode/{episode}', [StreamController::class, 'streamRemuxEpisode'])->name('stream.remux.episode');
 
 // Storage & Codec Analytics
 Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics.index');
@@ -108,12 +111,4 @@ Route::get('/settings', [SettingsController::class, 'index'])->name('settings.in
 Route::post('/api/settings', [SettingsController::class, 'update'])->name('api.settings.update');
 Route::post('/api/settings/test-provider', [SettingsController::class, 'testProvider'])->name('api.settings.test-provider');
 
-// Semantic Human-Readable Media Routes
-Route::get('/movie/{slug}', [MediaController::class, 'showBySlug'])->name('movies.show.slug');
-Route::get('/series/{seriesSlug}', [SeriesController::class, 'showBySlug'])->name('series.show.slug');
-Route::get('/series/{seriesSlug}/season/{seasonNumber}', [SeriesController::class, 'showSeason'])->name('series.season.show');
-Route::get('/series/{seriesSlug}/season/{seasonNumber}/episode/{episodeNumber}', [SeriesController::class, 'showEpisode'])->name('series.episode.show');
-
-// Server-Side Remux Streaming Routes (Instant on-the-fly AAC remuxing for unsupported formats)
-Route::get('/stream/remux/movie/{mediaItem}', [StreamController::class, 'streamRemuxMovie'])->name('stream.remux.movie');
-Route::get('/stream/remux/episode/{episode}', [StreamController::class, 'streamRemuxEpisode'])->name('stream.remux.episode');
+require __DIR__.'/settings.php';

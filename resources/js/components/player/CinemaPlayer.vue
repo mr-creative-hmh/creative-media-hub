@@ -62,7 +62,12 @@ const isPlaying = ref(false);
 const isMuted = ref(false);
 const volume = ref(1.0);
 const currentTime = ref(0);
-const duration = ref(0);
+
+// Initialize duration from original file metadata immediately (never start at 0 or NaN)
+const initialDuration = Number(props.item?.duration_seconds) || (Number(props.item?.runtime_minutes) ? Number(props.item.runtime_minutes) * 60 : 0);
+const duration = ref(initialDuration > 0 ? initialDuration : 0);
+const isDurationLocked = ref(initialDuration > 0);
+
 const bufferedPercent = ref(0);
 const isFullscreen = ref(false);
 const isControlsVisible = ref(true);
@@ -112,22 +117,35 @@ let controlsTimeout: any = null;
 let progressSaveInterval: any = null;
 
 const isEpisode = computed(() => {
-    return props.item.type === 'episode' 
-        || props.item.watchable_type === 'episode' 
-        || !!props.item.episode_number 
-        || !!props.item.season_id;
+    return props.item?.type === 'episode' 
+        || props.item?.watchable_type === 'episode' 
+        || !!props.item?.episode_number 
+        || !!props.item?.season_id;
 });
 
-const isRemuxStream = ref(false);
+// Auto-detect if media requires Ultra-Fast Server Remuxing (MKV containers, DTS, Dolby Digital Plus, AC3, EAC3, HEVC, AVI, XviD)
+const checkNeedsRemux = (item: any) => {
+    if (!item) return false;
+    const path = (item.file_path || '').toLowerCase();
+    const audio = (item.audio_codec || '').toLowerCase();
+    const video = (item.video_codec || '').toLowerCase();
+    const isMkvOrAvi = path.endsWith('.mkv') || path.endsWith('.avi') || path.endsWith('.ts') || path.endsWith('.wmv');
+    const isSurroundAudio = audio.includes('dts') || audio.includes('dolby') || audio.includes('ac3') || audio.includes('eac3') || audio.includes('truehd') || audio.includes('surround');
+    const isNonH264Video = video.includes('hevc') || video.includes('h.265') || video.includes('265') || video.includes('mpeg') || video.includes('xvid') || video.includes('divx');
+    return isMkvOrAvi || isSurroundAudio || isNonH264Video;
+};
 
-// Stream URL: Direct Stream vs Server-Side Remux (Zero-overhead on-the-fly AAC Transcode for DTS/MKV/AC3)
+const isRemuxStream = ref(checkNeedsRemux(props.item));
+const remuxStartOffset = ref(props.initialProgress ? Math.floor(props.initialProgress) : 0);
+
+// Stable Stream URL: Direct Stream vs Server-Side Remux
 const streamUrl = computed(() => {
-    const startOffset = Math.floor(currentTime.value);
     if (isRemuxStream.value) {
+        const startParam = remuxStartOffset.value > 0 ? `?start=${remuxStartOffset.value}` : '';
         if (isEpisode.value) {
-            return `/stream/remux/episode/${props.item.id}?start=${startOffset}`;
+            return `/stream/remux/episode/${props.item.id}${startParam}`;
         }
-        return `/stream/remux/movie/${props.item.id}?start=${startOffset}`;
+        return `/stream/remux/movie/${props.item.id}${startParam}`;
     }
 
     if (isEpisode.value) {
@@ -138,18 +156,36 @@ const streamUrl = computed(() => {
 
 const toggleRemuxStream = () => {
     isRemuxStream.value = !isRemuxStream.value;
+    if (isRemuxStream.value) {
+        remuxStartOffset.value = Math.floor(currentTime.value);
+    } else {
+        remuxStartOffset.value = 0;
+    }
     showToast(isRemuxStream.value 
-        ? (isRTL ? 'تم تفعيل بث السيرفر مع إعادة ترميز الصوت AAC' : 'Enabled Server Remux with on-the-fly AAC audio')
-        : (isRTL ? 'تم التبديل إلى البث المباشر للأجهزة' : 'Switched back to Native Direct Stream')
+        ? (isRTL.value ? 'تم تفعيل البث المباشر المحسن (Server Remux)' : 'Enabled Ultra-Fast Server Remux')
+        : (isRTL.value ? 'تم التبديل للبث المباشر الأصلي' : 'Switched to Native Direct Stream')
     );
+    setTimeout(() => {
+        if (videoRef.value) {
+            videoRef.value.load();
+            videoRef.value.play().catch(() => {});
+        }
+    }, 100);
 };
 
 const handleVideoError = () => {
     if (!isRemuxStream.value) {
-        showToast(isRTL ? 'تنسيق غير مدعوم محلياً، يتم التبديل إلى بث السيرفر...' : 'Incompatible codec detected. Switching to Server Remux...');
+        showToast(isRTL.value ? 'جاري التحويل للبث المحسن (Remux)...' : 'Switching to Ultra-Fast Server Remux...');
         isRemuxStream.value = true;
+        remuxStartOffset.value = Math.floor(currentTime.value);
+        setTimeout(() => {
+            if (videoRef.value) {
+                videoRef.value.load();
+                videoRef.value.play().catch(() => {});
+            }
+        }, 100);
     } else {
-        showToast(isRTL ? 'تعذر تشغيل هذا الملف عبر المشغل.' : 'Playback error occurred.');
+        showToast(isRTL.value ? 'حدث خطأ في تشغيل البث.' : 'Playback error occurred.');
     }
 };
 
@@ -167,27 +203,53 @@ const progressPercent = computed(() => {
 
 // Media Meta Display (Resolution, Codec, Audio)
 const displayResolution = computed(() => {
-    return props.item.resolution || props.item.video_resolution || '1080p FHD';
+    return props.item?.resolution || props.item?.video_resolution || '1080p FHD';
 });
 
 const displayCodec = computed(() => {
-    return props.item.video_codec || props.item.codec || 'H.264 / HEVC';
+    return props.item?.video_codec || props.item?.codec || 'H.264 / HEVC';
 });
 
 const displayAudio = computed(() => {
-    return props.item.audio_codec || 'AAC 5.1';
+    return props.item?.audio_codec || 'AAC 5.1';
 });
 
 const displayYear = computed(() => {
-    return props.item.release_year || props.item.year || (props.item.series?.release_year ?? '');
+    return props.item?.release_year || props.item?.year || (props.item?.series?.release_year ?? '');
 });
 
-const episodeFormatted = computed(() => {
-    if (!isEpisode.value) return null;
-    const s = props.item.season_number ?? (props.item.season?.season_number ?? 1);
-    const e = props.item.episode_number ?? 1;
-    const epTitle = props.item.title && !props.item.title.match(/^Episode \d+$/i) ? ` - ${props.item.title}` : '';
-    return `S${String(s).padStart(2, '0')}E${String(e).padStart(2, '0')}${epTitle}`;
+// Clean Header Title (No raw S09E01 codes, fully localized)
+const playerHeaderTitle = computed(() => {
+    if (isEpisode.value) {
+        const rawTitle = props.item?.series?.title || props.item?.title || '';
+        let cleanSeriesName = rawTitle.replace(/\s*-\s*S\d+E\d+\s*-\s*Episode\s*\d+/gi, '').replace(/\s*-\s*S\d+E\d+/gi, '').trim();
+        if (isRTL.value && props.item?.series?.title_ar) {
+            cleanSeriesName = props.item.series.title_ar;
+        } else if (isRTL.value && props.item?.title_ar) {
+            cleanSeriesName = props.item.title_ar;
+        }
+        if (!cleanSeriesName) cleanSeriesName = 'Series';
+
+        const s = props.item?.season_number ?? (props.item?.season?.season_number ?? 1);
+        const e = props.item?.episode_number ?? 1;
+
+        const seasonLabel = isRTL.value ? `الموسم ${s}` : `Season ${s}`;
+        const episodeLabel = isRTL.value ? `الحلقة ${e}` : `Episode ${e}`;
+
+        let formatted = `${cleanSeriesName} - ${seasonLabel} - ${episodeLabel}`;
+        
+        const rawEpTitle = props.item?.title || '';
+        const isGeneric = !rawEpTitle || !!rawEpTitle.match(/^Episode \d+$/i) || rawEpTitle === `Episode ${e}` || rawEpTitle.includes(`S${s}E${e}`) || rawEpTitle.includes(`S0${s}E0${e}`);
+        if (!isGeneric) {
+            const cleanEpTitle = rawEpTitle.replace(/^Episode \d+:\s*/i, '').replace(/^[^-]+-\s*S\d+E\d+\s*-\s*/i, '').trim();
+            if (cleanEpTitle && cleanEpTitle !== cleanSeriesName) {
+                formatted += ` (${cleanEpTitle})`;
+            }
+        }
+        return formatted;
+    }
+
+    return isRTL.value && props.item?.title_ar ? props.item.title_ar : (props.item?.title || 'Media');
 });
 
 // =========================================================================
@@ -219,7 +281,7 @@ const parseWebVTTContent = (content: string): CueItem[] => {
                 cues.push({
                     start: currentStart,
                     end: currentEnd,
-                    text: currentTextLines.join('\n')
+                    text: currentTextLines.join('<br>')
                 });
                 currentStart = -1;
                 currentEnd = -1;
@@ -228,25 +290,20 @@ const parseWebVTTContent = (content: string): CueItem[] => {
             continue;
         }
 
-        const match = line.match(timeRegex);
-        if (match) {
+        const timeMatch = line.match(timeRegex);
+        if (timeMatch) {
             if (currentStart >= 0 && currentTextLines.length > 0) {
                 cues.push({
                     start: currentStart,
                     end: currentEnd,
-                    text: currentTextLines.join('\n')
+                    text: currentTextLines.join('<br>')
                 });
+                currentTextLines = [];
             }
-            currentStart = parseTimestampToSeconds(match[1]);
-            currentEnd = parseTimestampToSeconds(match[2]);
-            currentTextLines = [];
-        } else if (currentStart >= 0) {
-            // Filter out numeric cue identifiers
-            if (!line.match(/^\d+$/)) {
-                // Strip HTML/WebVTT styling tags like <i>, <b>, <c.color>
-                const cleanLine = line.replace(/<\/?[^>]+(>|$)/g, '');
-                currentTextLines.push(cleanLine);
-            }
+            currentStart = parseTimestampToSeconds(timeMatch[1]);
+            currentEnd = parseTimestampToSeconds(timeMatch[2]);
+        } else if (currentStart >= 0 && !line.match(/^\d+$/)) {
+            currentTextLines.push(line);
         }
     }
 
@@ -254,7 +311,7 @@ const parseWebVTTContent = (content: string): CueItem[] => {
         cues.push({
             start: currentStart,
             end: currentEnd,
-            text: currentTextLines.join('\n')
+            text: currentTextLines.join('<br>')
         });
     }
 
@@ -271,25 +328,23 @@ const loadSubtitleTrack = async (subId: number | string) => {
     isFetchingSubtitle.value = true;
     try {
         const res = await fetch(`/stream/subtitles/${subId}`);
-        if (res.ok) {
-            const vttText = await res.text();
-            parsedCues.value = parseWebVTTContent(vttText);
-            updateActiveCue(currentTime.value);
-        }
+        const content = await res.text();
+        parsedCues.value = parseWebVTTContent(content);
+        updateActiveCue(currentTime.value);
     } catch (e) {
-        parsedCues.value = [];
+        console.error('Failed to load subtitle track:', e);
     } finally {
         isFetchingSubtitle.value = false;
     }
 };
 
-const updateActiveCue = (currTime: number) => {
-    if (parsedCues.value.length === 0 || selectedSubtitleId.value === 'off') {
+const updateActiveCue = (timeSec: number) => {
+    if (selectedSubtitleId.value === 'off' || !parsedCues.value.length) {
         activeCueText.value = '';
         return;
     }
 
-    const adjustedTime = currTime - subtitleDelay.value;
+    const adjustedTime = timeSec + subtitleDelay.value;
     const active = parsedCues.value.find(c => adjustedTime >= c.start && adjustedTime <= c.end);
     activeCueText.value = active ? active.text : '';
 };
@@ -299,13 +354,10 @@ const fetchMediaDuration = async () => {
     try {
         const type = isEpisode.value ? 'episode' : 'movie';
         const res = await fetch(`/api/media/duration?type=${type}&id=${props.item.id}`);
-        if (res.ok) {
-            const data = await res.json();
-            if (data.duration_seconds && data.duration_seconds > 0) {
-                if (!duration.value || duration.value <= 0) {
-                    duration.value = data.duration_seconds;
-                }
-            }
+        const data = await res.json();
+        if (data.duration_seconds && data.duration_seconds > 0) {
+            duration.value = data.duration_seconds;
+            isDurationLocked.value = true;
         }
     } catch (e) {}
 };
@@ -314,39 +366,86 @@ const fetchSubtitles = async () => {
     try {
         const type = isEpisode.value ? 'episode' : 'movie';
         const res = await fetch(`/api/subtitles/for-media?type=${type}&id=${props.item.id}`);
-        if (res.ok) {
-            const data = await res.json();
-            const list = Array.isArray(data) ? data : (data.subtitles || []);
-            if (Array.isArray(list) && list.length > 0) {
-                availableSubtitles.value = list;
-                
-                // Auto-select Arabic or English subtitle if available
-                const defaultSub = list.find((s: any) => s.is_default)
-                    || list.find((s: any) => s.language === 'ar')
-                    || list.find((s: any) => s.language === 'en')
-                    || list[0];
-
-                if (defaultSub) {
-                    selectedSubtitleId.value = defaultSub.id;
-                    loadSubtitleTrack(defaultSub.id);
-                }
+        const data = await res.json();
+        if (data.subtitles) {
+            availableSubtitles.value = data.subtitles;
+            // Auto-select Arabic if available, else first English subtitle
+            const arSub = data.subtitles.find((s: any) => s.language === 'ara' || s.language === 'ar');
+            const enSub = data.subtitles.find((s: any) => s.language === 'eng' || s.language === 'en');
+            if (arSub) {
+                selectedSubtitleId.value = arSub.id;
+                loadSubtitleTrack(arSub.id);
+            } else if (enSub) {
+                selectedSubtitleId.value = enSub.id;
+                loadSubtitleTrack(enSub.id);
             }
         }
     } catch (e) {}
 };
 
-// Controls Visibility Management
-const showControlsTemporarily = () => {
-    isControlsVisible.value = true;
-    clearTimeout(controlsTimeout);
-    controlsTimeout = setTimeout(() => {
-        if (isPlaying.value && !showEqualizer.value && !showSubtitlesMenu.value && !showPlaybackSpeedMenu.value) {
-            isControlsVisible.value = false;
-        }
-    }, 4000);
+// Web Audio API Pipeline (Voice Enhancer / Equalizer)
+const initAudioPipeline = () => {
+    if (isAudioPipelineInitialized || !videoRef.value) return;
+    try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContextClass) return;
+
+        audioCtx = new AudioContextClass();
+        sourceNode = audioCtx.createMediaElementSource(videoRef.value);
+
+        voiceFilterNode = audioCtx.createBiquadFilter();
+        voiceFilterNode.type = 'peaking';
+        voiceFilterNode.frequency.value = 2500;
+        voiceFilterNode.Q.value = 1.0;
+        voiceFilterNode.gain.value = vocalBoost.value ? 4.5 : 0;
+
+        bassFilterNode = audioCtx.createBiquadFilter();
+        bassFilterNode.type = 'lowshelf';
+        bassFilterNode.frequency.value = 180;
+        bassFilterNode.gain.value = bassBoost.value ? 5.0 : 0;
+
+        trebleFilterNode = audioCtx.createBiquadFilter();
+        trebleFilterNode.type = 'highshelf';
+        trebleFilterNode.frequency.value = 6000;
+        trebleFilterNode.gain.value = 0;
+
+        compressorNode = audioCtx.createDynamicsCompressor();
+        compressorNode.threshold.value = nightMode.value ? -24 : -12;
+        compressorNode.knee.value = 10;
+        compressorNode.ratio.value = nightMode.value ? 12 : 3;
+        compressorNode.attack.value = 0.003;
+        compressorNode.release.value = 0.25;
+
+        gainNode = audioCtx.createGain();
+        gainNode.gain.value = volume.value;
+
+        sourceNode.connect(voiceFilterNode);
+        voiceFilterNode.connect(bassFilterNode);
+        bassFilterNode.connect(trebleFilterNode);
+        trebleFilterNode.connect(compressorNode);
+        compressorNode.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        isAudioPipelineInitialized = true;
+    } catch (e) {
+        console.warn('Web Audio pipeline initialization bypassed:', e);
+    }
 };
 
-// Playback Actions
+const updateAudioFilters = () => {
+    if (!isAudioPipelineInitialized) return;
+    if (voiceFilterNode) {
+        voiceFilterNode.gain.value = vocalBoost.value ? 4.5 : 0;
+    }
+    if (bassFilterNode) {
+        bassFilterNode.gain.value = bassBoost.value ? 5.0 : 0;
+    }
+    if (compressorNode) {
+        compressorNode.threshold.value = nightMode.value ? -24 : -12;
+        compressorNode.ratio.value = nightMode.value ? 12 : 3;
+    }
+};
+
 const togglePlay = () => {
     if (!videoRef.value) return;
     if (videoRef.value.paused) {
@@ -357,22 +456,49 @@ const togglePlay = () => {
     }
 };
 
+// Ultra-Fast Seeking in Remux & Native Stream
+const executeSeek = (targetSecs: number) => {
+    const clamped = Math.max(0, Math.min(duration.value || 3600, targetSecs));
+    currentTime.value = clamped;
+    updateActiveCue(clamped);
+
+    if (isRemuxStream.value) {
+        remuxStartOffset.value = Math.floor(clamped);
+        setTimeout(() => {
+            if (videoRef.value) {
+                videoRef.value.load();
+                videoRef.value.play().catch(() => {});
+            }
+        }, 50);
+    } else if (videoRef.value) {
+        videoRef.value.currentTime = clamped;
+    }
+};
+
 const seekRelative = (seconds: number) => {
-    if (!videoRef.value) return;
-    const target = Math.max(0, Math.min(duration.value || videoRef.value.duration || 0, videoRef.value.currentTime + seconds));
-    videoRef.value.currentTime = target;
-    currentTime.value = target;
-    updateActiveCue(target);
+    const current = currentTime.value || (videoRef.value ? videoRef.value.currentTime : 0);
+    const target = Math.max(0, Math.min(duration.value || 0, current + seconds));
+    executeSeek(target);
     showControlsTemporarily();
 };
 
 const onScrubberInput = (e: Event) => {
     const val = parseFloat((e.target as HTMLInputElement).value);
-    if (videoRef.value && duration.value > 0) {
+    if (duration.value > 0) {
         const target = (val / 100) * duration.value;
-        videoRef.value.currentTime = target;
         currentTime.value = target;
         updateActiveCue(target);
+        if (!isRemuxStream.value && videoRef.value) {
+            videoRef.value.currentTime = target;
+        }
+    }
+};
+
+const onScrubberChange = (e: Event) => {
+    const val = parseFloat((e.target as HTMLInputElement).value);
+    if (duration.value > 0) {
+        const target = (val / 100) * duration.value;
+        executeSeek(target);
     }
 };
 
@@ -423,97 +549,51 @@ const selectSubtitle = (subId: number | string) => {
     showToast(subId === 'off' ? (isRTL.value ? 'الترجمة: معطلة' : 'Subtitles: Off') : (isRTL.value ? `تم اختيار: ${found?.language_name}` : `Selected: ${found?.language_name}`));
 };
 
-// Audio Engine Setup (Web Audio API)
-const initAudioPipeline = () => {
-    if (isAudioPipelineInitialized || !videoRef.value) return;
-    try {
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        if (!AudioContextClass) return;
-
-        audioCtx = new AudioContextClass();
-        sourceNode = audioCtx.createMediaElementSource(videoRef.value);
-
-        // 1. Voice Clarity Filter (Peaking at 2.5kHz - Human Dialogue)
-        voiceFilterNode = audioCtx.createBiquadFilter();
-        voiceFilterNode.type = 'peaking';
-        voiceFilterNode.frequency.value = 2500;
-        voiceFilterNode.Q.value = 1.0;
-        voiceFilterNode.gain.value = vocalBoost.value ? 5.5 : 0;
-
-        // 2. Bass Filter (Low shelf at 120Hz)
-        bassFilterNode = audioCtx.createBiquadFilter();
-        bassFilterNode.type = 'lowshelf';
-        bassFilterNode.frequency.value = 120;
-        bassFilterNode.gain.value = bassBoost.value ? 4.0 : 0;
-
-        // 3. Treble Polish (High shelf at 8kHz)
-        trebleFilterNode = audioCtx.createBiquadFilter();
-        trebleFilterNode.type = 'highshelf';
-        trebleFilterNode.frequency.value = 8000;
-        trebleFilterNode.gain.value = 2.0;
-
-        // 4. Dynamics Compressor (Cinema Night Mode / Volume Leveling)
-        compressorNode = audioCtx.createDynamicsCompressor();
-        compressorNode.threshold.value = nightMode.value ? -24 : -12;
-        compressorNode.knee.value = 15;
-        compressorNode.ratio.value = nightMode.value ? 8 : 3;
-        compressorNode.attack.value = 0.003;
-        compressorNode.release.value = 0.25;
-
-        // 5. Master Gain
-        gainNode = audioCtx.createGain();
-        gainNode.gain.value = volume.value;
-
-        // Chain Nodes: Source -> Bass -> Voice -> Treble -> Compressor -> Gain -> Destination
-        sourceNode.connect(bassFilterNode);
-        bassFilterNode.connect(voiceFilterNode);
-        voiceFilterNode.connect(trebleFilterNode);
-        trebleFilterNode.connect(compressorNode);
-        compressorNode.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-
-        isAudioPipelineInitialized = true;
-    } catch (e) {}
+const adjustSubtitleDelay = (delta: number) => {
+    subtitleDelay.value = parseFloat((subtitleDelay.value + delta).toFixed(2));
+    updateActiveCue(currentTime.value);
+    showToast(isRTL.value ? `تأخير الترجمة: ${subtitleDelay.value} ثانية` : `Subtitle Sync: ${subtitleDelay.value > 0 ? '+' : ''}${subtitleDelay.value}s`);
 };
 
-// Equalizer Toggles
 const toggleVocalBoost = () => {
     vocalBoost.value = !vocalBoost.value;
-    if (voiceFilterNode) {
-        voiceFilterNode.gain.value = vocalBoost.value ? 5.5 : 0;
-    }
-    showToast(vocalBoost.value ? (isRTL.value ? 'تعزيز الحوار الصوتي: مفعل' : 'Vocal Clarity Boost: Enabled') : (isRTL.value ? 'تعزيز الحوار: معطل' : 'Vocal Boost: Disabled'));
+    updateAudioFilters();
+    showToast(vocalBoost.value ? (isRTL.value ? 'تم تفعيل تعزيز الحوار والوضوح' : 'Vocal Clarity Boost Enabled') : (isRTL.value ? 'تم تعطيل تعزيز الحوار' : 'Vocal Boost Disabled'));
 };
 
 const toggleBassBoost = () => {
     bassBoost.value = !bassBoost.value;
-    if (bassFilterNode) {
-        bassFilterNode.gain.value = bassBoost.value ? 4.5 : 0;
-    }
-    showToast(bassBoost.value ? (isRTL.value ? 'مضخم الصوت الجهوري (Bass): مفعل' : 'Bass Boost: Enabled') : (isRTL.value ? 'مضخم الصوت: معطل' : 'Bass Boost: Disabled'));
+    updateAudioFilters();
+    showToast(bassBoost.value ? (isRTL.value ? 'تم تفعيل التضخيم السينمائي (Bass)' : 'Cinema Bass Boost Enabled') : (isRTL.value ? 'تم تعطيل التضخيم' : 'Bass Boost Disabled'));
 };
 
 const toggleNightMode = () => {
     nightMode.value = !nightMode.value;
-    if (compressorNode) {
-        compressorNode.threshold.value = nightMode.value ? -26 : -12;
-        compressorNode.ratio.value = nightMode.value ? 8 : 3;
-    }
-    showToast(nightMode.value ? (isRTL.value ? 'الوضع الليلي المتوازن: مفعل' : 'Night Cinema Compression: Enabled') : (isRTL.value ? 'الوضع الليلي: معطل' : 'Night Mode: Disabled'));
+    updateAudioFilters();
+    showToast(nightMode.value ? (isRTL.value ? 'تم تفعيل الوضع الليلي (ضغط الصوت)' : 'Night Mode Active') : (isRTL.value ? 'تم تعطيل الوضع الليلي' : 'Night Mode Disabled'));
 };
 
-// Video Event Handlers
+const showControlsTemporarily = () => {
+    isControlsVisible.value = true;
+    clearTimeout(controlsTimeout);
+    controlsTimeout = setTimeout(() => {
+        if (isPlaying.value && !showEqualizer.value && !showSubtitlesMenu.value && !showPlaybackSpeedMenu.value) {
+            isControlsVisible.value = false;
+        }
+    }, 3200);
+};
+
+// Playback Lifecycle & Progress Handlers
 const onLoadedMetadata = () => {
     if (!videoRef.value) return;
-    if (videoRef.value.duration && !isNaN(videoRef.value.duration) && videoRef.value.duration > 0) {
-        duration.value = videoRef.value.duration;
+    const d = videoRef.value.duration;
+    if (!isDurationLocked.value && !isRemuxStream.value && d && isFinite(d) && !isNaN(d) && d > 0) {
+        duration.value = d;
     }
 
-    // Resume saved progress
     const saved = props.initialProgress || 0;
     if (saved > 0 && saved < duration.value - 10) {
-        videoRef.value.currentTime = saved;
-        currentTime.value = saved;
+        executeSeek(saved);
     }
 
     videoRef.value.play().then(() => {
@@ -523,15 +603,29 @@ const onLoadedMetadata = () => {
 
 const onTimeUpdate = () => {
     if (!videoRef.value) return;
-    currentTime.value = videoRef.value.currentTime;
-    if (videoRef.value.duration && !isNaN(videoRef.value.duration) && videoRef.value.duration > 0) {
-        duration.value = videoRef.value.duration;
+    
+    const rawCurrent = videoRef.value.currentTime;
+    if (isRemuxStream.value && remuxStartOffset.value > 0) {
+        currentTime.value = remuxStartOffset.value + rawCurrent;
+    } else {
+        currentTime.value = rawCurrent;
+    }
+
+    // In Remux mode, NEVER overwrite the locked original file duration with partial chunk durations
+    if (!isDurationLocked.value && !isRemuxStream.value) {
+        const d = videoRef.value.duration;
+        if (d && isFinite(d) && !isNaN(d) && d > 0) {
+            duration.value = d;
+        }
     }
 
     // Calculate Buffer Progress
-    if (videoRef.value.buffered.length > 0 && duration.value > 0) {
+    if (videoRef.value.buffered.length > 0 && duration.value > 0 && isFinite(duration.value)) {
         const bufferedEnd = videoRef.value.buffered.end(videoRef.value.buffered.length - 1);
-        bufferedPercent.value = Math.min(100, (bufferedEnd / duration.value) * 100);
+        const effectiveEnd = isRemuxStream.value && remuxStartOffset.value > 0 
+            ? remuxStartOffset.value + bufferedEnd 
+            : bufferedEnd;
+        bufferedPercent.value = Math.min(100, (effectiveEnd / duration.value) * 100);
     }
 
     updateActiveCue(currentTime.value);
@@ -558,9 +652,9 @@ const onVideoPlaying = () => {
     isBuffering.value = false;
 };
 
-// Formatting Time
+// Formatting Time (Handles Hours, Minutes, Seconds with zero NaN or Infinity bugs)
 const formatTime = (seconds: number) => {
-    if (!seconds || isNaN(seconds) || seconds < 0) return '00:00';
+    if (!seconds || isNaN(seconds) || !isFinite(seconds) || seconds <= 0) return '00:00';
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
@@ -571,65 +665,69 @@ const formatTime = (seconds: number) => {
     if (hrs > 0) {
         return `${hrs}:${m}:${s}`;
     }
-    return `${m}:${s}`;
+    return `${mins}:${s}`;
 };
 
-// Save Playback Progress to Server & LocalStorage
 const savePlaybackProgress = async () => {
-    const pos = Math.floor(currentTime.value);
+    if (!currentTime.value || currentTime.value <= 5) return;
     const dur = Math.floor(duration.value);
+    const current = Math.floor(currentTime.value);
 
-    if (dur <= 0 || pos <= 0) return;
-
-    localStorage.setItem(`progress_${isEpisode.value ? 'episode' : 'movie'}_${props.item.id}`, String(pos));
-    localStorage.setItem(`duration_${isEpisode.value ? 'episode' : 'movie'}_${props.item.id}`, String(dur));
-
+    emit('update:progress', current);
     try {
-        const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '';
-        await fetch('/api/playback/progress', {
+        localStorage.setItem(`progress_${isEpisode.value ? 'episode' : 'movie'}_${props.item.id}`, String(current));
+        if (dur > 0) {
+            localStorage.setItem(`duration_${isEpisode.value ? 'episode' : 'movie'}_${props.item.id}`, String(dur));
+        }
+
+        await fetch('/api/watch-history/progress', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': csrfToken,
-                'Accept': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || ''
             },
             body: JSON.stringify({
+                watchable_type: isEpisode.value ? 'episode' : 'media_item',
                 watchable_id: props.item.id,
-                watchable_type: isEpisode.value ? 'episode' : 'movie',
-                progress_seconds: pos,
-                position_seconds: pos,
+                media_item_id: isEpisode.value ? (props.item.series_id || props.item.series?.id) : props.item.id,
+                progress_seconds: current,
                 duration_seconds: dur,
-                completed: pos >= dur * 0.9,
-            }),
+                completed: dur > 0 && current >= dur - 30
+            })
         });
     } catch (e) {}
 };
 
 // Keyboard Shortcuts
 const onKeyDown = (e: KeyboardEvent) => {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    if (['input', 'textarea'].includes((e.target as HTMLElement).tagName.toLowerCase())) return;
 
-    switch (e.key.toLowerCase()) {
+    switch (e.key) {
         case ' ':
         case 'k':
             e.preventDefault();
             togglePlay();
+            showControlsTemporarily();
             break;
-        case 'arrowleft':
+        case 'ArrowLeft':
             e.preventDefault();
             seekRelative(-10);
             break;
-        case 'arrowright':
+        case 'ArrowRight':
             e.preventDefault();
             seekRelative(10);
             break;
-        case 'arrowup':
+        case 'ArrowUp':
             e.preventDefault();
-            onVolumeInput({ target: { value: Math.min(1, volume.value + 0.1) } } as any);
+            volume.value = Math.min(1, volume.value + 0.1);
+            if (videoRef.value) videoRef.value.volume = volume.value;
+            showControlsTemporarily();
             break;
-        case 'arrowdown':
+        case 'ArrowDown':
             e.preventDefault();
-            onVolumeInput({ target: { value: Math.max(0, volume.value - 0.1) } } as any);
+            volume.value = Math.max(0, volume.value - 0.1);
+            if (videoRef.value) videoRef.value.volume = volume.value;
+            showControlsTemporarily();
             break;
         case 'f':
             e.preventDefault();
@@ -638,12 +736,9 @@ const onKeyDown = (e: KeyboardEvent) => {
         case 'm':
             e.preventDefault();
             toggleMute();
+            showControlsTemporarily();
             break;
-        case 'c':
-            e.preventDefault();
-            showSubtitlesMenu.value = !showSubtitlesMenu.value;
-            break;
-        case 'escape':
+        case 'Escape':
             if (isFullscreen.value) {
                 toggleFullscreen();
             } else {
@@ -731,7 +826,7 @@ onBeforeUnmount(() => {
                         <!-- Primary Title & Episode Info -->
                         <div class="flex items-center gap-2.5 flex-wrap">
                             <h2 class="font-black text-sm sm:text-lg text-white tracking-wide truncate max-w-xs sm:max-w-xl">
-                                {{ isRTL && item.title_ar ? item.title_ar : (item.series?.title ? `${item.series.title} - ${episodeFormatted}` : item.title) }}
+                                {{ playerHeaderTitle }}
                             </h2>
 
                             <!-- Year Badge -->
@@ -751,7 +846,7 @@ onBeforeUnmount(() => {
                             <!-- Codec & Audio Badge -->
                             <span class="px-2 py-0.5 rounded-md bg-white/10 text-slate-300 font-semibold hidden sm:inline-flex items-center gap-1">
                                 <Layers class="w-3 h-3 text-slate-400" />
-                                {{ displayCodec }} • {{ displayAudio }}
+                                {{ displayCodec }} · {{ displayAudio }}
                             </span>
 
                             <!-- Active Subtitle Indicator -->
@@ -760,11 +855,16 @@ onBeforeUnmount(() => {
                                 {{ availableSubtitles.find(s => s.id === selectedSubtitleId)?.language_name || 'Subtitles ON' }}
                             </span>
 
-                            <!-- GPU Engine Badge -->
-                            <span class="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 font-bold hidden md:inline-flex items-center gap-1">
-                                <Activity class="w-3 h-3 text-emerald-400" />
-                                Direct Stream
-                            </span>
+                            <!-- Stream Engine Badge & Toggle -->
+                            <button
+                                @click="toggleRemuxStream"
+                                class="px-2.5 py-0.5 rounded-md font-bold text-[11px] hidden md:inline-flex items-center gap-1.5 transition-all cursor-pointer"
+                                :class="isRemuxStream ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30'"
+                                :title="isRemuxStream ? 'Ultra-Fast Remux active (Zero CPU video copy + AAC audio). Click to toggle Direct Stream.' : 'Direct Stream active. Click to toggle Server Remux.'"
+                            >
+                                <Activity class="w-3 h-3" :class="isRemuxStream ? 'text-cyan-400' : 'text-emerald-400'" />
+                                <span>{{ isRemuxStream ? 'Ultra-Fast Remux (AAC)' : 'Direct Stream' }}</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -782,7 +882,9 @@ onBeforeUnmount(() => {
             </div>
         </transition>
 
-        <!-- Native Hardware Video Element -->
+        <!-- ========================================================= -->
+        <!-- CORE VIDEO HTML5 ELEMENT & HARDWARE PIPELINE             -->
+        <!-- ========================================================= -->
         <video
             ref="videoRef"
             :src="streamUrl"
@@ -792,36 +894,38 @@ onBeforeUnmount(() => {
             @pause="onVideoPause"
             @waiting="onVideoWaiting"
             @playing="onVideoPlaying"
+            @error="handleVideoError"
             @click="togglePlay"
-            class="w-full h-full object-contain bg-black"
+            crossorigin="anonymous"
             playsinline
-            preload="auto"
+            class="w-full h-full object-contain cursor-pointer"
         ></video>
 
-        <!-- ========================================================= -->
-        <!-- BULLETPROOF CUSTOM SUBTITLE OVERLAY (Crisp Arabic/English)-->
-        <!-- ========================================================= -->
+        <!-- Subtitle Overlay (Dynamic WebVTT Rendering with Custom Arabic Typography) -->
         <div
             v-if="selectedSubtitleId !== 'off' && activeCueText"
             class="absolute inset-x-0 z-30 flex items-center justify-center px-6 pointer-events-none transition-all duration-300 ease-out"
-            :class="isControlsVisible ? 'bottom-24 sm:bottom-28' : 'bottom-8 sm:bottom-12'"
+            style="bottom: 12%;"
         >
             <div
                 class="subtitle-pill px-4 py-1.5 sm:px-6 sm:py-2.5 rounded-xl bg-black/80 border border-white/10 text-white text-center font-bold tracking-wide shadow-2xl backdrop-blur-sm transition-all duration-150 max-w-3xl pointer-events-none"
                 :class="{
-                    'text-sm sm:text-base': subtitleFontSize === 'sm',
-                    'text-base sm:text-xl': subtitleFontSize === 'md',
-                    'text-lg sm:text-2xl leading-relaxed': subtitleFontSize === 'lg',
-                    'text-xl sm:text-3xl leading-relaxed': subtitleFontSize === 'xl',
+                    'text-base sm:text-lg': subtitleFontSize === 'sm',
+                    'text-lg sm:text-2xl': subtitleFontSize === 'md',
+                    'text-xl sm:text-3xl': subtitleFontSize === 'lg',
+                    'text-2xl sm:text-4xl': subtitleFontSize === 'xl',
                 }"
-            >
-                <p class="whitespace-pre-line select-none font-subtitle">{{ activeCueText }}</p>
-            </div>
+                style="text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0,0,0,0.8); line-height: 1.45;"
+                v-html="activeCueText"
+            ></div>
         </div>
 
         <!-- Buffering Spinner -->
-        <div v-if="isBuffering" class="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
-            <div class="w-16 h-16 rounded-full border-4 border-cyan-500/20 border-t-cyan-500 animate-spin"></div>
+        <div
+            v-if="isBuffering"
+            class="absolute inset-0 flex items-center justify-center pointer-events-none z-30 bg-black/30 backdrop-blur-xs"
+        >
+            <div class="w-16 h-16 rounded-full border-4 border-cyan-500/20 border-t-cyan-400 animate-spin"></div>
         </div>
 
         <!-- Big Play Button Overlay when Paused -->
@@ -841,43 +945,58 @@ onBeforeUnmount(() => {
         <transition name="slide-up">
             <div
                 v-show="isControlsVisible || !isPlaying"
-                class="absolute bottom-0 inset-x-0 p-4 sm:p-6 bg-gradient-to-t from-black/95 via-black/75 to-transparent flex flex-col gap-3 z-40 transition-all"
+                class="absolute bottom-0 inset-x-0 p-4 sm:p-6 bg-gradient-to-t from-black/95 via-black/85 to-transparent flex flex-col gap-3 z-40 transition-all border-t border-white/5 backdrop-blur-xl"
             >
-                <!-- Timeline Scrubber & Buffer Status -->
-                <div class="flex items-center gap-3 w-full">
-                    <span class="text-xs font-mono font-bold text-slate-200 min-w-[48px] text-right">
+                <!-- Timeline Scrubber & YouTube-Style Buffer Status -->
+                <div class="flex items-center gap-3.5 w-full">
+                    <!-- Current Position -->
+                    <span class="text-xs font-mono font-bold text-cyan-300 min-w-[48px] text-right tracking-tight drop-shadow">
                         {{ formatTime(currentTime) }}
                     </span>
 
-                    <div class="relative flex-1 group cursor-pointer flex items-center h-4">
-                        <!-- Background Track -->
-                        <div class="absolute inset-x-0 h-1.5 group-hover:h-2.5 bg-white/20 rounded-lg overflow-hidden transition-all pointer-events-none">
-                            <!-- Buffered Line -->
+                    <!-- Interactive Seeker Bar -->
+                    <div class="relative flex-1 group/track cursor-pointer flex items-center h-6">
+                        <!-- Visual Track Container -->
+                        <div class="absolute inset-x-0 h-1.5 group-hover/track:h-2.5 bg-white/15 rounded-full overflow-hidden transition-all pointer-events-none shadow-inner">
+                            <!-- Gray YouTube-Style Buffered Bar -->
                             <div
-                                class="h-full bg-white/30 rounded-lg transition-all duration-200"
+                                class="h-full bg-slate-300/40 rounded-full transition-all duration-300"
                                 :style="{ width: `${bufferedPercent}%` }"
+                            ></div>
+                            <!-- Active Played Gradient Fill -->
+                            <div
+                                class="absolute inset-y-0 left-0 bg-gradient-to-r from-cyan-500 via-sky-400 to-blue-500 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.7)] transition-all"
+                                :style="{ width: `${progressPercent}%` }"
                             ></div>
                         </div>
 
-                        <!-- Progress Range Input -->
+                        <!-- Interactive Range Input Overlay -->
                         <input
                             type="range"
                             min="0"
                             max="100"
-                            step="0.1"
+                            step="0.05"
                             :value="progressPercent"
                             @input="onScrubberInput"
-                            class="relative z-10 w-full h-1.5 group-hover:h-2.5 bg-transparent appearance-none cursor-pointer accent-cyan-400 transition-all"
+                            @change="onScrubberChange"
+                            class="relative z-10 w-full h-full opacity-0 cursor-pointer"
                         />
+
+                        <!-- Glowing Thumb Playhead -->
+                        <div
+                            class="absolute w-3.5 h-3.5 bg-white rounded-full shadow-[0_0_10px_rgba(6,182,212,1)] border-2 border-cyan-400 pointer-events-none transition-transform duration-75 group-hover/track:scale-125"
+                            :style="{ left: `calc(${progressPercent}% - 7px)` }"
+                        ></div>
                     </div>
 
-                    <span class="text-xs font-mono font-bold text-slate-400 min-w-[48px]">
+                    <!-- Total End Time (Locked to original file duration) -->
+                    <span class="text-xs font-mono font-bold text-slate-300 min-w-[48px] tracking-tight drop-shadow">
                         {{ formatTime(duration) }}
                     </span>
                 </div>
 
                 <!-- Main Controls Row -->
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between pt-1">
                     <!-- Left: Play/Pause, Seek, Volume -->
                     <div class="flex items-center gap-2 sm:gap-4">
                         <button
@@ -891,7 +1010,7 @@ onBeforeUnmount(() => {
 
                         <button
                             @click="seekRelative(-10)"
-                            class="w-9 h-9 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer"
+                            class="w-9 h-9 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-90"
                             title="Rewind 10s (Left Arrow)"
                         >
                             <RotateCcw class="w-4 h-4" />
@@ -899,32 +1018,42 @@ onBeforeUnmount(() => {
 
                         <button
                             @click="seekRelative(10)"
-                            class="w-9 h-9 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer"
+                            class="w-9 h-9 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-90"
                             title="Forward 10s (Right Arrow)"
                         >
                             <RotateCw class="w-4 h-4" />
                         </button>
 
-                        <!-- Volume Slider -->
-                        <div class="flex items-center gap-2 group ml-2">
+                        <!-- Glowing Custom Volume Slider -->
+                        <div class="flex items-center gap-2 group/vol ml-2">
                             <button
                                 @click="toggleMute"
                                 class="w-9 h-9 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer"
                                 :title="isMuted ? 'Unmute (M)' : 'Mute (M)'"
                             >
-                                <VolumeX v-if="isMuted || volume === 0" class="w-4 h-4 text-red-400" />
-                                <Volume1 v-else-if="volume < 0.5" class="w-4 h-4" />
-                                <Volume2 v-else class="w-4 h-4" />
+                                <VolumeX v-if="isMuted || volume === 0" class="w-4 h-4 text-rose-400" />
+                                <Volume1 v-else-if="volume < 0.5" class="w-4 h-4 text-cyan-300" />
+                                <Volume2 v-else class="w-4 h-4 text-cyan-400" />
                             </button>
-                            <input
-                                type="range"
-                                min="0"
-                                max="1"
-                                step="0.05"
-                                :value="isMuted ? 0 : volume"
-                                @input="onVolumeInput"
-                                class="w-16 sm:w-24 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-                            />
+
+                            <!-- Volume Gradient Bar -->
+                            <div class="relative w-16 sm:w-24 flex items-center cursor-pointer h-6">
+                                <div class="absolute inset-x-0 h-1.5 group-hover/vol:h-2 bg-white/20 rounded-full overflow-hidden pointer-events-none transition-all shadow-inner">
+                                    <div
+                                        class="h-full bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full transition-all shadow-[0_0_8px_rgba(6,182,212,0.5)]"
+                                        :style="{ width: `${(isMuted ? 0 : volume) * 100}%` }"
+                                    ></div>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.02"
+                                    :value="isMuted ? 0 : volume"
+                                    @input="onVolumeInput"
+                                    class="relative z-10 w-full h-full opacity-0 cursor-pointer"
+                                />
+                            </div>
                         </div>
                     </div>
 
@@ -952,7 +1081,7 @@ onBeforeUnmount(() => {
                                         :key="rate"
                                         @click="setPlaybackRate(rate)"
                                         class="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-between transition-all cursor-pointer"
-                                        :class="playbackRate === rate ? 'bg-cyan-500 text-slate-950 font-black' : 'text-slate-300 hover:bg-white/10'"
+                                        :class="playbackRate === rate ? 'bg-cyan-500 text-slate-950' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
                                     >
                                         <span>{{ rate }}x</span>
                                         <Check v-if="playbackRate === rate" class="w-3.5 h-3.5" />
@@ -961,146 +1090,178 @@ onBeforeUnmount(() => {
                             </transition>
                         </div>
 
-                        <!-- Audio Equalizer & Enhancer -->
+                        <!-- Subtitles Menu Button -->
+                        <div class="relative">
+                            <button
+                                @click="showSubtitlesMenu = !showSubtitlesMenu; showEqualizer = false; showPlaybackSpeedMenu = false;"
+                                class="w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer"
+                                :class="selectedSubtitleId !== 'off' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
+                                title="Subtitles & Audio"
+                            >
+                                <MessageSquare class="w-4 h-4" />
+                            </button>
+
+                            <!-- Subtitles Dropdown & Settings Drawer -->
+                            <transition name="scale">
+                                <div
+                                    v-if="showSubtitlesMenu"
+                                    class="absolute bottom-12 right-0 w-72 bg-slate-950/95 border border-white/10 rounded-2xl p-3 shadow-2xl backdrop-blur-xl z-50 flex flex-col gap-3 max-h-96 overflow-y-auto"
+                                >
+                                    <div class="flex items-center justify-between border-b border-white/10 pb-2">
+                                        <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                                            <MessageSquare class="w-3.5 h-3.5 text-purple-400" />
+                                            {{ isRTL ? 'مسارات الترجمة' : 'Subtitle Tracks' }}
+                                        </span>
+                                        <span class="text-[10px] text-slate-400">{{ availableSubtitles.length }} available</span>
+                                    </div>
+
+                                    <!-- Tracks List -->
+                                    <div class="flex flex-col gap-1 max-h-40 overflow-y-auto">
+                                        <button
+                                            @click="selectSubtitle('off')"
+                                            class="px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-all cursor-pointer"
+                                            :class="selectedSubtitleId === 'off' ? 'bg-purple-500 text-white' : 'text-slate-300 hover:bg-white/10'"
+                                        >
+                                            <span>{{ isRTL ? 'إيقاف الترجمة' : 'Off' }}</span>
+                                            <Check v-if="selectedSubtitleId === 'off'" class="w-3.5 h-3.5" />
+                                        </button>
+
+                                        <button
+                                            v-for="sub in availableSubtitles"
+                                            :key="sub.id"
+                                            @click="selectSubtitle(sub.id)"
+                                            class="px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-all cursor-pointer"
+                                            :class="selectedSubtitleId === sub.id ? 'bg-purple-500 text-white' : 'text-slate-300 hover:bg-white/10'"
+                                        >
+                                            <div class="flex items-center gap-1.5 truncate">
+                                                <span class="uppercase text-[10px] px-1 py-0.5 rounded bg-black/40">{{ sub.language || 'CC' }}</span>
+                                                <span class="truncate">{{ sub.language_name || 'Subtitle' }}</span>
+                                            </div>
+                                            <Check v-if="selectedSubtitleId === sub.id" class="w-3.5 h-3.5 shrink-0" />
+                                        </button>
+                                    </div>
+
+                                    <!-- Subtitle Size & Sync Options -->
+                                    <div v-if="selectedSubtitleId !== 'off'" class="border-t border-white/10 pt-2.5 flex flex-col gap-2">
+                                        <!-- Font Size -->
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-[11px] text-slate-400">{{ isRTL ? 'حجم الخط' : 'Font Size' }}</span>
+                                            <div class="flex items-center gap-1 bg-white/5 p-0.5 rounded-lg border border-white/10">
+                                                <button
+                                                    v-for="size in (['sm', 'md', 'lg', 'xl'] as const)"
+                                                    :key="size"
+                                                    @click="subtitleFontSize = size"
+                                                    class="px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all cursor-pointer"
+                                                    :class="subtitleFontSize === size ? 'bg-purple-500 text-white' : 'text-slate-400 hover:text-white'"
+                                                >
+                                                    {{ size }}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <!-- Subtitle Delay Sync -->
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-[11px] text-slate-400">{{ isRTL ? 'تزامن الوقت' : 'Timing Sync' }}</span>
+                                            <div class="flex items-center gap-1.5">
+                                                <button
+                                                    @click="adjustSubtitleDelay(-0.5)"
+                                                    class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold cursor-pointer"
+                                                    title="-0.5s"
+                                                >
+                                                    -
+                                                </button>
+                                                <span class="text-[11px] font-mono font-bold text-slate-300 w-12 text-center">
+                                                    {{ subtitleDelay > 0 ? `+${subtitleDelay}` : subtitleDelay }}s
+                                                </span>
+                                                <button
+                                                    @click="adjustSubtitleDelay(0.5)"
+                                                    class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold cursor-pointer"
+                                                    title="+0.5s"
+                                                >
+                                                    +
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </transition>
+                        </div>
+
+                        <!-- Audio Enhancer & Equalizer Modal -->
                         <div class="relative">
                             <button
                                 @click="showEqualizer = !showEqualizer; showSubtitlesMenu = false; showPlaybackSpeedMenu = false;"
-                                class="w-9 h-9 rounded-xl transition-all flex items-center justify-center cursor-pointer"
-                                :class="vocalBoost || bassBoost || nightMode ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
-                                title="Cinema Audio Enhancer & Equalizer"
+                                class="w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer"
+                                :class="vocalBoost || bassBoost || nightMode ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
+                                title="Cinema Audio Enhancer"
                             >
                                 <Sliders class="w-4 h-4" />
                             </button>
 
-                            <!-- Equalizer Popover -->
+                            <!-- Equalizer Dropdown -->
                             <transition name="scale">
                                 <div
                                     v-if="showEqualizer"
-                                    class="absolute bottom-12 right-0 w-64 bg-slate-950/95 border border-white/10 rounded-2xl p-4 shadow-2xl backdrop-blur-xl z-50 flex flex-col gap-3"
+                                    class="absolute bottom-12 right-0 w-72 bg-slate-950/95 border border-white/10 rounded-2xl p-3.5 shadow-2xl backdrop-blur-xl z-50 flex flex-col gap-3"
                                 >
                                     <div class="flex items-center justify-between border-b border-white/10 pb-2">
-                                        <span class="font-extrabold text-xs text-white flex items-center gap-1.5">
-                                            <Sparkles class="w-3.5 h-3.5 text-purple-400" />
-                                            {{ isRTL ? 'معالج الصوت السينمائي' : 'Studio Audio Enhancer' }}
+                                        <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                                            <Sparkles class="w-3.5 h-3.5 text-cyan-400" />
+                                            {{ isRTL ? 'معالج الصوت السينمائي' : 'Cinema Audio DSP' }}
                                         </span>
-                                        <span class="text-[10px] font-mono text-purple-400 font-bold">DSP Active</span>
                                     </div>
 
                                     <div class="flex flex-col gap-2">
                                         <!-- Vocal Clarity Boost -->
                                         <button
                                             @click="toggleVocalBoost"
-                                            class="w-full p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer text-left"
-                                            :class="vocalBoost ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-300' : 'border-white/5 text-slate-400 hover:border-white/10'"
+                                            class="p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer text-left"
+                                            :class="vocalBoost ? 'bg-cyan-500/20 border-cyan-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'"
                                         >
-                                            <div class="flex flex-col">
-                                                <span class="text-xs font-bold text-white">{{ isRTL ? 'تعزيز نقاء الحوار' : 'Vocal Clarity Boost' }}</span>
-                                                <span class="text-[10px] text-slate-400">{{ isRTL ? 'توضيح أصوات الممثلين والحديث' : 'Boost speech frequencies (2.5kHz)' }}</span>
+                                            <div>
+                                                <div class="text-xs font-bold text-cyan-300">{{ isRTL ? 'تعزيز الحوار (Vocal Boost)' : 'Vocal Clarity Boost' }}</div>
+                                                <div class="text-[10px] text-slate-400">{{ isRTL ? 'توضيح أصوات الممثلين وعزل الضوضاء' : 'Enhance dialogue clarity over background music' }}</div>
                                             </div>
-                                            <Check v-if="vocalBoost" class="w-4 h-4 text-cyan-400 shrink-0" />
+                                            <div class="w-4 h-4 rounded-full border flex items-center justify-center" :class="vocalBoost ? 'border-cyan-400 bg-cyan-400 text-slate-950' : 'border-slate-600'">
+                                                <Check v-if="vocalBoost" class="w-3 h-3" />
+                                            </div>
                                         </button>
 
-                                        <!-- Bass Boost -->
+                                        <!-- Cinema Bass Boost -->
                                         <button
                                             @click="toggleBassBoost"
-                                            class="w-full p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer text-left"
-                                            :class="bassBoost ? 'bg-purple-500/20 border-purple-400/50 text-purple-300' : 'border-white/5 text-slate-400 hover:border-white/10'"
+                                            class="p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer text-left"
+                                            :class="bassBoost ? 'bg-cyan-500/20 border-cyan-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'"
                                         >
-                                            <div class="flex flex-col">
-                                                <span class="text-xs font-bold text-white">{{ isRTL ? 'مضخم الصوت الجهوري (Bass)' : 'Cinema Bass Boost' }}</span>
-                                                <span class="text-[10px] text-slate-400">{{ isRTL ? 'تعزيز الانفجارات والمؤثرات' : 'Low-frequency enhancement' }}</span>
+                                            <div>
+                                                <div class="text-xs font-bold text-cyan-300">{{ isRTL ? 'تضخيم الباس (Bass Boost)' : 'Cinema Bass Boost' }}</div>
+                                                <div class="text-[10px] text-slate-400">{{ isRTL ? 'تعميق الترددات المنخفضة والمؤثرات' : 'Deepen sub-frequencies and explosions' }}</div>
                                             </div>
-                                            <Check v-if="bassBoost" class="w-4 h-4 text-purple-400 shrink-0" />
+                                            <div class="w-4 h-4 rounded-full border flex items-center justify-center" :class="bassBoost ? 'border-cyan-400 bg-cyan-400 text-slate-950' : 'border-slate-600'">
+                                                <Check v-if="bassBoost" class="w-3 h-3" />
+                                            </div>
                                         </button>
 
-                                        <!-- Night Mode / Dynamic Leveling -->
+                                        <!-- Night Mode / Dynamic Compression -->
                                         <button
                                             @click="toggleNightMode"
-                                            class="w-full p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer text-left"
-                                            :class="nightMode ? 'bg-amber-500/20 border-amber-400/50 text-amber-300' : 'border-white/5 text-slate-400 hover:border-white/10'"
+                                            class="p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer text-left"
+                                            :class="nightMode ? 'bg-cyan-500/20 border-cyan-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'"
                                         >
-                                            <div class="flex flex-col">
-                                                <span class="text-xs font-bold text-white">{{ isRTL ? 'الوضع الليلي المتوازن' : 'Night Mode (Anti-Loud)' }}</span>
-                                                <span class="text-[10px] text-slate-400">{{ isRTL ? 'تقليل الفارق بين الانفجارات والحوار' : 'Dynamic compressor leveling' }}</span>
+                                            <div>
+                                                <div class="text-xs font-bold text-cyan-300">{{ isRTL ? 'الوضع الليلي (Night Mode)' : 'Night Mode (DRC)' }}</div>
+                                                <div class="text-[10px] text-slate-400">{{ isRTL ? 'موازنة الصوت الهادئ والإنفجارات الصاخبة' : 'Compress dynamic range to avoid loud jumps' }}</div>
                                             </div>
-                                            <Check v-if="nightMode" class="w-4 h-4 text-amber-400 shrink-0" />
+                                            <div class="w-4 h-4 rounded-full border flex items-center justify-center" :class="nightMode ? 'border-cyan-400 bg-cyan-400 text-slate-950' : 'border-slate-600'">
+                                                <Check v-if="nightMode" class="w-3 h-3" />
+                                            </div>
                                         </button>
                                     </div>
                                 </div>
                             </transition>
                         </div>
 
-                        <!-- Subtitles Menu -->
-                        <div class="relative">
-                            <button
-                                @click="showSubtitlesMenu = !showSubtitlesMenu; showEqualizer = false; showPlaybackSpeedMenu = false;"
-                                class="w-9 h-9 rounded-xl transition-all flex items-center justify-center cursor-pointer"
-                                :class="selectedSubtitleId !== 'off' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
-                                title="Subtitles Track (C)"
-                            >
-                                <MessageSquare class="w-4 h-4" />
-                            </button>
-
-                            <!-- Subtitles Dropdown -->
-                            <transition name="scale">
-                                <div
-                                    v-if="showSubtitlesMenu"
-                                    class="absolute bottom-12 w-72 bg-slate-950/95 border border-white/10 rounded-2xl p-3 shadow-2xl backdrop-blur-xl z-50 flex flex-col gap-2 max-h-80 overflow-y-auto"
-                                    :class="isRTL ? 'left-0 text-right' : 'right-0 text-left'"
-                                >
-                                    <div class="flex items-center justify-between border-b border-white/10 pb-2 px-1">
-                                        <span class="font-extrabold text-xs text-white">{{ isRTL ? 'مسارات الترجمة' : 'Subtitle Tracks' }}</span>
-                                        <span class="text-[10px] text-slate-400 font-mono">{{ availableSubtitles.length }} tracks</span>
-                                    </div>
-
-                                    <!-- Subtitle Font Size Picker -->
-                                    <div class="flex items-center justify-between px-2 py-1 bg-white/5 rounded-xl text-xs">
-                                        <span class="text-slate-400 font-medium text-[11px] flex items-center gap-1">
-                                            <Type class="w-3.5 h-3.5" />
-                                            {{ isRTL ? 'حجم الخط' : 'Font Size' }}
-                                        </span>
-                                        <div class="flex items-center gap-1">
-                                            <button
-                                                v-for="s in (['sm', 'md', 'lg', 'xl'] as const)"
-                                                :key="s"
-                                                @click="subtitleFontSize = s"
-                                                class="px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase transition-all"
-                                                :class="subtitleFontSize === s ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-white'"
-                                            >
-                                                {{ s }}
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <!-- Off Button -->
-                                    <button
-                                        @click="selectSubtitle('off')"
-                                        class="px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-all cursor-pointer"
-                                        :class="selectedSubtitleId === 'off' ? 'bg-white/20 text-white font-black' : 'text-slate-400 hover:bg-white/10 hover:text-white'"
-                                    >
-                                        <span>{{ isRTL ? 'إيقاف الترجمة' : 'Off / Disabled' }}</span>
-                                        <Check v-if="selectedSubtitleId === 'off'" class="w-3.5 h-3.5 text-cyan-400" />
-                                    </button>
-
-                                    <!-- Subtitle List -->
-                                    <button
-                                        v-for="sub in availableSubtitles"
-                                        :key="sub.id"
-                                        @click="selectSubtitle(sub.id)"
-                                        class="px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-all cursor-pointer text-left"
-                                        :class="selectedSubtitleId === sub.id ? 'bg-cyan-500 text-slate-950 font-black' : 'text-slate-300 hover:bg-white/10'"
-                                    >
-                                        <div class="flex flex-col">
-                                            <span class="truncate max-w-[200px]">{{ sub.language_name }}</span>
-                                            <span class="text-[9px] opacity-70 uppercase font-mono">{{ sub.format }} {{ sub.is_embedded ? '• Embedded' : '• External' }}</span>
-                                        </div>
-                                        <Check v-if="selectedSubtitleId === sub.id" class="w-3.5 h-3.5 text-slate-950 shrink-0" />
-                                    </button>
-                                </div>
-                            </transition>
-                        </div>
-
-                        <!-- Fullscreen -->
+                        <!-- Fullscreen Button -->
                         <button
                             @click="toggleFullscreen"
                             class="w-9 h-9 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer"
@@ -1117,20 +1278,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Alexandria:wght@500;700;800&family=Cairo:wght@600;700;800&display=swap');
-
-.font-subtitle {
-    font-family: 'Cairo', 'Alexandria', 'Noto Sans Arabic', 'Segoe UI', system-ui, -apple-system, sans-serif;
-    font-weight: 700;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.95), 0 0 10px rgba(0, 0, 0, 0.9);
-    letter-spacing: 0.02em;
-    line-height: 1.5;
-}
-
-.subtitle-pill {
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8), 0 2px 8px rgba(0, 0, 0, 0.6);
-}
-
 .fade-enter-active,
 .fade-leave-active {
     transition: opacity 0.25s ease;
@@ -1140,23 +1287,23 @@ onBeforeUnmount(() => {
     opacity: 0;
 }
 
-.slide-up-enter-active,
-.slide-up-leave-active {
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.slide-up-enter-from,
-.slide-up-leave-to {
-    transform: translateY(100%);
-    opacity: 0;
-}
-
 .scale-enter-active,
 .scale-leave-active {
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .scale-enter-from,
 .scale-leave-to {
-    transform: scale(0.92);
     opacity: 0;
+    transform: scale(0.92);
+}
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.slide-up-enter-from,
+.slide-up-leave-to {
+    opacity: 0;
+    transform: translateY(16px);
 }
 </style>
