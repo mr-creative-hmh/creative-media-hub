@@ -40,7 +40,7 @@ const tabs = [
                         {{ isRTL ? 'دليل المستخدم والتوثيق التقني' : 'Documentation & User Guide' }}
                     </h1>
                     <p class="text-xs sm:text-sm text-slate-400 mt-0.5">
-                        {{ isRTL ? 'مرجع شامل لكل ميزات المكتبة، استراتيجيات التنظيم، محرك البث، وفاحص الميتاداتا الذكي.' : 'Complete technical guide and workflow reference for Creative Media Streaming Library.' }}
+                        {{ isRTL ? 'مرجع شامل لكل ميزات المكتبة، استراتيجيات التنظيم، محرك البث، وفاحص الميتاداتا الذكي.' : 'Complete technical guide and workflow reference for Creative Media Hub.' }}
                     </p>
                 </div>
             </div>
@@ -92,7 +92,7 @@ const tabs = [
                                     <span>{{ isRTL ? 'المفهوم الأساسي للنظام' : 'Core System Philosophy' }}</span>
                                 </h4>
                                 <p class="text-xs text-slate-300 leading-relaxed">
-                                    {{ isRTL ? 'تم بناء النظام ليفصل تماماً بين "الفهرسة الافتراضية لقراءة الوسائط دون لمس الملفات" وبين "إعادة تنظيم القرص الصلب وتسميته". يتيح لك النظام فحص أي مسار على حاسوبك أو خادمك المنزلي وجلب بوسترات 4K باللغتين العربية والإنجليزية وترجمات فورية.' : 'Creative Media Streaming Library cleanly separates virtual metadata indexing from physical disk restructuring. You get zero-touch media exploration alongside powerful on-demand disk organization.' }}
+                                    {{ isRTL ? 'تم بناء النظام ليفصل تماماً بين "الفهرسة الافتراضية لقراءة الوسائط دون لمس الملفات" وبين "إعادة تنظيم القرص الصلب وتسميته". يتيح لك النظام فحص أي مسار على حاسوبك أو خادمك المنزلي وجلب بوسترات 4K باللغتين العربية والإنجليزية وترجمات فورية.' : 'Creative Media Hub cleanly separates virtual metadata indexing from physical disk restructuring. You get zero-touch media exploration alongside powerful on-demand disk organization.' }}
                                 </p>
                             </div>
 
