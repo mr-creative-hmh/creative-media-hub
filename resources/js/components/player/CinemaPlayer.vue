@@ -63,7 +63,7 @@ const isMuted = ref(false);
 const volume = ref(1.0);
 const currentTime = ref(0);
 
-// Initialize duration from original file metadata immediately (never start at 0 or NaN)
+// Initialize duration from original file metadata immediately
 const initialDuration = Number(props.item?.duration_seconds) || (Number(props.item?.runtime_minutes) ? Number(props.item.runtime_minutes) * 60 : 0);
 const duration = ref(initialDuration > 0 ? initialDuration : 0);
 const isDurationLocked = ref(initialDuration > 0);
@@ -83,7 +83,7 @@ const playbackRate = ref(1.0);
 const availableSubtitles = ref<SubtitleItem[]>([]);
 const selectedSubtitleId = ref<number | string>('off');
 const subtitleDelay = ref<number>(0); // in seconds
-const subtitleFontSize = ref<'sm' | 'md' | 'lg' | 'xl'>('lg');
+const subtitleFontSize = ref<'sm' | 'md' | 'lg' | 'xl'>('md');
 const parsedCues = ref<CueItem[]>([]);
 const activeCueText = ref<string>('');
 const isFetchingSubtitle = ref(false);
@@ -115,6 +115,7 @@ let isAudioPipelineInitialized = false;
 
 let controlsTimeout: any = null;
 let progressSaveInterval: any = null;
+let bufferTrackInterval: any = null;
 
 const isEpisode = computed(() => {
     return props.item?.type === 'episode' 
@@ -218,17 +219,16 @@ const displayYear = computed(() => {
     return props.item?.release_year || props.item?.year || (props.item?.series?.release_year ?? '');
 });
 
-// Clean Header Title (No raw S09E01 codes, fully localized)
+// Clean Header Title (Arabic in Arabic mode only, English in English mode only. No generic bracket titles like (Episode 5))
 const playerHeaderTitle = computed(() => {
     if (isEpisode.value) {
-        const rawTitle = props.item?.series?.title || props.item?.title || '';
-        let cleanSeriesName = rawTitle.replace(/\s*-\s*S\d+E\d+\s*-\s*Episode\s*\d+/gi, '').replace(/\s*-\s*S\d+E\d+/gi, '').trim();
-        if (isRTL.value && props.item?.series?.title_ar) {
-            cleanSeriesName = props.item.series.title_ar;
-        } else if (isRTL.value && props.item?.title_ar) {
-            cleanSeriesName = props.item.title_ar;
+        let cleanSeriesName = '';
+        if (isRTL.value) {
+            cleanSeriesName = props.item?.series?.title_ar || props.item?.title_ar || props.item?.series?.title || props.item?.title || 'مسلسل';
+        } else {
+            cleanSeriesName = props.item?.series?.title || props.item?.title || 'Series';
         }
-        if (!cleanSeriesName) cleanSeriesName = 'Series';
+        cleanSeriesName = cleanSeriesName.replace(/\s*-\s*S\d+E\d+\s*-\s*Episode\s*\d+/gi, '').replace(/\s*-\s*S\d+E\d+/gi, '').trim();
 
         const s = props.item?.season_number ?? (props.item?.season?.season_number ?? 1);
         const e = props.item?.episode_number ?? 1;
@@ -238,18 +238,24 @@ const playerHeaderTitle = computed(() => {
 
         let formatted = `${cleanSeriesName} - ${seasonLabel} - ${episodeLabel}`;
         
-        const rawEpTitle = props.item?.title || '';
-        const isGeneric = !rawEpTitle || !!rawEpTitle.match(/^Episode \d+$/i) || rawEpTitle === `Episode ${e}` || rawEpTitle.includes(`S${s}E${e}`) || rawEpTitle.includes(`S0${s}E0${e}`);
+        const rawEpTitle = (isRTL.value && props.item?.title_ar) ? props.item.title_ar : (props.item?.title || '');
+        const isGeneric = !rawEpTitle 
+            || !!rawEpTitle.match(/^(?:Episode|حلقة|الحلقة)\s*\d+$/i) 
+            || rawEpTitle === `Episode ${e}`
+            || rawEpTitle === `الحلقة ${e}`
+            || rawEpTitle.includes(`S${s}E${e}`) 
+            || rawEpTitle.includes(`S0${s}E0${e}`);
+            
         if (!isGeneric) {
-            const cleanEpTitle = rawEpTitle.replace(/^Episode \d+:\s*/i, '').replace(/^[^-]+-\s*S\d+E\d+\s*-\s*/i, '').trim();
-            if (cleanEpTitle && cleanEpTitle !== cleanSeriesName) {
+            const cleanEpTitle = rawEpTitle.replace(/^(?:Episode|الحلقة)\s*\d+:\s*/i, '').replace(/^[^-]+-\s*S\d+E\d+\s*-\s*/i, '').trim();
+            if (cleanEpTitle && cleanEpTitle !== cleanSeriesName && !cleanEpTitle.match(/^(?:Episode|الحلقة)\s*\d+$/i)) {
                 formatted += ` (${cleanEpTitle})`;
             }
         }
         return formatted;
     }
 
-    return isRTL.value && props.item?.title_ar ? props.item.title_ar : (props.item?.title || 'Media');
+    return (isRTL.value && props.item?.title_ar) ? props.item.title_ar : (props.item?.title || 'Media');
 });
 
 // =========================================================================
@@ -347,6 +353,25 @@ const updateActiveCue = (timeSec: number) => {
     const adjustedTime = timeSec + subtitleDelay.value;
     const active = parsedCues.value.find(c => adjustedTime >= c.start && adjustedTime <= c.end);
     activeCueText.value = active ? active.text : '';
+};
+
+// YouTube-Style Continuous Buffer Calculation (during play AND pause)
+const updateBufferProgress = () => {
+    if (!videoRef.value || !duration.value || duration.value <= 0 || !isFinite(duration.value)) return;
+    const buf = videoRef.value.buffered;
+    if (buf && buf.length > 0) {
+        let maxBufferedEnd = 0;
+        for (let i = 0; i < buf.length; i++) {
+            const end = buf.end(i);
+            if (end > maxBufferedEnd) {
+                maxBufferedEnd = end;
+            }
+        }
+        const effectiveEnd = (isRemuxStream.value && remuxStartOffset.value > 0)
+            ? remuxStartOffset.value + maxBufferedEnd
+            : maxBufferedEnd;
+        bufferedPercent.value = Math.min(100, Math.max(0, (effectiveEnd / duration.value) * 100));
+    }
 };
 
 // Fetch Duration & Subtitles
@@ -619,15 +644,7 @@ const onTimeUpdate = () => {
         }
     }
 
-    // Calculate Buffer Progress
-    if (videoRef.value.buffered.length > 0 && duration.value > 0 && isFinite(duration.value)) {
-        const bufferedEnd = videoRef.value.buffered.end(videoRef.value.buffered.length - 1);
-        const effectiveEnd = isRemuxStream.value && remuxStartOffset.value > 0 
-            ? remuxStartOffset.value + bufferedEnd 
-            : bufferedEnd;
-        bufferedPercent.value = Math.min(100, (effectiveEnd / duration.value) * 100);
-    }
-
+    updateBufferProgress();
     updateActiveCue(currentTime.value);
 };
 
@@ -642,6 +659,7 @@ const onVideoPlay = () => {
 const onVideoPause = () => {
     isPlaying.value = false;
     savePlaybackProgress();
+    updateBufferProgress();
 };
 
 const onVideoWaiting = () => {
@@ -698,6 +716,25 @@ const savePlaybackProgress = async () => {
     } catch (e) {}
 };
 
+const stopServerStreamingCache = () => {
+    try {
+        const payload = JSON.stringify({
+            type: isEpisode.value ? 'episode' : 'movie',
+            id: props.item?.id
+        });
+        if (navigator.sendBeacon) {
+            navigator.sendBeacon('/api/stream/stop', payload);
+        } else {
+            fetch('/api/stream/stop', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: payload,
+                keepalive: true
+            }).catch(() => {});
+        }
+    } catch (e) {}
+};
+
 // Keyboard Shortcuts
 const onKeyDown = (e: KeyboardEvent) => {
     if (['input', 'textarea'].includes((e.target as HTMLElement).tagName.toLowerCase())) return;
@@ -750,6 +787,7 @@ const onKeyDown = (e: KeyboardEvent) => {
 
 const handleClose = () => {
     savePlaybackProgress();
+    stopServerStreamingCache();
     emit('close');
 };
 
@@ -770,14 +808,21 @@ onMounted(() => {
             savePlaybackProgress();
         }
     }, 15000);
+
+    // Track YouTube-Style Buffer Line continuously (even when paused)
+    bufferTrackInterval = setInterval(() => {
+        updateBufferProgress();
+    }, 600);
 });
 
 onBeforeUnmount(() => {
     window.removeEventListener('keydown', onKeyDown);
     clearInterval(progressSaveInterval);
+    clearInterval(bufferTrackInterval);
     clearTimeout(controlsTimeout);
     clearTimeout(toastTimeout);
     savePlaybackProgress();
+    stopServerStreamingCache();
 
     if (audioCtx) {
         audioCtx.close().catch(() => {});
@@ -889,6 +934,7 @@ onBeforeUnmount(() => {
             ref="videoRef"
             :src="streamUrl"
             @timeupdate="onTimeUpdate"
+            @progress="updateBufferProgress"
             @loadedmetadata="onLoadedMetadata"
             @play="onVideoPlay"
             @pause="onVideoPause"
@@ -957,15 +1003,15 @@ onBeforeUnmount(() => {
                     <!-- Interactive Seeker Bar -->
                     <div class="relative flex-1 group/track cursor-pointer flex items-center h-6">
                         <!-- Visual Track Container -->
-                        <div class="absolute inset-x-0 h-1.5 group-hover/track:h-2.5 bg-white/15 rounded-full overflow-hidden transition-all pointer-events-none shadow-inner">
-                            <!-- Gray YouTube-Style Buffered Bar -->
+                        <div class="absolute inset-x-0 h-2 group-hover/track:h-3 bg-white/20 rounded-full overflow-hidden transition-all pointer-events-none shadow-inner">
+                            <!-- High-Contrast Light Gray YouTube-Style Buffered Bar -->
                             <div
-                                class="h-full bg-slate-300/40 rounded-full transition-all duration-300"
-                                :style="{ width: `${bufferedPercent}%` }"
+                                class="absolute inset-y-0 left-0 bg-slate-200/50 dark:bg-white/40 rounded-full transition-all duration-300"
+                                :style="{ width: `${Math.max(progressPercent, bufferedPercent)}%` }"
                             ></div>
                             <!-- Active Played Gradient Fill -->
                             <div
-                                class="absolute inset-y-0 left-0 bg-gradient-to-r from-cyan-500 via-sky-400 to-blue-500 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.7)] transition-all"
+                                class="absolute inset-y-0 left-0 bg-gradient-to-r from-cyan-500 via-sky-400 to-blue-500 rounded-full shadow-[0_0_12px_rgba(6,182,212,0.8)] transition-all"
                                 :style="{ width: `${progressPercent}%` }"
                             ></div>
                         </div>

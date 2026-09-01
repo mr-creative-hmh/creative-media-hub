@@ -292,8 +292,39 @@ class EmbeddedSubtitleDetectorService
         return $vtt;
     }
 
+    public function detectLanguageFromFileContent(string $filePath): string
+    {
+        if (!file_exists($filePath) || filesize($filePath) === 0) {
+            return 'und';
+        }
+
+        $handle = @fopen($filePath, 'r');
+        if (!$handle) return 'und';
+        $sample = fread($handle, 4096);
+        fclose($handle);
+
+        // Detect Arabic Unicode Script
+        if (preg_match('/[\x{0600}-\x{06FF}\x{0750}-\x{077F}\x{08A0}-\x{08FF}\x{FB50}-\x{FDFF}\x{FE70}-\x{FEFF}]/u', $sample)) {
+            return 'ar';
+        }
+
+        // Detect Latin/English Script
+        if (preg_match('/[a-zA-Z]{3,}/', $sample)) {
+            return 'en';
+        }
+
+        return 'und';
+    }
+
     public function resolveLanguageFromContext(string $rawLang, string $title = '', string $filePath = '', int $trackIndex = 0): string
     {
+        // 0. If local subtitle file exists on disk, inspect its actual text contents first
+        if (!empty($filePath) && file_exists($filePath) && in_array(strtolower(pathinfo($filePath, PATHINFO_EXTENSION)), ['srt', 'vtt', 'ass', 'ssa', 'sub'])) {
+            $contentLang = $this->detectLanguageFromFileContent($filePath);
+            if ($contentLang !== 'und') {
+                return $contentLang;
+            }
+        }
         $lang = strtolower(trim($rawLang));
         $haystack = strtolower("{$title} " . basename($filePath));
         $haystack = preg_replace('/[._\-\[\]\(\)]+/', ' ', $haystack);

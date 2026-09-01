@@ -221,6 +221,22 @@ class StreamController extends Controller
         ]);
     }
 
+        public function stopStream(Request $request)
+    {
+        $type = $request->input('type', 'movie');
+        $id = (int) $request->input('id');
+
+        $cacheDir = storage_path('app/cache/media_streams');
+        if (is_dir($cacheDir)) {
+            $pattern = "{$cacheDir}/stream_{$type}_{$id}_*.lock";
+            foreach (glob($pattern) as $lock) {
+                @unlink($lock);
+            }
+        }
+
+        return response()->json(['success' => true]);
+    }
+
     public function getMediaDuration(Request $request)
     {
         $type = $request->input('type', 'movie');
