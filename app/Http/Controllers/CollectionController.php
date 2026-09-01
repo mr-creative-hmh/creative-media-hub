@@ -30,10 +30,12 @@ class CollectionController extends Controller
 
         $allMoviesInCollections = $query->orderBy('release_year')->get();
 
-        // Group movies by collection_name
+        // Group movies by collection_name - ONLY include genuine collections with 2 or more movies!
         $grouped = $allMoviesInCollections->groupBy('collection_name');
 
-        $collections = $grouped->map(function ($movies, $name) {
+        $collections = $grouped
+            ->filter(fn($movies) => $movies->count() >= 2)
+            ->map(function ($movies, $name) {
             $first = $movies->first();
             $years = $movies->pluck('release_year')->filter()->sort()->values();
             $yearSpan = $years->isNotEmpty() 

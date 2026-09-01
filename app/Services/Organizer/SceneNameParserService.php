@@ -89,13 +89,28 @@ class SceneNameParserService
 
         $working = $baseName;
 
-        // Check if path indicates series library ancestor (e.g. /Series/ or /مسلسلات/)
+        // Check if path indicates series or movies library ancestor
         $isInsideSeriesTree = false;
+        $isInsideMovieTree = false;
         foreach ($parts as $p) {
-            if (in_array(strtolower(trim($p)), ['series', 'tv', 'tv shows', 'tv-shows', 'shows', 'مسلسلات', 'مسلسل', 'برامج'])) {
+            $pLower = strtolower(trim($p));
+            if (in_array($pLower, ['series', 'tv', 'tv shows', 'tv-shows', 'shows', 'مسلسلات', 'مسلسل', 'برامج', 'دراما', 'انمي', 'أنمي', 'anime'])) {
                 $isInsideSeriesTree = true;
-                break;
             }
+            if (in_array($pLower, ['movies', 'films', 'cinema', 'أفلام', 'افلام', 'فيلم', 'movie', 'film', 'movies 4k', '4k movies', 'movies 1080p', 'action', 'horror', 'comedy', 'drama', 'sci-fi', 'animation', 'funny & animation'])) {
+                $isInsideMovieTree = true;
+            }
+        }
+
+        // Check if parent or grandparent indicates a Movie Collection / Boxset
+        $isCollectionFolder = false;
+        $detectedCollectionName = null;
+        if (preg_match('/^(.*?)(?:\s+(?:Collection|Trilogy|Anthology|Saga|Boxset|سلسلة|أفلام|سلسلة أفلام))$/ui', trim($parentFolder), $cMatch)) {
+            $isCollectionFolder = true;
+            $detectedCollectionName = trim($parentFolder);
+        } elseif ($grandparentFolder && preg_match('/^(.*?)(?:\s+(?:Collection|Trilogy|Anthology|Saga|Boxset|سلسلة|أفلام|سلسلة أفلام))$/ui', trim($grandparentFolder), $gcMatch)) {
+            $isCollectionFolder = true;
+            $detectedCollectionName = trim($grandparentFolder);
         }
 
         // 1. Check 3D
@@ -126,6 +141,20 @@ class SceneNameParserService
             }
         }
 
+        // 2.5 Sequence numbering prefix on Collection Movies (e.g. "1.Ip.Man.2008.mp4", "2.Fast.2.Furious.2003", "1.Batman Begins (2005)")
+        if (preg_match('/^(?:E)?(\d{1,3})[.\-\s_]+(.*?)$/i', trim($working), $numPrefixMatch)) {
+            $restOfName = trim($numPrefixMatch[2]);
+            $hasYearInRest = preg_match('/(19\d\d|20\d\d)/', $restOfName);
+            if (($isInsideMovieTree || $isCollectionFolder || $hasYearInRest) && !$isInsideSeriesTree && !$isParentSeasonFolder) {
+                $part = (int) $numPrefixMatch[1];
+                $working = $restOfName;
+                $baseName = $restOfName;
+                if ($isCollectionFolder && empty($collectionName)) {
+                    $collectionName = $detectedCollectionName;
+                }
+            }
+        }
+
         // 3. Multi-Part Movie
         if (preg_match('/(?:\[|\(|\b)(?:part|pt|cd|disc|جزء|الجزء)\s*(\d{1,2})(?:\]|\)|\b)/ui', $working, $pMatches)) {
             $part = (int) $pMatches[1];
@@ -146,6 +175,7 @@ class SceneNameParserService
                 'title' => $cleanTitle,
                 'clean_title' => $cleanTitle,
                 'series_title' => $cleanTitle,
+            'collection_name' => $collectionName ?? $detectedCollectionName ?? null,
                 'type' => 'series',
                 'season' => $season,
                 'episode' => $episode,
@@ -276,8 +306,10 @@ class SceneNameParserService
         elseif (preg_match('/^(?:E)?(\d{1,3})(?:\s*[-_.]\s*(.*?))?$/i', trim($working), $epMatch)) {
             $candidateEp = (int) $epMatch[1];
             $isParentGeneric = in_array(strtolower(trim($parentFolder)), $this->genericFolderNames);
+            $hasYear = preg_match('/(19\d\d|20\d\d)/', $working);
             
-            if ($isParentSeasonFolder || $isInsideSeriesTree || (!$isParentGeneric && !empty($parentFolder))) {
+            // Only trigger as series if not inside movie tree and no movie release year is present
+            if (($isParentSeasonFolder || $isInsideSeriesTree || (!$isParentGeneric && !empty($parentFolder))) && !$isInsideMovieTree && !$hasYear && !$isCollectionFolder) {
                 $type = 'series';
                 $isSeriesDetected = true;
                 $episode = $candidateEp;
@@ -436,6 +468,7 @@ class SceneNameParserService
             'title' => $cleanTitle,
             'clean_title' => $cleanTitle,
             'series_title' => $type === 'series' ? $cleanTitle : null,
+            'collection_name' => $collectionName ?? $detectedCollectionName ?? null,
             'type' => $type,
             'season' => $season ?? ($type === 'series' ? 1 : null),
             'episode' => $episode ?? ($type === 'series' ? 1 : null),
