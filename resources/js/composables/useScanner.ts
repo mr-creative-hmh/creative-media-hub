@@ -8,11 +8,11 @@ export interface ScanLog {
 }
 
 export interface ScanJobStatus {
-    status: 'idle' | 'running' | 'paused' | 'completed' | 'cancelled';
+    status: 'idle' | 'scanning' | 'paused' | 'completed' | 'cancelled';
     total_files: number;
     processed_files: number;
     progress_percent: number;
-    current_file: string;
+    current_file: string | null;
     scanned_items?: any[];
     logs?: ScanLog[];
     started_at?: string;
@@ -34,7 +34,7 @@ const scanStatus = ref<ScanJobStatus>({
 });
 
 export function useScanner() {
-    const isScanning = computed(() => scanStatus.value.status === 'running');
+    const isScanning = computed(() => scanStatus.value.status === 'scanning');
     const isPaused = computed(() => scanStatus.value.status === 'paused');
 
     const openScanModal = () => {
@@ -51,9 +51,11 @@ export function useScanner() {
             const res = await fetch('/api/scanner/status');
             if (res.ok) {
                 const data = await res.json();
-                scanStatus.value = data;
-                if (data.status === 'running' && !isWorkerRunning.value) {
-                    runBackgroundWorker();
+                if (data && typeof data === 'object' && data.status) {
+                    scanStatus.value = data;
+                    if (data.status === 'scanning' && !isWorkerRunning.value) {
+                        runBackgroundWorker();
+                    }
                 }
             }
         } catch (e) {}
@@ -63,7 +65,7 @@ export function useScanner() {
         if (isWorkerRunning.value) return;
         isWorkerRunning.value = true;
 
-        while (scanStatus.value.status === 'running') {
+        while (scanStatus.value.status === 'scanning') {
             try {
                 const res = await fetch('/api/scanner/process-batch', {
                     method: 'POST',
@@ -71,14 +73,16 @@ export function useScanner() {
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
                     },
-                    body: JSON.stringify({ batch_size: 4 }),
+                    body: JSON.stringify({ batch_size: 6 }),
                 });
 
                 if (res.ok) {
                     const data = await res.json();
-                    scanStatus.value = data.status;
+                    if (data.status && typeof data.status === 'object') {
+                        scanStatus.value = data.status;
+                    }
 
-                    if (!data.has_more || data.status.status === 'completed' || data.status.status === 'cancelled') {
+                    if (!data.has_more || scanStatus.value.status === 'completed' || scanStatus.value.status === 'cancelled') {
                         break;
                     }
                 } else {
@@ -87,13 +91,13 @@ export function useScanner() {
             } catch (e) {
                 break;
             }
-            await new Promise((r) => setTimeout(r, 450));
+            await new Promise((r) => setTimeout(r, 400));
         }
 
         isWorkerRunning.value = false;
     };
 
-    const startFullScan = async () => {
+    const startFullScan = async (directories?: any[]) => {
         try {
             const res = await fetch('/api/scanner/start', {
                 method: 'POST',
@@ -101,11 +105,13 @@ export function useScanner() {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
                 },
-                body: JSON.stringify({}),
+                body: JSON.stringify({ directories: directories || [] }),
             });
             if (res.ok) {
                 const data = await res.json();
-                scanStatus.value = data.status;
+                if (data.status) {
+                    scanStatus.value = data.status;
+                }
                 runBackgroundWorker();
             }
         } catch (e) {}
@@ -123,7 +129,9 @@ export function useScanner() {
             });
             if (res.ok) {
                 const data = await res.json();
-                scanStatus.value = data.status;
+                if (data.status) {
+                    scanStatus.value = data.status;
+                }
                 runBackgroundWorker();
             }
         } catch (e) {}
@@ -141,7 +149,9 @@ export function useScanner() {
             });
             if (res.ok) {
                 const data = await res.json();
-                scanStatus.value = data.status;
+                if (data.status) {
+                    scanStatus.value = data.status;
+                }
                 runBackgroundWorker();
             }
         } catch (e) {}
@@ -158,7 +168,9 @@ export function useScanner() {
             });
             if (res.ok) {
                 const data = await res.json();
-                scanStatus.value = data.status;
+                if (data.status) {
+                    scanStatus.value = data.status;
+                }
                 return true;
             }
         } catch (e) {}
@@ -175,7 +187,9 @@ export function useScanner() {
             });
             if (res.ok) {
                 const data = await res.json();
-                scanStatus.value = data.status;
+                if (data.status) {
+                    scanStatus.value = data.status;
+                }
             }
         } catch (e) {}
     };
@@ -190,7 +204,9 @@ export function useScanner() {
             });
             if (res.ok) {
                 const data = await res.json();
-                scanStatus.value = data.status;
+                if (data.status) {
+                    scanStatus.value = data.status;
+                }
                 runBackgroundWorker();
             }
         } catch (e) {}
@@ -206,7 +222,9 @@ export function useScanner() {
             });
             if (res.ok) {
                 const data = await res.json();
-                scanStatus.value = data.status;
+                if (data.status) {
+                    scanStatus.value = data.status;
+                }
             }
         } catch (e) {}
     };

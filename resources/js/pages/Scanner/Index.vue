@@ -32,6 +32,7 @@ const {
     pauseScan,
     resumeScan,
     cancelScan,
+    startFullScan,
     rescanFresh,
     scanFolder,
     clearCatalog,
@@ -91,7 +92,7 @@ const addDirectory = async () => {
             const data = await res.json();
             monitoredDirs.value = data.directories;
             newDirPath.value = '';
-            toastMessage.value = isRTL.value ? 'تم إضافة المجلد بنجاح!' : 'Directory added successfully!';
+            toastMessage.value = isRTL.value ? 'تمت إضافة المجلد بنجاح!' : 'Directory added successfully!';
         }
     } finally {
         isAddingDir.value = false;
@@ -101,9 +102,9 @@ const addDirectory = async () => {
 const promptRemoveDirectory = (idx: number, dir: any) => {
     confirmModal.value = {
         show: true,
-        title: isRTL.value ? 'إزالة المجلد من المراقبة' : 'Remove Monitored Folder',
-        message: isRTL.value ? `هل أنت متأكد من إزالة المجلد "${dir.path}" من قائمة المجلدات المفحوصة؟ (لن يتم حذف الملفات من القرص).` : `Are you sure you want to remove "${dir.path}" from monitored library folders? (Files on disk will NOT be deleted).`,
-        confirmText: isRTL.value ? 'إزالة المجلد' : 'Remove Folder',
+        title: isRTL.value ? 'إزالة مجلد مراقب' : 'Remove Monitored Folder',
+        message: isRTL.value ? `هل أنت متأكد من إزالة "${dir.path}" من قائمة المجلدات المراقبة؟ (لن يتم حذف الملفات من القرص).` : `Are you sure you want to remove "${dir.path}" from monitored library folders? (Files on disk will NOT be deleted).`,
+        confirmText: isRTL.value ? 'إزالة' : 'Remove Folder',
         type: 'danger',
         action: async () => {
             confirmModal.value.show = false;
@@ -117,7 +118,7 @@ const promptRemoveDirectory = (idx: number, dir: any) => {
                 if (res.ok) {
                     const data = await res.json();
                     monitoredDirs.value = data.directories || [];
-                    toastMessage.value = isRTL.value ? 'تم إزالة المجلد من المراقبة.' : 'Directory removed.';
+                    toastMessage.value = isRTL.value ? 'تمت إزالة المجلد بنجاح.' : 'Directory removed.';
                 }
             } catch (e) {}
         },
@@ -126,37 +127,24 @@ const promptRemoveDirectory = (idx: number, dir: any) => {
 
 const startScan = async () => {
     if (monitoredDirs.value.length === 0) {
-        toastMessage.value = isRTL.value ? 'يرجى إضافة مجلد واحد على الأقل للفحص.' : 'Please add at least one folder to scan.';
+        toastMessage.value = isRTL.value ? 'يرجى إضافة مجلد واحد على الأقل للمسح.' : 'Please add at least one folder to scan.';
         return;
     }
-    try {
-        const res = await fetch('/api/scanner/start', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
-            },
-            body: JSON.stringify({
-                directories: monitoredDirs.value,
-            }),
-        });
-        const data = await res.json();
-        scanStatus.value = data.status;
-        runBackgroundWorker();
-    } catch (e) {}
+    await startFullScan(monitoredDirs.value);
+    toastMessage.value = isRTL.value ? 'بدأ مسح المكتبة في الخلفية...' : 'Library scan started in background...';
 };
 
 const promptRescanFresh = () => {
     confirmModal.value = {
         show: true,
-        title: isRTL.value ? 'إعادة فحص شاملة للمكتبة' : 'Fresh Full Library Rescan',
-        message: isRTL.value ? 'سيتم تصفير الفهارس السابقة وإعادة فحص وتحميل بيانات وأغلفة جميع المجلدات المراقبة من جديد.' : 'Are you sure you want to wipe the previous scan and start a fresh library indexing across all monitored folders?',
-        confirmText: isRTL.value ? 'بدء فحص شامل' : 'Start Fresh Scan',
+        title: isRTL.value ? 'إعادة مسح شاملة ونظيفة' : 'Fresh Full Library Rescan',
+        message: isRTL.value ? 'هل أنت متأكد من مسح الفهرس السابق وبدء مسح جديد ونظيف لجميع المجلدات المراقبة؟' : 'Are you sure you want to wipe the previous scan and start a fresh library indexing across all monitored folders?',
+        confirmText: isRTL.value ? 'بدء مسح نظيف' : 'Start Fresh Scan',
         type: 'warning',
         action: async () => {
             confirmModal.value.show = false;
             await rescanFresh();
-            toastMessage.value = isRTL.value ? 'تم تصفير الفهارس وبدء فحص جديد شامل!' : 'Previous index wiped. Fresh scan started!';
+            toastMessage.value = isRTL.value ? 'تم مسح الفهرس القديم وبدأ المسح النظيف!' : 'Previous index wiped. Fresh scan started!';
         },
     };
 };
@@ -164,16 +152,16 @@ const promptRescanFresh = () => {
 const promptClearCatalog = () => {
     confirmModal.value = {
         show: true,
-        title: isRTL.value ? 'مسح كافة فهارس المكتبة والإحصائيات' : 'Clear Library Catalog & Analytics',
-        message: isRTL.value ? 'تحذير: سيتم حذف كافة عناصر المكتبة والأفلام والمسلسلات وسجل المشاهدة والإحصائيات من قاعدة البيانات (لن يتم حذف الملفات من القرص). هل تريد المتابعة؟' : 'Warning: This will remove all indexed movies, series, watch histories, and analytics metrics from your library database (files on disk will NOT be deleted). Continue?',
-        confirmText: isRTL.value ? 'تأكيد المسح الشامل' : 'Wipe Catalog',
+        title: isRTL.value ? 'مسح قاعدة بيانات المكتبة' : 'Clear Library Catalog & Analytics',
+        message: isRTL.value ? 'تحذير: سيتم مسح جميع الأفلام والمسلسلات وسجلات المشاهدة من قاعدة البيانات (لن تُحذف ملفاتك من القرص). هل ترغب بالمتابعة؟' : 'Warning: This will remove all indexed movies, series, watch histories, and analytics metrics from your library database (files on disk will NOT be deleted). Continue?',
+        confirmText: isRTL.value ? 'مسح الفهرس' : 'Wipe Catalog',
         type: 'danger',
         action: async () => {
             confirmModal.value.show = false;
             isClearing.value = true;
             try {
                 await clearCatalog();
-                toastMessage.value = isRTL.value ? 'تم تفريغ فهارس المكتبة والإحصائيات بنجاح.' : 'Library catalog & analytics cleared.';
+                toastMessage.value = isRTL.value ? 'تم مسح قاعدة بيانات الفهرس بنجاح.' : 'Library catalog & analytics cleared.';
                 setTimeout(() => { router.reload(); }, 800);
             } finally {
                 isClearing.value = false;
@@ -184,20 +172,20 @@ const promptClearCatalog = () => {
 
 const scanSingleFolder = async (dir: { path: string; type: string }) => {
     await scanFolder(dir.path, dir.type, false);
-    toastMessage.value = isRTL.value ? `جاري فحص: ${dir.path}` : `Scanning folder: ${dir.path}`;
+    toastMessage.value = isRTL.value ? `جاري مسح: ${dir.path}` : `Scanning folder: ${dir.path}`;
 };
 
 const promptFreshRescanFolder = (dir: { path: string; type: string }) => {
     confirmModal.value = {
         show: true,
-        title: isRTL.value ? 'إعادة فحص جديدة للمجلد المختار' : 'Fresh Rescan Folder',
-        message: isRTL.value ? `سيتم إعادة فهرسة وتحديث الوسائط والأغلفة الموجودة في المجلد: "${dir.path}". هل تريد المتابعة؟` : `This will re-index and refresh media items and metadata for: "${dir.path}". Continue?`,
-        confirmText: isRTL.value ? 'إعادة الفحص الآن' : 'Rescan Folder',
+        title: isRTL.value ? 'إعادة مسح نظيفة للمجلد' : 'Fresh Rescan Folder',
+        message: isRTL.value ? `سيتم إعادة فهرسة وتحديث الوسائط والبوسترات للمجلد: "${dir.path}". متابعة؟` : `This will re-index and refresh media items and metadata for: "${dir.path}". Continue?`,
+        confirmText: isRTL.value ? 'إعادة مسح' : 'Rescan Folder',
         type: 'warning',
         action: async () => {
             confirmModal.value.show = false;
             await scanFolder(dir.path, dir.type, true);
-            toastMessage.value = isRTL.value ? `بدء فحص جديد للمجلد: ${dir.path}` : `Fresh scan started for: ${dir.path}`;
+            toastMessage.value = isRTL.value ? `بدأ المسح النظيف للمجلد: ${dir.path}` : `Fresh scan started for: ${dir.path}`;
         },
     };
 };
@@ -215,8 +203,8 @@ const enrichMissingPosters = async () => {
         if (res.ok) {
             const data = await res.json();
             toastMessage.value = isRTL.value
-                ? `تم تحديث وتحميل بيانات ${data.result?.total || 0} عنصر بنجاح!`
-                : `Successfully downloaded posters & metadata for ${data.result?.total || 0} items!`;
+                ? `تم بنجاح جلب بوسترات وبيانات ${data.result?.enriched_count || data.result?.total || 0} عنصر!`
+                : `Successfully downloaded posters & metadata for ${data.result?.enriched_count || data.result?.total || 0} items!`;
             setTimeout(() => { router.reload(); }, 1200);
         }
     } finally {

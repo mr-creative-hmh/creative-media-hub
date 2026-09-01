@@ -15,6 +15,7 @@ use App\Services\Organizer\FilesystemScannerService;
 use App\Services\Organizer\SceneNameParserService;
 use App\Services\Subtitles\EmbeddedSubtitleDetectorService;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class VirtualLibraryScannerService
@@ -42,7 +43,7 @@ class VirtualLibraryScannerService
     public function getScanStatus(): array
     {
         return Cache::get('virtual_scanner_job_status', [
-            'status' => 'idle', // idle, scanning, paused, completed, cancelled
+            'status' => 'idle',
             'progress_percent' => 0,
             'total_files' => 0,
             'processed_files' => 0,
@@ -98,6 +99,48 @@ class VirtualLibraryScannerService
         ];
     }
 
+    public function initScanForFolder(string $folderPath, string $typeHint = 'mixed'): array
+    {
+        $allFiles = [];
+        $cleanPath = rtrim(str_replace('\\', '/', $folderPath), '/');
+
+        if (is_dir($cleanPath)) {
+            $scanned = $this->fsScanner->scanDirectory($cleanPath, true);
+            foreach ($scanned as $f) {
+                $f['type_hint'] = $typeHint;
+                $allFiles[] = $f;
+            }
+        }
+
+        $totalFiles = count($allFiles);
+
+        $jobData = [
+            'status' => $totalFiles > 0 ? 'scanning' : 'completed',
+            'progress_percent' => 0,
+            'total_files' => $totalFiles,
+            'processed_files' => 0,
+            'current_file' => null,
+            'queue' => $allFiles,
+            'scanned_items' => [],
+            'logs' => [
+                [
+                    'time' => now()->format('H:i:s'),
+                    'level' => 'info',
+                    'message' => "Folder scanner initialized for {$cleanPath}. Found {$totalFiles} files.",
+                ]
+            ],
+            'started_at' => now()->toDateTimeString(),
+            'updated_at' => now()->toDateTimeString(),
+        ];
+
+        Cache::put('virtual_scanner_job_status', $jobData, now()->addHours(6));
+
+        return [
+            'total_files' => $totalFiles,
+            'status' => $jobData['status'],
+        ];
+    }
+
     public function processBatch(int $batchSize = 4): array
     {
         return $this->processNextBatch($batchSize);
@@ -118,7 +161,16 @@ class VirtualLibraryScannerService
                 ];
                 Cache::put('virtual_scanner_job_status', $jobData, now()->addHours(6));
             }
-            return ['status' => $jobData['status'], 'progress_percent' => $jobData['progress_percent'], 'processed' => 0];
+            return [
+                'status' => $jobData['status'],
+                'has_more' => false,
+                'progress_percent' => $jobData['progress_percent'] ?? 100,
+                'processed_files' => $jobData['processed_files'] ?? 0,
+                'total_files' => $jobData['total_files'] ?? 0,
+                'current_file' => null,
+                'latest_scanned' => [],
+                'latest_logs' => [],
+            ];
         }
 
         $queue = $jobData['queue'];
@@ -127,6 +179,7 @@ class VirtualLibraryScannerService
 
         $batch = array_splice($queue, 0, $batchSize);
 
+        // Process files individually without holding long open transactions during network requests
         foreach ($batch as $file) {
             try {
                 $jobData['current_file'] = $file['filename'];
@@ -164,8 +217,8 @@ class VirtualLibraryScannerService
         }
 
         $jobData['queue'] = $queue;
-        $jobData['scanned_items'] = array_slice($scannedItems, -30);
-        $jobData['logs'] = array_slice($logs, -80);
+        $jobData['scanned_items'] = array_slice($scannedItems, -40);
+        $jobData['logs'] = array_slice($logs, -100);
         $jobData['updated_at'] = now()->toDateTimeString();
 
         $total = max(1, $jobData['total_files']);
@@ -191,8 +244,8 @@ class VirtualLibraryScannerService
             'processed_files' => $jobData['processed_files'],
             'total_files' => $jobData['total_files'],
             'current_file' => $jobData['current_file'],
-            'latest_scanned' => array_slice($scannedItems, -5),
-            'latest_logs' => array_slice($logs, -10),
+            'latest_scanned' => array_slice($scannedItems, -6),
+            'latest_logs' => array_slice($logs, -12),
         ];
     }
 
@@ -233,6 +286,67 @@ class VirtualLibraryScannerService
         Cache::put('virtual_scanner_job_status', $job, now()->addHours(6));
     }
 
+    public function enrichMissingMetadata(int $limit = 25): array
+    {
+        $enrichedCount = 0;
+
+        $movies = MediaItem::whereNull('poster_path')
+            ->orWhere('overview', 'like', 'Enjoy watching%')
+            ->take($limit)
+            ->get();
+
+        foreach ($movies as $movie) {
+            try {
+                $meta = $this->metadata->aggregateMovieMetadata($movie->title, $movie->release_year);
+                $poster = $meta['poster_path'] ?? null;
+                if (empty($poster)) {
+                    $poster = $this->webArtwork->searchAndDownloadArtwork($movie->title, $movie->release_year, 'movie');
+                }
+
+                retry(3, function () use ($movie, $meta, $poster) {
+                    $movie->update([
+                        'poster_path' => $poster ?? $movie->poster_path,
+                        'backdrop_path' => $meta['backdrop_path'] ?? $movie->backdrop_path,
+                        'overview' => $meta['overview'] ?? $movie->overview,
+                        'rating' => $meta['rating'] ?? $movie->rating,
+                        'runtime_minutes' => $meta['runtime_minutes'] ?? ($meta['duration_minutes'] ?? $movie->runtime_minutes),
+                    ]);
+                }, 100);
+                $enrichedCount++;
+            } catch (\Throwable $e) {}
+        }
+
+        $seriesList = Series::whereNull('poster_path')
+            ->orWhere('overview', 'like', 'Experience the complete series%')
+            ->take($limit)
+            ->get();
+
+        foreach ($seriesList as $series) {
+            try {
+                $meta = $this->metadata->aggregateSeriesMetadata($series->title, $series->release_year);
+                $poster = $meta['poster_path'] ?? null;
+                if (empty($poster)) {
+                    $poster = $this->webArtwork->searchAndDownloadArtwork($series->title, $series->release_year, 'series');
+                }
+
+                retry(3, function () use ($series, $meta, $poster) {
+                    $series->update([
+                        'poster_path' => $poster ?? $series->poster_path,
+                        'backdrop_path' => $meta['backdrop_path'] ?? $series->backdrop_path,
+                        'overview' => $meta['overview'] ?? $series->overview,
+                        'rating' => $meta['rating'] ?? $series->rating,
+                    ]);
+                }, 100);
+                $enrichedCount++;
+            } catch (\Throwable $e) {}
+        }
+
+        return [
+            'enriched_count' => $enrichedCount,
+            'message' => "Enriched metadata for {$enrichedCount} library items.",
+        ];
+    }
+
     public function processFileItem(array $file): mixed
     {
         $parsed = $file['parsed'] ?? $this->nameParser->parse($file['path']);
@@ -258,6 +372,7 @@ class VirtualLibraryScannerService
             return $existing;
         }
 
+        // 1. Perform Network & Artwork Search outside any database lock
         $meta = $this->metadata->aggregateMovieMetadata($cleanTitle, $year);
         $posterUrl = $meta['poster_path'] ?? ($file['local_poster'] ?? null);
         if (empty($posterUrl)) {
@@ -266,37 +381,41 @@ class VirtualLibraryScannerService
 
         $backdropUrl = $meta['backdrop_path'] ?? ($file['local_backdrop'] ?? null);
 
-        $movie = MediaItem::create([
-            'title' => $meta['title'] ?? $cleanTitle,
-            'original_title' => $meta['original_title'] ?? $cleanTitle,
-            'title_ar' => $meta['title_ar'] ?? null,
-            'release_year' => $meta['year'] ?? $year,
-            'overview' => $meta['overview'] ?? "Enjoy watching {$cleanTitle}.",
-            'overview_ar' => $meta['overview_ar'] ?? null,
-            'rating' => $meta['rating'] ?? 7.5,
-            'duration_minutes' => $meta['duration_minutes'] ?? 115,
-            'file_path' => $file['path'],
-            'file_size_bytes' => $file['size_bytes'] ?? 0,
-            'resolution' => $parsed['resolution'] ?? '1080p',
-            'video_codec' => $parsed['codec'] ?? 'x264',
-            'audio_codec' => $parsed['audio'] ?? 'AAC',
-            'source' => $parsed['source'] ?? 'WEB-DL',
-            'poster_path' => $posterUrl,
-            'backdrop_path' => $backdropUrl,
-            'is_favorite' => false,
-        ]);
+        // 2. Perform SQLite write with automatic retry for busy lock resistance
+        $movie = retry(4, function () use ($cleanTitle, $year, $meta, $file, $parsed, $posterUrl, $backdropUrl) {
+            $m = MediaItem::create([
+                'title' => $meta['title'] ?? $cleanTitle,
+                'original_title' => $meta['original_title'] ?? $cleanTitle,
+                'title_ar' => $meta['title_ar'] ?? null,
+                'release_year' => $meta['year'] ?? $year,
+                'overview' => $meta['overview'] ?? "Enjoy watching {$cleanTitle}.",
+                'overview_ar' => $meta['overview_ar'] ?? null,
+                'rating' => $meta['rating'] ?? 7.5,
+                'runtime_minutes' => $meta['runtime_minutes'] ?? ($meta['duration_minutes'] ?? 115),
+                'file_path' => $file['path'],
+                'file_size_bytes' => $file['size_bytes'] ?? 0,
+                'resolution' => $parsed['resolution'] ?? '1080p',
+                'video_codec' => $parsed['codec'] ?? 'x264',
+                'audio_codec' => $parsed['audio'] ?? 'AAC',
+                'poster_path' => $posterUrl,
+                'backdrop_path' => $backdropUrl,
+                'is_favorite' => false,
+            ]);
 
-        if (!empty($meta['genres'])) {
-            $genreIds = [];
-            foreach ($meta['genres'] as $gName) {
-                $genre = Genre::firstOrCreate(
-                    ['slug' => Str::slug($gName)],
-                    ['name_en' => $gName, 'name_ar' => $gName]
-                );
-                $genreIds[] = $genre->id;
+            if (!empty($meta['genres'])) {
+                $genreIds = [];
+                foreach ($meta['genres'] as $gName) {
+                    $genre = Genre::firstOrCreate(
+                        ['slug' => Str::slug($gName)],
+                        ['name_en' => $gName, 'name_ar' => $gName]
+                    );
+                    $genreIds[] = $genre->id;
+                }
+                $m->genres()->sync($genreIds);
             }
-            $movie->genres()->sync($genreIds);
-        }
+
+            return $m;
+        }, 150);
 
         $this->attachAllSubtitles($movie, $file);
 
@@ -316,14 +435,16 @@ class VirtualLibraryScannerService
             ->first();
 
         if (!$series) {
-            $series = Series::create([
-                'title' => $showTitle,
-                'original_title' => $showTitle,
-                'release_year' => $parsed['year'] ?? null,
-                'overview' => "Experience the complete series of {$showTitle}.",
-                'rating' => 8.0,
-                'status' => 'Continuing',
-            ]);
+            $series = retry(4, function () use ($showTitle, $parsed) {
+                return Series::create([
+                    'title' => $showTitle,
+                    'original_title' => $showTitle,
+                    'release_year' => $parsed['year'] ?? null,
+                    'overview' => "Experience the complete series of {$showTitle}.",
+                    'rating' => 8.0,
+                    'status' => 'Continuing',
+                ]);
+            }, 150);
         }
 
         if (!$series->poster_path || !$series->overview || $series->overview === "Experience the complete series of {$showTitle}.") {
@@ -336,52 +457,58 @@ class VirtualLibraryScannerService
 
                 $backdropUrl = $meta['backdrop_path'] ?? ($file['local_backdrop'] ?? null);
 
-                $series->update([
-                    'title_ar' => $meta['title_ar'] ?? $series->title_ar,
-                    'overview' => $meta['overview'] ?? $series->overview,
-                    'overview_ar' => $meta['overview_ar'] ?? $series->overview_ar,
-                    'poster_path' => $posterUrl ?? $series->poster_path,
-                    'backdrop_path' => $backdropUrl ?? $series->backdrop_path,
-                    'rating' => $meta['rating'] ?? $series->rating,
-                    'release_year' => $meta['year'] ?? $series->release_year,
-                ]);
+                retry(3, function () use ($series, $meta, $posterUrl, $backdropUrl) {
+                    $series->update([
+                        'title_ar' => $meta['title_ar'] ?? $series->title_ar,
+                        'overview' => $meta['overview'] ?? $series->overview,
+                        'overview_ar' => $meta['overview_ar'] ?? $series->overview_ar,
+                        'poster_path' => $posterUrl ?? $series->poster_path,
+                        'backdrop_path' => $backdropUrl ?? $series->backdrop_path,
+                        'rating' => $meta['rating'] ?? $series->rating,
+                        'release_year' => $meta['year'] ?? $series->release_year,
+                    ]);
 
-                if (!empty($meta['genres'])) {
-                    $genreIds = [];
-                    foreach ($meta['genres'] as $gName) {
-                        $genre = Genre::firstOrCreate(
-                            ['slug' => Str::slug($gName)],
-                            ['name_en' => $gName, 'name_ar' => $gName]
-                        );
-                        $genreIds[] = $genre->id;
+                    if (!empty($meta['genres'])) {
+                        $genreIds = [];
+                        foreach ($meta['genres'] as $gName) {
+                            $genre = Genre::firstOrCreate(
+                                ['slug' => Str::slug($gName)],
+                                ['name_en' => $gName, 'name_ar' => $gName]
+                            );
+                            $genreIds[] = $genre->id;
+                        }
+                        $series->genres()->sync($genreIds);
                     }
-                    $series->genres()->sync($genreIds);
-                }
+                }, 150);
             } catch (\Throwable $e) {}
         }
 
-        $season = Season::firstOrCreate(
-            ['series_id' => $series->id, 'season_number' => $seasonNum],
-            ['title' => "Season {$seasonNum}"]
-        );
+        $season = retry(4, function () use ($series, $seasonNum) {
+            return Season::firstOrCreate(
+                ['series_id' => $series->id, 'season_number' => $seasonNum],
+                ['title' => "Season {$seasonNum}"]
+            );
+        }, 150);
 
-        $episode = Episode::updateOrCreate(
-            [
-                'series_id' => $series->id,
-                'season_id' => $season->id,
-                'episode_number' => $epNum,
-            ],
-            [
-                'title' => $epTitle,
-                'overview' => "Episode {$epNum} of Season {$seasonNum}.",
-                'file_path' => $file['path'],
-                'file_size_bytes' => $file['size_bytes'] ?? 0,
-                'runtime_minutes' => 45,
-                'resolution' => $parsed['resolution'] ?? '1080p',
-                'video_codec' => $parsed['codec'] ?? 'x264',
-                'audio_codec' => $parsed['audio'] ?? 'AAC',
-            ]
-        );
+        $episode = retry(4, function () use ($series, $season, $epNum, $epTitle, $seasonNum, $file, $parsed) {
+            return Episode::updateOrCreate(
+                [
+                    'series_id' => $series->id,
+                    'season_id' => $season->id,
+                    'episode_number' => $epNum,
+                ],
+                [
+                    'title' => $epTitle,
+                    'overview' => "Episode {$epNum} of Season {$seasonNum}.",
+                    'file_path' => $file['path'],
+                    'file_size_bytes' => $file['size_bytes'] ?? 0,
+                    'runtime_minutes' => 45,
+                    'resolution' => $parsed['resolution'] ?? '1080p',
+                    'video_codec' => $parsed['codec'] ?? 'x264',
+                    'audio_codec' => $parsed['audio'] ?? 'AAC',
+                ]
+            );
+        }, 150);
 
         $this->attachAllSubtitles($episode, $file);
 
@@ -412,59 +539,56 @@ class VirtualLibraryScannerService
                     'zh' => 'Chinese',
                     'ru' => 'Russian',
                     'pt' => 'Portuguese',
-                    'tr' => 'Turkish',
-                    default => 'External Subtitle',
+                    default => strtoupper($lang),
                 };
 
-                Subtitle::updateOrCreate(
-                    [
-                        'subtitlable_id' => $model->id,
-                        'subtitlable_type' => $modelClass,
-                        'file_path' => $sub['path'],
-                    ],
-                    [
-                        'language' => $lang,
-                        'language_name' => $langName,
-                        'format' => $sub['extension'] ?? 'srt',
-                        'is_embedded' => false,
-                        'is_default' => $lang === 'ar' || $lang === 'en',
-                    ]
-                );
+                retry(3, function () use ($modelClass, $model, $sub, $lang, $langName) {
+                    Subtitle::updateOrCreate(
+                        [
+                            'subtitlable_type' => $modelClass,
+                            'subtitlable_id' => $model->id,
+                            'file_path' => $sub['path'],
+                        ],
+                        [
+                            'language' => $lang,
+                            'language_name' => $langName . (!empty($sub['is_forced']) ? ' (Forced)' : ''),
+                            'format' => strtolower(pathinfo($sub['path'], PATHINFO_EXTENSION)) ?: 'srt',
+                            'is_embedded' => false,
+                            'is_default' => $lang === 'ar' || $lang === 'en',
+                        ]
+                    );
+                }, 150);
             }
         }
 
-        // 2. Embedded Subtitle Streams inside the container (MKV / MP4)
-        if ($filePath && file_exists($filePath)) {
-            $embeddedTracks = $this->embeddedSubDetector->detectEmbeddedSubtitles($filePath);
-            foreach ($embeddedTracks as $track) {
-                $virtualPath = "embedded:{$track['stream_index']}:{$filePath}";
+        // 2. Embedded Subtitle Tracks inside the video container
+        if (!empty($filePath) && file_exists($filePath) && filesize($filePath) > 1024) {
+            try {
+                $embeddedTracks = $this->embeddedSubDetector->detectEmbeddedSubtitles($filePath);
+                foreach ($embeddedTracks as $track) {
+                    $streamIdx = $track['stream_index'] ?? 0;
+                    $embeddedVirtualPath = "embedded:{$streamIdx}:{$filePath}";
+                    $langCode = $track['language'] ?? 'und';
+                    $langTitle = ($track['title'] ?: ($track['language_name'] ?? 'Track ' . ($streamIdx + 1))) . ' (Embedded)';
 
-                Subtitle::updateOrCreate(
-                    [
-                        'subtitlable_id' => $model->id,
-                        'subtitlable_type' => $modelClass,
-                        'file_path' => $virtualPath,
-                    ],
-                    [
-                        'language' => $track['language'],
-                        'language_name' => $track['language_name'],
-                        'format' => $track['codec'] ?? 'srt',
-                        'is_embedded' => true,
-                        'is_default' => false,
-                    ]
-                );
-            }
+                    retry(3, function () use ($modelClass, $model, $embeddedVirtualPath, $langCode, $langTitle, $track) {
+                        Subtitle::updateOrCreate(
+                            [
+                                'subtitlable_type' => $modelClass,
+                                'subtitlable_id' => $model->id,
+                                'file_path' => $embeddedVirtualPath,
+                            ],
+                            [
+                                'language' => $langCode,
+                                'language_name' => $langTitle,
+                                'format' => $track['codec'] ?? 'srt',
+                                'is_embedded' => true,
+                                'is_default' => (bool) ($track['is_default'] ?? false),
+                            ]
+                        );
+                    }, 150);
+                }
+            } catch (\Throwable $e) {}
         }
-    }
-
-    public function processSingleFile(string $filePath, string $typeHint = 'movie'): ?array
-    {
-        return $this->processFileItem([
-            'path' => $filePath,
-            'filename' => basename($filePath),
-            'extension' => pathinfo($filePath, PATHINFO_EXTENSION),
-            'size_bytes' => file_exists($filePath) ? filesize($filePath) : 1500000000,
-            'type_hint' => $typeHint === 'series' ? 'series' : 'movies',
-        ]);
     }
 }

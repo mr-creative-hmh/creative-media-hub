@@ -175,10 +175,18 @@ class ScannerController extends Controller
         ]);
     }
 
-    public function processBatch(): JsonResponse
+    public function processBatch(Request $request): JsonResponse
     {
-        $result = $this->scannerService->processNextBatch(4);
-        return response()->json($result);
+        $batchSize = (int) $request->input('batch_size', 6);
+        $result = $this->scannerService->processNextBatch($batchSize);
+        $fullStatus = $this->scannerService->getScanStatus();
+
+        return response()->json([
+            'success' => true,
+            'status' => $fullStatus,
+            'has_more' => $result['has_more'] ?? false,
+            'result' => $result,
+        ]);
     }
 
     public function enrichMissing(): JsonResponse
@@ -193,19 +201,28 @@ class ScannerController extends Controller
     public function pauseScan(): JsonResponse
     {
         $this->scannerService->pauseScan();
-        return response()->json(['success' => true, 'status' => $this->scannerService->getScanStatus()]);
+        return response()->json([
+            'success' => true,
+            'status' => $this->scannerService->getScanStatus(),
+        ]);
     }
 
     public function resumeScan(): JsonResponse
     {
         $this->scannerService->resumeScan();
-        return response()->json(['success' => true, 'status' => $this->scannerService->getScanStatus()]);
+        return response()->json([
+            'success' => true,
+            'status' => $this->scannerService->getScanStatus(),
+        ]);
     }
 
     public function cancelScan(): JsonResponse
     {
         $this->scannerService->cancelScan();
-        return response()->json(['success' => true, 'status' => $this->scannerService->getScanStatus()]);
+        return response()->json([
+            'success' => true,
+            'status' => $this->scannerService->getScanStatus(),
+        ]);
     }
 
     public function getStatus(): JsonResponse
@@ -219,116 +236,74 @@ class ScannerController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Library catalog, analytics, and watch history cleared successfully.',
+            'message' => 'Library catalog cleared successfully.',
             'status' => $this->scannerService->getScanStatus(),
         ]);
     }
 
-    public function deleteSingleMedia(Request $request, $id): JsonResponse
+    public function deleteSingleMedia($id): JsonResponse
     {
-        $type = $request->input('type', 'movie');
-
-        if ($type === 'series') {
-            $series = Series::find($id);
-            if ($series) {
-                $seasonIds = $series->seasons()->pluck('id');
-                $episodes = Episode::whereIn('season_id', $seasonIds)->get();
-                foreach ($episodes as $ep) {
-                    Subtitle::where('subtitlable_type', Episode::class)->where('subtitlable_id', $ep->id)->delete();
-                    WatchHistory::where('watchable_type', Episode::class)->where('watchable_id', $ep->id)->delete();
-                    $ep->delete();
-                }
-                Season::whereIn('id', $seasonIds)->delete();
-                DB::table('genre_series')->where('series_id', $series->id)->delete();
-                $series->delete();
-                return response()->json(['success' => true, 'message' => "Series '{$series->title}' removed from library."]);
-            }
-        } else {
-            $movie = MediaItem::find($id);
-            if ($movie) {
-                Subtitle::where('subtitlable_type', MediaItem::class)->where('subtitlable_id', $movie->id)->delete();
-                WatchHistory::where('watchable_type', MediaItem::class)->where('watchable_id', $movie->id)->delete();
-                WatchHistory::where('media_item_id', $movie->id)->delete();
-                DB::table('genre_media_item')->where('media_item_id', $movie->id)->delete();
-                $movie->delete();
-                return response()->json(['success' => true, 'message' => "Movie '{$movie->title}' removed from library."]);
-            }
+        $item = MediaItem::find($id);
+        if ($item) {
+            $item->subtitles()->delete();
+            $item->genres()->detach();
+            $item->delete();
+            return response()->json(['success' => true]);
         }
 
-        return response()->json(['success' => false, 'message' => 'Media item not found.'], 404);
+        $series = Series::find($id);
+        if ($series) {
+            $series->seasons()->each(function ($season) {
+                $season->episodes()->each(function ($ep) {
+                    $ep->subtitles()->delete();
+                    $ep->delete();
+                });
+                $season->delete();
+            });
+            $series->genres()->detach();
+            $series->delete();
+            return response()->json(['success' => true]);
+        }
+
+        return response()->json(['success' => false, 'message' => 'Item not found.'], 404);
     }
 
     protected function wipeAllScannedMedia(): void
     {
-        DB::statement('PRAGMA foreign_keys = OFF;');
-        WatchHistory::truncate();
-        Subtitle::truncate();
-        Episode::truncate();
-        Season::truncate();
-        Series::truncate();
-        MediaItem::truncate();
-        try {
-            DB::table('genre_media_item')->truncate();
-            DB::table('genre_series')->truncate();
-        } catch (\Throwable $e) {}
-        DB::statement('PRAGMA foreign_keys = ON;');
+        retry(5, function () {
+            DB::statement('PRAGMA foreign_keys = OFF;');
+            DB::statement('DELETE FROM subtitles;');
+            DB::statement('DELETE FROM watch_histories;');
+            DB::statement('DELETE FROM personables;');
+            DB::statement('DELETE FROM genreables;');
+            DB::statement('DELETE FROM episodes;');
+            DB::statement('DELETE FROM seasons;');
+            DB::statement('DELETE FROM series;');
+            DB::statement('DELETE FROM media_items;');
+            DB::statement('PRAGMA foreign_keys = ON;');
+        }, 150);
 
-        Cache::put('virtual_scan_job', [
-            'status' => 'idle',
-            'total_files' => 0,
-            'processed_files' => 0,
-            'progress_percent' => 0,
-            'current_file' => '',
-            'queue' => [],
-            'scanned_items' => [],
-            'logs' => [
-                [
-                    'time' => now()->format('H:i:s'),
-                    'level' => 'info',
-                    'message' => 'Library catalog, media items, and analytics wiped.',
-                ]
-            ],
-            'started_at' => now()->toDateTimeString(),
-            'updated_at' => now()->toDateTimeString(),
-        ], 86400);
+        Cache::forget('virtual_scanner_job_status');
     }
 
     protected function wipeFolderMedia(string $folderPath): void
     {
-        $cleanPath = rtrim(str_replace('\\', '/', $folderPath), '/');
-
-        // Delete movies originating from this folder
-        $movies = MediaItem::where('file_path', 'like', "{$cleanPath}%")->orWhere('folder_path', 'like', "{$cleanPath}%")->get();
-        foreach ($movies as $m) {
-            Subtitle::where('subtitlable_type', MediaItem::class)->where('subtitlable_id', $m->id)->delete();
-            WatchHistory::where('watchable_type', MediaItem::class)->where('watchable_id', $m->id)->delete();
-            $m->delete();
-        }
-
-        // Delete episodes originating from this folder
-        $episodes = Episode::where('file_path', 'like', "{$cleanPath}%")->get();
-        foreach ($episodes as $ep) {
-            Subtitle::where('subtitlable_type', Episode::class)->where('subtitlable_id', $ep->id)->delete();
-            WatchHistory::where('watchable_type', Episode::class)->where('watchable_id', $ep->id)->delete();
-            $ep->delete();
-        }
-
-        // Delete orphan seasons & series
-        Season::doesntHave('episodes')->delete();
-        Series::doesntHave('seasons')->delete();
+        $clean = rtrim($folderPath, '/');
+        MediaItem::where('file_path', 'like', "{$clean}%")->delete();
+        Episode::where('file_path', 'like', "{$clean}%")->delete();
     }
 
     protected function formatBytes(int $bytes): string
     {
+        if ($bytes >= 1073741824 * 1024) {
+            return round($bytes / (1073741824 * 1024), 2) . ' TB';
+        }
         if ($bytes >= 1073741824) {
             return round($bytes / 1073741824, 2) . ' GB';
         }
         if ($bytes >= 1048576) {
-            return round($bytes / 1048576, 2) . ' MB';
+            return round($bytes / 1048576, 1) . ' MB';
         }
-        if ($bytes > 0) {
-            return round($bytes / 1024, 2) . ' KB';
-        }
-        return '0 GB';
+        return round($bytes / 1024, 1) . ' KB';
     }
 }

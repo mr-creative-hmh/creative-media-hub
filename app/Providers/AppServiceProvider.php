@@ -19,13 +19,15 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
 
-        // High-Performance SQLite Tuning (WAL Mode, in-memory temp store, 64MB cache)
+        // High-Performance SQLite Tuning (WAL Mode, in-memory temp store, 64MB page cache, 256MB mmap)
         if (config('database.default') === 'sqlite') {
             try {
                 DB::statement('PRAGMA journal_mode=WAL;');
                 DB::statement('PRAGMA synchronous=NORMAL;');
                 DB::statement('PRAGMA cache_size=-64000;');
                 DB::statement('PRAGMA temp_store=MEMORY;');
+                DB::statement('PRAGMA mmap_size=268435456;');
+                DB::statement('PRAGMA busy_timeout=10000;');
             } catch (\Throwable $e) {}
         }
     }
