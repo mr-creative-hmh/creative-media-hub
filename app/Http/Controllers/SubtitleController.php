@@ -111,7 +111,7 @@ class SubtitleController extends Controller
         $validated = $request->validate([
             'media_id' => 'required|integer',
             'media_type' => 'required|in:movie,episode',
-            'language' => 'required|in:ar,en',
+            'language' => 'required|string|max:10',
         ]);
 
         $model = $validated['media_type'] === 'movie'
@@ -123,6 +123,27 @@ class SubtitleController extends Controller
         return response()->json([
             'status' => 'success',
             'subtitle' => $subtitle,
+        ]);
+    }
+
+    public function forMedia(Request $request): JsonResponse
+    {
+        $type = $request->input('type', 'movie');
+        $id = (int) $request->input('id');
+
+        $model = $type === 'episode'
+            ? Episode::find($id)
+            : MediaItem::find($id);
+
+        if (!$model) {
+            return response()->json(['subtitles' => []]);
+        }
+
+        $subtitles = $model->subtitles()->get();
+
+        return response()->json([
+            'success' => true,
+            'subtitles' => $subtitles,
         ]);
     }
 }

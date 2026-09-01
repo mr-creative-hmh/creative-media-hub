@@ -54,15 +54,28 @@ class SeriesController extends Controller
         $seriesList = $query->paginate(24)->withQueryString();
         $genres = Genre::orderBy('name_en')->get();
 
-        $heroSeries = Series::with(['genres', 'actors'])
-            ->whereNotNull('backdrop_path')
-            ->orderByDesc('rating')
-            ->first();
+        $heroSeriesList = Series::with(['genres', 'actors', 'seasons.episodes.subtitles'])
+            ->where(function ($q) {
+                $q->whereNotNull('backdrop_path')->orWhereNotNull('poster_path');
+            })
+            ->orderByDesc('created_at')
+            ->limit(6)
+            ->get();
+
+        if ($heroSeriesList->isEmpty()) {
+            $heroSeriesList = Series::with(['genres', 'actors', 'seasons.episodes.subtitles'])
+                ->orderByDesc('rating')
+                ->limit(6)
+                ->get();
+        }
+
+        $heroSeries = $heroSeriesList->first();
 
         return Inertia::render('Series/Index', [
             'seriesList' => $seriesList,
             'genres' => $genres,
             'heroSeries' => $heroSeries,
+            'heroItems' => $heroSeriesList,
             'filters' => $request->only(['search', 'genre', 'sort', 'direction', 'favorite_only']),
         ]);
     }

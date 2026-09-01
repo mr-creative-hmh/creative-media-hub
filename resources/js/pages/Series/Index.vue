@@ -19,7 +19,8 @@ const props = defineProps<{
         last_page?: number;
     };
     genres: any[];
-    heroSeries: any;
+    heroSeries?: any;
+    heroItems?: any[];
     filters: Record<string, any>;
 }>();
 
@@ -33,7 +34,7 @@ const { t, isRTL } = useI18n();
         <!-- Spotlight Hero -->
         <HeroBanner
             v-if="heroSeries && !filters.search && !filters.genre && !filters.vibe"
-            :item="heroSeries"
+            :items="heroItems || (heroSeries ? [heroSeries] : [])"
             @play="play"
             @details="(item) => {}"
         />

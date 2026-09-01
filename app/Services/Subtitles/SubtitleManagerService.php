@@ -70,7 +70,8 @@ class SubtitleManagerService
     public function downloadAndAttachMockSubtitle(MediaItem|Episode $media, string $lang = 'ar'): Subtitle
     {
         $langCode = strtolower($lang);
-        $langName = $langCode === 'ar' ? 'Arabic' : 'English';
+        $detector = app(EmbeddedSubtitleDetectorService::class);
+        $langName = $detector->getLanguageName($langCode);
 
         $destDir = $media->file_path ? pathinfo($media->file_path, PATHINFO_DIRNAME) : storage_path('app/subtitles');
         $baseName = $media->file_path ? pathinfo($media->file_path, PATHINFO_FILENAME) : "media_{$media->id}";

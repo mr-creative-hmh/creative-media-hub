@@ -2,14 +2,48 @@
 
 namespace App\Services\Subtitles;
 
+use App\Services\Media\FfmpegLocatorService;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 
 class EmbeddedSubtitleDetectorService
 {
-    /**
-     * Detect all embedded subtitle streams inside a video container (MKV, MP4, WebM).
-     */
+    protected static array $languageMap = [
+        'ar' => ['name' => 'Arabic', 'ar' => 'العربية', 'flag' => '🇸🇦'],
+        'en' => ['name' => 'English', 'ar' => 'الإنجليزية', 'flag' => '🇬🇧'],
+        'es' => ['name' => 'Spanish', 'ar' => 'الإسبانية', 'flag' => '🇪🇸'],
+        'fr' => ['name' => 'French', 'ar' => 'الفرنسية', 'flag' => '🇫🇷'],
+        'de' => ['name' => 'German', 'ar' => 'الألمانية', 'flag' => '🇩🇪'],
+        'it' => ['name' => 'Italian', 'ar' => 'الإيطالية', 'flag' => '🇮🇹'],
+        'pt' => ['name' => 'Portuguese', 'ar' => 'البرتغالية', 'flag' => '🇵🇹'],
+        'ru' => ['name' => 'Russian', 'ar' => 'الروسية', 'flag' => '🇷🇺'],
+        'tr' => ['name' => 'Turkish', 'ar' => 'التركية', 'flag' => '🇹🇷'],
+        'fa' => ['name' => 'Persian', 'ar' => 'الفارسية', 'flag' => '🇮🇷'],
+        'ja' => ['name' => 'Japanese', 'ar' => 'اليابانية', 'flag' => '🇯🇵'],
+        'ko' => ['name' => 'Korean', 'ar' => 'الكورية', 'flag' => '🇰🇷'],
+        'zh' => ['name' => 'Chinese', 'ar' => 'الصينية', 'flag' => '🇨🇳'],
+        'hi' => ['name' => 'Hindi', 'ar' => 'الهندية', 'flag' => '🇮🇳'],
+        'id' => ['name' => 'Indonesian', 'ar' => 'الإندونيسية', 'flag' => '🇮🇩'],
+        'nl' => ['name' => 'Dutch', 'ar' => 'الهولندية', 'flag' => '🇳🇱'],
+        'pl' => ['name' => 'Polish', 'ar' => 'البولندية', 'flag' => '🇵🇱'],
+        'sv' => ['name' => 'Swedish', 'ar' => 'السويدية', 'flag' => '🇸🇪'],
+        'da' => ['name' => 'Danish', 'ar' => 'الدانماركية', 'flag' => '🇩🇰'],
+        'no' => ['name' => 'Norwegian', 'ar' => 'النرويجية', 'flag' => '🇳🇴'],
+        'fi' => ['name' => 'Finnish', 'ar' => 'الفنلندية', 'flag' => '🇫🇮'],
+        'el' => ['name' => 'Greek', 'ar' => 'اليونانية', 'flag' => '🇬🇷'],
+        'he' => ['name' => 'Hebrew', 'ar' => 'العبرية', 'flag' => '🇮🇱'],
+        'vi' => ['name' => 'Vietnamese', 'ar' => 'الفيتنامية', 'flag' => '🇻🇳'],
+        'th' => ['name' => 'Thai', 'ar' => 'التايلاندية', 'flag' => '🇹🇭'],
+        'ur' => ['name' => 'Urdu', 'ar' => 'الأردية', 'flag' => '🇵🇰'],
+        'ro' => ['name' => 'Romanian', 'ar' => 'الرومانية', 'flag' => '🇷🇴'],
+        'cs' => ['name' => 'Czech', 'ar' => 'التشيكية', 'flag' => '🇨🇿'],
+        'hu' => ['name' => 'Hungarian', 'ar' => 'المجرية', 'flag' => '🇭🇺'],
+        'uk' => ['name' => 'Ukrainian', 'ar' => 'الأوكرانية', 'flag' => '🇺🇦'],
+        'ms' => ['name' => 'Malay', 'ar' => 'الماليزية', 'flag' => '🇲🇾'],
+        'bn' => ['name' => 'Bengali', 'ar' => 'البنغالية', 'flag' => '🇧🇩'],
+        'tl' => ['name' => 'Tagalog', 'ar' => 'الفلبينية', 'flag' => '🇵🇭'],
+    ];
+
     public function detectEmbeddedSubtitles(string $videoPath): array
     {
         if (!File::exists($videoPath) || filesize($videoPath) < 1024) {
@@ -17,27 +51,23 @@ class EmbeddedSubtitleDetectorService
         }
 
         $ext = strtolower(pathinfo($videoPath, PATHINFO_EXTENSION));
-        $tracks = [];
 
-        // 1. If FFprobe / FFmpeg is available on system, use it
+        // 1. FFprobe Detection
         $ffprobeTracks = $this->detectViaFfprobe($videoPath);
         if (!empty($ffprobeTracks)) {
             return $ffprobeTracks;
         }
 
-        // 2. Pure PHP container binary parser (MKV / WebM EBML Parser)
+        // 2. Pure PHP EBML Parser Fallback
         if (in_array($ext, ['mkv', 'webm', 'mka'])) {
-            $tracks = $this->parseMatroskaSubtitles($videoPath);
+            return $this->parseMatroskaSubtitles($videoPath);
         } elseif (in_array($ext, ['mp4', 'm4v', 'mov'])) {
-            $tracks = $this->parseMp4Subtitles($videoPath);
+            return $this->parseMp4Subtitles($videoPath);
         }
 
-        return $tracks;
+        return [];
     }
 
-    /**
-     * Extract or stream an embedded subtitle stream into standard WebVTT format.
-     */
     public function extractToWebVtt(string $videoPath, int $streamIndex, string $format = 'srt'): string
     {
         $cacheDir = storage_path('app/subtitles/cache');
@@ -52,16 +82,14 @@ class EmbeddedSubtitleDetectorService
             return File::get($cacheFile);
         }
 
-        // Attempt extraction via FFmpeg if available
         $vtt = $this->extractViaFfmpeg($videoPath, $streamIndex);
 
         if (empty($vtt) || !str_starts_with(trim($vtt), 'WEBVTT')) {
-            // Pure PHP fallback extraction for MKV EBML simple blocks
             $vtt = $this->extractMatroskaBlocksToVtt($videoPath, $streamIndex);
         }
 
         if (empty($vtt)) {
-            $vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:05.000\n[Embedded Subtitle Stream Active]\n\n";
+            $vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:05.000\n[Embedded Subtitle Track Active]\n\n";
         }
 
         File::put($cacheFile, $vtt);
@@ -70,16 +98,13 @@ class EmbeddedSubtitleDetectorService
 
     protected function detectViaFfprobe(string $videoPath): array
     {
-        $isWin = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
-        $testCmd = $isWin ? "where ffprobe 2>NUL" : "which ffprobe 2>/dev/null";
-        @exec($testCmd, $out, $code);
-
-        if ($code !== 0 || empty($out)) {
+        $ffprobeBin = FfmpegLocatorService::getFfprobePath();
+        if (!$ffprobeBin) {
             return [];
         }
 
         $escaped = escapeshellarg($videoPath);
-        $cmd = "ffprobe -v quiet -print_format json -show_streams -select_streams s {$escaped}";
+        $cmd = escapeshellarg($ffprobeBin) . " -v quiet -print_format json -show_streams -select_streams s {$escaped}";
         $output = @shell_exec($cmd);
 
         if (!$output) return [];
@@ -90,18 +115,19 @@ class EmbeddedSubtitleDetectorService
         $tracks = [];
         foreach ($data['streams'] as $idx => $stream) {
             $lang = $stream['tags']['language'] ?? 'und';
-            $title = $stream['tags']['title'] ?? '';
+            $title = $stream['tags']['title'] ?? ($stream['tags']['handler_name'] ?? '');
             $codec = $stream['codec_name'] ?? 'srt';
 
-            $langCode = $this->normalizeLanguageCode($lang);
-            $langName = $this->getLanguageName($langCode);
+            // Smart language deduction from title/handler if lang is und
+            $resolvedLang = $this->resolveLanguageFromContext($lang, $title, $videoPath, $idx);
+            $langName = $this->getLanguageName($resolvedLang);
 
-            $label = $title ? "{$langName} - {$title} (Embedded)" : "{$langName} (Embedded)";
+            $label = $this->buildHumanTrackLabel($resolvedLang, $langName, $title, $idx, $codec);
 
             $tracks[] = [
                 'stream_index' => $idx,
-                'track_number' => $stream['index'] ?? $idx,
-                'language' => $langCode,
+                'track_number' => $stream['index'] ?? ($idx + 1),
+                'language' => $resolvedLang,
                 'language_name' => $label,
                 'codec' => $codec,
                 'is_embedded' => true,
@@ -113,31 +139,23 @@ class EmbeddedSubtitleDetectorService
 
     protected function extractViaFfmpeg(string $videoPath, int $streamIndex): ?string
     {
-        $isWin = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
-        $testCmd = $isWin ? "where ffmpeg 2>NUL" : "which ffmpeg 2>/dev/null";
-        @exec($testCmd, $out, $code);
-
-        if ($code !== 0 || empty($out)) {
+        $ffmpegBin = FfmpegLocatorService::getFfmpegPath();
+        if (!$ffmpegBin) {
             return null;
         }
 
         $escaped = escapeshellarg($videoPath);
-        $cmd = "ffmpeg -nostats -loglevel error -hide_banner -i {$escaped} -map 0:s:{$streamIndex} -f webvtt -";
+        $cmd = escapeshellarg($ffmpegBin) . " -nostats -loglevel error -hide_banner -i {$escaped} -map 0:s:{$streamIndex} -f webvtt -";
         $vtt = @shell_exec($cmd);
 
         return $vtt ?: null;
     }
 
-    /**
-     * Pure PHP Matroska EBML Subtitle Track Scanner.
-     * Scans TrackEntry elements for TrackType = 0x11 (Subtitles).
-     */
     protected function parseMatroskaSubtitles(string $videoPath): array
     {
         $fp = @fopen($videoPath, 'rb');
         if (!$fp) return [];
 
-        // Read first 2MB to find Track headers
         $headerChunk = fread($fp, 1024 * 1024 * 3);
         fclose($fp);
 
@@ -148,7 +166,6 @@ class EmbeddedSubtitleDetectorService
         $tracks = [];
         $streamIndex = 0;
 
-        // Search for Matroska Codec IDs: S_TEXT/UTF8, S_TEXT/ASS, S_TEXT/SSA, S_HDMV/PGS, S_VOBSUB
         $codecPatterns = [
             'S_TEXT/UTF8' => 'srt',
             'S_TEXT/ASS' => 'ass',
@@ -160,58 +177,33 @@ class EmbeddedSubtitleDetectorService
         foreach ($codecPatterns as $codecTag => $format) {
             $offset = 0;
             while (($pos = strpos($headerChunk, $codecTag, $offset)) !== false) {
-                // Inspect surrounding 300 bytes around the Codec ID to extract language code
                 $context = substr($headerChunk, max(0, $pos - 150), 300);
 
                 $lang = 'und';
-                // Check 3-letter ISO language tags in EBML context (e.g. 'ara', 'eng', 'fre', 'spa', 'ger', 'ita', 'jpn')
-                if (preg_match('/\b(ara|eng|fre|fra|spa|ger|deu|ita|jpn|kor|chi|zho|rus|por|tur|und)\b/i', $context, $lMatch)) {
+                if (preg_match('/\b(ara|eng|fre|fra|spa|ger|deu|ita|jpn|kor|chi|zho|rus|por|tur|fas|hin|ind|nld|pol|swe|dan|nor|fin|ell|heb|vie|tha|urd|ron|ces|hun|ukr|und)\b/i', $context, $lMatch)) {
                     $lang = strtolower($lMatch[1]);
                 }
 
-                $langCode = $this->normalizeLanguageCode($lang);
-                $langName = $this->getLanguageName($langCode);
+                $resolvedLang = $this->resolveLanguageFromContext($lang, $context, $videoPath, $streamIndex);
+                $langName = $this->getLanguageName($resolvedLang);
 
-                // Avoid duplicate tracks with same language and format
-                $exists = false;
-                foreach ($tracks as $t) {
-                    if ($t['language'] === $langCode && $t['codec'] === $format) {
-                        $exists = true;
-                        break;
-                    }
-                }
+                $label = $this->buildHumanTrackLabel($resolvedLang, $langName, '', $streamIndex, $format);
 
-                if (!$exists) {
-                    $tracks[] = [
-                        'stream_index' => $streamIndex++,
-                        'language' => $langCode,
-                        'language_name' => "{$langName} (Embedded)",
-                        'codec' => $format,
-                        'is_embedded' => true,
-                    ];
-                }
+                $tracks[] = [
+                    'stream_index' => $streamIndex++,
+                    'language' => $resolvedLang,
+                    'language_name' => $label,
+                    'codec' => $format,
+                    'is_embedded' => true,
+                ];
 
                 $offset = $pos + strlen($codecTag);
             }
         }
 
-        // If no codec tags matched but container is MKV, provide standard embedded track if strings indicate presence
-        if (empty($tracks) && (str_contains($headerChunk, 'subtitles') || str_contains($headerChunk, 'Subtitle'))) {
-            $tracks[] = [
-                'stream_index' => 0,
-                'language' => 'und',
-                'language_name' => 'Embedded Subtitles (MKV)',
-                'codec' => 'srt',
-                'is_embedded' => true,
-            ];
-        }
-
         return $tracks;
     }
 
-    /**
-     * Pure PHP MP4 Subtitle Track Scanner (tx3g, text, subt).
-     */
     protected function parseMp4Subtitles(string $videoPath): array
     {
         $fp = @fopen($videoPath, 'rb');
@@ -227,16 +219,16 @@ class EmbeddedSubtitleDetectorService
 
         if (str_contains($headerChunk, 'sbtl') || str_contains($headerChunk, 'subt') || str_contains($headerChunk, 'tx3g')) {
             $lang = 'und';
-            if (preg_match('/\b(ara|eng|fre|spa|ger|und)\b/i', $headerChunk, $lMatch)) {
+            if (preg_match('/\b(ara|eng|fre|spa|ger|ita|por|rus|tur|jpn|kor|chi|und)\b/i', $headerChunk, $lMatch)) {
                 $lang = strtolower($lMatch[1]);
             }
 
-            $langCode = $this->normalizeLanguageCode($lang);
-            $langName = $this->getLanguageName($langCode);
+            $resolvedLang = $this->resolveLanguageFromContext($lang, '', $videoPath, $streamIndex);
+            $langName = $this->getLanguageName($resolvedLang);
 
             $tracks[] = [
                 'stream_index' => $streamIndex,
-                'language' => $langCode,
+                'language' => $resolvedLang,
                 'language_name' => "{$langName} (Embedded MP4)",
                 'codec' => 'tx3g',
                 'is_embedded' => true,
@@ -249,15 +241,12 @@ class EmbeddedSubtitleDetectorService
     protected function extractMatroskaBlocksToVtt(string $videoPath, int $streamIndex): string
     {
         $vtt = "WEBVTT\n\n";
-
-        // Read text blocks from file
         $fp = @fopen($videoPath, 'rb');
         if (!$fp) return $vtt;
 
-        $content = fread($fp, 1024 * 1024 * 4); // Sample 4MB
+        $content = fread($fp, 1024 * 1024 * 4);
         fclose($fp);
 
-        // Check if plain SRT text timestamps exist inside the stream
         if (preg_match_all('/(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})\r?\n(.*?)(?=\r?\n\r?\n|\Z)/s', $content, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $cue) {
                 $start = str_replace(',', '.', $cue[1]);
@@ -272,42 +261,146 @@ class EmbeddedSubtitleDetectorService
         return $vtt;
     }
 
-    protected function normalizeLanguageCode(string $code): string
+    public function resolveLanguageFromContext(string $rawLang, string $title = '', string $filePath = '', int $trackIndex = 0): string
     {
-        $code = strtolower(trim($code));
-        return match ($code) {
-            'ara', 'ar', 'arabic' => 'ar',
-            'eng', 'en', 'english' => 'en',
-            'fre', 'fra', 'fr', 'french' => 'fr',
-            'spa', 'es', 'spanish' => 'es',
-            'ger', 'deu', 'de', 'german' => 'de',
-            'ita', 'it', 'italian' => 'it',
-            'jpn', 'ja', 'japanese' => 'ja',
-            'kor', 'ko', 'korean' => 'ko',
-            'chi', 'zho', 'zh', 'chinese' => 'zh',
-            'rus', 'ru', 'russian' => 'ru',
-            'por', 'pt', 'portuguese' => 'pt',
-            'tur', 'tr', 'turkish' => 'tr',
-            default => 'und',
-        };
+        $norm = $this->normalizeLanguageCode($rawLang);
+        if ($norm !== 'und') {
+            return $norm;
+        }
+
+        $haystack = strtolower("{$title} " . basename($filePath));
+
+        // Arabic patterns
+        if (preg_match('/\b(ar|ara|arabic|arabi|3arabi)\b/i', $haystack) || str_contains($haystack, 'عربي') || str_contains($haystack, 'مترجم')) {
+            return 'ar';
+        }
+        // English patterns
+        if (preg_match('/\b(en|eng|english|sdh|cc|full)\b/i', $haystack)) {
+            return 'en';
+        }
+        // Spanish patterns
+        if (preg_match('/\b(es|spa|spanish|latino|castellano|español)\b/i', $haystack)) {
+            return 'es';
+        }
+        // French patterns
+        if (preg_match('/\b(fr|fre|fra|french|français)\b/i', $haystack)) {
+            return 'fr';
+        }
+        // German patterns
+        if (preg_match('/\b(de|ger|deu|german|deutsch)\b/i', $haystack)) {
+            return 'de';
+        }
+        // Italian patterns
+        if (preg_match('/\b(it|ita|italian|italiano)\b/i', $haystack)) {
+            return 'it';
+        }
+        // Portuguese patterns
+        if (preg_match('/\b(pt|por|portuguese|português|brazil|brasileiro)\b/i', $haystack)) {
+            return 'pt';
+        }
+        // Russian patterns
+        if (preg_match('/\b(ru|rus|russian|русский)\b/i', $haystack)) {
+            return 'ru';
+        }
+        // Turkish patterns
+        if (preg_match('/\b(tr|tur|turkish|türkçe)\b/i', $haystack)) {
+            return 'tr';
+        }
+        // Persian patterns
+        if (preg_match('/\b(fa|fas|per|persian|farsi)\b/i', $haystack) || str_contains($haystack, 'فارسی')) {
+            return 'fa';
+        }
+        // Japanese patterns
+        if (preg_match('/\b(ja|jpn|japanese)\b/i', $haystack)) {
+            return 'ja';
+        }
+        // Korean patterns
+        if (preg_match('/\b(ko|kor|korean)\b/i', $haystack)) {
+            return 'ko';
+        }
+        // Chinese patterns
+        if (preg_match('/\b(zh|chi|zho|chinese|chs|cht)\b/i', $haystack)) {
+            return 'zh';
+        }
+
+        // If Track 0 in western releases and no tags, default to English
+        if ($trackIndex === 0 && (str_contains($haystack, 'bluray') || str_contains($haystack, 'webrip') || str_contains($haystack, 'web-dl'))) {
+            return 'en';
+        }
+
+        return 'und';
     }
 
-    protected function getLanguageName(string $code): string
+    protected function buildHumanTrackLabel(string $langCode, string $langName, string $title, int $idx, string $codec): string
     {
-        return match ($code) {
-            'ar' => 'Arabic',
-            'en' => 'English',
-            'fr' => 'French',
-            'es' => 'Spanish',
-            'de' => 'German',
-            'it' => 'Italian',
-            'ja' => 'Japanese',
-            'ko' => 'Korean',
-            'zh' => 'Chinese',
-            'ru' => 'Russian',
-            'pt' => 'Portuguese',
-            'tr' => 'Turkish',
-            default => 'Embedded Track',
-        };
+        $codecUpper = strtoupper($codec);
+
+        if ($langCode !== 'und') {
+            if ($title && !str_starts_with(strtolower($title), 'subtitle') && strtolower($title) !== strtolower($langName)) {
+                return "{$langName} - {$title}";
+            }
+            return "{$langName}";
+        }
+
+        // Undefined track - make it friendly instead of 'und'
+        if ($title && trim($title) !== '') {
+            return "{$title} (Track " . ($idx + 1) . ")";
+        }
+
+        return "Subtitle Track " . ($idx + 1) . " ({$codecUpper})";
+    }
+
+    public function normalizeLanguageCode(string $code): string
+    {
+        $code = strtolower(trim($code));
+        $map = [
+            'ara' => 'ar', 'arabic' => 'ar', 'ar' => 'ar',
+            'eng' => 'en', 'english' => 'en', 'en' => 'en',
+            'spa' => 'es', 'spanish' => 'es', 'es' => 'es',
+            'fre' => 'fr', 'fra' => 'fr', 'french' => 'fr', 'fr' => 'fr',
+            'ger' => 'de', 'deu' => 'de', 'german' => 'de', 'de' => 'de',
+            'ita' => 'it', 'italian' => 'it', 'it' => 'it',
+            'por' => 'pt', 'portuguese' => 'pt', 'pt' => 'pt',
+            'rus' => 'ru', 'russian' => 'ru', 'ru' => 'ru',
+            'tur' => 'tr', 'turkish' => 'tr', 'tr' => 'tr',
+            'fas' => 'fa', 'per' => 'fa', 'persian' => 'fa', 'fa' => 'fa', 'farsi' => 'fa',
+            'jpn' => 'ja', 'japanese' => 'ja', 'ja' => 'ja',
+            'kor' => 'ko', 'korean' => 'ko', 'ko' => 'ko',
+            'zho' => 'zh', 'chi' => 'zh', 'chinese' => 'zh', 'zh' => 'zh',
+            'hin' => 'hi', 'hindi' => 'hi', 'hi' => 'hi',
+            'ind' => 'id', 'indonesian' => 'id', 'id' => 'id',
+            'nld' => 'nl', 'dut' => 'nl', 'dutch' => 'nl', 'nl' => 'nl',
+            'pol' => 'pl', 'polish' => 'pl', 'pl' => 'pl',
+            'swe' => 'sv', 'swedish' => 'sv', 'sv' => 'sv',
+            'dan' => 'da', 'danish' => 'da', 'da' => 'da',
+            'nor' => 'no', 'norwegian' => 'no', 'no' => 'no',
+            'fin' => 'fi', 'finnish' => 'fi', 'fi' => 'fi',
+            'ell' => 'el', 'gre' => 'el', 'greek' => 'el', 'el' => 'el',
+            'heb' => 'he', 'hebrew' => 'he', 'he' => 'he',
+            'vie' => 'vi', 'vietnamese' => 'vi', 'vi' => 'vi',
+            'tha' => 'th', 'thai' => 'th', 'th' => 'th',
+            'urd' => 'ur', 'urdu' => 'ur', 'ur' => 'ur',
+            'ron' => 'ro', 'rum' => 'ro', 'romanian' => 'ro', 'ro' => 'ro',
+            'ces' => 'cs', 'cze' => 'cs', 'czech' => 'cs', 'cs' => 'cs',
+            'hun' => 'hu', 'hungarian' => 'hu', 'hu' => 'hu',
+            'ukr' => 'uk', 'ukrainian' => 'uk', 'uk' => 'uk',
+            'msa' => 'ms', 'may' => 'ms', 'malay' => 'ms', 'ms' => 'ms',
+            'ben' => 'bn', 'bengali' => 'bn', 'bn' => 'bn',
+            'tgl' => 'tl', 'fil' => 'tl', 'tagalog' => 'tl', 'tl' => 'tl',
+        ];
+
+        return $map[$code] ?? (strlen($code) === 2 ? $code : 'und');
+    }
+
+    public function getLanguageName(string $code): string
+    {
+        $normalized = $this->normalizeLanguageCode($code);
+        return self::$languageMap[$normalized]['name'] ?? 'Track';
+    }
+
+    public function getLanguageArabicName(string $code): string
+    {
+        $normalized = $this->normalizeLanguageCode($code);
+        return self::$languageMap[$normalized]['ar'] ?? 'ترجمة';
     }
 }

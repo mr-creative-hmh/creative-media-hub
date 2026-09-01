@@ -71,16 +71,29 @@ class MediaController extends Controller
         $movies = $query->paginate(24)->withQueryString();
         $genres = Genre::orderBy('name_en')->get();
 
-        // Spotlight / Hero item (Top rated favorite or latest movie)
-        $heroItem = MediaItem::with(['genres', 'directors', 'actors'])
-            ->whereNotNull('backdrop_path')
-            ->orderByDesc('rating')
-            ->first();
+        // Spotlight / Hero items (Latest added & top rated movies for slides carousel)
+        $heroItems = MediaItem::with(['genres', 'directors', 'actors', 'subtitles'])
+            ->where(function ($q) {
+                $q->whereNotNull('backdrop_path')->orWhereNotNull('poster_path');
+            })
+            ->orderByDesc('created_at')
+            ->limit(6)
+            ->get();
+
+        if ($heroItems->isEmpty()) {
+            $heroItems = MediaItem::with(['genres', 'directors', 'actors', 'subtitles'])
+                ->orderByDesc('rating')
+                ->limit(6)
+                ->get();
+        }
+
+        $heroItem = $heroItems->first();
 
         return Inertia::render('Movies/Index', [
             'movies' => $movies,
             'genres' => $genres,
             'heroItem' => $heroItem,
+            'heroItems' => $heroItems,
             'filters' => $request->only(['search', 'genre', 'resolution', 'from_year', 'to_year', 'sort', 'direction', 'favorite_only', 'vibe']),
         ]);
     }

@@ -72,6 +72,7 @@ Route::post('/api/organizer/execute', [DiskOrganizerController::class, 'execute'
 Route::get('/subtitles', [SubtitleController::class, 'index'])->name('subtitles.index');
 Route::get('/api/subtitles/search', [SubtitleController::class, 'search'])->name('api.subtitles.search');
 Route::post('/api/subtitles/download', [SubtitleController::class, 'downloadForMedia'])->name('api.subtitles.download');
+Route::get('/api/subtitles/for-media', [SubtitleController::class, 'forMedia'])->name('api.subtitles.for-media');
 Route::post('/api/subtitles/verify-engine', [SubtitleController::class, 'verifyEngine'])->name('api.subtitles.verify-engine');
 
 // Cinema Video & Subtitle Streaming Engine (HTTP 206 Partial Content + Audio Transcoding)

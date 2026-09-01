@@ -22,7 +22,8 @@ const props = defineProps<{
         last_page?: number;
     };
     genres: any[];
-    heroItem: any;
+    heroItem?: any;
+    heroItems?: any[];
     filters: Record<string, any>;
 }>();
 
@@ -60,7 +61,7 @@ const handleToggleFavorite = async (item: any) => {
         <!-- Spotlight Hero Banner -->
         <HeroBanner
             v-if="heroItem && !filters.search && !filters.genre && !filters.vibe"
-            :item="heroItem"
+            :items="heroItems || (heroItem ? [heroItem] : [])"
             @play="play"
             @details="handleDetails"
         />
