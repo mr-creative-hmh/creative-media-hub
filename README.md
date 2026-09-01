@@ -16,6 +16,8 @@
 [![SQLite](https://img.shields.io/badge/SQLite-3.x-003B57?style=flat&logo=sqlite&logoColor=white)](https://sqlite.org)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-Supported-007808?style=flat&logo=ffmpeg&logoColor=white)](https://ffmpeg.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Developer](https://img.shields.io/badge/Developer-Eng._Hasan_Mohammad_Hasan-06B6D4?style=flat&logo=github&logoColor=white)](https://github.com/mr-creative-hmh)
+
 
 </div>
 
@@ -194,3 +196,19 @@ php artisan test
 ## 📄 License
 
 The Creative Media Hub project is open-source software licensed under the [MIT License](LICENSE).
+
+---
+
+## 👨‍💻 Creator & Lead Developer
+
+<div align="center">
+
+### **Eng. Hasan Mohammad Hasan**
+**م. حسن محمد حسن**
+
+*Created & Developed with Passion by Eng. Hasan Mohammad Hasan*  
+*تم التصميم والتطوير وبرمجة النظام بالكامل بواسطة المهندس حسن محمد حسن*
+
+[![GitHub](https://img.shields.io/badge/GitHub-mr--creative--hmh-181717?style=for-the-badge&logo=github)](https://github.com/mr-creative-hmh)
+
+</div>

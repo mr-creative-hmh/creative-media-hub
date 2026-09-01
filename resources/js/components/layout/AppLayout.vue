@@ -8,7 +8,7 @@ import ScannerStatusModal from '@/components/scanner/ScannerStatusModal.vue';
 import { useScanner } from '@/composables/useScanner';
 import { useDownloader } from '@/composables/useDownloader';
 
-const { isRTL } = useI18n();
+const { t, isRTL } = useI18n();
 const { fetchStatus } = useScanner();
 const { startBackgroundWorker } = useDownloader();
 
@@ -54,6 +54,20 @@ const closePlayer = () => {
                 <slot :play="handlePlay" />
             </main>
         </div>
+
+        <!-- Global Premium App Footer -->
+        <footer class="border-t border-slate-800/80 bg-[#07090E]/90 backdrop-blur-md py-6 px-4 lg:px-8 mt-auto relative z-10">
+            <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+                <div class="flex items-center gap-3">
+                    <img src="/favicon.svg" alt="Creative Media Hub" class="w-6 h-6 shrink-0" />
+                    <span class="font-bold text-slate-200 tracking-wide">Creative Media Hub</span>
+                </div>
+                <div class="flex items-center gap-2 text-center sm:text-right">
+                    <span class="text-slate-400 font-medium">{{ t('created_by') }}</span>
+                    <span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
+                </div>
+            </div>
+        </footer>
 
         <!-- Global Cinema Video Player Modal -->
         <CinemaPlayer

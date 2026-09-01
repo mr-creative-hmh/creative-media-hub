@@ -112,5 +112,11 @@
         }
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "authors": [
+        {
+            "name": "Eng. Hasan Mohammad Hasan",
+            "role": "Creator & Lead Developer"
+        }
+    ]
 }
