@@ -123,4 +123,49 @@ class MetadataRenameAndCollectionTest extends TestCase
         @rmdir($expectedNewFolder);
         @rmdir($tempDir);
     }
+
+    public function test_delete_item_from_library_index_movie(): void
+    {
+        $movie = MediaItem::create([
+            'title' => 'Garbage Movie',
+            'release_year' => 2020,
+            'file_path' => 'C:/test/garbage.mkv',
+        ]);
+
+        $response = $this->deleteJson("/api/metadata/movie/{$movie->id}");
+        $response->assertStatus(200);
+        $response->assertJson(['success' => true]);
+
+        $this->assertDatabaseMissing('media_items', ['id' => $movie->id]);
+    }
+
+    public function test_delete_item_from_library_index_series(): void
+    {
+        $series = Series::create([
+            'title' => 'Garbage Series',
+            'release_year' => 2020,
+            'folder_path' => 'C:/test/garbage_series',
+        ]);
+
+        $season = Season::create([
+            'series_id' => $series->id,
+            'season_number' => 1,
+        ]);
+
+        $episode = Episode::create([
+            'series_id' => $series->id,
+            'season_id' => $season->id,
+            'episode_number' => 1,
+            'title' => 'Pilot',
+            'file_path' => 'C:/test/garbage_series/ep1.mkv',
+        ]);
+
+        $response = $this->deleteJson("/api/metadata/series/{$series->id}");
+        $response->assertStatus(200);
+        $response->assertJson(['success' => true]);
+
+        $this->assertDatabaseMissing('series', ['id' => $series->id]);
+        $this->assertDatabaseMissing('seasons', ['id' => $season->id]);
+        $this->assertDatabaseMissing('episodes', ['id' => $episode->id]);
+    }
 }

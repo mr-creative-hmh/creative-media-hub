@@ -463,6 +463,48 @@ class MetadataManagementController extends Controller
         }
     }
 
+    public function deleteItem(Request $request, string $type, int $id): JsonResponse
+    {
+        if ($type === 'movie') {
+            $item = MediaItem::find($id);
+            if (!$item) {
+                return response()->json(['success' => false, 'message' => 'Movie not found.'], 404);
+            }
+
+            $title = $item->title;
+            // Delete associated subtitles and watch history
+            $item->subtitles()->delete();
+            $item->watchHistories()->delete();
+            $item->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Movie '{$title}' removed from library index.",
+            ]);
+        } else {
+            $series = Series::with(['seasons.episodes.subtitles'])->find($id);
+            if (!$series) {
+                return response()->json(['success' => false, 'message' => 'Series not found.'], 404);
+            }
+
+            $title = $series->title;
+            foreach ($series->seasons as $season) {
+                foreach ($season->episodes as $episode) {
+                    $episode->subtitles()->delete();
+                    $episode->watchHistories()->delete();
+                    $episode->delete();
+                }
+                $season->delete();
+            }
+            $series->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Series '{$title}' and its episodes removed from library index.",
+            ]);
+        }
+    }
+
     public function batchEnrich(Request $request): JsonResponse
     {
         $limit = max(10, min(100, (int) $request->input('limit', 50)));

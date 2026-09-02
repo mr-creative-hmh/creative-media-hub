@@ -54,6 +54,7 @@ Route::post('/api/metadata/lookup-id', [MetadataManagementController::class, 'lo
 Route::post('/api/metadata/{type}/{id}/reparse', [MetadataManagementController::class, 'reparseItem'])->name('api.metadata.reparse');
 Route::post('/api/metadata/{type}/{id}/convert-type', [MetadataManagementController::class, 'convertType'])->name('api.metadata.convert-type');
 Route::post('/api/metadata/{type}/{id}/rename-file', [MetadataManagementController::class, 'renameFile'])->name('api.metadata.rename-file');
+Route::delete('/api/metadata/{type}/{id}', [MetadataManagementController::class, 'deleteItem'])->name('api.metadata.delete-item');
 
 // Virtual Media Scanner & Background Job Control Center
 Route::get('/scanner', [ScannerController::class, 'index'])->name('scanner.index');

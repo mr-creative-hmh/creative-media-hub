@@ -14,7 +14,7 @@ const props = defineProps<{
     type?: 'movie' | 'series';
 }>();
 
-const emit = defineEmits(['close', 'updated']);
+const emit = defineEmits(['close', 'updated', 'deleted']);
 
 const { isRTL, t } = useI18n();
 
@@ -271,6 +271,12 @@ const convertMediaType = async () => {
     }
 };
 
+const triggerDeleteIndex = () => {
+    if (!props.item?.id) return;
+    emit('deleted', props.item);
+    closeModal();
+};
+
 const renamePhysicalFile = async () => {
     if (!props.item?.id) return;
     isRenaming.value = true;
@@ -524,6 +530,17 @@ const saveManualEdit = async () => {
                     >
                         <ArrowRightLeft class="w-3.5 h-3.5 text-purple-400" />
                         <span>{{ isSeriesType ? (isRTL ? 'تحويل لفيلم' : 'To Movie') : (isRTL ? 'تحويل لمسلسل' : 'To Series') }}</span>
+                    </button>
+
+                    <!-- Delete Index from Library -->
+                    <button
+                        @click="triggerDeleteIndex"
+                        type="button"
+                        class="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 text-xs font-medium border border-rose-500/20 transition-all flex items-center gap-1 cursor-pointer"
+                        :title="isRTL ? 'حذف من فهرس المكتبة' : 'Remove item from library index'"
+                    >
+                        <Trash2 class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'حذف من الفهرس' : 'Delete Index' }}</span>
                     </button>
                 </div>
             </div>

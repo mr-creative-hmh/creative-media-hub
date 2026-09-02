@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -11,7 +11,7 @@ import {
     SlidersHorizontal, Edit, ExternalLink, Check, X, Trash2,
     Database, Filter, ArrowRight, Wand2, Repeat, ArrowRightLeft,
     AlertTriangle, HelpCircle, Layers, Copy, FileVideo, Folder, HardDrive,
-    FileEdit
+    FileEdit, ShieldAlert
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -32,11 +32,18 @@ const props = defineProps<{
 
 const { t, isRTL } = useI18n();
 
+// Local reactive items array
+const localItems = ref<any[]>([...props.items]);
+watch(() => props.items, (newVal) => {
+    localItems.value = [...newVal];
+});
+
 const activeFilter = ref(props.filters?.filter || 'all');
 const searchQuery = ref(props.filters?.search || '');
 const isBatchEnriching = ref(false);
 const isOperating = ref(false);
 const toastMessage = ref('');
+const toastType = ref<'success' | 'info' | 'danger'>('success');
 const copiedItemId = ref<number | string | null>(null);
 
 // Fix Match Modal State
@@ -48,6 +55,7 @@ const confirmModal = ref<{
     title: string;
     message: string;
     confirmText: string;
+    cancelText?: string;
     type: 'danger' | 'warning' | 'info';
     action: () => Promise<void> | void;
 }>({
@@ -58,6 +66,16 @@ const confirmModal = ref<{
     type: 'danger',
     action: () => {},
 });
+
+const showToast = (msg: string, type: 'success' | 'info' | 'danger' = 'success') => {
+    toastMessage.value = msg;
+    toastType.value = type;
+    setTimeout(() => {
+        if (toastMessage.value === msg) {
+            toastMessage.value = '';
+        }
+    }, 4500);
+};
 
 const applyFilter = (filterKey: string) => {
     activeFilter.value = filterKey;
@@ -95,16 +113,27 @@ const copyFilePath = async (item: any) => {
 
 const handleItemUpdated = (updatedItem: any) => {
     showFixModal.value = false;
-    toastMessage.value = isRTL.value 
-        ? `تم تحديث بيانات "${updatedItem.title}" بنجاح!` 
-        : `Metadata updated for "${updatedItem.title}"!`;
-    const target = props.items.find((i) => i.id === updatedItem.id && i.type === updatedItem.type);
-    if (target) {
-        Object.assign(target, updatedItem);
+    showToast(
+        isRTL.value ? `تم تحديث بيانات "${updatedItem.title}" بنجاح!` : `Metadata updated for "${updatedItem.title}"!`,
+        'success'
+    );
+
+    // If currently filtered by unmatched/missing and the item is now resolved, remove it locally
+    if (
+        (activeFilter.value === 'unmatched' && updatedItem.is_matched) ||
+        (activeFilter.value === 'missing_posters' && updatedItem.has_poster) ||
+        (activeFilter.value === 'missing_arabic' && updatedItem.has_arabic)
+    ) {
+        localItems.value = localItems.value.filter(i => !(i.id === updatedItem.id && i.type === updatedItem.type));
+    } else {
+        const target = localItems.value.find((i) => i.id === updatedItem.id && i.type === updatedItem.type);
+        if (target) {
+            Object.assign(target, updatedItem);
+        }
     }
-    setTimeout(() => {
-        toastMessage.value = '';
-    }, 4000);
+
+    // Refresh server state to update all stats and lists
+    router.reload({ preserveScroll: true });
 };
 
 const quickReparse = async (item: any) => {
@@ -120,9 +149,12 @@ const quickReparse = async (item: any) => {
         const data = await res.json();
         if (data.success) {
             handleItemUpdated(data.media || data.series);
+        } else {
+            showToast(data.message || 'Reparse failed.', 'danger');
         }
     } catch (e) {
         console.error('Reparse error', e);
+        showToast('Reparse error occurred.', 'danger');
     } finally {
         isOperating.value = false;
     }
@@ -140,7 +172,10 @@ const quickConvert = async (item: any) => {
         });
         const data = await res.json();
         if (data.success) {
+            showToast(data.message || 'Media type converted!', 'info');
             router.reload({ preserveScroll: true });
+        } else {
+            showToast(data.message || 'Conversion failed.', 'danger');
         }
     } catch (e) {
         console.error('Convert error', e);
@@ -160,11 +195,20 @@ const confirmRenameFile = (item: any) => {
         show: true,
         title: isRTL.value ? 'إعادة تسمية الملف الفعلي على القرص' : 'Rename Physical File on Disk',
         message: isRTL.value
-            ? `هل تريد إعادة تسمية الملف من:\n"${oldName}"\n\nإلى الاسم القياسي الجديد:\n"${newName}"؟`
-            : `Do you want to rename the physical file on disk from:\n"${oldName}"\n\nto the clean standard title:\n"${newName}"?`,
+            ? `هل تريد إعادة تسمية الملف من:
+"${oldName}"
+
+إلى الاسم القياسي الجديد:
+"${newName}"؟`
+            : `Do you want to rename the physical file on disk from:
+"${oldName}"
+
+to the clean standard title:
+"${newName}"?`,
         confirmText: isRTL.value ? 'تأكيد إعادة التسمية' : 'Rename File Now',
         type: 'info',
         action: async () => {
+            confirmModal.value.show = false;
             isOperating.value = true;
             try {
                 const res = await fetch(`/api/metadata/${item.type}/${item.id}/rename-file`, {
@@ -176,13 +220,55 @@ const confirmRenameFile = (item: any) => {
                 });
                 const data = await res.json();
                 if (data.success) {
-                    toastMessage.value = data.message || (isRTL.value ? 'تمت إعادة تسمية الملف بنجاح!' : 'File renamed successfully!');
+                    showToast(data.message || (isRTL.value ? 'تمت إعادة تسمية الملف بنجاح!' : 'File renamed successfully!'), 'success');
                     handleItemUpdated(data.media || data.series);
                 } else {
-                    toastMessage.value = data.message || (isRTL.value ? 'فشلت إعادة التسمية.' : 'Failed to rename file.');
+                    showToast(data.message || (isRTL.value ? 'فشلت إعادة التسمية.' : 'Failed to rename file.'), 'danger');
                 }
             } catch (e) {
                 console.error(e);
+                showToast('Error renaming file.', 'danger');
+            } finally {
+                isOperating.value = false;
+            }
+        },
+    };
+};
+
+const confirmDeleteItem = (item: any) => {
+    confirmModal.value = {
+        show: true,
+        title: isRTL.value ? 'حذف من فهرس المكتبة' : 'Remove from Library Index',
+        message: isRTL.value
+            ? `هل أنت متأكد من حذف "${item.title}" من فهرس المكتبة؟
+(ملاحظة: لن يتم حذف الملف الفعلي من القرص الصلب)`
+            : `Are you sure you want to remove "${item.title}" from the library index?
+(Note: The physical file on your disk will NOT be deleted).`,
+        confirmText: isRTL.value ? 'حذف من الفهرس' : 'Remove Index',
+        cancelText: isRTL.value ? 'إلغاء' : 'Cancel',
+        type: 'danger',
+        action: async () => {
+            confirmModal.value.show = false;
+            isOperating.value = true;
+            try {
+                const res = await fetch(`/api/metadata/${item.type}/${item.id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    },
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(data.message || (isRTL.value ? 'تم حذف العنصر من الفهرس!' : 'Item removed from library index!'), 'info');
+                    localItems.value = localItems.value.filter(i => !(i.id === item.id && i.type === item.type));
+                    router.reload({ preserveScroll: true });
+                } else {
+                    showToast(data.message || 'Failed to delete index.', 'danger');
+                }
+            } catch (e) {
+                console.error(e);
+                showToast('Error deleting index.', 'danger');
             } finally {
                 isOperating.value = false;
             }
@@ -200,7 +286,12 @@ const triggerBatchEnrich = async () => {
         confirmText: isRTL.value ? 'بدء الآن' : 'Start Auto-Enrich',
         type: 'info',
         action: async () => {
+            confirmModal.value.show = false;
             isBatchEnriching.value = true;
+            showToast(
+                isRTL.value ? 'جارٍ تشغيل المعالجة الذكية في الخلفية...' : 'Batch enrichment running in background...',
+                'info'
+            );
             try {
                 const res = await fetch('/api/metadata/batch-enrich', {
                     method: 'POST',
@@ -210,10 +301,11 @@ const triggerBatchEnrich = async () => {
                     },
                 });
                 const data = await res.json();
-                toastMessage.value = data.message || (isRTL.value ? 'اكتملت المعالجة الذكية!' : 'Batch enrichment finished!');
+                showToast(data.message || (isRTL.value ? 'اكتملت المعالجة الذكية!' : 'Batch enrichment finished!'), 'success');
                 router.reload({ preserveScroll: true });
             } catch (e) {
                 console.error(e);
+                showToast('Error running batch enrichment.', 'danger');
             } finally {
                 isBatchEnriching.value = false;
             }
@@ -226,15 +318,40 @@ const triggerBatchEnrich = async () => {
     <AppLayout>
         <Head :title="isRTL ? 'استوديو إصلاح وتصحيح البيانات' : 'Fix Match & Metadata Studio'" />
 
-        <div class="space-y-8 max-w-7xl mx-auto pb-16">
-            <!-- Toast Notification -->
-            <div
-                v-if="toastMessage"
-                class="fixed top-6 right-6 z-50 p-4 rounded-2xl bg-cyan-500/90 text-slate-950 font-bold shadow-2xl backdrop-blur-md flex items-center gap-3 animate-fade-in border border-cyan-400"
+        <div class="space-y-8 max-w-7xl mx-auto pb-24">
+            <!-- Toast Notification at Bottom-Right (Clear of Navbar, Highly Visible & Accessible) -->
+            <transition
+                enter-active-class="transition duration-300 ease-out"
+                enter-from-class="transform translate-y-6 opacity-0"
+                enter-to-class="transform translate-y-0 opacity-100"
+                leave-active-class="transition duration-200 ease-in"
+                leave-from-class="transform translate-y-0 opacity-100"
+                leave-to-class="transform translate-y-6 opacity-0"
             >
-                <CheckCircle2 class="w-5 h-5" />
-                <span>{{ toastMessage }}</span>
-            </div>
+                <div
+                    v-if="toastMessage"
+                    class="fixed bottom-8 z-[9999] max-w-md p-4 rounded-2xl shadow-2xl backdrop-blur-xl border flex items-center justify-between gap-3 text-sm font-bold animate-in"
+                    :class="[
+                        isRTL ? 'left-8' : 'right-8',
+                        toastType === 'success' ? 'bg-cyan-950/90 text-cyan-200 border-cyan-400 shadow-cyan-500/20' : '',
+                        toastType === 'info' ? 'bg-purple-950/90 text-purple-200 border-purple-400 shadow-purple-500/20' : '',
+                        toastType === 'danger' ? 'bg-rose-950/90 text-rose-200 border-rose-400 shadow-rose-500/20' : ''
+                    ]"
+                >
+                    <div class="flex items-center gap-3">
+                        <CheckCircle2 v-if="toastType === 'success'" class="w-5 h-5 text-cyan-400 shrink-0" />
+                        <Sparkles v-else-if="toastType === 'info'" class="w-5 h-5 text-purple-400 shrink-0" />
+                        <AlertCircle v-else class="w-5 h-5 text-rose-400 shrink-0" />
+                        <span class="leading-snug">{{ toastMessage }}</span>
+                    </div>
+                    <button
+                        @click="toastMessage = ''"
+                        class="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors shrink-0"
+                    >
+                        <X class="w-4 h-4" />
+                    </button>
+                </div>
+            </transition>
 
             <!-- Header Showcase Hero -->
             <div class="relative overflow-hidden rounded-3xl p-8 lg:p-10 border border-white/10 bg-gradient-to-br from-slate-900 via-[#0c1222] to-slate-950 shadow-2xl">
@@ -252,8 +369,8 @@ const triggerBatchEnrich = async () => {
                         </h1>
                         <p class="text-slate-400 text-sm max-w-2xl mt-2 leading-relaxed">
                             {{ isRTL 
-                                ? 'استعراض المسار الفعلي للملفات، إصلاح التسميات غير المطابقة، إعادة تسمية الملفات على القرص لتطابق العناوين، وجلب البوسترات والخلفيات بدقة.' 
-                                : 'Inspect physical disk paths, fix unmatched titles, rename disk files to match standard titles, and download pristine artwork.' }}
+                                ? 'استعراض المسار الفعلي للملفات، إصلاح التسميات غير المطابقة، إعادة تسمية الملفات على القرص، حذف العناصر غير المرغوبة من الفهرس، وجلب البوسترات بدقة.' 
+                                : 'Inspect physical disk paths, fix unmatched titles, rename disk files to standard titles, remove obsolete indexes, and fetch pristine artwork.' }}
                         </p>
                     </div>
 
@@ -363,9 +480,9 @@ const triggerBatchEnrich = async () => {
             </div>
 
             <!-- Items List Container -->
-            <div v-if="items.length > 0" class="space-y-4">
+            <div v-if="localItems.length > 0" class="space-y-4">
                 <div
-                    v-for="item in items"
+                    v-for="item in localItems"
                     :key="`${item.type}-${item.id}`"
                     class="p-4 rounded-3xl bg-slate-900/60 hover:bg-slate-900/90 border border-white/10 hover:border-cyan-500/40 transition-all flex flex-col gap-3 group"
                 >
@@ -477,6 +594,16 @@ const triggerBatchEnrich = async () => {
                                 <ArrowRightLeft class="w-4 h-4" />
                             </button>
 
+                            <!-- Delete Index from Library -->
+                            <button
+                                @click="confirmDeleteItem(item)"
+                                :disabled="isOperating"
+                                class="p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 hover:text-rose-300 text-xs font-bold transition-all cursor-pointer"
+                                :title="isRTL ? 'حذف من فهرس المكتبة' : 'Remove item from library index'"
+                            >
+                                <Trash2 class="w-4 h-4" />
+                            </button>
+
                             <!-- Fix Match Modal Trigger -->
                             <button
                                 @click="openFixMatch(item)"
@@ -534,6 +661,7 @@ const triggerBatchEnrich = async () => {
             :type="selectedItemForFix?.type"
             @close="showFixModal = false"
             @updated="handleItemUpdated"
+            @deleted="confirmDeleteItem"
         />
 
         <!-- Confirm Modal Dialog -->
@@ -542,9 +670,11 @@ const triggerBatchEnrich = async () => {
             :title="confirmModal.title"
             :message="confirmModal.message"
             :confirm-text="confirmModal.confirmText"
+            :cancel-text="confirmModal.cancelText"
             :type="confirmModal.type"
             @confirm="confirmModal.action"
             @close="confirmModal.show = false"
+            @cancel="confirmModal.show = false"
         />
     </AppLayout>
 </template>

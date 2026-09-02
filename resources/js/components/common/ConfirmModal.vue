@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue';
-import { AlertTriangle, Trash2, RotateCcw, X, ShieldAlert, Sparkles } from 'lucide-vue-next';
+import { AlertTriangle, Trash2, RotateCcw, X, ShieldAlert, Sparkles, AlertCircle } from 'lucide-vue-next';
 import { useI18n } from '@/i18n/useI18n';
 
 const props = withDefaults(
@@ -28,6 +28,10 @@ const { isRTL } = useI18n();
 const handleClose = () => {
     emit('cancel');
     emit('close');
+};
+
+const handleConfirm = () => {
+    emit('confirm');
 };
 
 const handleKeydown = (e: KeyboardEvent) => {
@@ -82,7 +86,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
                     <h3 class="font-extrabold text-base text-white leading-tight">
                         {{ title }}
                     </h3>
-                    <p class="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                    <p class="text-xs text-slate-400 mt-1.5 leading-relaxed whitespace-pre-line">
                         {{ message }}
                     </p>
                 </div>
@@ -96,7 +100,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
                 </button>
             </div>
 
-            <!-- Extra Slot Content (e.g. Move vs Copy Selector) -->
+            <!-- Extra Slot Content -->
             <div v-if="$slots.extra || $slots.default" class="relative z-10">
                 <slot name="extra" />
                 <slot />
@@ -114,7 +118,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
 
                 <button
                     type="button"
-                    @click="emit('confirm')"
+                    @click="handleConfirm"
                     :disabled="loading"
                     class="px-5 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer shadow-lg"
                     :class="{
