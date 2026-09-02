@@ -53,6 +53,7 @@ Route::post('/api/metadata/batch-enrich', [MetadataManagementController::class, 
 Route::post('/api/metadata/lookup-id', [MetadataManagementController::class, 'lookupId'])->name('api.metadata.lookup-id');
 Route::post('/api/metadata/{type}/{id}/reparse', [MetadataManagementController::class, 'reparseItem'])->name('api.metadata.reparse');
 Route::post('/api/metadata/{type}/{id}/convert-type', [MetadataManagementController::class, 'convertType'])->name('api.metadata.convert-type');
+Route::post('/api/metadata/{type}/{id}/rename-file', [MetadataManagementController::class, 'renameFile'])->name('api.metadata.rename-file');
 
 // Virtual Media Scanner & Background Job Control Center
 Route::get('/scanner', [ScannerController::class, 'index'])->name('scanner.index');

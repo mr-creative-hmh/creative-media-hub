@@ -315,6 +315,154 @@ class MetadataManagementController extends Controller
         }
     }
 
+    public function renameFile(Request $request, string $type, int $id): JsonResponse
+    {
+        if ($type === 'movie') {
+            $item = MediaItem::find($id);
+            if (!$item) {
+                return response()->json(['success' => false, 'message' => 'Movie not found.'], 404);
+            }
+
+            $oldPath = $item->file_path;
+            if (!file_exists($oldPath)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Physical file does not exist on disk: {$oldPath}",
+                ], 404);
+            }
+
+            $dir = dirname($oldPath);
+            $ext = pathinfo($oldPath, PATHINFO_EXTENSION);
+            
+            $cleanTitle = trim(preg_replace('~[\\/:*?"<>|]~', ' ', $item->title));
+            $cleanTitle = preg_replace('/\s+/', ' ', $cleanTitle);
+            
+            $newFilename = $cleanTitle;
+            if ($item->release_year) {
+                $newFilename .= " ({$item->release_year})";
+            }
+            $newFilename .= ".{$ext}";
+            $newPath = $dir . DIRECTORY_SEPARATOR . $newFilename;
+
+            // Normalize path slashes
+            $newPath = str_replace('\\', '/', $newPath);
+            $oldPathNorm = str_replace('\\', '/', $oldPath);
+
+            if ($oldPathNorm !== $newPath) {
+                if (file_exists($newPath)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Target file already exists: {$newFilename}",
+                    ], 400);
+                }
+
+                if (!@rename($oldPath, $newPath)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Failed to rename physical file on disk. Check filesystem permissions.",
+                    ], 500);
+                }
+
+                // Also rename associated subtitle files with matching basename
+                $oldBase = pathinfo($oldPath, PATHINFO_FILENAME);
+                $newBase = pathinfo($newPath, PATHINFO_FILENAME);
+                foreach (['srt', 'vtt', 'sub', 'ass'] as $subExt) {
+                    $oldSub = $dir . DIRECTORY_SEPARATOR . "{$oldBase}.{$subExt}";
+                    $newSub = $dir . DIRECTORY_SEPARATOR . "{$newBase}.{$subExt}";
+                    if (file_exists($oldSub) && !file_exists($newSub)) {
+                        @rename($oldSub, $newSub);
+                    }
+                }
+
+                $item->update([
+                    'file_path' => $newPath,
+                    'folder_path' => dirname($newPath),
+                ]);
+
+                // Update subtitle database records
+                foreach ($item->subtitles as $sub) {
+                    if ($sub->file_path && str_contains($sub->file_path, $oldBase)) {
+                        $updatedSubPath = str_replace($oldBase, $newBase, $sub->file_path);
+                        $sub->update(['file_path' => $updatedSubPath]);
+                    }
+                }
+            }
+
+            $item->load(['genres', 'subtitles']);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Physical file successfully renamed to '{$newFilename}'!",
+                'old_path' => $oldPath,
+                'new_path' => $newPath,
+                'media' => $item,
+            ]);
+        } else {
+            $series = Series::with('seasons.episodes')->find($id);
+            if (!$series) {
+                return response()->json(['success' => false, 'message' => 'Series not found.'], 404);
+            }
+
+            $oldFolder = $series->folder_path;
+            if (!$oldFolder || !is_dir($oldFolder)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Series folder does not exist on disk: {$oldFolder}",
+                ], 404);
+            }
+
+            $parentDir = dirname($oldFolder);
+            $cleanTitle = trim(preg_replace('~[\\/:*?"<>|]~', ' ', $series->title));
+            $cleanTitle = preg_replace('/\s+/', ' ', $cleanTitle);
+            
+            $newFolderName = $cleanTitle;
+            if ($series->release_year) {
+                $newFolderName .= " ({$series->release_year})";
+            }
+            $newFolder = $parentDir . DIRECTORY_SEPARATOR . $newFolderName;
+            $newFolder = str_replace('\\', '/', $newFolder);
+            $oldFolderNorm = str_replace('\\', '/', $oldFolder);
+
+            if ($oldFolderNorm !== $newFolder) {
+                if (file_exists($newFolder)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Target folder already exists: {$newFolderName}",
+                    ], 400);
+                }
+
+                if (!@rename($oldFolder, $newFolder)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Failed to rename series folder. Check permissions.",
+                    ], 500);
+                }
+
+                $series->update(['folder_path' => $newFolder]);
+
+                // Update all episodes file_path
+                foreach ($series->seasons as $season) {
+                    foreach ($season->episodes as $episode) {
+                        if ($episode->file_path) {
+                            $updatedEpPath = str_replace($oldFolderNorm, $newFolder, str_replace('\\', '/', $episode->file_path));
+                            $episode->update(['file_path' => $updatedEpPath]);
+                        }
+                    }
+                }
+            }
+
+            $series->load(['genres', 'seasons.episodes']);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Series folder successfully renamed to '{$newFolderName}'!",
+                'old_path' => $oldFolder,
+                'new_path' => $newFolder,
+                'series' => $series,
+            ]);
+        }
+    }
+
     public function batchEnrich(Request $request): JsonResponse
     {
         $limit = max(10, min(100, (int) $request->input('limit', 50)));

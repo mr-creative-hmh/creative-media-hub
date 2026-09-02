@@ -99,15 +99,17 @@ class CollectionController extends Controller
         }
 
         $movies = MediaItem::where('collection_name', $matchedName)
-            ->with(['genres', 'subtitles', 'people'])
+            ->with(['genres', 'subtitles', 'people', 'directors', 'actors', 'watchHistories'])
             ->orderBy('release_year')
             ->get()
             ->map(function ($m) {
                 $slug = $m->slug ?: "movie-{$m->id}";
                 return [
                     'id' => $m->id,
+                    'type' => 'movie',
                     'title' => $m->title,
                     'title_ar' => $m->title_ar,
+                    'original_title' => $m->original_title,
                     'slug' => $slug,
                     'slug_url' => route('movies.show.slug', $slug),
                     'release_year' => $m->release_year,
@@ -120,8 +122,17 @@ class CollectionController extends Controller
                     'resolution' => $m->resolution,
                     'video_codec' => $m->video_codec,
                     'audio_codec' => $m->audio_codec,
+                    'file_path' => $m->file_path,
+                    'collection_name' => $m->collection_name,
+                    'is_favorite' => (bool) $m->is_favorite,
+                    'trailer_url' => $m->trailer_url,
                     'genres' => $m->genres,
+                    'people' => $m->people,
+                    'directors' => $m->directors,
+                    'actors' => $m->actors,
+                    'subtitles' => $m->subtitles,
                     'subtitles_count' => $m->subtitles->count(),
+                    'watch_history' => $m->watchHistories->first(),
                     'stream_url' => route('stream.movie', $m->id),
                     'remux_url' => route('stream.remux.movie', $m->id),
                 ];

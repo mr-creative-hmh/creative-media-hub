@@ -10,7 +10,8 @@ import {
     Star, RefreshCw, CheckCircle2, AlertCircle, Play,
     SlidersHorizontal, Edit, ExternalLink, Check, X, Trash2,
     Database, Filter, ArrowRight, Wand2, Repeat, ArrowRightLeft,
-    AlertTriangle, HelpCircle, Layers, Copy, FileVideo, Folder, HardDrive
+    AlertTriangle, HelpCircle, Layers, Copy, FileVideo, Folder, HardDrive,
+    FileEdit
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -148,6 +149,47 @@ const quickConvert = async (item: any) => {
     }
 };
 
+const confirmRenameFile = (item: any) => {
+    const rawPath = item.file_path || item.folder_path || '';
+    const oldName = rawPath.split(/[\\/]/).pop() || '';
+    const ext = oldName.includes('.') ? '.' + oldName.split('.').pop() : '';
+    const cleanTitle = (item.title || 'media').replace(/[\\/:*?"<>|]/g, ' ').trim();
+    const newName = `${cleanTitle}${item.release_year ? ` (${item.release_year})` : ''}${item.type === 'movie' ? ext : ''}`;
+
+    confirmModal.value = {
+        show: true,
+        title: isRTL.value ? 'إعادة تسمية الملف الفعلي على القرص' : 'Rename Physical File on Disk',
+        message: isRTL.value
+            ? `هل تريد إعادة تسمية الملف من:\n"${oldName}"\n\nإلى الاسم القياسي الجديد:\n"${newName}"؟`
+            : `Do you want to rename the physical file on disk from:\n"${oldName}"\n\nto the clean standard title:\n"${newName}"?`,
+        confirmText: isRTL.value ? 'تأكيد إعادة التسمية' : 'Rename File Now',
+        type: 'info',
+        action: async () => {
+            isOperating.value = true;
+            try {
+                const res = await fetch(`/api/metadata/${item.type}/${item.id}/rename-file`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    },
+                });
+                const data = await res.json();
+                if (data.success) {
+                    toastMessage.value = data.message || (isRTL.value ? 'تمت إعادة تسمية الملف بنجاح!' : 'File renamed successfully!');
+                    handleItemUpdated(data.media || data.series);
+                } else {
+                    toastMessage.value = data.message || (isRTL.value ? 'فشلت إعادة التسمية.' : 'Failed to rename file.');
+                }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                isOperating.value = false;
+            }
+        },
+    };
+};
+
 const triggerBatchEnrich = async () => {
     confirmModal.value = {
         show: true,
@@ -210,8 +252,8 @@ const triggerBatchEnrich = async () => {
                         </h1>
                         <p class="text-slate-400 text-sm max-w-2xl mt-2 leading-relaxed">
                             {{ isRTL 
-                                ? 'استعراض المسار الفعلي للملفات، إصلاح التسميات غير المطابقة، جلب البوسترات والخلفيات بدقة، وإعادة تحليل الملفات بخوارزميات المشاهد الذكية.' 
-                                : 'Inspect physical disk paths, fix unmatched titles, download pristine artwork, and re-parse files with intelligent multilingual heuristics.' }}
+                                ? 'استعراض المسار الفعلي للملفات، إصلاح التسميات غير المطابقة، إعادة تسمية الملفات على القرص لتطابق العناوين، وجلب البوسترات والخلفيات بدقة.' 
+                                : 'Inspect physical disk paths, fix unmatched titles, rename disk files to match standard titles, and download pristine artwork.' }}
                         </p>
                     </div>
 
@@ -405,6 +447,16 @@ const triggerBatchEnrich = async () => {
 
                         <!-- Right: Action Buttons -->
                         <div class="flex items-center gap-2 shrink-0 self-end md:self-center">
+                            <!-- Rename File on Disk -->
+                            <button
+                                @click="confirmRenameFile(item)"
+                                :disabled="isOperating"
+                                class="p-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-300 text-xs font-bold transition-all cursor-pointer"
+                                :title="isRTL ? 'إعادة تسمية الملف الفعلي على القرص ليطابق العنوان النظيف' : 'Rename physical file on disk to clean standard title'"
+                            >
+                                <FileEdit class="w-4 h-4" />
+                            </button>
+
                             <!-- Quick Re-Parse -->
                             <button
                                 @click="quickReparse(item)"

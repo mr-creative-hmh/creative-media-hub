@@ -4,7 +4,8 @@ import { useI18n } from '@/i18n/useI18n';
 import {
     X, Search, Sparkles, Check, Image as ImageIcon, Star, Calendar,
     Film, Tv, RefreshCw, AlertCircle, Save, SlidersHorizontal, Layers,
-    Hash, Repeat, ArrowRightLeft, Wand2, Copy, FileVideo, Folder, HardDrive
+    Hash, Repeat, ArrowRightLeft, Wand2, Copy, FileVideo, Folder, HardDrive,
+    FileEdit
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -23,10 +24,12 @@ const searchYear = ref<string>('');
 const directIdInput = ref('');
 const isSearching = ref(false);
 const isSaving = ref(false);
+const isRenaming = ref(false);
 const searchResults = ref<any[]>([]);
 const searchError = ref('');
 const successMessage = ref('');
 const copiedPath = ref(false);
+const autoRenameFile = ref(false);
 
 // Manual form state
 const form = ref({
@@ -111,6 +114,7 @@ watch(() => props.item, (newItem) => {
         searchError.value = '';
         successMessage.value = '';
         copiedPath.value = false;
+        autoRenameFile.value = false;
     }
 }, { immediate: true });
 
@@ -188,8 +192,12 @@ const lookupAndApplyDirectId = async () => {
 
         const data = await res.json();
         if (data.success) {
+            const updated = data.media || data.series;
+            if (autoRenameFile.value) {
+                await renamePhysicalFile();
+            }
             successMessage.value = isRTL.value ? 'تم جلب وتطبيق البيانات بنجاح!' : 'Metadata applied successfully!';
-            emit('updated', data.media || data.series);
+            emit('updated', updated);
             setTimeout(() => closeModal(), 1200);
         } else {
             searchError.value = data.message || (isRTL.value ? 'معرّف TMDb / IMDb غير صالح أو غير موجود.' : 'Invalid or not found TMDb / IMDb ID.');
@@ -263,6 +271,41 @@ const convertMediaType = async () => {
     }
 };
 
+const renamePhysicalFile = async () => {
+    if (!props.item?.id) return;
+    isRenaming.value = true;
+    searchError.value = '';
+    successMessage.value = '';
+
+    const mediaType = isSeriesType.value ? 'series' : 'movie';
+    try {
+        const res = await fetch(`/api/metadata/${mediaType}/${props.item.id}/rename-file`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            successMessage.value = data.message || (isRTL.value ? 'تمت إعادة تسمية الملف على القرص بنجاح!' : 'File successfully renamed on disk!');
+            const updated = data.media || data.series;
+            if (updated && props.item) {
+                props.item.file_path = updated.file_path;
+                props.item.folder_path = updated.folder_path;
+            }
+            emit('updated', updated);
+        } else {
+            searchError.value = data.message || (isRTL.value ? 'فشلت إعادة تسمية الملف على القرص.' : 'Failed to rename file on disk.');
+        }
+    } catch (e) {
+        searchError.value = isRTL.value ? 'خطأ أثناء إعادة تسمية الملف.' : 'Error renaming file on disk.';
+    } finally {
+        isRenaming.value = false;
+    }
+};
+
 const applyMatch = async (result: any) => {
     if (!props.item?.id) return;
     isSaving.value = true;
@@ -299,6 +342,9 @@ const applyMatch = async (result: any) => {
         if (res.ok) {
             const data = await res.json();
             const updated = data.media || data.series;
+            if (autoRenameFile.value) {
+                await renamePhysicalFile();
+            }
             emit('updated', updated);
             closeModal();
         } else {
@@ -345,6 +391,9 @@ const saveManualEdit = async () => {
         if (res.ok) {
             const data = await res.json();
             const updated = data.media || data.series;
+            if (autoRenameFile.value) {
+                await renamePhysicalFile();
+            }
             emit('updated', updated);
             closeModal();
         } else {
@@ -443,6 +492,19 @@ const saveManualEdit = async () => {
 
                 <!-- Quick Action Tools -->
                 <div class="flex items-center gap-1.5">
+                    <!-- Rename Physical File -->
+                    <button
+                        @click="renamePhysicalFile"
+                        :disabled="isRenaming"
+                        class="px-2.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/20 transition-all flex items-center gap-1 cursor-pointer"
+                        :title="isRTL ? 'إعادة تسمية الملف على القرص ليطابق العنوان' : 'Rename physical file on disk to match clean title'"
+                    >
+                        <RefreshCw v-if="isRenaming" class="w-3.5 h-3.5 animate-spin" />
+                        <FileEdit v-else class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'تسمية الملف' : 'Rename File' }}</span>
+                    </button>
+
+                    <!-- Quick Re-Parse -->
                     <button
                         @click="reparseFilename"
                         :disabled="isSearching"
@@ -450,8 +512,10 @@ const saveManualEdit = async () => {
                         :title="isRTL ? 'إعادة قراءة وتفكيك اسم الملف' : 'Re-parse filename using intelligent scene engine'"
                     >
                         <Repeat class="w-3.5 h-3.5 text-cyan-400" />
-                        <span>{{ isRTL ? 'إعادة تفكيك' : 'Re-Parse' }}</span>
+                        <span>{{ isRTL ? 'تفكيك' : 'Re-Parse' }}</span>
                     </button>
+
+                    <!-- Quick Convert Type -->
                     <button
                         @click="convertMediaType"
                         :disabled="isSearching"
@@ -472,6 +536,18 @@ const saveManualEdit = async () => {
             <div v-if="successMessage" class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2 shrink-0">
                 <Check class="w-4 h-4 shrink-0" />
                 <span>{{ successMessage }}</span>
+            </div>
+
+            <!-- Optional: Auto-Rename Checkbox Option -->
+            <div class="px-1 flex items-center gap-2 text-xs text-slate-400">
+                <label class="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                        v-model="autoRenameFile"
+                        type="checkbox"
+                        class="rounded border-white/20 bg-slate-900 text-cyan-500 focus:ring-cyan-500"
+                    />
+                    <span>{{ isRTL ? 'إعادة تسمية الملف الفعلي على القرص تلقائياً عند حفظ المطابقة' : 'Automatically rename physical disk file when match is saved' }}</span>
+                </label>
             </div>
 
             <!-- Tab 1: Live Online Search -->
