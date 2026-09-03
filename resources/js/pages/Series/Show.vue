@@ -68,11 +68,14 @@ const playEpisode = (ep: any, playFn: (item: any, playlist?: any[]) => void) => 
         series_id: props.series.id,
         season_number: selectedSeason()?.season_number || 1,
         episode_number: e.episode_number,
-        runtime_minutes: e.runtime_minutes || 22,
-        duration_seconds: (e.runtime_minutes ? e.runtime_minutes * 60 : 1320),
+        runtime_minutes: e.runtime_minutes,
+        duration_seconds: e.duration_seconds || (e.runtime_minutes ? e.runtime_minutes * 60 : 0),
+        resolution: e.resolution,
+        video_codec: e.video_codec,
+        audio_codec: e.audio_codec,
         subtitles: e.subtitles || [],
         title: e.title,
-        title_ar: e.title_ar
+        title_ar: e.title_ar,
     }));
 
     const currentItem = {
@@ -85,11 +88,14 @@ const playEpisode = (ep: any, playFn: (item: any, playlist?: any[]) => void) => 
         series_id: props.series.id,
         season_number: selectedSeason()?.season_number || 1,
         episode_number: ep.episode_number,
-        runtime_minutes: ep.runtime_minutes || 22,
-        duration_seconds: (ep.runtime_minutes ? ep.runtime_minutes * 60 : 1320),
+        runtime_minutes: ep.runtime_minutes,
+        duration_seconds: ep.duration_seconds || (ep.runtime_minutes ? ep.runtime_minutes * 60 : 0),
+        resolution: ep.resolution,
+        video_codec: ep.video_codec,
+        audio_codec: ep.audio_codec,
         subtitles: ep.subtitles || [],
         title: ep.title,
-        title_ar: ep.title_ar
+        title_ar: ep.title_ar,
     };
 
     playFn(currentItem, playlist);
@@ -220,8 +226,8 @@ const playEpisode = (ep: any, playFn: (item: any, playlist?: any[]) => void) => 
                             <Subtitles class="w-2.5 h-2.5" />
                             <span>{{ ep.subtitles.length }} CC</span>
                         </span>
-                        <span class="cinema-badge bg-black/80 text-cyan-400 border border-cyan-500/40 text-[9px]">
-                            {{ ep.resolution || '1080p' }}
+                        <span v-if="ep.resolution && ep.resolution !== 'Unknown'" class="cinema-badge bg-black/80 text-cyan-400 border border-cyan-500/40 text-[9px]">
+                            {{ ep.resolution }}
                         </span>
                     </div>
                 </div>

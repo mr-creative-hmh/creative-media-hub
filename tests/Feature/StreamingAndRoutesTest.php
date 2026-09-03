@@ -134,4 +134,62 @@ class StreamingAndRoutesTest extends TestCase
         $this->assertEquals(1, count($resCol->json('items')));
         $this->assertEquals('The Dark Knight', $resCol->json('items.0.title'));
     }
+
+    public function test_continue_watching_includes_resolution_and_codecs(): void
+    {
+        $movie = MediaItem::create([
+            'title' => 'Sample 480p Video',
+            'release_year' => 2020,
+            'resolution' => '480p SD',
+            'video_codec' => 'h264',
+            'audio_codec' => 'aac',
+            'duration_seconds' => 3600,
+        ]);
+
+        WatchHistory::create([
+            'watchable_id' => $movie->id,
+            'watchable_type' => MediaItem::class,
+            'progress_seconds' => 120,
+            'duration_seconds' => 3600,
+            'is_completed' => false,
+            'last_watched_at' => now(),
+        ]);
+
+        $res = $this->getJson('/api/continue-watching?type=movie');
+        $res->assertStatus(200);
+        $item = $res->json('items.0');
+        $this->assertEquals('480p SD', $item['resolution']);
+        $this->assertEquals('h264', $item['video_codec']);
+        $this->assertEquals('aac', $item['audio_codec']);
+        $this->assertEquals(3600, $item['duration_seconds']);
+    }
+
+    public function test_media_duration_endpoint_returns_exact_duration_and_resolution(): void
+    {
+        $series = Series::create([
+            'title' => 'Wicked Science',
+            'release_year' => 2004,
+        ]);
+
+        $season = Season::create([
+            'series_id' => $series->id,
+            'season_number' => 1,
+        ]);
+
+        $episode = Episode::create([
+            'series_id' => $series->id,
+            'season_id' => $season->id,
+            'episode_number' => 1,
+            'title' => 'Episode 1',
+            'resolution' => '360p',
+            'duration_seconds' => 1427,
+            'runtime_minutes' => 24,
+        ]);
+
+        $res = $this->getJson('/api/media/duration?type=episode&id='.$episode->id);
+        $res->assertStatus(200);
+        $this->assertEquals(1427, $res->json('duration_seconds'));
+        $this->assertEquals(24, $res->json('runtime_minutes'));
+        $this->assertEquals('360p', $res->json('resolution'));
+    }
 }

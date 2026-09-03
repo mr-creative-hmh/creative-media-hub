@@ -192,8 +192,10 @@ class StreamController extends Controller
                     'progress_percent' => $percent,
                     'percent' => $percent,
                     'current_time_formatted' => $formatTime($h->progress_seconds),
-                    'duration_formatted' => $formatTime($h->duration_seconds),
                     'subtitles' => $item->subtitles,
+                    'resolution' => $item->resolution,
+                    'video_codec' => $item->video_codec,
+                    'audio_codec' => $item->audio_codec,
                     'last_watched_at' => $h->last_watched_at,
                     'stream_url' => route('stream.movie', $item->id),
                 ];
@@ -233,6 +235,9 @@ class StreamController extends Controller
                     'current_time_formatted' => $formatTime($h->progress_seconds),
                     'duration_formatted' => $formatTime($h->duration_seconds),
                     'subtitles' => $item->subtitles,
+                    'resolution' => $item->resolution,
+                    'video_codec' => $item->video_codec,
+                    'audio_codec' => $item->audio_codec,
                     'last_watched_at' => $h->last_watched_at,
                     'stream_url' => route('stream.episode', $item->id),
                 ];
@@ -310,37 +315,64 @@ class StreamController extends Controller
         $id = (int) $request->input('id');
 
         $model = $type === 'episode' ? Episode::find($id) : MediaItem::find($id);
-        if (! $model || ! $model->file_path || ! File::exists($model->file_path)) {
-            return response()->json(['duration_seconds' => 0, 'runtime_minutes' => 0]);
+        if (! $model) {
+            return response()->json(['duration_seconds' => 0, 'runtime_minutes' => 0, 'resolution' => null]);
         }
 
         // Return cached exact duration from database if present
         if (! empty($model->duration_seconds) && $model->duration_seconds > 0) {
             return response()->json([
-                'duration_seconds' => (int) $model->duration_seconds,
+                'duration_seconds' => (float) $model->duration_seconds,
                 'runtime_minutes' => max(1, (int) round($model->duration_seconds / 60)),
+                'resolution' => $model->resolution,
             ]);
         }
 
-        // Directly probe the ORIGINAL video file on disk for exact seconds
+        if (! $model->file_path || ! File::exists($model->file_path)) {
+            $fallbackMins = $model->runtime_minutes ?: 45;
+
+            return response()->json([
+                'duration_seconds' => $fallbackMins * 60,
+                'runtime_minutes' => $fallbackMins,
+                'resolution' => $model->resolution,
+            ]);
+        }
+
+        // Directly probe the ORIGINAL video file on disk for exact seconds & technical specs
         $ffprobe = FfmpegLocatorService::getFfprobePath();
         if ($ffprobe) {
             $escaped = escapeshellarg($model->file_path);
-            $cmd = escapeshellarg($ffprobe)." -v quiet -print_format json -show_format {$escaped}";
+            $cmd = escapeshellarg($ffprobe)." -v quiet -print_format json -show_format -show_streams {$escaped}";
             $out = @shell_exec($cmd);
             if ($out) {
                 $data = @json_decode($out, true);
                 if (! empty($data['format']['duration']) && is_numeric($data['format']['duration'])) {
-                    $secs = (int) round((float) $data['format']['duration']);
+                    $secs = (float) $data['format']['duration'];
                     if ($secs > 0) {
                         $mins = max(1, (int) round($secs / 60));
-                        $model->duration_seconds = $secs;
+                        $model->duration_seconds = (int) round($secs);
                         $model->runtime_minutes = $mins;
+
+                        // Check resolution if missing or Unknown
+                        if (empty($model->resolution) || $model->resolution === 'Unknown') {
+                            foreach ($data['streams'] ?? [] as $st) {
+                                if (($st['codec_type'] ?? '') === 'video') {
+                                    $w = (int) ($st['width'] ?? 0);
+                                    $h = (int) ($st['height'] ?? 0);
+                                    if ($h > 0) {
+                                        $model->resolution = $this->calculateProbeResolution($w, $h);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
                         $model->save();
 
                         return response()->json([
                             'duration_seconds' => $secs,
                             'runtime_minutes' => $mins,
+                            'resolution' => $model->resolution,
                         ]);
                     }
                 }
@@ -352,7 +384,31 @@ class StreamController extends Controller
         return response()->json([
             'duration_seconds' => $fallbackMins * 60,
             'runtime_minutes' => $fallbackMins,
+            'resolution' => $model->resolution,
         ]);
+    }
+
+    protected function calculateProbeResolution(int $width, int $height): string
+    {
+        $resolutions = [
+            4320 => '8K UHD',
+            2160 => '4K UHD',
+            1440 => '1440p 2K',
+            1080 => '1080p FHD',
+            720 => '720p HD',
+            576 => '576p SD',
+            480 => '480p SD',
+            360 => '360p',
+            240 => '240p',
+        ];
+
+        foreach ($resolutions as $minHeight => $label) {
+            if ($height >= $minHeight) {
+                return $label;
+            }
+        }
+
+        return "{$width}x{$height}";
     }
 
     /**

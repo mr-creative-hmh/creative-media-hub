@@ -216,7 +216,7 @@ class VirtualLibraryScannerService
                     'title' => $title,
                     'type' => $mediaType,
                     'file' => $file['filename'],
-                    'resolution' => $file['parsed']['resolution'] ?? '1080p',
+                    'resolution' => $file['parsed']['resolution'] ?? ($probeData['resolution'] ?? null),
                     'subtitles_count' => count($file['subtitles'] ?? []),
                 ];
 
@@ -384,6 +384,7 @@ class VirtualLibraryScannerService
                 'imdb_id' => $meta['imdb_id'] ?? null,
                 'rating' => $meta['rating'] ?? 7.5,
                 'runtime_minutes' => $runtimeMinutes,
+                'duration_seconds' => ! empty($probeData['duration']) && $probeData['duration'] > 0 ? (int) round($probeData['duration']) : ($runtimeMinutes * 60),
                 'file_path' => $file['path'],
                 'folder_path' => str_replace('\\', '/', dirname($file['path'])),
                 'file_size_bytes' => $file['size_bytes'] ?? 0,
@@ -522,6 +523,7 @@ class VirtualLibraryScannerService
                 'title' => $epTitle,
                 'overview' => "Episode {$epNum}",
                 'runtime_minutes' => $runtimeMinutes,
+                'duration_seconds' => ! empty($probeData['duration']) && $probeData['duration'] > 0 ? (int) round($probeData['duration']) : ($runtimeMinutes * 60),
                 'file_path' => $file['path'],
                 'file_size_bytes' => $file['size_bytes'] ?? 0,
                 'resolution' => $resolution,

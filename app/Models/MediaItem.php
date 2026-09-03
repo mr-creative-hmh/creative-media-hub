@@ -30,6 +30,7 @@ class MediaItem extends Model
         'rating' => 'float',
         'vote_count' => 'integer',
         'runtime_minutes' => 'integer',
+        'duration_seconds' => 'integer',
         'file_size_bytes' => 'integer',
         'mood_tags' => 'array',
         'is_favorite' => 'boolean',

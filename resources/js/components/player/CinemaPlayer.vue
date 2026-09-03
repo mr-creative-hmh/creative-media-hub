@@ -76,9 +76,10 @@ const initialSec = Number(props.initialProgress) || Number(props.item?.progress_
 const currentTime = ref(initialSec > 0 ? initialSec : 0);
 
 // Initialize duration from original file metadata immediately
-const initialDuration = Number(props.item?.duration_seconds) || (Number(props.item?.runtime_minutes) ? Number(props.item.runtime_minutes) * 60 : 0);
+const hasExactDuration = Number(props.item?.duration_seconds) > 0;
+const initialDuration = hasExactDuration ? Number(props.item?.duration_seconds) : (Number(props.item?.runtime_minutes) ? Number(props.item.runtime_minutes) * 60 : 0);
 const duration = ref(initialDuration > 0 ? initialDuration : 0);
-const isDurationLocked = ref(initialDuration > 0);
+const isDurationLocked = ref(hasExactDuration);
 
 const bufferedPercent = ref(0);
 const isFullscreen = ref(false);
@@ -192,13 +193,13 @@ const checkNeedsRemux = (item: any) => {
 };
 
 const isRemuxStream = ref(checkNeedsRemux(props.item));
-const remuxStartOffset = ref(isRemuxStream.value && initialSec > 0 ? Math.floor(initialSec) : 0);
+const remuxStartOffset = ref(isRemuxStream.value && initialSec > 0 ? initialSec : 0);
 
 // Stable Stream URL: Direct Stream vs Server-Side Remux
 const streamUrl = computed(() => {
     if (!activeItem.value) return '';
     if (isRemuxStream.value) {
-        const startParam = remuxStartOffset.value > 0 ? `?start=${remuxStartOffset.value}` : '';
+        const startParam = remuxStartOffset.value > 0 ? `?start=${Math.round(remuxStartOffset.value * 100) / 100}` : '';
         if (isEpisode.value) {
             return `/stream/remux/episode/${activeItem.value.id}${startParam}`;
         }
@@ -215,11 +216,13 @@ const changeActiveItem = (newItem: any) => {
     savePlaybackProgress();
     stopServerStreamingCache();
     activeItem.value = newItem;
+    liveResolution.value = '';
     hasAppliedInitialSeek.value = false;
     currentTime.value = 0;
-    const dur = Number(newItem?.duration_seconds) || (Number(newItem?.runtime_minutes) ? Number(newItem.runtime_minutes) * 60 : 0);
-    duration.value = dur > 0 ? dur : 0;
-    isDurationLocked.value = dur > 0;
+    const exactDur = Number(newItem?.duration_seconds) || 0;
+    const fallbackDur = Number(newItem?.runtime_minutes) ? Number(newItem.runtime_minutes) * 60 : 0;
+    duration.value = exactDur > 0 ? exactDur : fallbackDur;
+    isDurationLocked.value = exactDur > 0;
     isRemuxStream.value = checkNeedsRemux(newItem);
     remuxStartOffset.value = 0;
     selectedSubtitleId.value = 'off';
@@ -270,7 +273,7 @@ watch(() => props.item, (newVal) => {
 const toggleRemuxStream = () => {
     isRemuxStream.value = !isRemuxStream.value;
     if (isRemuxStream.value) {
-        remuxStartOffset.value = Math.floor(currentTime.value);
+        remuxStartOffset.value = currentTime.value;
     } else {
         remuxStartOffset.value = 0;
     }
@@ -290,7 +293,7 @@ const handleVideoError = () => {
     if (!isRemuxStream.value) {
         showToast(isRTL.value ? 'جاري التحويل للبث المحسن (Remux)...' : 'Switching to Ultra-Fast Server Remux...');
         isRemuxStream.value = true;
-        remuxStartOffset.value = Math.floor(currentTime.value);
+        remuxStartOffset.value = currentTime.value;
         setTimeout(() => {
             if (videoRef.value) {
                 videoRef.value.load();
@@ -314,9 +317,37 @@ const progressPercent = computed(() => {
     return Math.min(100, Math.max(0, (currentTime.value / duration.value) * 100));
 });
 
+// Live dynamic stream resolution detector from video decoder dimensions
+const liveResolution = ref<string>('');
+
+const updateLiveResolution = () => {
+    const v = videoRef.value;
+    if (!v) return;
+    const w = v.videoWidth;
+    const h = v.videoHeight;
+    if (w > 0 && h > 0) {
+        if (h >= 2160 || w >= 3800) liveResolution.value = '4K UHD';
+        else if (h >= 1440 || w >= 2500) liveResolution.value = '1440p 2K';
+        else if (h >= 1000 || w >= 1900) liveResolution.value = '1080p FHD';
+        else if (h >= 700 || w >= 1200) liveResolution.value = '720p HD';
+        else if (h >= 540) liveResolution.value = '576p SD';
+        else if (h >= 450) liveResolution.value = '480p SD';
+        else if (h >= 340) liveResolution.value = '360p';
+        else if (h >= 200) liveResolution.value = `${h}p`;
+        else liveResolution.value = `${w}x${h}`;
+    }
+};
+
 // Media Meta Display (Resolution, Codec, Audio)
 const displayResolution = computed(() => {
-    return activeItem.value?.resolution || activeItem.value?.video_resolution || '1080p FHD';
+    if (liveResolution.value) {
+        return liveResolution.value;
+    }
+    const meta = activeItem.value?.resolution || activeItem.value?.video_resolution;
+    if (meta && meta !== 'Unknown') {
+        return meta;
+    }
+    return '';
 });
 
 const displayCodec = computed(() => {
@@ -541,6 +572,9 @@ const fetchMediaDuration = async () => {
             duration.value = data.duration_seconds;
             isDurationLocked.value = true;
         }
+        if (data.resolution && data.resolution !== 'Unknown' && !liveResolution.value) {
+            liveResolution.value = data.resolution;
+        }
     } catch (e) {}
 };
 
@@ -650,7 +684,7 @@ const downloadAndApplySubtitle = async (result: any) => {
                     availableSubtitles.value.push(newSub);
                 }
                 showSubtitleSearchModal.value = false;
-                await selectSubtitle(newSub.id);
+                await selectSubtitle(newSub.id, false);
                 showToast(isRTL.value ? 'تم تنزيل وتفعيل الترجمة بنجاح!' : 'Subtitle downloaded & activated!');
             }
         } else {
@@ -748,7 +782,7 @@ const executeSeek = (targetSecs: number) => {
     updateActiveCue(clamped);
 
     if (isRemuxStream.value) {
-        remuxStartOffset.value = Math.floor(clamped);
+        remuxStartOffset.value = clamped;
         setTimeout(() => {
             if (videoRef.value) {
                 videoRef.value.load();
@@ -826,12 +860,14 @@ const toggleFullscreen = () => {
     }
 };
 
-const selectSubtitle = (subId: number | string) => {
+const selectSubtitle = (subId: number | string, notify = true) => {
     selectedSubtitleId.value = subId;
     loadSubtitleTrack(subId);
     showSubtitlesMenu.value = false;
-    const found = availableSubtitles.value.find(s => s.id === subId);
-    showToast(subId === 'off' ? (isRTL.value ? 'الترجمة: معطلة' : 'Subtitles: Off') : (isRTL.value ? `تم اختيار: ${found?.language_name}` : `Selected: ${found?.language_name}`));
+    if (notify) {
+        const found = availableSubtitles.value.find(s => s.id === subId);
+        showToast(subId === 'off' ? (isRTL.value ? 'الترجمة: معطلة' : 'Subtitles: Off') : (isRTL.value ? `تم اختيار: ${found?.language_name}` : `Selected: ${found?.language_name}`));
+    }
 };
 
 const adjustSubtitleDelay = (delta: number) => {
@@ -871,6 +907,7 @@ const showControlsTemporarily = () => {
 // Playback Lifecycle & Progress Handlers
 const onLoadedMetadata = () => {
     if (!videoRef.value) return;
+    updateLiveResolution();
     const d = videoRef.value.duration;
     if (!isDurationLocked.value && !isRemuxStream.value && d && isFinite(d) && !isNaN(d) && d > 0) {
         duration.value = d;
@@ -931,6 +968,7 @@ const onVideoWaiting = () => {
 
 const onVideoPlaying = () => {
     isBuffering.value = false;
+    updateLiveResolution();
 };
 
 // Formatting Time (Handles Hours, Minutes, Seconds with zero NaN or Infinity bugs)
@@ -1159,7 +1197,7 @@ onBeforeUnmount(() => {
                         <!-- Technical Status Line (Resolution, Codec, Hardware Stream) -->
                         <div class="flex items-center gap-2 flex-wrap text-[11px] font-mono">
                             <!-- Quality Badge -->
-                            <span class="px-2 py-0.5 rounded-md bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 font-extrabold flex items-center gap-1">
+                            <span v-if="displayResolution" class="px-2 py-0.5 rounded-md bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 font-extrabold flex items-center gap-1">
                                 <Film class="w-3 h-3 text-cyan-400" />
                                 {{ displayResolution }}
                             </span>
@@ -1212,6 +1250,7 @@ onBeforeUnmount(() => {
             @timeupdate="onTimeUpdate"
             @progress="updateBufferProgress"
             @loadedmetadata="onLoadedMetadata"
+            @canplay="updateLiveResolution"
             @play="onVideoPlay"
             @pause="onVideoPause"
             @waiting="onVideoWaiting"
@@ -1242,17 +1281,6 @@ onBeforeUnmount(() => {
                 v-html="activeCueText"
             ></div>
         </div>
-
-        <!-- In-Player Floating Toast Notification -->
-        <transition name="fade">
-            <div
-                v-if="toastNotice"
-                class="absolute top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-none px-4 py-2 rounded-2xl bg-slate-950/90 border border-cyan-500/40 text-cyan-300 text-xs font-bold shadow-2xl backdrop-blur-md flex items-center gap-2"
-            >
-                <Sparkles class="w-4 h-4 text-cyan-400 animate-pulse" />
-                <span>{{ toastNotice }}</span>
-            </div>
-        </transition>
 
         <!-- Buffering Spinner -->
         <div

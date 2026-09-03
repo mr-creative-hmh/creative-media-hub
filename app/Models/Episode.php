@@ -16,6 +16,7 @@ class Episode extends Model
     protected $casts = [
         'episode_number' => 'integer',
         'runtime_minutes' => 'integer',
+        'duration_seconds' => 'integer',
         'rating' => 'float',
         'air_date' => 'date',
         'file_size_bytes' => 'integer',
