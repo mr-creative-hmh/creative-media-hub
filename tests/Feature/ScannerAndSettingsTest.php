@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Episode;
 use App\Models\Series;
-use App\Models\User;
 use App\Services\Organizer\FilesystemScannerService;
 use App\Services\Organizer\PhysicalOrganizerService;
 use App\Services\Organizer\SceneNameParserService;
@@ -114,7 +113,6 @@ class ScannerAndSettingsTest extends TestCase
 
     public function test_media_cache_stats_and_clearing(): void
     {
-        $user = User::factory()->create();
         $cacheDir = storage_path('app/cache/media_streams');
         if (! File::isDirectory($cacheDir)) {
             File::makeDirectory($cacheDir, 0755, true);
@@ -125,14 +123,14 @@ class ScannerAndSettingsTest extends TestCase
         File::put("{$cacheDir}/stream_dummy_2.mp4", str_repeat('B', 3000));
 
         // Test stats endpoint
-        $statsRes = $this->actingAs($user)->getJson(route('api.settings.media-cache-stats'));
+        $statsRes = $this->getJson(route('api.settings.media-cache-stats'));
         $statsRes->assertOk();
         $statsRes->assertJsonStructure(['size_bytes', 'formatted_size', 'file_count']);
         $this->assertGreaterThanOrEqual(8000, $statsRes->json('size_bytes'));
         $this->assertGreaterThanOrEqual(2, $statsRes->json('file_count'));
 
         // Test clear endpoint
-        $clearRes = $this->actingAs($user)->postJson(route('api.settings.clear-media-cache'));
+        $clearRes = $this->postJson(route('api.settings.clear-media-cache'));
         $clearRes->assertOk();
         $clearRes->assertJson([
             'success' => true,

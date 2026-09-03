@@ -96,7 +96,11 @@
     },
     "extra": {
         "laravel": {
-            "dont-discover": [],
+            "dont-discover": [
+                "laravel/fortify",
+                "laravel/passkeys",
+                "Laravel\\Passkeys\\PasskeysServiceProvider"
+            ],
             "installer": {
                 "post-create-project": []
             }

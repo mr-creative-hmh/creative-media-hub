@@ -147,7 +147,7 @@ return new class extends Migration
 
         Schema::create('watch_histories', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('user_id')->nullable();
             $table->morphs('watchable');
             $table->integer('progress_seconds')->default(0);
             $table->integer('duration_seconds')->default(0);

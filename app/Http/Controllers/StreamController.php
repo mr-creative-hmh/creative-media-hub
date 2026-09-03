@@ -9,7 +9,6 @@ use App\Models\WatchHistory;
 use App\Services\Media\FfmpegLocatorService;
 use App\Services\Subtitles\EmbeddedSubtitleDetectorService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -108,11 +107,9 @@ class StreamController extends Controller
 
         $modelClass = ($wType === 'episode') ? Episode::class : MediaItem::class;
         $isCompleted = ($prog / max(1, $dur)) >= 0.92;
-        $userId = Auth::id();
 
         $watchHistory = WatchHistory::updateOrCreate(
             [
-                'user_id' => $userId,
                 'watchable_type' => $modelClass,
                 'watchable_id' => $wId,
             ],
@@ -132,17 +129,11 @@ class StreamController extends Controller
 
     public function getContinueWatching(Request $request)
     {
-        $userId = Auth::id();
-
         $query = WatchHistory::query()
             ->where('is_completed', false)
             ->where('progress_seconds', '>', 3)
             ->orderByDesc('last_watched_at')
             ->with(['watchable']);
-
-        if ($userId) {
-            $query->where('user_id', $userId);
-        }
 
         $type = $request->input('type');
         if ($type === 'movie') {

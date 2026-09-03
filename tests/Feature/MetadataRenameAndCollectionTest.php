@@ -6,20 +6,12 @@ use App\Models\Episode;
 use App\Models\MediaItem;
 use App\Models\Season;
 use App\Models\Series;
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class MetadataRenameAndCollectionTest extends TestCase
 {
     use RefreshDatabase;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $user = User::factory()->create();
-        $this->actingAs($user);
-    }
 
     public function test_collection_show_returns_rich_movie_data(): void
     {

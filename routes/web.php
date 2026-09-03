@@ -133,5 +133,3 @@ Route::post('/api/settings', [SettingsController::class, 'update'])->name('api.s
 Route::post('/api/settings/test-provider', [SettingsController::class, 'testProvider'])->name('api.settings.test-provider');
 Route::get('/api/settings/media-cache-stats', [SettingsController::class, 'getMediaCacheStats'])->name('api.settings.media-cache-stats');
 Route::post('/api/settings/clear-media-cache', [SettingsController::class, 'clearMediaCache'])->name('api.settings.clear-media-cache');
-
-require __DIR__.'/settings.php';

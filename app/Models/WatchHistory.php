@@ -20,11 +20,6 @@ class WatchHistory extends Model
         'last_watched_at' => 'datetime',
     ];
 
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class);
-    }
-
     public function watchable(): MorphTo
     {
         return $this->morphTo();
