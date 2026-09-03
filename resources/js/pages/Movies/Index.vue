@@ -66,8 +66,8 @@ const handleToggleFavorite = async (item: any) => {
             @details="handleDetails"
         />
 
-        <!-- In-Progress Continue Watching Bar -->
-        <ContinueWatchingBar @play="play" />
+        <!-- In-Progress Continue Watching Bar (Movies Only) -->
+        <ContinueWatchingBar type="movie" @play="play" />
 
         <!-- Filter & Search Studio (Zero Dropdowns) -->
         <FilterBar :genres="genres" :filters="filters" :show-vibes="true" />

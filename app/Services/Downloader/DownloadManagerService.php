@@ -39,9 +39,15 @@ class DownloadManagerService
      */
     public function getSettings(): array
     {
+        $destinations = $this->getDefaultDestinations();
+
         return [
-            'folders' => $this->getDefaultDestinations(),
+            'folders' => $destinations,
+            'default_download_path' => $destinations['default'],
+            'movies_download_path' => $destinations['movies'],
+            'series_download_path' => $destinations['series'],
             'max_concurrent_downloads' => (int) AppSetting::get('download_max_concurrent', 3),
+            'download_speed_limit_kb' => (int) AppSetting::get('download_speed_limit_kb', 0),
             'auto_index_on_complete' => (bool) AppSetting::get('download_auto_index', true),
         ];
     }
@@ -51,20 +57,30 @@ class DownloadManagerService
      */
     public function saveSettings(array $settings): array
     {
-        if (isset($settings['folders'])) {
-            if (! empty($settings['folders']['movies'])) {
-                AppSetting::set('download_folder_movies', rtrim(str_replace('\\', '/', $settings['folders']['movies']), '/'), 'string');
-            }
-            if (! empty($settings['folders']['series'])) {
-                AppSetting::set('download_folder_series', rtrim(str_replace('\\', '/', $settings['folders']['series']), '/'), 'string');
-            }
-            if (! empty($settings['folders']['default'])) {
-                AppSetting::set('download_folder_default', rtrim(str_replace('\\', '/', $settings['folders']['default']), '/'), 'string');
-            }
+        if (! empty($settings['movies_download_path'])) {
+            AppSetting::set('download_folder_movies', rtrim(str_replace('\\', '/', $settings['movies_download_path']), '/'), 'string');
+        } elseif (! empty($settings['folders']['movies'])) {
+            AppSetting::set('download_folder_movies', rtrim(str_replace('\\', '/', $settings['folders']['movies']), '/'), 'string');
+        }
+
+        if (! empty($settings['series_download_path'])) {
+            AppSetting::set('download_folder_series', rtrim(str_replace('\\', '/', $settings['series_download_path']), '/'), 'string');
+        } elseif (! empty($settings['folders']['series'])) {
+            AppSetting::set('download_folder_series', rtrim(str_replace('\\', '/', $settings['folders']['series']), '/'), 'string');
+        }
+
+        if (! empty($settings['default_download_path'])) {
+            AppSetting::set('download_folder_default', rtrim(str_replace('\\', '/', $settings['default_download_path']), '/'), 'string');
+        } elseif (! empty($settings['folders']['default'])) {
+            AppSetting::set('download_folder_default', rtrim(str_replace('\\', '/', $settings['folders']['default']), '/'), 'string');
         }
 
         if (isset($settings['max_concurrent_downloads'])) {
             AppSetting::set('download_max_concurrent', (int) $settings['max_concurrent_downloads'], 'integer');
+        }
+
+        if (isset($settings['download_speed_limit_kb'])) {
+            AppSetting::set('download_speed_limit_kb', (int) $settings['download_speed_limit_kb'], 'integer');
         }
 
         if (isset($settings['auto_index_on_complete'])) {

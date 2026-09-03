@@ -15,5 +15,7 @@ class DownloadItem extends Model
         'total_bytes' => 'integer',
         'downloaded_bytes' => 'integer',
         'speed_bytes_sec' => 'integer',
+        'torrent_files' => 'array',
+        'selected_files' => 'array',
     ];
 }

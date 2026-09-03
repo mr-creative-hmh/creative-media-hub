@@ -45,4 +45,9 @@ class Episode extends Model
     {
         return $this->morphMany(WatchHistory::class, 'watchable');
     }
+
+    public function getSeasonNumberAttribute(): int
+    {
+        return $this->season?->season_number ?? 1;
+    }
 }

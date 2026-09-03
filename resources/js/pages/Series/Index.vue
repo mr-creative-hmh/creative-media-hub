@@ -4,6 +4,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import HeroBanner from '@/components/media/HeroBanner.vue';
+import ContinueWatchingBar from '@/components/layout/ContinueWatchingBar.vue';
 import FilterBar from '@/components/media/FilterBar.vue';
 import Pagination from '@/components/common/Pagination.vue';
 import { Tv, Star, Layers, ScanLine, Plus } from 'lucide-vue-next';
@@ -88,6 +89,9 @@ const handlePlaySeries = (seriesItem: any, playFn: (item: any, playlist?: any[])
             @details="handleDetails"
             @info="handleDetails"
         />
+
+        <!-- In-Progress Continue Watching Bar (Series Episodes Only) -->
+        <ContinueWatchingBar type="series" @play="play" />
 
         <!-- Filter & Search Studio (Zero Dropdowns) -->
         <FilterBar :genres="genres" :filters="filters" :show-vibes="true" />

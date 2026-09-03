@@ -134,54 +134,7 @@ const openDetail = (item: any) => {
             </Link>
         </div>
 
-        <!-- 3. Continue Watching Row (If items in progress) -->
-        <div v-if="continueWatching && continueWatching.length > 0" class="mb-12">
-            <div class="flex items-center justify-between mb-4">
-                <div class="flex items-center gap-2">
-                    <Clock class="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
-                    <h2 class="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-wide">
-                        {{ t('media.continue_watching') }}
-                    </h2>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                <div
-                    v-for="item in continueWatching"
-                    :key="`${item.type}-${item.id}`"
-                    @click="play(item)"
-                    class="group relative rounded-2xl overflow-hidden glass-panel border border-slate-200 dark:border-white/10 hover:border-cyan-500/50 cursor-pointer transition-all duration-300 hover:-translate-y-1 shadow-sm hover:shadow-lg"
-                >
-                    <div class="aspect-[16/9] w-full bg-slate-900 overflow-hidden relative">
-                        <img
-                            :src="item.backdrop_path || item.poster_path || '/placeholder.jpg'"
-                            :alt="item.title"
-                            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
-                        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
-                        
-                        <!-- Play Hover Button -->
-                        <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
-                            <div class="w-10 h-10 rounded-full bg-cyan-500 text-slate-950 flex items-center justify-center shadow-lg shadow-cyan-500/50">
-                                <Play class="w-5 h-5 fill-current ml-0.5" />
-                            </div>
-                        </div>
-
-                        <!-- Progress Bar -->
-                        <div class="absolute bottom-0 inset-x-0 h-1 bg-white/20">
-                            <div class="h-full bg-cyan-400" :style="{ width: `${item.progress_percent}%` }"></div>
-                        </div>
-                    </div>
-
-                    <div class="p-3 bg-white dark:bg-slate-950/40">
-                        <h4 class="font-bold text-xs text-slate-900 dark:text-white truncate">{{ isRTL && item.title_ar ? item.title_ar : item.title }}</h4>
-                        <p class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{{ item.progress_percent }}% • {{ item.current_time_formatted }}</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 4. Curated AI Mood Vibes Interactive Matcher Studio -->
+        <!-- 3. Curated AI Mood Vibes Interactive Matcher Studio -->
         <div class="mb-12 glass-panel rounded-3xl p-6 border border-slate-200 dark:border-white/10 space-y-6 relative overflow-hidden shadow-sm">
             <div class="ambient-glow bg-indigo-500/10 w-96 h-96 -top-32 -right-32 pointer-events-none"></div>
 

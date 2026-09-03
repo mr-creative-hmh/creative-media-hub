@@ -144,6 +144,18 @@ class StreamController extends Controller
             $query->where('user_id', $userId);
         }
 
+        $type = $request->input('type');
+        if ($type === 'movie') {
+            $query->where('watchable_type', MediaItem::class);
+        } elseif ($type === 'series' || $type === 'episode') {
+            $query->where('watchable_type', Episode::class);
+        } elseif ($type === 'collection') {
+            $query->where('watchable_type', MediaItem::class)
+                ->whereHasMorph('watchable', [MediaItem::class], function ($q) {
+                    $q->whereNotNull('collection_name')->where('collection_name', '!=', '');
+                });
+        }
+
         $history = $query->limit(12)->get()->map(function ($h) {
             $item = $h->watchable;
             if (! $item) {

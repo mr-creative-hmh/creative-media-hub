@@ -24,6 +24,8 @@ class DownloadManagerController extends Controller
 
         return Inertia::render('Downloader/Index', [
             'initialDownloads' => $downloads,
+            'destinations' => $this->downloadService->getDefaultDestinations(),
+            'settings' => $this->downloadService->getSettings(),
         ]);
     }
 
@@ -34,6 +36,44 @@ class DownloadManagerController extends Controller
         return response()->json($downloads);
     }
 
+    public function inspect(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'url' => 'required|string',
+            'type' => 'nullable|string|in:direct,torrent',
+        ]);
+
+        $inspection = $this->downloadService->inspectUrl($validated['url'], $validated['type'] ?? null);
+
+        return response()->json($inspection);
+    }
+
+    public function getSettings(): JsonResponse
+    {
+        return response()->json([
+            'settings' => $this->downloadService->getSettings(),
+            'destinations' => $this->downloadService->getDefaultDestinations(),
+        ]);
+    }
+
+    public function saveSettings(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'default_download_path' => 'nullable|string',
+            'movies_download_path' => 'nullable|string',
+            'series_download_path' => 'nullable|string',
+            'max_concurrent_downloads' => 'nullable|integer|min:1|max:10',
+            'download_speed_limit_kb' => 'nullable|integer|min:0',
+        ]);
+
+        $saved = $this->downloadService->saveSettings($validated);
+
+        return response()->json([
+            'success' => true,
+            'settings' => $saved,
+        ]);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -41,13 +81,25 @@ class DownloadManagerController extends Controller
             'media_type' => 'required|in:movie,series,subtitle',
             'source_url' => 'nullable|string',
             'destination_path' => 'nullable|string',
+            'destination_folder' => 'nullable|string',
+            'download_type' => 'nullable|string|in:direct,torrent',
+            'selected_files' => 'nullable|array',
+            'torrent_files' => 'nullable|array',
+            'info_hash' => 'nullable|string',
         ]);
+
+        $destFolder = $validated['destination_folder'] ?? null;
 
         $item = $this->downloadService->createDownload(
             $validated['title'],
             $validated['media_type'],
             $validated['source_url'] ?? null,
-            $validated['destination_path'] ?? null
+            $validated['destination_path'] ?? null,
+            $validated['download_type'] ?? 'direct',
+            $destFolder,
+            $validated['torrent_files'] ?? null,
+            $validated['selected_files'] ?? null,
+            $validated['info_hash'] ?? null
         );
 
         return response()->json($item);

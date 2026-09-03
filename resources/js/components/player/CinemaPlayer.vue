@@ -565,14 +565,9 @@ const openSubtitleSearchModal = () => {
     showSubtitleSearchModal.value = true;
     let query = activeItem.value?.title || '';
     if (isEpisode.value) {
-        let s = activeItem.value?.season_number;
-        let e = activeItem.value?.episode_number;
         let sName = activeItem.value?.series?.title || activeItem.value?.series_title || '';
         if (sName) {
             query = sName;
-        }
-        if (s && e) {
-            query += ` S${String(s).padStart(2, '0')}E${String(e).padStart(2, '0')}`;
         }
     }
     subtitleSearchQuery.value = query;
@@ -585,16 +580,29 @@ const performSubtitleSearch = async () => {
     subtitleSearchError.value = null;
     subtitleSearchResults.value = [];
     try {
+        const mediaId = isEpisode.value
+            ? (activeItem.value?.watchable_id || activeItem.value?.id)
+            : activeItem.value?.id;
+
+        const payload: Record<string, any> = {
+            query: subtitleSearchQuery.value.trim(),
+            language: subtitleSearchLang.value,
+            media_id: mediaId,
+            media_type: isEpisode.value ? 'episode' : 'movie',
+        };
+
+        if (isEpisode.value) {
+            payload.season_number = activeItem.value?.season_number || (activeItem.value?.season?.season_number ?? 1);
+            payload.episode_number = activeItem.value?.episode_number || 1;
+        }
+
         const res = await fetch('/api/subtitles/verify-engine', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
             },
-            body: JSON.stringify({
-                query: subtitleSearchQuery.value.trim(),
-                language: subtitleSearchLang.value,
-            }),
+            body: JSON.stringify(payload),
         });
         if (res.ok) {
             const data = await res.json();
@@ -612,6 +620,10 @@ const performSubtitleSearch = async () => {
 const downloadAndApplySubtitle = async (result: any) => {
     isDownloadingSubtitle.value = true;
     try {
+        const mediaId = isEpisode.value
+            ? (activeItem.value?.watchable_id || activeItem.value?.id)
+            : activeItem.value?.id;
+
         const res = await fetch('/api/subtitles/download', {
             method: 'POST',
             headers: {
@@ -619,9 +631,12 @@ const downloadAndApplySubtitle = async (result: any) => {
                 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
             },
             body: JSON.stringify({
-                media_id: activeItem.value.id,
+                media_id: mediaId,
                 media_type: isEpisode.value ? 'episode' : 'movie',
                 language: result.language || subtitleSearchLang.value,
+                download_url: result.download_url || result.url,
+                file_name: result.file_name,
+                release: result.release,
             }),
         });
         if (res.ok) {
@@ -1227,6 +1242,17 @@ onBeforeUnmount(() => {
                 v-html="activeCueText"
             ></div>
         </div>
+
+        <!-- In-Player Floating Toast Notification -->
+        <transition name="fade">
+            <div
+                v-if="toastNotice"
+                class="absolute top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-none px-4 py-2 rounded-2xl bg-slate-950/90 border border-cyan-500/40 text-cyan-300 text-xs font-bold shadow-2xl backdrop-blur-md flex items-center gap-2"
+            >
+                <Sparkles class="w-4 h-4 text-cyan-400 animate-pulse" />
+                <span>{{ toastNotice }}</span>
+            </div>
+        </transition>
 
         <!-- Buffering Spinner -->
         <div

@@ -3,6 +3,13 @@ import { ref, onMounted } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import { Play, Clock, Sparkles } from 'lucide-vue-next';
 
+const props = withDefaults(defineProps<{
+    type?: 'all' | 'movie' | 'series' | 'episode' | 'collection';
+    title?: string;
+}>(), {
+    type: 'all',
+});
+
 const { t, isRTL } = useI18n();
 const items = ref<any[]>([]);
 
@@ -10,7 +17,10 @@ const emit = defineEmits(['play']);
 
 const loadItems = async () => {
     try {
-        const res = await fetch('/api/continue-watching');
+        const url = props.type && props.type !== 'all'
+            ? `/api/continue-watching?type=${props.type}`
+            : '/api/continue-watching';
+        const res = await fetch(url);
         if (res.ok) {
             const data = await res.json();
             items.value = Array.isArray(data) ? data : (data.items || []);

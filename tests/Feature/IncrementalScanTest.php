@@ -8,6 +8,7 @@ use App\Models\Series;
 use App\Services\Scanner\VirtualLibraryScannerService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
@@ -27,7 +28,7 @@ class IncrementalScanTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        \Illuminate\Support\Facades\Http::fake();
+        Http::fake();
         $this->testDir = storage_path('app/test_incremental_media');
 
         if (File::isDirectory($this->testDir)) {
@@ -52,7 +53,7 @@ class IncrementalScanTest extends TestCase
     protected function createVideo(string $filename, int $mb = 20): string
     {
         $path = "{$this->testDir}/{$filename}";
-        File::put($path, 'dummy test video content ' . $filename);
+        File::put($path, 'dummy test video content '.$filename);
 
         return $path;
     }

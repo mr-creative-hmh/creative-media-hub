@@ -112,6 +112,9 @@ Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics
 Route::get('/downloads', [DownloadManagerController::class, 'index'])->name('downloads.index');
 Route::get('/api/downloads/list', [DownloadManagerController::class, 'list'])->name('api.downloads.list');
 Route::post('/api/downloads', [DownloadManagerController::class, 'store'])->name('api.downloads.store');
+Route::post('/api/downloads/inspect', [DownloadManagerController::class, 'inspect'])->name('api.downloads.inspect');
+Route::get('/api/downloads/settings', [DownloadManagerController::class, 'getSettings'])->name('api.downloads.settings');
+Route::post('/api/downloads/settings', [DownloadManagerController::class, 'saveSettings'])->name('api.downloads.settings.save');
 Route::post('/api/downloads/process-batch', [DownloadManagerController::class, 'processBatch'])->name('api.downloads.process-batch');
 Route::post('/api/downloads/{id}/pause', [DownloadManagerController::class, 'pause'])->name('api.downloads.pause');
 Route::post('/api/downloads/{id}/resume', [DownloadManagerController::class, 'resume'])->name('api.downloads.resume');

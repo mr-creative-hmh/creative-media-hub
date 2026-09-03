@@ -48,17 +48,54 @@ class SubtitleController extends Controller
 
     public function search(Request $request): JsonResponse
     {
-        $query = $request->input('query', 'Inception');
+        $query = $request->input('query', '');
         $imdbId = $request->input('imdb_id');
-        $languages = $request->input('languages', 'ar,en');
+        $lang = $request->input('language', $request->input('languages', 'ar,en'));
+        $mediaId = $request->input('media_id');
+        $mediaType = $request->input('media_type', 'movie');
+        $season = $request->input('season_number');
+        $episode = $request->input('episode_number');
+        $year = $request->input('year');
+
+        // Resolve media context if media_id provided
+        if ($mediaId) {
+            if ($mediaType === 'episode') {
+                $ep = Episode::with('series')->find($mediaId);
+                if ($ep) {
+                    $query = $query ?: ($ep->series?->title ?? '');
+                    $imdbId = $imdbId ?: $ep->series?->imdb_id;
+                    $season = $season ?: $ep->season_number;
+                    $episode = $episode ?: $ep->episode_number;
+                    $year = $year ?: $ep->series?->release_year;
+                }
+            } else {
+                $movie = MediaItem::find($mediaId);
+                if ($movie) {
+                    $query = $query ?: $movie->title;
+                    $imdbId = $imdbId ?: $movie->imdb_id;
+                    $year = $year ?: $movie->release_year;
+                }
+            }
+        }
 
         $openSubResults = $this->openSubtitles->searchSubtitles([
             'query' => $query,
             'imdb_id' => $imdbId,
-            'languages' => $languages,
+            'language' => $lang,
+            'type' => $mediaType,
+            'season_number' => $season,
+            'episode_number' => $episode,
+            'year' => $year,
         ]);
 
-        $subDlResults = $this->subDl->searchSubtitles($query);
+        $subDlResults = $this->subDl->searchSubtitles(
+            $query,
+            $year ? (int) $year : null,
+            explode(',', (string) $lang),
+            $mediaType,
+            $season ? (int) $season : null,
+            $episode ? (int) $episode : null
+        );
 
         return response()->json([
             'results' => array_merge($openSubResults, $subDlResults),
@@ -67,46 +104,76 @@ class SubtitleController extends Controller
 
     public function verifyEngine(Request $request): JsonResponse
     {
-        $title = $request->input('query', 'Inception');
+        $query = $request->input('query', '');
         $lang = $request->input('language', 'ar');
+        $mediaId = $request->input('media_id');
+        $mediaType = $request->input('media_type', 'movie');
+        $season = $request->input('season_number');
+        $episode = $request->input('episode_number');
+        $year = $request->input('year');
 
-        $subDl = $this->subDl->searchSubtitles($title, null, [strtoupper($lang)]);
-        $openSubs = $this->openSubtitles->searchSubtitles(['query' => $title, 'languages' => $lang]);
+        if ($mediaId) {
+            if ($mediaType === 'episode') {
+                $ep = Episode::with('series')->find($mediaId);
+                if ($ep) {
+                    $query = $query ?: ($ep->series?->title ?? '');
+                    $season = $season ?: $ep->season_number;
+                    $episode = $episode ?: $ep->episode_number;
+                    $year = $year ?: $ep->series?->release_year;
 
-        $combined = array_merge($subDl, $openSubs);
+                    // If series doesn't have an IMDb ID yet, resolve and cache it
+                    if (empty($ep->series?->imdb_id) && $ep->series) {
+                        $resolvedImdb = $this->openSubtitles->resolveImdbId($ep->series->title, 'series', $year);
+                        if ($resolvedImdb) {
+                            $ep->series->update(['imdb_id' => $resolvedImdb]);
+                        }
+                    }
+                }
+            } else {
+                $movie = MediaItem::find($mediaId);
+                if ($movie) {
+                    $query = $query ?: $movie->title;
+                    $year = $year ?: $movie->release_year;
 
-        if (empty($combined)) {
-            $combined = [
-                [
-                    'provider' => 'SubDL Free Cloud',
-                    'subtitle_id' => 'subdl-ar-1080p',
-                    'language' => $lang,
-                    'release' => "{$title}.2023.1080p.BluRay.x264-SPARKS",
-                    'file_name' => "{$title}.{$lang}.srt",
-                    'downloads' => 1420,
-                    'rating' => 9.8,
-                    'download_url' => 'https://subdl.com/download/sample',
-                ],
-                [
-                    'provider' => 'OpenSubtitles Free',
-                    'subtitle_id' => 'opensub-ar-720p',
-                    'language' => $lang,
-                    'release' => "{$title}.720p.WEB-DL.DDP5.1.H.264",
-                    'file_name' => "{$title}.Arabic.WEB-DL.srt",
-                    'downloads' => 890,
-                    'rating' => 9.4,
-                    'download_url' => 'https://opensubtitles.com/download/sample',
-                ],
-            ];
+                    // If movie doesn't have an IMDb ID yet, resolve and cache it
+                    if (empty($movie->imdb_id)) {
+                        $resolvedImdb = $this->openSubtitles->resolveImdbId($movie->title, 'movie', $year);
+                        if ($resolvedImdb) {
+                            $movie->update(['imdb_id' => $resolvedImdb]);
+                        }
+                    }
+                }
+            }
         }
+
+        $searchParams = [
+            'query' => $query,
+            'language' => $lang,
+            'type' => $mediaType,
+            'season_number' => $season,
+            'episode_number' => $episode,
+            'year' => $year,
+        ];
+
+        $openSubs = $this->openSubtitles->searchSubtitles($searchParams);
+        $subDl = $this->subDl->searchSubtitles(
+            $query,
+            $year ? (int) $year : null,
+            [strtoupper($lang)],
+            $mediaType,
+            $season ? (int) $season : null,
+            $episode ? (int) $episode : null
+        );
+
+        $combined = array_merge($openSubs, $subDl);
 
         return response()->json([
             'success' => true,
-            'query' => $title,
+            'query' => $query,
             'language' => $lang,
             'engine_status' => [
-                'opensubtitles' => 'Online (REST API Active)',
-                'subdl' => 'Online (Scraper Engine Active)',
+                'opensubtitles' => 'Online (Stremio v3 / REST Live Engine)',
+                'subdl' => 'Online (SubDL API v1 Engine)',
                 'hash_matcher' => 'Ready (64-bit Audio Sync Checksum)',
             ],
             'results' => $combined,
@@ -119,13 +186,28 @@ class SubtitleController extends Controller
             'media_id' => 'required|integer',
             'media_type' => 'required|in:movie,episode',
             'language' => 'required|string|max:10',
+            'download_url' => 'nullable|string',
+            'release' => 'nullable|string',
+            'file_name' => 'nullable|string',
         ]);
 
         $model = $validated['media_type'] === 'movie'
             ? MediaItem::findOrFail($validated['media_id'])
             : Episode::findOrFail($validated['media_id']);
 
-        $subtitle = $this->manager->downloadAndAttachMockSubtitle($model, $validated['language']);
+        $subtitle = $this->manager->downloadAndAttachRealSubtitle(
+            $model,
+            $validated['language'],
+            $request->input('download_url'),
+            $request->input('release') ?? $request->input('file_name')
+        );
+
+        if (! $subtitle) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No genuine subtitle could be downloaded for this item and language.',
+            ], 404);
+        }
 
         return response()->json([
             'status' => 'success',
@@ -146,65 +228,88 @@ class SubtitleController extends Controller
             return response()->json(['subtitles' => []]);
         }
 
-        $subtitles = $model->subtitles()->get();
+        // Auto-detect and sync embedded tracks inside video file if not yet detected
+        if ($model->file_path && File::exists($model->file_path)) {
+            $existingEmbedded = Subtitle::where('subtitlable_id', $model->id)
+                ->where('subtitlable_type', get_class($model))
+                ->where('is_embedded', true)
+                ->count();
 
-        // If subtitles are empty or missing embedded tracks, detect and attach on the fly
-        if ($subtitles->isEmpty() && $model->file_path && File::exists($model->file_path)) {
-            $embedded = $this->detector->detectEmbeddedSubtitles($model->file_path);
-            foreach ($embedded as $track) {
-                Subtitle::updateOrCreate(
-                    [
-                        'subtitlable_type' => get_class($model),
-                        'subtitlable_id' => $model->id,
-                        'file_path' => "embedded:{$track['stream_index']}:{$model->file_path}",
-                    ],
-                    [
-                        'language' => $track['language'],
-                        'language_name' => $track['language_name'],
-                        'is_embedded' => true,
-                        'format' => $track['codec'] ?? 'srt',
-                    ]
-                );
+            if ($existingEmbedded === 0) {
+                $this->detector->detectAndRegisterEmbeddedSubtitles($model);
             }
-
-            // Also check adjacent local files
-            $dir = dirname($model->file_path);
-            if (File::isDirectory($dir)) {
-                $files = File::files($dir);
-                $subsDir = "{$dir}/Subs";
-                if (File::isDirectory($subsDir)) {
-                    $files = array_merge($files, File::files($subsDir));
-                }
-
-                foreach ($files as $f) {
-                    $ext = strtolower($f->getExtension());
-                    if (in_array($ext, ['srt', 'vtt', 'ass', 'ssa'])) {
-                        $resolvedLang = $this->detector->resolveLanguageFromContext('und', '', $f->getFilename());
-                        $langName = $this->detector->getLanguageName($resolvedLang);
-
-                        Subtitle::updateOrCreate(
-                            [
-                                'subtitlable_type' => get_class($model),
-                                'subtitlable_id' => $model->id,
-                                'file_path' => str_replace('\\', '/', $f->getRealPath()),
-                            ],
-                            [
-                                'language' => $resolvedLang,
-                                'language_name' => $langName,
-                                'is_embedded' => false,
-                                'format' => $ext,
-                            ]
-                        );
-                    }
-                }
-            }
-
-            $subtitles = $model->subtitles()->get();
         }
 
+        // Return all subtitles ordered with Arabic first, English second
+        $subs = Subtitle::where('subtitlable_id', $model->id)
+            ->where('subtitlable_type', get_class($model))
+            ->get()
+            ->sortBy(function ($sub) {
+                return match (strtolower($sub->language)) {
+                    'ar', 'ara' => 1,
+                    'en', 'eng' => 2,
+                    default => 3,
+                };
+            })
+            ->values();
+
         return response()->json([
-            'success' => true,
-            'subtitles' => $subtitles,
+            'subtitles' => $subs,
         ]);
+    }
+
+    public function autoSync(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'subtitle_id' => 'required|exists:subtitles,id',
+            'offset_seconds' => 'required|numeric',
+        ]);
+
+        $subtitle = Subtitle::findOrFail($validated['subtitle_id']);
+
+        if (! $subtitle->file_path || ! File::exists($subtitle->file_path)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Subtitle file not found on disk',
+            ], 404);
+        }
+
+        $content = File::get($subtitle->file_path);
+        $offset = (float) $validated['offset_seconds'];
+
+        $shifted = preg_replace_callback(
+            '/(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})/',
+            function ($matches) use ($offset) {
+                $start = $this->timeToSeconds($matches[1]) + $offset;
+                $end = $this->timeToSeconds($matches[2]) + $offset;
+
+                return $this->secondsToTime(max(0, $start)).' --> '.$this->secondsToTime(max(0, $end));
+            },
+            $content
+        );
+
+        File::put($subtitle->file_path, $shifted);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Subtitle timing synchronized and saved',
+            'offset' => $offset,
+        ]);
+    }
+
+    private function timeToSeconds(string $timeStr): float
+    {
+        $parts = explode(':', str_replace(',', '.', $timeStr));
+
+        return ((float) $parts[0] * 3600) + ((float) $parts[1] * 60) + (float) $parts[2];
+    }
+
+    private function secondsToTime(float $seconds): string
+    {
+        $h = floor($seconds / 3600);
+        $m = floor(($seconds % 3600) / 60);
+        $s = $seconds - ($h * 3600) - ($m * 60);
+
+        return sprintf('%02d:%02d:%06.3f', $h, $m, $s);
     }
 }
