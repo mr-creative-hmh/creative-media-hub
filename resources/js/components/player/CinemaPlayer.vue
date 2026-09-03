@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
+import CinemaLoader from '@/components/player/CinemaLoader.vue';
 import {
     Play,
     Pause,
@@ -1407,13 +1408,20 @@ onBeforeUnmount(() => {
             ></div>
         </div>
 
-        <!-- Buffering Spinner -->
-        <div
-            v-if="isBuffering"
-            class="absolute inset-0 flex items-center justify-center pointer-events-none z-30 bg-black/30 backdrop-blur-xs"
-        >
-            <div class="w-16 h-16 rounded-full border-4 border-cyan-500/20 border-t-cyan-400 animate-spin"></div>
-        </div>
+        <!-- Premium Cinema Buffering & Stream Loader -->
+        <transition name="fade">
+            <div
+                v-if="isBuffering"
+                class="absolute inset-0 flex items-center justify-center pointer-events-none z-30 bg-black/45 backdrop-blur-xs transition-all"
+            >
+                <CinemaLoader
+                    size="md"
+                    :is-r-t-l="isRTL"
+                    :status-text="isRTL ? 'جاري ضبط وتدفق البث السينمائي...' : 'Buffering Cinema Stream...'"
+                    :sub-text="`${isRemuxStream ? 'Ultra-Fast Remux' : 'Direct Stream'} · ${liveResolution || displayResolution}`"
+                />
+            </div>
+        </transition>
 
         <!-- Big Play Button Overlay when Paused -->
         <transition name="scale">
