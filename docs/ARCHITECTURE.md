@@ -97,7 +97,7 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
   - Creates a clean, standard media directory structure (`Movies/Title (Year)/Title (Year) [1080p].ext`) without consuming additional disk space.
   - Keeps active torrent seeding intact by creating hardlink pointers rather than moving files.
 
-### 3.2. Hybrid Video Streaming & Remuxing Architecture
+### 3.2. Hybrid Video Streaming & Intelligent Remuxing Architecture
 ```
                                  [Client Playback Request]
                                              │
@@ -106,17 +106,25 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
                                              │
                        ┌─────────────────────┴─────────────────────┐
                        │                                           │
-             [Native Web Compatible]                    [Unsupported / Legacy]
-             (MP4, WebM, H.264, AAC)                     (AVI, MPEG-4, DTS, MKV)
+             [Native Web Compatible]                    [Incompatible / Non-Web Audio]
+           (MP4, MKV, H.264, VP9, AV1,                    (AVI, WMV, TS, FLV, XviD,
+             AAC, MP3, AC3, E-AC3)                            DTS, TrueHD, WMA)
                        │                                           │
                        ▼                                           ▼
-            [HTTP 206 Partial Content]                 [On-The-Fly FFmpeg Remuxer]
-             - 256KB Buffered Chunks                    - Output: fragmented MP4
-             - 0% CPU Consumption                       - Direct stdout pipe to HTTP response
-             - Instant Hardware Seek                    - Async background disk caching worker
+            [Direct Stream Engine]                     [On-The-Fly FFmpeg Remuxer]
+             - HTTP 206 Partial Content                 - Output: Fragmented MP4
+             - 0% Server CPU Consumption                - Seamless PTS presentation sync
+             - Hardware-Accelerated Decode              - Automatic A/V delay compensation
+             - Self-Healing Remux Fallback              - Async background transcode cache
 ```
 
-### 3.3. Database Architecture & Concurrency Model
+### 3.3. Subtitle Typography Engine & Bidirectional Transit Architecture
+- **Curated Arabic Typography**: Native web font cascade prioritizing **Cairo**, **Plus Jakarta Sans**, **IBM Plex Sans Arabic**, **Almarai**, and **Alexandria** with dynamic runtime font style selection.
+- **Bilingual Cinema Subtitles**: Multi-pass high-contrast text outlines and drop shadows prevent scene color clash.
+- **Bidirectional Mirrored Progress**: Uses CSS horizontal scale reflection (`[dir="rtl"] #nprogress { transform: scaleX(-1); }`) to accurately advance right-to-left in Arabic without JavaScript overhead.
+- **Top-Center Cinema Transit Island**: An isolated, floating status component listening to Inertia navigation events (`router.on('start')` / `router.on('finish')`) positioned symmetrically at top-center to eliminate header collisions in both LTR and RTL.
+
+### 3.4. Database Architecture & Concurrency Model
 - **Engine**: SQLite 3 with Write-Ahead Logging (`PRAGMA journal_mode=WAL;`).
 - **Concurrency**:
   - WAL mode allows unlimited concurrent readers alongside a single active writer without lock contention.

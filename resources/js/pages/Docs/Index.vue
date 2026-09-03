@@ -452,6 +452,22 @@ const tabs = [
                                     <div class="text-[10px] text-slate-400">{{ isRTL ? 'كتم الصوت' : 'Mute Audio' }}</div>
                                 </div>
                             </div>
+
+                            <!-- Advanced Features List -->
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-3">
+                                <div class="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-1.5">
+                                    <div class="text-xs font-bold text-cyan-400">{{ isRTL ? 'بث مباشر فوري (Direct Stream)' : 'Zero-CPU Direct Streaming' }}</div>
+                                    <p class="text-[11px] text-slate-400">{{ isRTL ? 'تشغيل فوري بصيغ H.264 و AAC و Dolby Digital بدون أي حمل على المعالج أو تأخير في الصوت.' : 'Hardware-accelerated HTTP 206 streaming for H.264/AAC/AC3 with zero server transcode latency.' }}</p>
+                                </div>
+                                <div class="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-1.5">
+                                    <div class="text-xs font-bold text-purple-400">{{ isRTL ? 'استوديو الخطوط والترجمة' : 'Subtitle Typography Studio' }}</div>
+                                    <p class="text-[11px] text-slate-400">{{ isRTL ? 'خطوط عربية مخصصة (Cairo, Jakarta) مع تباين سينمائي فائق ودعم كامل لاتجاه RTL.' : 'Native Cairo & Jakarta fonts, high-contrast text outlines, and full RTL menu alignment.' }}</p>
+                                </div>
+                                <div class="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-1.5">
+                                    <div class="text-xs font-bold text-emerald-400">{{ isRTL ? 'إدارة الذاكرة المؤقتة' : 'Media Cache Maintenance' }}</div>
+                                    <p class="text-[11px] text-slate-400">{{ isRTL ? 'مراقبة سعة تخزين البث وتنظيف ملفات الترميز المؤقتة بضغطة زر من صفحة الإعدادات.' : 'Real-time cache monitoring and 1-click transcode cache purge from the Settings dashboard.' }}</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </section>

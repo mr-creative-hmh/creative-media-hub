@@ -113,15 +113,37 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 - Folder ancestor context inheritance: resolves episode numbers from nested structures (`Breaking Bad/Season 01/01.mp4`).
 - Distinguishes movie franchise sequence numbers from TV episodes inside movie folders (`1.Ip.Man.2008.mp4` → Movie Part 1).
 
-### 9. ⚡ Hybrid Video Streaming & Remuxing
-- **Direct Stream (HTTP 206 Partial Content)**: Zero-CPU byte-range streaming for MP4 / H.264 / AAC.
-- **On-The-Fly FFmpeg Remuxer**: Real-time stdout remuxing for legacy containers (AVI, MKV, MPEG-4, DTS) into fragmented MP4.
-- **FastStart Disk Caching**: Transcode-caches remuxed streams in background for instantaneous seeking upon replay.
+### 9. ⚡ Hybrid Video Streaming & Intelligent Remuxing
+- **Intelligent Direct Stream Engine**: Automatically defaults to zero-CPU native byte-range streaming (`HTTP 206 Partial Content`) for all web-compatible formats (`.mp4`, `.mkv`, `H.264/AVC`, `VP9`, `AV1`, `AAC`, `Dolby Digital AC3/E-AC3`), eliminating unnecessary server load.
+- **Timestamp Synchronization (Zero Lag)**: Direct stream circumvents timestamp drifting entirely, while background remuxing uses continuous PTS alignment without desync.
+- **Self-Healing Fallback**: Automatically switches to Ultra-Fast Remux within 100ms if native browser hardware decoders report an unsupported profile.
+- **User Preference Memory**: Manual stream toggles ("Direct Stream" vs "Ultra-Fast Remux") are remembered per title and persisted in `localStorage`.
 
 ### 10. 🔗 Zero-Copy NTFS Hardlink Organizer
 - Restructures chaotic folders into pristine paths (`Movies/Title (Year)/Title (Year) [1080p].ext`) using NTFS hardlinks (`mklink /H`).
 - **0 bytes** duplicated on disk and continuous torrent seeding remains 100% active.
 - Includes side-by-side Dry-Run simulation before execution.
+
+### 11. ✍️ Arabic & English Subtitle Typography Studio
+- **Curated Arabic Typography**: Native integration with Google Fonts (**Cairo**, **Plus Jakarta Sans**, **IBM Plex Sans Arabic**, **Almarai**, and **Alexandria**).
+- **In-Player Subtitle Font Selector**: Users can switch between **Cairo**, **Jakarta**, and **System** fonts on the fly.
+- **Cinema-Grade Contrast**: Multi-layered text shadow (`0 2px 4px rgba(0,0,0,0.95), 0 0 3px #000, 1px 1px 2px #000...`) ensures crystal-clear legibility across bright or dark scenes.
+
+### 12. 🌐 Full RTL (Right-to-Left) Architecture
+- **In-Player Popovers**: Playback Speed, Subtitle Tracks, and Audio Equalizer dropdowns dynamically anchor to `left-0` in RTL mode, preventing UI clipping across screen edges.
+- **Mirrored Audio Controls**: Vocal Clarity Boost, Cinema Bass Boost, and Dynamic Range Night Mode properly align with natural Arabic reading direction.
+- **RTL Search & Modals**: Subtitle Search & Download modals feature native `:dir="rtl"` layout.
+
+### 13. 🧹 Media Streams & Transcode Cache Manager
+- **Disk Usage Inspection**: Real-time stats card in Settings showing current cache size (e.g., `140.75 MB`, `1.4 GB`) and cached file count in `storage/app/cache/media_streams/`.
+- **1-Click Cache Cleaner**: Safely purges accumulated remux and transcode files with instant toast feedback showing freed space.
+
+### 14. 🪐 Holographic Cinema Orbit Loaders & Transit Island
+- **Cinema Multi-Orbit Loader (`CinemaLoader.vue`)**: Replaces standard spinning rings with a multi-tiered glowing celestial orbit, reverse-spinning violet comet, and ambient pulsing core.
+- **Live Glassmorphic Buffering Status**: Floating status card with animated multi-bar equalizer waveforms and real-time stream resolution metadata.
+- **Top-Center Transit Island (`PageTransitionLoader.vue`)**: Dynamic island docked top-center that indicates smooth page transitions without colliding with header navigation.
+- **Bidirectional Progress Laser**: Mirrored laser progress bar (`[dir="rtl"] scaleX(-1)`) that physically advances Right-to-Left in Arabic and Left-to-Right in English.
+
 
 ---
 

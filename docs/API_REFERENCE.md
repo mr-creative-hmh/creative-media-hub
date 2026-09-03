@@ -141,3 +141,41 @@
   Generates a dry-run preview of original paths vs new organized paths according to selected naming template.
 - **`POST /api/organizer/execute`**  
   Executes NTFS hardlink creation (`mklink /H`) and updates database paths without moving original files.
+
+---
+
+## 7. Settings & Storage Maintenance Endpoints
+
+### 7.1. Media Cache Statistics
+- **`GET /api/settings/media-cache-stats`**  
+  Calculates the current disk footprint and file count of generated video stream chunks and transcode cache in `storage/app/cache/media_streams/`.
+  **Response:**
+  ```json
+  {
+    "success": true,
+    "stats": {
+      "size_bytes": 147582048,
+      "size_formatted": "140.75 MB",
+      "file_count": 3
+    }
+  }
+  ```
+
+### 7.2. Clean Media Streams Cache
+- **`POST /api/settings/clear-media-cache`**  
+  Safely wipes all cached remux/transcode MP4 and chunk files from disk and returns the total freed space.
+  **Response:**
+  ```json
+  {
+    "success": true,
+    "message": "Media transcode cache cleared successfully.",
+    "freed_bytes": 147582048,
+    "freed_formatted": "140.75 MB",
+    "stats": {
+      "size_bytes": 0,
+      "size_formatted": "0 B",
+      "file_count": 0
+    }
+  }
+  ```
+
