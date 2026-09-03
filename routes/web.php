@@ -89,6 +89,7 @@ Route::post('/api/subtitles/download', [SubtitleController::class, 'downloadForM
 Route::get('/api/subtitles/for-media', [SubtitleController::class, 'forMedia'])->name('api.subtitles.for-media');
 Route::get('/api/subtitles/list', [SubtitleController::class, 'forMedia'])->name('api.subtitles.list');
 Route::post('/api/subtitles/verify-engine', [SubtitleController::class, 'verifyEngine'])->name('api.subtitles.verify-engine');
+Route::post('/api/subtitles/check', [SubtitleController::class, 'checkHealth'])->name('api.subtitles.check');
 
 // Cinema Video & Subtitle Streaming Engine (HTTP 206 Partial Content + Audio Transcoding)
 Route::get('/stream/movie/{mediaItem}', [StreamController::class, 'streamMovie'])->name('stream.movie');

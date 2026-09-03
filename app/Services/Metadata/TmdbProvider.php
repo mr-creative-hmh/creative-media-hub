@@ -422,6 +422,52 @@ class TmdbProvider implements MetadataProviderInterface
         return [];
     }
 
+    /**
+     * Find a movie or TV series on TMDb using an external ID (e.g., IMDb ID tt1375666).
+     */
+    public function findByExternalId(string $externalId, string $type = 'movie'): ?array
+    {
+        $key = $this->getApiKey();
+        if (! $key) {
+            return null;
+        }
+
+        $cleanId = trim($externalId);
+        if (preg_match('/(tt\d+)/i', $cleanId, $m)) {
+            $cleanId = strtolower($m[1]);
+        }
+
+        try {
+            $response = Http::timeout(8)->get("{$this->baseUrl}/find/{$cleanId}", [
+                'api_key' => $key,
+                'external_source' => 'imdb_id',
+            ]);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                if ($type === 'series') {
+                    $results = $data['tv_results'] ?? [];
+                    if (empty($results)) {
+                        $results = $data['movie_results'] ?? [];
+                    }
+                } else {
+                    $results = $data['movie_results'] ?? [];
+                    if (empty($results)) {
+                        $results = $data['tv_results'] ?? [];
+                    }
+                }
+
+                if (! empty($results[0]['id'])) {
+                    return $results[0];
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning("TMDb findByExternalId failed for {$cleanId}: ".$e->getMessage());
+        }
+
+        return null;
+    }
+
     protected function formatMovieSummary(array $item): array
     {
         return [

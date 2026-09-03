@@ -491,4 +491,117 @@ class MetadataAggregator
 
         return $list;
     }
+
+    /**
+     * Look up full media metadata by direct ID (TMDb numeric ID, IMDb ID tt..., or URL).
+     */
+    public function lookupByExternalId(string $externalId, string $type = 'movie'): ?array
+    {
+        $input = trim($externalId);
+        if (empty($input)) {
+            return null;
+        }
+
+        $tmdbId = null;
+        $imdbId = null;
+
+        // 1. Detect IMDb ID: tt1234567
+        if (preg_match('/(tt\d+)/i', $input, $m)) {
+            $imdbId = strtolower($m[1]);
+        }
+
+        // 2. Detect TMDb URL: /movie/12345 or /tv/12345
+        if (preg_match('/themoviedb\.org\/(movie|tv)\/(\d+)/i', $input, $m)) {
+            $type = $m[1] === 'tv' ? 'series' : 'movie';
+            $tmdbId = $m[2];
+        }
+
+        // 3. Detect prefixed: tmdb:12345 or imdb:tt12345
+        if (! $tmdbId && preg_match('/^tmdb[:\s\/]+(\d+)$/i', $input, $m)) {
+            $tmdbId = $m[1];
+        }
+
+        // 4. Pure numeric: 27205 -> TMDb ID
+        if (! $tmdbId && ! $imdbId && preg_match('/^\d+$/', $input)) {
+            $tmdbId = $input;
+        }
+
+        $details = null;
+
+        // Fetch via TMDb ID
+        if ($tmdbId) {
+            if ($type === 'series') {
+                $details = $this->getSeriesDetails($tmdbId, 'tmdb');
+                if (! $details) {
+                    $details = $this->getMovieDetails($tmdbId, 'tmdb');
+                }
+            } else {
+                $details = $this->getMovieDetails($tmdbId, 'tmdb');
+                if (! $details) {
+                    $details = $this->getSeriesDetails($tmdbId, 'tmdb');
+                }
+            }
+        }
+
+        // Fetch via IMDb ID
+        if (! $details && $imdbId) {
+            /** @var TmdbProvider|null $tmdb */
+            $tmdb = $this->providers['tmdb'] ?? null;
+            if ($tmdb && method_exists($tmdb, 'findByExternalId')) {
+                $found = $tmdb->findByExternalId($imdbId, $type);
+                if (! empty($found['id'])) {
+                    $details = $type === 'series'
+                        ? $this->getSeriesDetails($found['id'], 'tmdb')
+                        : $this->getMovieDetails($found['id'], 'tmdb');
+                }
+            }
+
+            // Fallback to OMDb by IMDb ID
+            if (! $details) {
+                /** @var OmdbProvider|null $omdb */
+                $omdb = $this->providers['omdb'] ?? null;
+                if ($omdb) {
+                    $details = $type === 'series'
+                        ? $omdb->getSeriesDetails($imdbId)
+                        : $omdb->getMovieDetails($imdbId);
+                }
+            }
+        }
+
+        // If still not found, search by the raw input as title
+        if (! $details) {
+            $searchRes = $type === 'series' ? $this->searchSeries($input) : $this->searchMovie($input);
+            if (! empty($searchRes[0]['id'])) {
+                $first = $searchRes[0];
+                $prov = strtolower($first['provider'] ?? 'tmdb');
+                $details = $type === 'series'
+                    ? $this->getSeriesDetails($first['id'], $prov)
+                    : $this->getMovieDetails($first['id'], $prov);
+            }
+        }
+
+        if ($details) {
+            if ($imdbId && empty($details['imdb_id'])) {
+                $details['imdb_id'] = $imdbId;
+            }
+            if ($tmdbId && empty($details['tmdb_id'])) {
+                $details['tmdb_id'] = $tmdbId;
+            }
+
+            $this->ensureArabicMetadata($details, $type);
+
+            if (! empty($details['poster_path']) && filter_var($details['poster_path'], FILTER_VALIDATE_URL)) {
+                $details['poster_path'] = $this->artwork->downloadPoster($details['poster_path']);
+            }
+            if (! empty($details['backdrop_path']) && filter_var($details['backdrop_path'], FILTER_VALIDATE_URL)) {
+                $details['backdrop_path'] = $this->artwork->downloadBackdrop($details['backdrop_path']);
+            }
+
+            if ($type === 'movie' && empty($details['collection_name']) && ! empty($details['title'])) {
+                $details['collection_name'] = TmdbProvider::inferCollectionFromTitle($details['title']);
+            }
+        }
+
+        return $details;
+    }
 }

@@ -8,6 +8,7 @@ use App\Models\Subtitle;
 use App\Services\Subtitles\EmbeddedSubtitleDetectorService;
 use App\Services\Subtitles\OpenSubtitlesService;
 use App\Services\Subtitles\SubDlService;
+use App\Services\Subtitles\SubtitleHealthCheckService;
 use App\Services\Subtitles\SubtitleManagerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -311,5 +312,27 @@ class SubtitleController extends Controller
         $s = $seconds - ($h * 3600) - ($m * 60);
 
         return sprintf('%02d:%02d:%06.3f', $h, $m, $s);
+    }
+
+    /**
+     * Scan library directories, validate subtitle integrity, prune corrupt files, and standardize language extensions.
+     */
+    public function checkHealth(Request $request, SubtitleHealthCheckService $healthService): JsonResponse
+    {
+        $validated = $request->validate([
+            'dry_run' => 'nullable|boolean',
+            'delete_invalid' => 'nullable|boolean',
+            'auto_rename' => 'nullable|boolean',
+            'target_path' => 'nullable|string',
+        ]);
+
+        $results = $healthService->checkAndNormalize([
+            'dry_run' => $validated['dry_run'] ?? false,
+            'delete_invalid' => $validated['delete_invalid'] ?? true,
+            'auto_rename' => $validated['auto_rename'] ?? true,
+            'target_path' => $validated['target_path'] ?? null,
+        ]);
+
+        return response()->json($results);
     }
 }

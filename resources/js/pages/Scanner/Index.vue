@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, nextTick } from 'vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import { useScanner } from '@/composables/useScanner';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -9,7 +9,7 @@ import {
     ScanLine, FolderPlus, Play, Pause, XCircle, RotateCcw,
     CheckCircle2, AlertCircle, FileVideo, HardDrive, Terminal,
     Layers, Cpu, RefreshCw, Trash2, Folder, Film, Tv, Sparkles,
-    Check, Filter, Clock, Info, ShieldAlert, ArrowRight, Image as ImageIcon, MessageSquare
+    Check, Filter, Clock, Info, ShieldAlert, ShieldCheck, ArrowRight, Image as ImageIcon, MessageSquare
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -272,6 +272,14 @@ onMounted(() => {
                 </div>
 
                 <div class="flex items-center flex-wrap gap-2.5">
+                    <Link
+                        href="/subtitles?tab=checker"
+                        class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-bold transition-all cursor-pointer"
+                    >
+                        <ShieldCheck class="w-4 h-4 text-cyan-400" />
+                        <span>{{ isRTL ? 'فاحص ومطهر الترجمات' : 'Subtitle Checker' }}</span>
+                    </Link>
+
                     <button
                         @click="enrichMissingPosters"
                         :disabled="isBatchEnriching"

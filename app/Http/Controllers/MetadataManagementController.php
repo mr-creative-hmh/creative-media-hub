@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AppSetting;
 use App\Models\Episode;
+use App\Models\Genre;
 use App\Models\MediaItem;
 use App\Models\Season;
 use App\Models\Series;
@@ -15,6 +16,7 @@ use App\Services\Organizer\SceneNameParserService;
 use App\Services\Scanner\VirtualLibraryScannerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -162,32 +164,176 @@ class MetadataManagementController extends Controller
         ]);
     }
 
+    /**
+     * Direct ID Lookup & Apply for Fix Match Studio.
+     * Supports TMDb numeric ID (e.g. 27205), IMDb ID (e.g. tt1375666), or TMDb/IMDb URLs.
+     */
     public function lookupId(Request $request): JsonResponse
     {
-        $id = trim((string) $request->input('id'));
         $type = strtolower((string) $request->input('type', 'movie'));
+        $dbId = $request->input('id') ?: $request->input('media_id');
+        $externalId = trim((string) ($request->input('external_id') ?: $request->input('direct_id') ?: $request->input('query')));
 
-        if (empty($id)) {
-            return response()->json(['success' => false, 'message' => 'Please provide an ID.'], 422);
+        // If external_id wasn't provided, check if id itself is the external_id string
+        if (empty($externalId) && ! empty($request->input('id')) && ! is_numeric($request->input('id'))) {
+            $externalId = trim((string) $request->input('id'));
+            $dbId = null;
         }
 
-        // Clean up prefixes (e.g. tmdb:123 or tt0241527)
-        $cleanId = preg_replace('/^(tmdb:|imdb:)/i', '', $id);
-
-        if ($type === 'series' || $type === 'tv') {
-            $details = $this->metadata->getSeriesDetails($cleanId, 'tmdb');
-        } else {
-            $details = $this->metadata->getMovieDetails($cleanId, 'tmdb');
+        if (empty($externalId)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please provide a TMDb ID (e.g. 27205) or IMDb ID (e.g. tt1375666).',
+            ], 422);
         }
+
+        // Fetch rich metadata via our unified lookup
+        $mediaType = ($type === 'series' || $type === 'tv') ? 'series' : 'movie';
+        $details = $this->metadata->lookupByExternalId($externalId, $mediaType);
 
         if (! $details) {
-            return response()->json(['success' => false, 'message' => 'No media found with that ID.'], 404);
+            return response()->json([
+                'success' => false,
+                'message' => "Could not find any metadata for '{$externalId}' on TMDb or OMDb. Please verify the ID or URL.",
+            ], 404);
         }
 
-        return response()->json([
-            'success' => true,
-            'details' => $details,
-        ]);
+        // If no database ID was passed, just return the preview details
+        if (empty($dbId)) {
+            return response()->json([
+                'success' => true,
+                'details' => $details,
+            ]);
+        }
+
+        // Apply metadata to the existing database record
+        if ($mediaType === 'movie') {
+            $movie = MediaItem::find($dbId);
+            if (! $movie) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Movie with database ID #{$dbId} not found.",
+                ], 404);
+            }
+
+            $cleanTitle = $details['title'] ?? $movie->title;
+            $year = $details['release_year'] ?? ($details['year'] ?? $movie->release_year);
+
+            $movie->update([
+                'title' => $cleanTitle,
+                'original_title' => $details['original_title'] ?? $movie->original_title,
+                'title_ar' => $details['title_ar'] ?? $movie->title_ar,
+                'release_year' => $year,
+                'overview' => $details['overview'] ?? $movie->overview,
+                'overview_ar' => $details['overview_ar'] ?? $movie->overview_ar,
+                'tmdb_id' => $details['tmdb_id'] ?? $movie->tmdb_id,
+                'imdb_id' => $details['imdb_id'] ?? $movie->imdb_id,
+                'poster_path' => $details['poster_path'] ?? $movie->poster_path,
+                'backdrop_path' => $details['backdrop_path'] ?? $movie->backdrop_path,
+                'collection_name' => $details['collection_name'] ?? TmdbProvider::inferCollectionFromTitle($cleanTitle),
+                'rating' => $details['rating'] ?? $movie->rating,
+                'runtime_minutes' => $details['runtime_minutes'] ?? $movie->runtime_minutes,
+                'original_language' => $details['original_language'] ?? $movie->original_language,
+                'origin_country' => $details['origin_country'] ?? $movie->origin_country,
+            ]);
+
+            // Sync Genres
+            if (! empty($details['genres']) && is_array($details['genres'])) {
+                $genreIds = [];
+                foreach ($details['genres'] as $gName) {
+                    if (! empty($gName) && is_string($gName)) {
+                        $genre = Genre::firstOrCreate(
+                            ['slug' => Str::slug($gName)],
+                            ['name_en' => $gName, 'name_ar' => $gName]
+                        );
+                        $genreIds[] = $genre->id;
+                    }
+                }
+                $movie->genres()->sync($genreIds);
+            }
+
+            $movie->refresh();
+            $movie->load(['genres', 'subtitles']);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Movie metadata successfully updated for '{$movie->title}'!",
+                'media' => $movie,
+                'details' => $details,
+            ]);
+        } else {
+            $series = Series::find($dbId);
+            if (! $series) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Series with database ID #{$dbId} not found.",
+                ], 404);
+            }
+
+            $cleanTitle = $details['title'] ?? $series->title;
+            $year = $details['release_year'] ?? ($details['year'] ?? $series->release_year);
+
+            $series->update([
+                'title' => $cleanTitle,
+                'original_title' => $details['original_title'] ?? $series->original_title,
+                'title_ar' => $details['title_ar'] ?? $series->title_ar,
+                'release_year' => $year,
+                'overview' => $details['overview'] ?? $series->overview,
+                'overview_ar' => $details['overview_ar'] ?? $series->overview_ar,
+                'tmdb_id' => $details['tmdb_id'] ?? $series->tmdb_id,
+                'imdb_id' => $details['imdb_id'] ?? $series->imdb_id,
+                'poster_path' => $details['poster_path'] ?? $series->poster_path,
+                'backdrop_path' => $details['backdrop_path'] ?? $series->backdrop_path,
+                'rating' => $details['rating'] ?? $series->rating,
+                'status' => $details['status'] ?? $series->status,
+                'network' => $details['network'] ?? $series->network,
+            ]);
+
+            // Sync Genres
+            if (! empty($details['genres']) && is_array($details['genres'])) {
+                $genreIds = [];
+                foreach ($details['genres'] as $gName) {
+                    if (! empty($gName) && is_string($gName)) {
+                        $genre = Genre::firstOrCreate(
+                            ['slug' => Str::slug($gName)],
+                            ['name_en' => $gName, 'name_ar' => $gName]
+                        );
+                        $genreIds[] = $genre->id;
+                    }
+                }
+                $series->genres()->sync($genreIds);
+            }
+
+            // Sync Seasons if available from details
+            if (! empty($details['seasons']) && is_array($details['seasons'])) {
+                foreach ($details['seasons'] as $s) {
+                    if (isset($s['season_number']) && $s['season_number'] > 0) {
+                        Season::firstOrCreate(
+                            [
+                                'series_id' => $series->id,
+                                'season_number' => $s['season_number'],
+                            ],
+                            [
+                                'title' => $s['title'] ?? "Season {$s['season_number']}",
+                                'overview' => $s['overview'] ?? null,
+                                'poster_path' => $s['poster_path'] ?? null,
+                            ]
+                        );
+                    }
+                }
+            }
+
+            $series->refresh();
+            $series->load(['genres', 'seasons.episodes']);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Series metadata successfully updated for '{$series->title}'!",
+                'media' => $series,
+                'series' => $series,
+                'details' => $details,
+            ]);
+        }
     }
 
     public function reparseItem(Request $request, string $type, int $id): JsonResponse
@@ -264,7 +410,7 @@ class MetadataManagementController extends Controller
             $season = Season::create([
                 'series_id' => $series->id,
                 'season_number' => 1,
-                'name' => 'Season 1',
+                'title' => 'Season 1',
             ]);
 
             Episode::create([
