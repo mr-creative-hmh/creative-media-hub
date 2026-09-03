@@ -15,21 +15,44 @@ class DashboardController extends Controller
     public function index(Request $request): Response
     {
         // 1. Featured Spotlight Media for Hero Banner (Movies + Series with backdrop/poster)
-        $featuredMovies = MediaItem::with('genres')
-            ->whereNotNull('backdrop_path')
-            ->orWhereNotNull('poster_path')
+        $featuredMovies = MediaItem::with(['genres', 'subtitles'])
+            ->where(function ($q) {
+                $q->whereNotNull('backdrop_path')
+                    ->orWhereNotNull('poster_path');
+            })
+            ->orderByDesc('rating')
+            ->limit(4)
+            ->get()
+            ->map(function ($movie) {
+                $arr = $movie->toArray();
+                $arr['type'] = 'movie';
+                $arr['watchable_type'] = 'media_item';
+                $arr['watchable_id'] = $movie->id;
+
+                return $arr;
+            });
+
+        $featuredSeries = Series::with(['genres', 'seasons.episodes.subtitles'])
+            ->where(function ($q) {
+                $q->whereNotNull('backdrop_path')
+                    ->orWhereNotNull('poster_path');
+            })
             ->orderByDesc('rating')
             ->limit(3)
-            ->get();
+            ->get()
+            ->map(function ($series) {
+                $firstSeason = $series->seasons->sortBy('season_number')->first();
+                $firstEpisode = $firstSeason?->episodes->sortBy('episode_number')->first();
+                $arr = $series->toArray();
+                $arr['type'] = 'series';
+                $arr['first_episode'] = $firstEpisode ? $firstEpisode->toArray() : null;
 
-        $featuredSeries = Series::with('genres')
-            ->whereNotNull('backdrop_path')
-            ->orWhereNotNull('poster_path')
-            ->orderByDesc('rating')
-            ->limit(2)
-            ->get();
+                return $arr;
+            });
 
-        $featuredMedia = $featuredMovies->concat($featuredSeries)->shuffle()->values();
+        $featuredMedia = $featuredMovies->concat($featuredSeries)
+            ->sortByDesc(fn ($item) => (float) ($item['rating'] ?? 0))
+            ->values();
 
         // 2. Recently Added Movies
         $recentlyAddedMovies = MediaItem::with(['genres', 'subtitles'])

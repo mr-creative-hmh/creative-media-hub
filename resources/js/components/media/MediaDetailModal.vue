@@ -4,15 +4,20 @@ import { useI18n } from '@/i18n/useI18n';
 import { X, Play, Star, Film, Clock, Heart, Users, Subtitles, Download, Check, HardDrive, Cpu, Video, Sparkles, SlidersHorizontal, Layers } from 'lucide-vue-next';
 import FixMatchModal from './FixMatchModal.vue';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     item: any;
-}>();
+    isOpen?: boolean;
+    show?: boolean;
+    type?: string;
+}>(), {
+    isOpen: true,
+    show: true,
+    type: 'movie',
+});
 
 const emit = defineEmits(['close', 'play', 'downloadSub', 'updated']);
 
 const { t, isRTL } = useI18n();
-
-
 
 const showFixMatch = ref(false);
 const isDownloadingAr = ref(false);
@@ -55,15 +60,16 @@ const handleMetadataUpdated = (updatedItem: any) => {
 
 <template>
     <div
-        v-if="item"
+        v-if="item && isOpen !== false && show !== false"
         class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto font-sans"
         @click.self="emit('close')"
     >
         <div class="relative w-full max-w-4xl glass-panel rounded-3xl overflow-hidden border border-slate-200 dark:border-white/15 shadow-2xl my-8 bg-white dark:bg-[#121622]">
             <!-- Close Button -->
             <button
-                @click="emit('close')"
+                @click.stop="emit('close')"
                 class="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-black/60 hover:bg-black/90 text-white flex items-center justify-center transition-colors cursor-pointer"
+                title="Close"
             >
                 <X class="w-5 h-5" />
             </button>

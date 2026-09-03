@@ -23,7 +23,7 @@ const defaultTitle = computed(() => {
 </script>
 
 <template>
-    <div class="cinema-loader-wrapper flex flex-col items-center justify-center gap-4 select-none pointer-events-none" :dir="isRTL ? 'rtl' : 'ltr'">
+    <div class="cinema-loader-wrapper flex flex-col items-center justify-center gap-4 select-none pointer-events-none" dir="ltr">
         <!-- Ambient Glow Aura behind the loader -->
         <div class="relative flex items-center justify-center">
             <div class="absolute -inset-4 bg-gradient-to-r from-cyan-500/20 via-purple-500/20 to-blue-500/20 rounded-full blur-xl animate-pulse"></div>

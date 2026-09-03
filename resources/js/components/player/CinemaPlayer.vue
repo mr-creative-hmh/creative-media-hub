@@ -1269,6 +1269,7 @@ onBeforeUnmount(() => {
 <template>
     <div
         ref="playerContainerRef"
+        dir="ltr"
         @mousemove="showControlsTemporarily"
         @click="showControlsTemporarily"
         class="fixed inset-0 z-50 bg-black flex items-center justify-center select-none overflow-hidden font-sans group"
@@ -1300,7 +1301,7 @@ onBeforeUnmount(() => {
                         class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md transition-transform hover:scale-110 active:scale-95 cursor-pointer shadow-lg"
                         title="Back to Library"
                     >
-                        <ArrowLeft class="w-5 h-5" :class="isRTL ? 'rotate-180' : ''" />
+                        <ArrowLeft class="w-5 h-5" />
                     </button>
 
                     <div class="flex flex-col gap-1">
@@ -1393,6 +1394,7 @@ onBeforeUnmount(() => {
         >
             <div
                 class="subtitle-pill px-4 py-1.5 sm:px-5 sm:py-2 rounded-xl bg-black/75 text-white text-center font-bold tracking-normal shadow-2xl backdrop-blur-xs transition-all duration-100 max-w-4xl pointer-events-none border border-white/10"
+                dir="auto"
                 :class="{
                     'text-sm sm:text-base': subtitleFontSize === 'sm',
                     'text-base sm:text-lg': subtitleFontSize === 'md',
@@ -1416,7 +1418,7 @@ onBeforeUnmount(() => {
             >
                 <CinemaLoader
                     size="md"
-                    :is-r-t-l="isRTL"
+                    :is-r-t-l="false"
                     :status-text="isRTL ? 'جاري ضبط وتدفق البث السينمائي...' : 'Buffering Cinema Stream...'"
                     :sub-text="`${isRemuxStream ? 'Ultra-Fast Remux' : 'Direct Stream'} · ${liveResolution || displayResolution}`"
                 />
@@ -1591,9 +1593,7 @@ onBeforeUnmount(() => {
                             <transition name="scale">
                                 <div
                                     v-if="showPlaybackSpeedMenu"
-                                    class="absolute bottom-12 w-32 bg-slate-950/95 border border-white/10 rounded-2xl p-1.5 shadow-2xl backdrop-blur-xl z-50 flex flex-col gap-1"
-                                    :class="isRTL ? 'left-0' : 'right-0'"
-                                    :dir="isRTL ? 'rtl' : 'ltr'"
+                                    class="absolute bottom-12 right-0 w-32 bg-slate-950/95 border border-white/10 rounded-2xl p-1.5 shadow-2xl backdrop-blur-xl z-50 flex flex-col gap-1"
                                 >
                                     <button
                                         v-for="rate in [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]"
@@ -1624,9 +1624,7 @@ onBeforeUnmount(() => {
                             <transition name="scale">
                                 <div
                                     v-if="showSubtitlesMenu"
-                                    class="absolute bottom-12 w-80 max-w-[90vw] bg-slate-950/95 border border-white/10 rounded-2xl p-3 shadow-2xl backdrop-blur-xl z-50 flex flex-col gap-3 max-h-96 overflow-y-auto"
-                                    :class="isRTL ? 'left-0 text-right' : 'right-0 text-left'"
-                                    :dir="isRTL ? 'rtl' : 'ltr'"
+                                    class="absolute bottom-12 right-0 text-left w-80 max-w-[90vw] bg-slate-950/95 border border-white/10 rounded-2xl p-3 shadow-2xl backdrop-blur-xl z-50 flex flex-col gap-3 max-h-96 overflow-y-auto"
                                 >
                                     <div class="flex items-center justify-between border-b border-white/10 pb-2">
                                         <span class="text-xs font-bold text-white flex items-center gap-1.5">
@@ -1754,9 +1752,7 @@ onBeforeUnmount(() => {
                             <transition name="scale">
                                 <div
                                     v-if="showEqualizer"
-                                    class="absolute bottom-12 w-80 max-w-[90vw] bg-slate-950/95 border border-white/10 rounded-2xl p-3.5 shadow-2xl backdrop-blur-xl z-50 flex flex-col gap-3"
-                                    :class="isRTL ? 'left-0 text-right' : 'right-0 text-left'"
-                                    :dir="isRTL ? 'rtl' : 'ltr'"
+                                    class="absolute bottom-12 right-0 text-left w-80 max-w-[90vw] bg-slate-950/95 border border-white/10 rounded-2xl p-3.5 shadow-2xl backdrop-blur-xl z-50 flex flex-col gap-3"
                                 >
                                     <div class="flex items-center justify-between border-b border-white/10 pb-2">
                                         <span class="text-xs font-bold text-white flex items-center gap-1.5">
@@ -1769,11 +1765,8 @@ onBeforeUnmount(() => {
                                         <!-- Vocal Clarity Boost -->
                                         <button
                                             @click="toggleVocalBoost"
-                                            class="p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer"
-                                            :class="[
-                                                vocalBoost ? 'bg-cyan-500/20 border-cyan-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200',
-                                                isRTL ? 'text-right' : 'text-left'
-                                            ]"
+                                            class="p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer text-left"
+                                            :class="vocalBoost ? 'bg-cyan-500/20 border-cyan-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'"
                                         >
                                             <div>
                                                 <div class="text-xs font-bold text-cyan-300">{{ isRTL ? 'تعزيز الحوار (Vocal Boost)' : 'Vocal Clarity Boost' }}</div>
@@ -1787,11 +1780,8 @@ onBeforeUnmount(() => {
                                         <!-- Cinema Bass Boost -->
                                         <button
                                             @click="toggleBassBoost"
-                                            class="p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer"
-                                            :class="[
-                                                bassBoost ? 'bg-cyan-500/20 border-cyan-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200',
-                                                isRTL ? 'text-right' : 'text-left'
-                                            ]"
+                                            class="p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer text-left"
+                                            :class="bassBoost ? 'bg-cyan-500/20 border-cyan-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'"
                                         >
                                             <div>
                                                 <div class="text-xs font-bold text-cyan-300">{{ isRTL ? 'تضخيم الباس (Bass Boost)' : 'Cinema Bass Boost' }}</div>
@@ -1805,11 +1795,8 @@ onBeforeUnmount(() => {
                                         <!-- Night Mode / Dynamic Compression -->
                                         <button
                                             @click="toggleNightMode"
-                                            class="p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer"
-                                            :class="[
-                                                nightMode ? 'bg-cyan-500/20 border-cyan-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200',
-                                                isRTL ? 'text-right' : 'text-left'
-                                            ]"
+                                            class="p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer text-left"
+                                            :class="nightMode ? 'bg-cyan-500/20 border-cyan-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'"
                                         >
                                             <div>
                                                 <div class="text-xs font-bold text-cyan-300">{{ isRTL ? 'الوضع الليلي (Night Mode)' : 'Night Mode (DRC)' }}</div>
@@ -1908,7 +1895,7 @@ onBeforeUnmount(() => {
                 class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
                 @click.self="showSubtitleSearchModal = false"
             >
-                <div class="relative w-full max-w-lg bg-slate-950 border border-purple-500/30 rounded-3xl p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col" :dir="isRTL ? 'rtl' : 'ltr'">
+                <div class="relative w-full max-w-lg bg-slate-950 border border-purple-500/30 rounded-3xl p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col" dir="ltr">
                     <div class="flex items-center justify-between border-b border-white/10 pb-3">
                         <div class="flex items-center gap-2.5">
                             <div class="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">

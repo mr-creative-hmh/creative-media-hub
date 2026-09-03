@@ -129,10 +129,9 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 - **In-Player Subtitle Font Selector**: Users can switch between **Cairo**, **Jakarta**, and **System** fonts on the fly.
 - **Cinema-Grade Contrast**: Multi-layered text shadow (`0 2px 4px rgba(0,0,0,0.95), 0 0 3px #000, 1px 1px 2px #000...`) ensures crystal-clear legibility across bright or dark scenes.
 
-### 12. 🌐 Full RTL (Right-to-Left) Architecture
-- **In-Player Popovers**: Playback Speed, Subtitle Tracks, and Audio Equalizer dropdowns dynamically anchor to `left-0` in RTL mode, preventing UI clipping across screen edges.
-- **Mirrored Audio Controls**: Vocal Clarity Boost, Cinema Bass Boost, and Dynamic Range Night Mode properly align with natural Arabic reading direction.
-- **RTL Search & Modals**: Subtitle Search & Download modals feature native `:dir="rtl"` layout.
+### 12. 🌐 Bilingual Interface & Player Usability
+- **Bilingual Interface (Arabic / English)**: Instant switching between Arabic and English across all catalog pages, regional filters, metadata studio, and subtitle managers.
+- **Cinema Player Layout Ergonomics**: While catalog pages adopt natural RTL flow when Arabic is active, `CinemaPlayer.vue` maintains a stable LTR component direction (`dir="ltr"`) for its timeline scrubber, volume slider, playhead, and buffer tracks—preventing reversed slider math while rendering complete Arabic dialogue, track names, settings, and WebVTT typography.
 
 ### 13. 🧹 Media Streams & Transcode Cache Manager
 - **Disk Usage Inspection**: Real-time stats card in Settings showing current cache size (e.g., `140.75 MB`, `1.4 GB`) and cached file count in `storage/app/cache/media_streams/`.
@@ -143,6 +142,13 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 - **Live Glassmorphic Buffering Status**: Floating status card with animated multi-bar equalizer waveforms and real-time stream resolution metadata.
 - **Top-Center Transit Island (`PageTransitionLoader.vue`)**: Dynamic island docked top-center that indicates smooth page transitions without colliding with header navigation.
 - **Bidirectional Progress Laser**: Mirrored laser progress bar (`[dir="rtl"] scaleX(-1)`) that physically advances Right-to-Left in Arabic and Left-to-Right in English.
+
+### 15. 🏛️ Consolidated Master Schema & Zero-Demo Seeders
+- **Consolidated 2-Migration Architecture**: All legacy migration fragments merged into two canonical definitions:
+  - `0001_01_01_000000_create_system_tables.php` (sessions, cache, queue jobs).
+  - `2026_09_01_000000_create_media_hub_tables.php` (clean consolidated schema for media items, series, seasons, episodes, genres, credits, subtitles, watch history, downloads, and app settings).
+- **Pure Local-First Cinema (Zero Auth Overhead)**: Unnecessary user accounts, password authentication, and session barriers removed for a streamlined home theatre appliance experience.
+- **Production-Only Clean Seeder**: `MediaLibrarySeeder` seeds pure essential system defaults (15 official TMDb genres with Arabic/English names and core application settings) with zero mock movies, fake series, or dummy subtitle records.
 
 
 ---

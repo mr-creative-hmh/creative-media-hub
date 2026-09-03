@@ -75,11 +75,13 @@ Creative Media Hub is powered by 9 interconnected pipelines designed for maximum
 
 ---
 
-### 2.5. Hybrid Streaming & On-The-Fly FFmpeg Remuxer
-- **Location**: `App\Http\Controllers\StreamController`
-- **Modes**:
+### 2.5. Hybrid Streaming, Hero Resolution & Cinema Player Engine
+- **Location**: `App\Http\Controllers\StreamController`, `DashboardController`, & `CinemaPlayer.vue`
+- **Modes & Architecture**:
   - **Direct Stream (HTTP 206 Partial Content)**: For browser-native containers (MP4, WebM) with H.264/AAC codecs. Serves 256KB chunks with instant seeking and 0% CPU consumption.
   - **On-The-Fly Remuxer**: For unsupported formats (AVI, MKV, MPEG-4, DTS). Spawns an FFmpeg sub-process piping fragmented MP4 (`-movflags frag_keyframe+empty_moov+default_base_moof`) directly to stdout.
+  - **Hero Spotlight Playback Resolution**: Distinguishes movies from TV series using explicit `type` attribution. Clicking "Play Now" on a movie launches direct playback; clicking "Play Now" on a TV series resolves Season 1 Episode 1 (`first_episode`) and streams with the full season playlist, avoiding ID collisions between movies and series sharing primary keys.
+  - **Cinema Player LTR Scrubber Architecture**: Enforces `dir="ltr"` on the player container regardless of the interface locale. This aligns range inputs, seekbar progress, and volume sliders with universal media player ergonomics (matching YouTube, Netflix, Shahid), eliminating inverted thumb calculations while displaying full Arabic localized text and bidirectional WebVTT cues (`dir="auto"`).
   - **FastStart Disk Caching**: Concurrently transcode-caches remuxed streams into `storage/app/transcodes/` for instant re-play without re-encoding.
   - **Orphan Process Reaper**: Kills hanging FFmpeg processes automatically on client disconnect or via `POST /api/stream/stop`.
 

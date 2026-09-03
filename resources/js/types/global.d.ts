@@ -1,6 +1,6 @@
-import type { Auth } from '@/types/auth';
+import type { Page, Router } from '@inertiajs/core';
+import type { createHeadManager } from '@inertiajs/vue3';
 
-// Extend ImportMeta interface for Vite...
 declare module 'vite/client' {
     interface ImportMetaEnv {
         readonly VITE_APP_NAME: string;
@@ -17,7 +17,6 @@ declare module '@inertiajs/core' {
     export interface InertiaConfig {
         sharedPageProps: {
             name: string;
-            auth: Auth;
             sidebarOpen: boolean;
             [key: string]: unknown;
         };
@@ -31,3 +30,5 @@ declare module 'vue' {
         $headManager: ReturnType<typeof createHeadManager>;
     }
 }
+
+export {};

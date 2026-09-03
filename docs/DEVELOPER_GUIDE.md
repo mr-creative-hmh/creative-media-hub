@@ -30,9 +30,10 @@ npm install
 cp .env.example .env
 php artisan key:generate
 
-# 5. Initialize SQLite database & run schema migrations
+# 5. Initialize SQLite database, run migrations & seed base taxonomy
 touch database/database.sqlite
 php artisan migrate
+php artisan db:seed --class=MediaLibrarySeeder
 
 # 6. Build frontend assets & start development server
 npm run dev
@@ -45,7 +46,7 @@ npm run dev
 Creative Media Hub includes automated unit and feature test suites covering parser behavior, route integrity, streaming responses, metadata cascades, subtitle health verification, and direct ID lookup.
 
 ```bash
-# Run the complete PHPUnit test suite (91+ tests, 635+ assertions)
+# Run the complete PHPUnit test suite (71 tests, 600 assertions)
 php artisan test
 
 # Run specific feature test suites
@@ -54,6 +55,7 @@ php artisan test --filter=MetadataDirectIdLookupTest
 php artisan test --filter=SceneNameParserServiceTest
 php artisan test --filter=StreamingAndRoutesTest
 php artisan test --filter=VirtualLibraryScannerTest
+php artisan test --filter=DashboardTest
 
 # Static Type Checking (Vue 3 + TypeScript)
 npm run types:check

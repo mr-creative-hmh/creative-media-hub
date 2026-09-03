@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import HeroBanner from '@/components/media/HeroBanner.vue';
@@ -56,6 +56,78 @@ const openDetail = (item: any) => {
     selectedMedia.value = item;
     isModalOpen.value = true;
 };
+
+const closeDetail = () => {
+    selectedMedia.value = null;
+    isModalOpen.value = false;
+};
+
+const handleHeroPlay = (item: any, playFn: (mediaItem: any, playlist?: any[]) => void) => {
+    if (!item) return;
+
+    // If it's a TV Series
+    if (item.type === 'series' || item.seasons || !item.file_path) {
+        const firstSeason = item.seasons?.find((s: any) => s.season_number === 1) || item.seasons?.[0];
+        const firstEp = item.first_episode || firstSeason?.episodes?.[0];
+        if (firstEp) {
+            const playlist = (firstSeason?.episodes || []).map((e: any) => ({
+                ...e,
+                id: e.id,
+                type: 'episode',
+                watchable_id: e.id,
+                watchable_type: 'episode',
+                series: item,
+                series_id: item.id,
+                series_title: item.title,
+                series_title_ar: item.title_ar,
+                season_number: firstSeason?.season_number || 1,
+                episode_number: e.episode_number || 1,
+                title: e.title,
+                title_ar: e.title_ar,
+                subtitles: e.subtitles || [],
+            }));
+
+            playFn({
+                ...firstEp,
+                id: firstEp.id,
+                type: 'episode',
+                watchable_id: firstEp.id,
+                watchable_type: 'episode',
+                series: item,
+                series_id: item.id,
+                series_title: item.title,
+                series_title_ar: item.title_ar,
+                season_number: firstSeason?.season_number || 1,
+                episode_number: firstEp.episode_number || 1,
+                title: firstEp.title,
+                title_ar: firstEp.title_ar,
+                subtitles: firstEp.subtitles || [],
+            }, playlist);
+            return;
+        }
+
+        // If no playable episode indexed yet, navigate to series showcase
+        router.visit(`/series/${item.slug || item.id}`);
+        return;
+    }
+
+    // Otherwise it is a Movie
+    playFn({
+        ...item,
+        type: 'movie',
+        watchable_id: item.id,
+        watchable_type: 'media_item',
+    });
+};
+
+const handleHeroDetails = (item: any) => {
+    if (!item) return;
+    if (item.type === 'series' || item.seasons || !item.file_path) {
+        router.visit(`/series/${item.slug || item.id}`);
+        return;
+    }
+    openDetail(item);
+};
 </script>
 
 <template>
@@ -66,8 +138,9 @@ const openDetail = (item: any) => {
         <div v-if="featuredMedia && featuredMedia.length > 0" class="mb-10">
             <HeroBanner
                 :featured-items="featuredMedia"
-                @play="(item) => play(item)"
-                @info="(item) => openDetail(item)"
+                @play="(item) => handleHeroPlay(item, play)"
+                @details="handleHeroDetails"
+                @info="handleHeroDetails"
             />
         </div>
 
@@ -333,12 +406,12 @@ const openDetail = (item: any) => {
 
         <!-- Detail Modal -->
         <MediaDetailModal
-            v-if="selectedMedia"
+            v-if="selectedMedia && isModalOpen"
             :item="selectedMedia"
             :type="selectedMedia.type || 'movie'"
             :is-open="isModalOpen"
-            @close="isModalOpen = false"
-            @play="(item) => { isModalOpen = false; play(item); }"
+            @close="closeDetail"
+            @play="(item) => { closeDetail(); play(item); }"
         />
     </AppLayout>
 </template>

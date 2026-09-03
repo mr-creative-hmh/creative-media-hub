@@ -121,16 +121,29 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
 ### 3.3. Subtitle Typography Engine & Bidirectional Transit Architecture
 - **Curated Arabic Typography**: Native web font cascade prioritizing **Cairo**, **Plus Jakarta Sans**, **IBM Plex Sans Arabic**, **Almarai**, and **Alexandria** with dynamic runtime font style selection.
 - **Bilingual Cinema Subtitles**: Multi-pass high-contrast text outlines and drop shadows prevent scene color clash.
-- **Bidirectional Mirrored Progress**: Uses CSS horizontal scale reflection (`[dir="rtl"] #nprogress { transform: scaleX(-1); }`) to accurately advance right-to-left in Arabic without JavaScript overhead.
+- **Cinema Player LTR Layout Stabilization**: While catalog and management pages adopt natural RTL flow when Arabic is active, `CinemaPlayer.vue` enforces a strict Left-to-Right component direction (`dir="ltr"`). This follows industry video player standards (YouTube, Netflix, Shahid), ensuring range inputs (timeline scrubber, volume bar) advance naturally from 0% (left) to 100% (right) without inverted touch/click math, while subtitle text displays using `dir="auto"` for proper bidirectional WebVTT rendering.
+- **Bidirectional Mirrored Progress**: Uses CSS horizontal scale reflection (`[dir="rtl"] #nprogress { transform: scaleX(-1); }`) to accurately advance right-to-left in Arabic on catalog pages without JavaScript overhead.
 - **Top-Center Cinema Transit Island**: An isolated, floating status component listening to Inertia navigation events (`router.on('start')` / `router.on('finish')`) positioned symmetrically at top-center to eliminate header collisions in both LTR and RTL.
 
-### 3.4. Database Architecture & Concurrency Model
+### 3.4. Database Architecture & Schema Consolidation
 - **Engine**: SQLite 3 with Write-Ahead Logging (`PRAGMA journal_mode=WAL;`).
 - **Concurrency**:
   - WAL mode allows unlimited concurrent readers alongside a single active writer without lock contention.
   - `busy_timeout = 5000ms` prevents transient lock timeouts during bulk scanning operations.
-- **Polymorphic Progress Model**:
-  - `WatchHistory` uses polymorphic relations (`watchable_type = 'movie' | 'episode'`) with null-safe queries, guaranteeing accurate progress persistence across both guest and authenticated sessions.
+- **Consolidated 2-Migration Master Schema**:
+  - All legacy incremental migration fragments have been consolidated into two authoritative files:
+    1. `database/migrations/0001_01_01_000000_create_system_tables.php`: Foundation system tables (`sessions`, `cache`, `cache_locks`, `jobs`, `job_batches`, `failed_jobs`).
+    2. `database/migrations/2026_09_01_000000_create_media_hub_tables.php`: Complete cinema domain schema (`media_items`, `series`, `seasons`, `episodes`, `genres`, `media_genre`, `series_genre`, `people`, `media_person`, `series_person`, `subtitles`, `watch_history`, `downloads`, `app_settings`).
+- **Local-First Single-User Cinema Model**:
+  - Eliminates multi-tenant authentication overhead, login screens, and token management for a high-performance local appliance experience.
+  - `WatchHistory` uses polymorphic relations (`watchable_type = 'media_item' | 'episode'`) with null-safe queries, guaranteeing accurate resume state across all sessions.
+- **Production-Only Clean Seeder**:
+  - `MediaLibrarySeeder` provides idempotent initialization of essential application settings and 15 standard TMDb genres with Arabic and English localization, with zero fake mock movies or demo records.
+
+### 3.5. Hero Spotlight & Media Resolution Pipeline
+- **Explicit Type Tagging**: Hero carousel slides are tagged explicitly with `type: 'movie'` or `type: 'series'`.
+- **Episodic Resolution**: For TV series slides, the backend pre-resolves Season 1 Episode 1 (`first_episode`) along with its season playlist and subtitles. When a user clicks "Play Now" on a series slide, the cinema player immediately launches Episode 1 rather than accidentally streaming a movie with a matching numeric ID.
+- **Action Bifurcation**: "Play Now" initiates immediate playback, while "More Details" opens the modal for movies or transitions directly to the series view page (`/series/{slug}`).
 
 ---
 
