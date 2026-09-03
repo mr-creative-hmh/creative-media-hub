@@ -27,14 +27,15 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
                                           v
 +-----------------------------------------------------------------------------------+
 |                            HTTP & CONTROLLERS LAYER                               |
-|   ├── DashboardController (Hero Spotlight & Deduplicated Watch Progress)          |
-|   ├── MediaController (Movies Catalog, Regional Cinema Filters, Favorites)       |
-|   ├── SeriesController (TV Shows, Seasons, Multi-Episode Deep Links)              |
-|   ├── CollectionController (Movie Boxsets, Chronological Franchise Sagas)         |
+|   ├── DashboardController (Hero Spotlight & Top Rated Showcase)                   |
+|   ├── MediaController (Movies Catalog, Regional Cinema Filters, Continue Watching)|
+|   ├── SeriesController (TV Shows, Seasons, Episodic Scoped Continue Watching)     |
+|   ├── CollectionController (Movie Boxsets, Chronological Sagas, Franchise Resume) |
 |   ├── StreamController (HTTP 206 Byte-Range & Non-Blocking FFmpeg Remuxer)        |
-|   ├── MetadataManagementController (Fix Match Studio, Direct ID Lookup)           |
+|   ├── MetadataManagementController (Fix Match Studio, Direct TMDb/IMDb Lookup)    |
+|   ├── DownloadManagerController (Torrent/Direct Inspector, Multi-File Selection)  |
 |   ├── PhysicalOrganizerController (Zero-Copy NTFS Hardlink Engine)               |
-|   ├── SubtitleController (Embedded Track Extractor & SubDL/OpenSubtitles Sync)    |
+|   ├── SubtitleController (Embedded Extractor, SubDL/OpenSubtitles Sync & Checker) |
 |   └── AnalyticsController (Storage Usage, Codec Breakdown, Resolution Stats)      |
 +-----------------------------------------+-----------------------------------------+
                                           | Orchestration Calls
@@ -49,16 +50,23 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
 |  +--------------------------------+  +------------------------------------------+  |
 |  +--------------------------------+  +------------------------------------------+  |
 |  | MetadataAggregator (Waterfall) |  | FfmpegLocatorService & Stream Engine     |  |
-|  | - TMDb (Primary + Collections) |  | - HTTP 206 Byte-Range Partial Content    |  |
+|  | - TMDb (Primary + /find ID)    |  | - HTTP 206 Byte-Range Partial Content    |  |
 |  | - OMDb (IMDb Ratings/Awards)   |  | - On-the-Fly Fragmented MP4 Remuxing     |  |
 |  | - AniList (Anime Specialist)   |  | - Background FastStart Disk Caching      |  |
 |  | - Arabic Translation Engine    |  | - Process Lifecycle & Orphan Reaper      |  |
 |  +--------------------------------+  +------------------------------------------+  |
 |  +--------------------------------+  +------------------------------------------+  |
+|  | SubtitleHealth & Cloud Sync    |  | DownloadManagerService                   |  |
+|  | - LanguageDetector (Unicode+Txt)| | - Intelligent URL & Torrent Inspector    |  |
+|  | - Validator (Stub/HTML Purge)  |  | - Multi-File Bencode Video Parsing       |  |
+|  | - HealthCheck & Ext Renamer    |  | - Default/Custom Folder Target Routing   |  |
+|  | - SubDL & OpenSubtitles Engine |  | - Staging, Speed Limits & Concurrency    |  |
+|  +--------------------------------+  +------------------------------------------+  |
+|  +--------------------------------+  +------------------------------------------+  |
 |  | EmbeddedSubtitleDetector       |  | PhysicalOrganizerService                 |  |
 |  | - FFprobe Stream Analysis      |  | - Zero-Copy NTFS Hardlink Engine         |  |
 |  | - WebVTT Conversion Pipeline   |  | - Replay Protection & Conflict Matrix    |  |
-|  | - SubDL & OpenSubtitles Sync   |  | - Dry-Run Simulation & Reversal Safety   |  |
+|  | - Subtitle Language Tagging    |  | - Dry-Run Simulation & Reversal Safety   |  |
 |  +--------------------------------+  +------------------------------------------+  |
 +-----------------------------------------+-----------------------------------------+
                                           | Eloquent ORM & Storage I/O

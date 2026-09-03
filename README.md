@@ -64,11 +64,35 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 
 ## ✨ Key Features & Capabilities
 
-### 1. 🍿 Movie Boxsets & Franchise Sagas
+### 1. 🛡️ Subtitle Checker & Health Normalizer
+- **Lexical Dialogue Language Detector**: Analyzes spoken dialogue directly (ignoring timecodes and tags) using Unicode script blocks (`\p{Arabic}` with stop-word validation, Cyrillic, CJK, Greek, Hebrew) and Latin dialogue stop-word frequency matrices (`ar`, `en`, `fr`, `es`, `de`, `it`, `pt`, `tr`, `nl`).
+- **Encoding Normalizer**: Automatically decodes Windows-1256 (Arabic CP1256), ISO-8859-6, Windows-1252, ISO-8859-1, UTF-16, and UTF-8 BOM into clean UTF-8.
+- **Strict Integrity Purger**: Detects 0-byte corrupt files, HTML 404/503 Cloudflare pages, and dummy stubs (< 5 cues or < 300 bytes), deleting them from disk and database.
+- **Standardized Extension Renamer**: Renames adjacent subtitle files to standard convention: `{mediaBase}.{lang}.srt` (e.g. `Gladiator (2000).ar.srt`, `Gladiator (2000).en.srt`).
+- **CLI & Web Studio**: Available via `php artisan subtitles:check {--fix} {--dry-run} {--path=}` and interactive Subtitle Studio UI.
+
+### 2. 💬 100% Real Subtitle Cloud Engine & In-Player Search
+- **Zero Fake Subtitles**: Removed all mock generator placeholders. Real online search via SubDL and OpenSubtitles v3.
+- **Cinemeta Dynamic IMDb Discovery**: Automatically discovers IMDb IDs (`ttXXXXXXX`) on the fly without user input.
+- **In-Player Subtitle Modal**: Search, preview ratings/downloads, and 1-click download directly inside `CinemaPlayer.vue`.
+- **Gzip & Zip Decompressor**: Automatically unpacks compressed subtitle archives and attaches them to the playing track instantly.
+
+### 3. 🎯 Fix Match & Direct ID Resolution Studio
+- **Direct ID Lookup**: Instantly fetch and apply full bilingual metadata by exact TMDb numeric ID (e.g. `27205`), IMDb ID (`tt1375666`), or direct TMDb/IMDb URLs.
+- **Automatic Fallback Waterfall**: Queries TMDb `/find` external source with automatic fallback to OMDb.
+- **Bilingual Arabization & Artwork Caching**: Automatically saves English and Arabic titles and synopses, and caches high-res artwork locally.
+- **1-Click Movie ↔ Series Converter & Scene Re-Parser**: Instantly convert accidental classifications and re-evaluate filenames.
+
+### 4. 🧲 Smart Downloader with Torrent Multi-File Selection
+- **Multi-File Torrent Checklist**: Inspects torrents and magnet links, allowing users to select individual video files with quick buttons (`Select All`, `Videos Only`, `Clear`).
+- **Direct vs Torrent Modes**: Dedicated modes for direct HTTP downloads and P2P torrent streaming ingestion.
+- **Default vs Custom Folder Routing**: Automatically routes movies and series to default library folders or custom user-selected paths.
+
+### 5. 🍿 Movie Boxsets & Franchise Sagas
 - Clusters multi-film movie franchises (e.g. *Harry Potter (9 films)*, *Fast & Furious (11 films)*, *The Dark Knight Trilogy*, *Knives Out*, *Ip Man Collection*) with chronological release timelines.
 - Intelligent **`count >= 2`** threshold eliminates solitary 1-movie false positives from `/collections`.
 
-### 2. 🌍 Regional Cinema Origin Filtering
+### 6. 🌍 Regional Cinema Origin Filtering
 - 1-Click regional filtering:
   - **Arabic Cinema (عربي)**: Egypt, Saudi Arabia, UAE, Syria, Lebanon, Jordan, Maghreb.
   - **Bollywood (بوليوود)**: Hindi, Tamil, Telugu cinema.
@@ -77,23 +101,24 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
   - **Hollywood & Western**: US, UK, Australia, Canada.
   - **European Cinema**: France, Germany, Italy, Spain, Scandinavia.
 
-### 3. 🎯 Fix Match & Error Resolution Studio
-- Instant online metadata search with automated query cleaning (strips scene tags and dots).
-- **Direct ID Lookup**: Instantly fetch and apply full bilingual metadata by exact TMDb numeric ID (e.g. `27205`) or IMDb ID (`tt1375666`).
-- **1-Click Movie ↔ Series Converter**: Instantly fixes accidental type classification.
-- **Intelligent Scene Re-Parser**: Re-evaluates raw filenames on demand.
+### 7. ⏱️ Scoped Continue Watching Bars
+- Context-segregated continue watching trays:
+  - **Movies Page**: Displays only in-progress feature films.
+  - **Series Page**: Displays only in-progress TV show episodes.
+  - **Collections Page**: Displays only in-progress franchise movies.
+  - **Dashboard**: Clean cinematic spotlight without redundant clutter.
 
-### 4. 🧠 Intelligent Scene Name Parser (Arabic & Multilingual Engine)
+### 8. 🧠 Intelligent Scene Name Parser (Arabic & Multilingual Engine)
 - Normalizes Eastern Arabic numerals (`١, ٢, ٣ → 1, 2, 3`).
 - Folder ancestor context inheritance: resolves episode numbers from nested structures (`Breaking Bad/Season 01/01.mp4`).
 - Distinguishes movie franchise sequence numbers from TV episodes inside movie folders (`1.Ip.Man.2008.mp4` → Movie Part 1).
 
-### 5. ⚡ Hybrid Video Streaming & Remuxing
+### 9. ⚡ Hybrid Video Streaming & Remuxing
 - **Direct Stream (HTTP 206 Partial Content)**: Zero-CPU byte-range streaming for MP4 / H.264 / AAC.
 - **On-The-Fly FFmpeg Remuxer**: Real-time stdout remuxing for legacy containers (AVI, MKV, MPEG-4, DTS) into fragmented MP4.
 - **FastStart Disk Caching**: Transcode-caches remuxed streams in background for instantaneous seeking upon replay.
 
-### 6. 🔗 Zero-Copy NTFS Hardlink Organizer
+### 10. 🔗 Zero-Copy NTFS Hardlink Organizer
 - Restructures chaotic folders into pristine paths (`Movies/Title (Year)/Title (Year) [1080p].ext`) using NTFS hardlinks (`mklink /H`).
 - **0 bytes** duplicated on disk and continuous torrent seeding remains 100% active.
 - Includes side-by-side Dry-Run simulation before execution.

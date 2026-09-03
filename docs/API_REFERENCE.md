@@ -45,9 +45,22 @@
 
 ### 2.3. Direct ID Lookup & 1-Click Utilities
 - **`POST /api/metadata/lookup-id`**  
-  Fetches full metadata by exact TMDb ID (e.g. `27205`) or IMDb ID (e.g. `tt1375666`).
+  Fetches full metadata by exact TMDb numeric ID (`27205`), IMDb ID (`tt1375666`), or direct TMDb/IMDb URLs, updates the local database model, caches high-res artwork, and syncs genres and seasons.
   ```json
-  { "id": 1, "type": "movie", "external_id": "27205" }
+  {
+    "id": 1,
+    "type": "movie",
+    "external_id": "27205"
+  }
+  ```
+  **Response:**
+  ```json
+  {
+    "success": true,
+    "message": "Metadata updated successfully from TMDb",
+    "media": { "id": 1, "title": "Inception", "title_ar": "استهلال", ... },
+    "details": { ... }
+  }
   ```
 - **`POST /api/metadata/{type}/{id}/reparse`**  
   Re-parses the file/folder name using the latest `SceneNameParserService` rules and re-enriches metadata.
@@ -58,16 +71,71 @@
 
 ## 3. Subtitles API Endpoints
 
+### 3.1. Subtitle Search & Ingestion
 - **`GET /api/subtitles/search?media_id={id}&type={movie|series}&lang={ar|en}`**  
-  Searches SubDL and OpenSubtitles for subtitles matching the file title/hash.
+  Searches real online providers (SubDL and OpenSubtitles v3 via Cinemeta IMDb lookup) for subtitles matching the title or IMDb ID.
 - **`POST /api/subtitles/download`**  
-  Downloads and associates a subtitle file with the media record.
+  Downloads, decompresses (.gz / .zip), normalizes encoding (CP1256 / UTF-8), saves adjacent to the video file, and registers the subtitle track in the database.
 - **`GET /stream/subtitles/{id}`**  
   Serves WebVTT subtitle track with proper `Content-Type: text/vtt`.
 
+### 3.2. Subtitle Health Checker & Normalizer
+- **`POST /api/subtitles/check`**  
+  Scans directories for subtitles, detects dialogue languages, removes corrupt stubs, and standardizes file extensions.
+  ```json
+  {
+    "fix": true,
+    "dry_run": false,
+    "delete_invalid": true,
+    "path": "C:/Media"
+  }
+  ```
+  **Response:**
+  ```json
+  {
+    "success": true,
+    "total_scanned": 142,
+    "valid_count": 138,
+    "invalid_count": 4,
+    "renamed_count": 89,
+    "deleted_count": 4,
+    "languages": { "ar": 65, "en": 70, "fr": 3 },
+    "results": [ ... ]
+  }
+  ```
+
 ---
 
-## 4. Physical NTFS Hardlink Organizer Endpoints
+## 4. Scoped Continue Watching Endpoints
+
+- **`GET /api/continue-watching?type={movie|series|collection}`**  
+  Returns deduplicated, in-progress items scoped strictly by media context:
+  - `type=movie`: In-progress standalone feature films.
+  - `type=series`: Most recently watched in-progress episode per TV series.
+  - `type=collection`: In-progress movies belonging to a franchise collection.
+- **`POST /api/watch-history`**  
+  Records current playback timestamp and marks media as completed once progress exceeds 92%.
+
+---
+
+## 5. Downloader & Torrent Inspection Endpoints
+
+- **`POST /api/downloads/inspect`**  
+  Inspects a direct HTTP URL, torrent file, or magnet link. Returns detected media title, inferred type (`movie` or `series`), total size, and a multi-file selection tree with video badges.
+  ```json
+  {
+    "source": "magnet:?xt=urn:btih:...",
+    "type": "torrent"
+  }
+  ```
+- **`POST /api/downloads/add`**  
+  Enqueues an inspected download with user-selected file indices, mode (`direct` vs `torrent`), and destination folder (`default` vs `custom`).
+- **`GET /api/downloads/settings`** & **`POST /api/downloads/settings`**  
+  Retrieves and persists user preferences for default staging paths, movies path, TV shows path, max concurrent downloads, and rate limits.
+
+---
+
+## 6. Physical NTFS Hardlink Organizer Endpoints
 
 - **`POST /api/organizer/preview`**  
   Generates a dry-run preview of original paths vs new organized paths according to selected naming template.

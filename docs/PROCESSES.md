@@ -85,37 +85,64 @@ Creative Media Hub is powered by 9 interconnected pipelines designed for maximum
 
 ---
 
-### 2.6. Subtitle Extraction & Sync Pipeline
-- **Location**: `App\Services\Subtitles\EmbeddedSubtitleDetectorService`
+### 2.6. Real Online Subtitle Search & Ingestion Pipeline
+- **Location**: `App\Services\Subtitles\SubtitleManagerService` & `CinemaPlayer.vue`
 - **Workflow**:
-  - Probes video files using `ffprobe` to identify internal subtitle tracks (SRT, ASS, PGS).
-  - Extracts embedded text tracks to `.vtt` format on demand.
-  - Integrates with SubDL and OpenSubtitles APIs for automated 1-click external Arabic/English subtitle downloading.
+  - **Dynamic IMDb Discovery**: Probes Cinemeta `/meta/movie/{title}.json` or OMDb to automatically resolve exact IMDb IDs (`ttXXXXXXX`) on the fly.
+  - **Real Online Providers**: Queries Stremio OpenSubtitles v3 addon and SubDL APIs. Zero placeholder or fake subtitles.
+  - **In-Player Subtitle Modal**: Triggered directly from `CinemaPlayer.vue`'s subtitle selector to search, preview, and download subtitles without leaving playback.
+  - **Decompression & Ingestion**: Decompresses `.gz` and `.zip` archives, converts CP1256 (Windows Arabic) / UTF-16 to UTF-8, saves `.srt` adjacent to video file, and inserts a `Subtitle` database record.
 
 ---
 
-### 2.7. Zero-Copy NTFS Hardlink Physical Organizer
+### 2.7. Subtitle Health Checker & Normalizer Pipeline
+- **Location**: `App\Services\Subtitles\SubtitleHealthCheckService` & `CheckSubtitlesCommand`
+- **Workflow**:
+  - **Lexical Dialogue Extraction**: Strips timestamps, formatting tags, and numeric indices to isolate raw spoken dialogue.
+  - **Multi-Encoding Conversion**: Decodes Windows-1256, ISO-8859-6, Windows-1252, ISO-8859-1, and UTF-16 into clean UTF-8.
+  - **Script & Stop-Words Language Identification**: Identifies Arabic via `\p{Arabic}` with stop-word cross-validation; identifies Cyrillic, CJK, Greek, Hebrew; evaluates Latin dialogue stop-word frequency matrices for English, French, Spanish, German, Italian, Portuguese, Turkish, Dutch.
+  - **Integrity Validation**: Detects 0-byte corrupt files, HTML error pages (Cloudflare 404/503), and dummy stubs (< 5 cues or < 300 bytes).
+  - **Standardized Renaming**: Renames adjacent subtitles to `{videoBase}.{lang}.srt` (e.g. `Inception (2010).ar.srt`) and synchronizes the database.
+  - **Execution**: Can be run via CLI `php artisan subtitles:check {--fix} {--dry-run} {--path=}` or the interactive web studio.
+
+---
+
+### 2.8. Fix Match & Direct ID Resolution Studio
+- **Location**: `App\Http\Controllers\MetadataManagementController`
+- **Capabilities**:
+  - **Instant Live Search**: Live title search with automatic release tag stripping.
+  - **Direct ID Resolution**: Accepts numeric TMDb IDs (`27205`), IMDb IDs (`tt1375666`), or direct URLs (`themoviedb.org`, `imdb.com`).
+  - **Waterfall Cascade**: Resolves IMDb IDs via TMDb `/find` API with automatic fallback to OMDb.
+  - **Automated Arabization & Artwork Caching**: Downloads and caches local poster/backdrop images, fetches Arabic titles/synopses (`ensureArabicMetadata`), updates the database model, and syncs genres and seasons.
+  - **1-Click Utilities**: 1-Click Movie ↔ Series conversion and scene re-parsing.
+
+---
+
+### 2.9. Scoped Continue Watching & Watch History Engine
+- **Location**: `App\Models\WatchHistory` & `ContinueWatchingBar.vue`
+- **Features**:
+  - **Context-Segregated Trays**:
+    - `type=movie`: Filtered strictly to feature films on the Movies page.
+    - `type=series`: Filtered to TV shows on the Series page, automatically grouping by series to show only the latest in-progress episode.
+    - `type=collection`: Filtered to franchise movies on the Collections page.
+    - Dashboard remains clean and distraction-free.
+  - **Auto-Dismiss**: Automatically marks media as finished and clears it from the resume bar when progress exceeds 92%.
+
+---
+
+### 2.10. Download Manager & Torrent File Selection Pipeline
+- **Location**: `App\Services\Downloader\DownloadManagerService` & `Downloader/Index.vue`
+- **Features**:
+  - **Intelligent URL & Torrent Inspector**: `POST /api/downloads/inspect` parses direct HTTP URLs, `.torrent` files, and `magnet:` links.
+  - **Multi-File Video Checklist**: Decodes bencode metadata, extracts nested file trees, detects video streams, and provides 1-click batch selection (`Select All`, `Videos Only`, `Clear`).
+  - **Target Routing**: Allows routing downloads to default library directories (`Movies/`, `Series/`) or custom user-defined paths.
+  - **Speed Limits & Concurrency**: Manages staging paths, concurrency limits, and throttling via persistent user settings (`/api/downloads/settings`).
+
+---
+
+### 2.11. Zero-Copy NTFS Hardlink Physical Organizer
 - **Location**: `App\Services\Organizer\PhysicalOrganizerService`
 - **Features**:
   - Employs NTFS hardlinks (`mklink /H`) so files are organized into standard paths (`Movies/Title (Year)/Title (Year) [1080p].ext`) without duplicating disk space.
   - Continuous torrent seeding remains unaffected.
   - Includes a full **Dry-Run Simulation Mode** with side-by-side filename preview before execution.
-
----
-
-### 2.8. Fix Match & Error Resolution Studio
-- **Location**: `App\Http\Controllers\MetadataManagementController`
-- **Capabilities**:
-  - Instant live search with automatic query normalization.
-  - Direct TMDb numeric ID and IMDb `tt...` ID lookup with automatic metadata replacement.
-  - 1-Click Movie ↔ Series type conversion.
-  - Intelligent scene re-parser button.
-
----
-
-### 2.9. Deduplicated Continue Watching & Watch History Engine
-- **Location**: `App\Models\WatchHistory` & `ContinueWatchingBar.vue`
-- **Features**:
-  - Polymorphic relation across `MediaItem` and `Episode`.
-  - Grouped by parent entity to prevent clutter (e.g. only the most recently watched episode of a TV show is displayed).
-  - Automatically clears items from the tray once watched percentage exceeds 92%.

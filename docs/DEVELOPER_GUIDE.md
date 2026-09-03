@@ -40,21 +40,46 @@ npm run dev
 
 ---
 
-## 2. Running Automated Tests
+## 2. Running Automated Tests & Quality Checks
 
-Creative Media Hub includes automated unit and feature test suites covering parser behavior, route integrity, streaming responses, and metadata cascades.
+Creative Media Hub includes automated unit and feature test suites covering parser behavior, route integrity, streaming responses, metadata cascades, subtitle health verification, and direct ID lookup.
 
 ```bash
-# Run the complete test suite
+# Run the complete PHPUnit test suite (91+ tests, 635+ assertions)
 php artisan test
 
-# Run a specific test suite
+# Run specific feature test suites
+php artisan test --filter=SubtitleHealthCheckTest
+php artisan test --filter=MetadataDirectIdLookupTest
 php artisan test --filter=SceneNameParserServiceTest
 php artisan test --filter=StreamingAndRoutesTest
 php artisan test --filter=VirtualLibraryScannerTest
 
-# Verify frontend build compilation
+# Static Type Checking (Vue 3 + TypeScript)
+npm run types:check
+
+# Verify production frontend assets compilation
 npm run build
+
+# Code style formatting (Laravel Pint)
+vendor/bin/pint --format agent
+```
+
+---
+
+## 3. Subtitle Health Checker & Normalizer CLI
+
+To audit, clean, and standardize subtitles from the command line:
+
+```bash
+# Dry-run audit (prints findings without modifying disk)
+php artisan subtitles:check --dry-run
+
+# Execute cleanup & renaming across entire library
+php artisan subtitles:check --fix --delete-invalid
+
+# Target a specific directory
+php artisan subtitles:check --path="D:/Media/Movies" --fix
 ```
 
 ---
