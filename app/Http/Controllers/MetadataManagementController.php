@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Genre;
-use App\Models\MediaItem;
-use App\Models\Series;
-use App\Models\Season;
+use App\Models\AppSetting;
 use App\Models\Episode;
+use App\Models\MediaItem;
+use App\Models\Season;
+use App\Models\Series;
+use App\Models\Subtitle;
 use App\Services\Metadata\ArtworkDownloadService;
 use App\Services\Metadata\MetadataAggregator;
 use App\Services\Metadata\TmdbProvider;
@@ -14,15 +15,17 @@ use App\Services\Organizer\SceneNameParserService;
 use App\Services\Scanner\VirtualLibraryScannerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class MetadataManagementController extends Controller
 {
     protected VirtualLibraryScannerService $scannerService;
+
     protected MetadataAggregator $metadata;
+
     protected ArtworkDownloadService $artwork;
+
     protected SceneNameParserService $parser;
 
     public function __construct(
@@ -48,13 +51,13 @@ class MetadataManagementController extends Controller
         if ($search) {
             $moviesQuery->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('title_ar', 'like', "%{$search}%")
-                  ->orWhere('file_path', 'like', "%{$search}%");
+                    ->orWhere('title_ar', 'like', "%{$search}%")
+                    ->orWhere('file_path', 'like', "%{$search}%");
             });
             $seriesQuery->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('title_ar', 'like', "%{$search}%")
-                  ->orWhere('folder_path', 'like', "%{$search}%");
+                    ->orWhere('title_ar', 'like', "%{$search}%")
+                    ->orWhere('folder_path', 'like', "%{$search}%");
             });
         }
 
@@ -62,13 +65,13 @@ class MetadataManagementController extends Controller
             'unmatched' => [
                 $moviesQuery->where(function ($q) {
                     $q->whereNull('tmdb_id')
-                      ->orWhereNull('poster_path')
-                      ->orWhere('overview', 'like', 'Enjoy watching%');
+                        ->orWhereNull('poster_path')
+                        ->orWhere('overview', 'like', 'Enjoy watching%');
                 }),
                 $seriesQuery->where(function ($q) {
                     $q->whereNull('tmdb_id')
-                      ->orWhereNull('poster_path')
-                      ->orWhere('overview', 'like', 'Experience the complete series%');
+                        ->orWhereNull('poster_path')
+                        ->orWhere('overview', 'like', 'Experience the complete series%');
                 }),
             ],
             'missing_posters' => [
@@ -104,9 +107,9 @@ class MetadataManagementController extends Controller
                 'overview_ar' => $m->overview_ar,
                 'tmdb_id' => $m->tmdb_id,
                 'imdb_id' => $m->imdb_id,
-                'has_poster' => !empty($m->poster_path),
-                'has_arabic' => !empty($m->title_ar) || !empty($m->overview_ar),
-                'is_matched' => !empty($m->tmdb_id),
+                'has_poster' => ! empty($m->poster_path),
+                'has_arabic' => ! empty($m->title_ar) || ! empty($m->overview_ar),
+                'is_matched' => ! empty($m->tmdb_id),
                 'subtitles_count' => $m->subtitles->count(),
                 'file_path' => $m->file_path,
             ];
@@ -114,6 +117,7 @@ class MetadataManagementController extends Controller
 
         $seriesList = $seriesQuery->orderByDesc('created_at')->limit(50)->get()->map(function ($s) {
             $episodesCount = $s->seasons->sum(fn ($sea) => $sea->episodes->count());
+
             return [
                 'id' => $s->id,
                 'title' => $s->title,
@@ -128,9 +132,9 @@ class MetadataManagementController extends Controller
                 'overview_ar' => $s->overview_ar,
                 'tmdb_id' => $s->tmdb_id,
                 'imdb_id' => $s->imdb_id,
-                'has_poster' => !empty($s->poster_path),
-                'has_arabic' => !empty($s->title_ar) || !empty($s->overview_ar),
-                'is_matched' => !empty($s->tmdb_id),
+                'has_poster' => ! empty($s->poster_path),
+                'has_arabic' => ! empty($s->title_ar) || ! empty($s->overview_ar),
+                'is_matched' => ! empty($s->tmdb_id),
                 'seasons_count' => $s->seasons->count(),
                 'episodes_count' => $episodesCount,
                 'file_path' => $s->folder_path,
@@ -176,7 +180,7 @@ class MetadataManagementController extends Controller
             $details = $this->metadata->getMovieDetails($cleanId, 'tmdb');
         }
 
-        if (!$details) {
+        if (! $details) {
             return response()->json(['success' => false, 'message' => 'No media found with that ID.'], 404);
         }
 
@@ -319,12 +323,12 @@ class MetadataManagementController extends Controller
     {
         if ($type === 'movie') {
             $item = MediaItem::find($id);
-            if (!$item) {
+            if (! $item) {
                 return response()->json(['success' => false, 'message' => 'Movie not found.'], 404);
             }
 
-            $oldPath = $item->file_path;
-            if (!file_exists($oldPath)) {
+            $oldPath = str_replace('\\', '/', $item->file_path);
+            if (! file_exists($oldPath)) {
                 return response()->json([
                     'success' => false,
                     'message' => "Physical file does not exist on disk: {$oldPath}",
@@ -333,50 +337,47 @@ class MetadataManagementController extends Controller
 
             $dir = dirname($oldPath);
             $ext = pathinfo($oldPath, PATHINFO_EXTENSION);
-            
+
             $cleanTitle = trim(preg_replace('~[\\/:*?"<>|]~', ' ', $item->title));
             $cleanTitle = preg_replace('/\s+/', ' ', $cleanTitle);
-            
+
             $newFilename = $cleanTitle;
             if ($item->release_year) {
                 $newFilename .= " ({$item->release_year})";
             }
             $newFilename .= ".{$ext}";
-            $newPath = $dir . DIRECTORY_SEPARATOR . $newFilename;
+            $newFilePath = str_replace('\\', '/', $dir.'/'.$newFilename);
 
-            // Normalize path slashes
-            $newPath = str_replace('\\', '/', $newPath);
-            $oldPathNorm = str_replace('\\', '/', $oldPath);
-
-            if ($oldPathNorm !== $newPath) {
-                if (file_exists($newPath)) {
+            // 1. Rename the movie file if needed
+            if ($oldPath !== $newFilePath) {
+                if (file_exists($newFilePath)) {
                     return response()->json([
                         'success' => false,
                         'message' => "Target file already exists: {$newFilename}",
                     ], 400);
                 }
 
-                if (!@rename($oldPath, $newPath)) {
+                if (! @rename($oldPath, $newFilePath)) {
                     return response()->json([
                         'success' => false,
-                        'message' => "Failed to rename physical file on disk. Check filesystem permissions.",
+                        'message' => 'Failed to rename physical file on disk. Check filesystem permissions.',
                     ], 500);
                 }
 
                 // Also rename associated subtitle files with matching basename
                 $oldBase = pathinfo($oldPath, PATHINFO_FILENAME);
-                $newBase = pathinfo($newPath, PATHINFO_FILENAME);
+                $newBase = pathinfo($newFilePath, PATHINFO_FILENAME);
                 foreach (['srt', 'vtt', 'sub', 'ass'] as $subExt) {
-                    $oldSub = $dir . DIRECTORY_SEPARATOR . "{$oldBase}.{$subExt}";
-                    $newSub = $dir . DIRECTORY_SEPARATOR . "{$newBase}.{$subExt}";
-                    if (file_exists($oldSub) && !file_exists($newSub)) {
+                    $oldSub = $dir.'/'."{$oldBase}.{$subExt}";
+                    $newSub = $dir.'/'."{$newBase}.{$subExt}";
+                    if (file_exists($oldSub) && ! file_exists($newSub)) {
                         @rename($oldSub, $newSub);
                     }
                 }
 
                 $item->update([
-                    'file_path' => $newPath,
-                    'folder_path' => dirname($newPath),
+                    'file_path' => $newFilePath,
+                    'folder_path' => $dir,
                 ]);
 
                 // Update subtitle database records
@@ -388,86 +389,258 @@ class MetadataManagementController extends Controller
                 }
             }
 
-            $item->load(['genres', 'subtitles']);
-
-            return response()->json([
-                'success' => true,
-                'message' => "Physical file successfully renamed to '{$newFilename}'!",
-                'old_path' => $oldPath,
-                'new_path' => $newPath,
-                'media' => $item,
-            ]);
-        } else {
-            $series = Series::with('seasons.episodes')->find($id);
-            if (!$series) {
-                return response()->json(['success' => false, 'message' => 'Series not found.'], 404);
-            }
-
-            $oldFolder = $series->folder_path;
-            if (!$oldFolder || !is_dir($oldFolder)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => "Series folder does not exist on disk: {$oldFolder}",
-                ], 404);
-            }
-
-            $parentDir = dirname($oldFolder);
-            $cleanTitle = trim(preg_replace('~[\\/:*?"<>|]~', ' ', $series->title));
-            $cleanTitle = preg_replace('/\s+/', ' ', $cleanTitle);
-            
-            $newFolderName = $cleanTitle;
-            if ($series->release_year) {
-                $newFolderName .= " ({$series->release_year})";
-            }
-            $newFolder = $parentDir . DIRECTORY_SEPARATOR . $newFolderName;
-            $newFolder = str_replace('\\', '/', $newFolder);
-            $oldFolderNorm = str_replace('\\', '/', $oldFolder);
-
-            if ($oldFolderNorm !== $newFolder) {
-                if (file_exists($newFolder)) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => "Target folder already exists: {$newFolderName}",
-                    ], 400);
+            // 2. Check if movie is inside a dedicated movie folder (not monitored root and not containing other media)
+            $currentFolder = str_replace('\\', '/', dirname($item->file_path));
+            $folderRenamed = false;
+            if ($this->isDedicatedMovieFolder($currentFolder, $item->id)) {
+                $parentDir = dirname($currentFolder);
+                $cleanFolderTarget = $cleanTitle;
+                if ($item->release_year) {
+                    $cleanFolderTarget .= " ({$item->release_year})";
                 }
+                $newFolder = str_replace('\\', '/', $parentDir.'/'.$cleanFolderTarget);
 
-                if (!@rename($oldFolder, $newFolder)) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => "Failed to rename series folder. Check permissions.",
-                    ], 500);
-                }
+                if ($currentFolder !== $newFolder && ! file_exists($newFolder)) {
+                    if (@rename($currentFolder, $newFolder)) {
+                        $folderRenamed = true;
+                        $newFilePathInRenamedFolder = str_replace($currentFolder, $newFolder, $item->file_path);
+                        $item->update([
+                            'folder_path' => $newFolder,
+                            'file_path' => $newFilePathInRenamedFolder,
+                        ]);
 
-                $series->update(['folder_path' => $newFolder]);
-
-                // Update all episodes file_path
-                foreach ($series->seasons as $season) {
-                    foreach ($season->episodes as $episode) {
-                        if ($episode->file_path) {
-                            $updatedEpPath = str_replace($oldFolderNorm, $newFolder, str_replace('\\', '/', $episode->file_path));
-                            $episode->update(['file_path' => $updatedEpPath]);
+                        foreach ($item->subtitles as $sub) {
+                            if ($sub->file_path && str_contains($sub->file_path, $currentFolder)) {
+                                $sub->update([
+                                    'file_path' => str_replace($currentFolder, $newFolder, $sub->file_path),
+                                ]);
+                            }
                         }
                     }
                 }
             }
 
+            $item->refresh();
+            $item->load(['genres', 'subtitles']);
+
+            return response()->json([
+                'success' => true,
+                'message' => $folderRenamed
+                    ? 'Movie file and folder successfully renamed!'
+                    : "Physical file successfully renamed to '{$newFilename}'!",
+                'old_path' => $oldPath,
+                'new_path' => $item->file_path,
+                'media' => $item,
+            ]);
+        } else {
+            $series = Series::with('seasons.episodes.subtitles')->find($id);
+            if (! $series) {
+                return response()->json(['success' => false, 'message' => 'Series not found.'], 404);
+            }
+
+            $seriesFolder = $this->resolveSeriesFolder($series);
+            if (! $seriesFolder || ! is_dir($seriesFolder)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Series folder could not be resolved or does not exist on disk.',
+                ], 404);
+            }
+
+            $seriesFolderNorm = str_replace('\\', '/', $seriesFolder);
+            $parentDir = dirname($seriesFolderNorm);
+
+            $cleanSeriesTitle = trim(preg_replace('~[\\/:*?"<>|]~', ' ', $series->title));
+            $cleanSeriesTitle = preg_replace('/\s+/', ' ', $cleanSeriesTitle);
+
+            $newFolderName = $cleanSeriesTitle;
+            if ($series->release_year) {
+                $newFolderName .= " ({$series->release_year})";
+            }
+            $newFolder = str_replace('\\', '/', $parentDir.'/'.$newFolderName);
+
+            // 1. Rename series folder if name changed
+            if ($seriesFolderNorm !== $newFolder) {
+                if (file_exists($newFolder)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Target series folder already exists: {$newFolderName}",
+                    ], 400);
+                }
+
+                if (! @rename($seriesFolderNorm, $newFolder)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Failed to rename series folder. Check permissions.',
+                    ], 500);
+                }
+
+                $series->update(['folder_path' => $newFolder]);
+
+                // Update all episodes file_path in DB before renaming files
+                foreach ($series->seasons as $season) {
+                    foreach ($season->episodes as $episode) {
+                        if ($episode->file_path) {
+                            $updatedEpPath = str_replace($seriesFolderNorm, $newFolder, str_replace('\\', '/', $episode->file_path));
+                            $episode->update(['file_path' => $updatedEpPath]);
+                            foreach ($episode->subtitles as $sub) {
+                                if ($sub->file_path) {
+                                    $sub->update([
+                                        'file_path' => str_replace($seriesFolderNorm, $newFolder, str_replace('\\', '/', $sub->file_path)),
+                                    ]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Rename physical episode files & subtitles across all seasons
+            $renamedEpisodesCount = 0;
+            foreach ($series->seasons as $season) {
+                $sNum = str_pad((string) ($season->season_number ?? 1), 2, '0', STR_PAD_LEFT);
+
+                foreach ($season->episodes as $episode) {
+                    if (! $episode->file_path) {
+                        continue;
+                    }
+
+                    $currentEpPath = str_replace('\\', '/', $episode->file_path);
+                    if (! file_exists($currentEpPath)) {
+                        continue;
+                    }
+
+                    $epDir = dirname($currentEpPath);
+                    $ext = pathinfo($currentEpPath, PATHINFO_EXTENSION);
+                    $eNum = str_pad((string) ($episode->episode_number ?? 1), 2, '0', STR_PAD_LEFT);
+
+                    $epName = "{$cleanSeriesTitle} - S{$sNum}E{$eNum}";
+                    if (! empty($episode->title) && ! preg_match('/^Episode \d+$/i', $episode->title)) {
+                        $cleanEpTitle = trim(preg_replace('~[\\/:*?"<>|]~', ' ', $episode->title));
+                        $cleanEpTitle = preg_replace('/\s+/', ' ', $cleanEpTitle);
+                        if ($cleanEpTitle) {
+                            $epName .= " - {$cleanEpTitle}";
+                        }
+                    }
+                    $newEpFilename = "{$epName}.{$ext}";
+                    $newEpPath = str_replace('\\', '/', "{$epDir}/{$newEpFilename}");
+
+                    if ($currentEpPath !== $newEpPath) {
+                        if (! file_exists($newEpPath)) {
+                            if (@rename($currentEpPath, $newEpPath)) {
+                                $renamedEpisodesCount++;
+
+                                // Rename associated subtitles
+                                $oldEpBase = pathinfo($currentEpPath, PATHINFO_FILENAME);
+                                $newEpBase = pathinfo($newEpPath, PATHINFO_FILENAME);
+                                foreach (['srt', 'vtt', 'sub', 'ass'] as $subExt) {
+                                    $oldSub = "{$epDir}/{$oldEpBase}.{$subExt}";
+                                    $newSub = "{$epDir}/{$newEpBase}.{$subExt}";
+                                    if (file_exists($oldSub) && ! file_exists($newSub)) {
+                                        @rename($oldSub, $newSub);
+                                    }
+                                }
+
+                                $episode->update(['file_path' => $newEpPath]);
+
+                                foreach ($episode->subtitles as $sub) {
+                                    if ($sub->file_path && str_contains($sub->file_path, $oldEpBase)) {
+                                        $sub->update([
+                                            'file_path' => str_replace($oldEpBase, $newEpBase, $sub->file_path),
+                                        ]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            $series->refresh();
             $series->load(['genres', 'seasons.episodes']);
 
             return response()->json([
                 'success' => true,
-                'message' => "Series folder successfully renamed to '{$newFolderName}'!",
-                'old_path' => $oldFolder,
-                'new_path' => $newFolder,
+                'message' => "Series folder and {$renamedEpisodesCount} episode files successfully renamed!",
+                'old_path' => $seriesFolderNorm,
+                'new_path' => $series->folder_path,
+                'renamed_episodes_count' => $renamedEpisodesCount,
                 'series' => $series,
             ]);
         }
+    }
+
+    protected function isDedicatedMovieFolder(string $dir, int $movieId): bool
+    {
+        $dirNorm = str_replace('\\', '/', realpath($dir) ?: $dir);
+
+        // Monitored library root directories should never be renamed
+        $monitoredJson = AppSetting::where('key', 'scanner_monitored_directories')->first()?->value;
+        $monitored = $monitoredJson ? json_decode($monitoredJson, true) : [];
+        if (is_array($monitored)) {
+            foreach ($monitored as $mDir) {
+                $mNorm = str_replace('\\', '/', realpath($mDir) ?: $mDir);
+                if (strcasecmp($dirNorm, $mNorm) === 0) {
+                    return false;
+                }
+            }
+        }
+
+        // Check if other MediaItems have files inside this directory
+        $otherMediaCount = MediaItem::where('id', '!=', $movieId)
+            ->where(function ($q) use ($dirNorm) {
+                $q->where('folder_path', $dirNorm)
+                    ->orWhere('file_path', 'like', $dirNorm.'/%');
+            })->count();
+
+        if ($otherMediaCount > 0) {
+            return false;
+        }
+
+        // Check if directory contains series episodes
+        $episodeCount = Episode::where('file_path', 'like', $dirNorm.'/%')->count();
+        if ($episodeCount > 0) {
+            return false;
+        }
+
+        return true;
+    }
+
+    protected function resolveSeriesFolder(Series $series): ?string
+    {
+        if (! empty($series->folder_path) && is_dir($series->folder_path)) {
+            return str_replace('\\', '/', $series->folder_path);
+        }
+
+        $firstEp = Episode::where('series_id', $series->id)->whereNotNull('file_path')->first();
+        if (! $firstEp || ! file_exists($firstEp->file_path)) {
+            return null;
+        }
+
+        $epPath = str_replace('\\', '/', $firstEp->file_path);
+        $epDir = dirname($epPath);
+        $epDirBase = strtolower(basename($epDir));
+
+        if (preg_match('/^(season\s*\d+|s\d+|specials?)$/i', $epDirBase)) {
+            $candidate = dirname($epDir);
+        } else {
+            $candidate = $epDir;
+        }
+
+        if (is_dir($candidate)) {
+            $series->folder_path = $candidate;
+            $series->save();
+
+            return $candidate;
+        }
+
+        return null;
     }
 
     public function deleteItem(Request $request, string $type, int $id): JsonResponse
     {
         if ($type === 'movie') {
             $item = MediaItem::find($id);
-            if (!$item) {
+            if (! $item) {
                 return response()->json(['success' => false, 'message' => 'Movie not found.'], 404);
             }
 
@@ -483,7 +656,7 @@ class MetadataManagementController extends Controller
             ]);
         } else {
             $series = Series::with(['seasons.episodes.subtitles'])->find($id);
-            if (!$series) {
+            if (! $series) {
                 return response()->json(['success' => false, 'message' => 'Series not found.'], 404);
             }
 
@@ -509,6 +682,7 @@ class MetadataManagementController extends Controller
     {
         $limit = max(10, min(100, (int) $request->input('limit', 50)));
         $result = $this->scannerService->enrichMissingMetadata($limit);
+
         return response()->json([
             'success' => true,
             'message' => "Successfully enriched {$result['enriched_count']} items with bilingual metadata, collections, and artwork.",

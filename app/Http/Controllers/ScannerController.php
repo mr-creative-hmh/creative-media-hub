@@ -5,10 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\AppSetting;
 use App\Models\Episode;
 use App\Models\MediaItem;
-use App\Models\Season;
 use App\Models\Series;
 use App\Models\Subtitle;
-use App\Models\WatchHistory;
 use App\Services\Scanner\VirtualLibraryScannerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -31,24 +29,38 @@ class ScannerController extends Controller
         $setting = AppSetting::where('key', 'scanner_monitored_directories')->first();
         $directories = $setting ? json_decode($setting->value, true) : [];
 
+        $scanStatus = $this->scannerService->getScanStatus();
+        $stats = $this->getLibraryStats();
+        $scanStatus['stats'] = $stats;
+
+        return Inertia::render('Scanner/Index', [
+            'directories' => $directories ?: [],
+            'scanStatus' => $scanStatus,
+            'stats' => $stats,
+        ]);
+    }
+
+    public function getLibraryStats(): array
+    {
         $totalMovies = MediaItem::count();
         $totalSeries = Series::count();
         $totalEpisodes = Episode::count();
         $totalSubs = Subtitle::count();
+        $totalCollections = MediaItem::whereNotNull('collection_name')
+            ->where('collection_name', '!=', '')
+            ->distinct('collection_name')
+            ->count('collection_name');
 
         $storageBytes = (int) MediaItem::sum('file_size_bytes') + (int) Episode::sum('file_size_bytes');
 
-        return Inertia::render('Scanner/Index', [
-            'directories' => $directories ?: [],
-            'scanStatus' => $this->scannerService->getScanStatus(),
-            'stats' => [
-                'total_movies' => $totalMovies,
-                'total_series' => $totalSeries,
-                'total_episodes' => $totalEpisodes,
-                'total_subtitles' => $totalSubs,
-                'storage_size_formatted' => $this->formatBytes($storageBytes),
-            ],
-        ]);
+        return [
+            'total_movies' => $totalMovies,
+            'total_series' => $totalSeries,
+            'total_episodes' => $totalEpisodes,
+            'total_subtitles' => $totalSubs,
+            'total_collections' => $totalCollections,
+            'storage_size_formatted' => $this->formatBytes($storageBytes),
+        ];
     }
 
     public function addDirectory(Request $request): JsonResponse
@@ -92,7 +104,7 @@ class ScannerController extends Controller
     public function removeDirectory($index): JsonResponse
     {
         $setting = AppSetting::where('key', 'scanner_monitored_directories')->first();
-        if (!$setting) {
+        if (! $setting) {
             return response()->json(['success' => true, 'directories' => []]);
         }
 
@@ -101,7 +113,7 @@ class ScannerController extends Controller
         if (is_numeric($index) && isset($dirs[$index])) {
             array_splice($dirs, (int) $index, 1);
         } else {
-            $dirs = array_values(array_filter($dirs, fn($d) => ($d['id'] ?? '') !== $index && ($d['path'] ?? '') !== $index));
+            $dirs = array_values(array_filter($dirs, fn ($d) => ($d['id'] ?? '') !== $index && ($d['path'] ?? '') !== $index));
         }
 
         $setting->update(['value' => json_encode($dirs)]);
@@ -116,13 +128,14 @@ class ScannerController extends Controller
     public function startScan(Request $request): JsonResponse
     {
         $directories = $request->input('directories');
+        $scanMode = $request->input('scan_mode', 'incremental');
 
         if (empty($directories)) {
             $setting = AppSetting::where('key', 'scanner_monitored_directories')->first();
             $directories = $setting ? json_decode($setting->value, true) : [];
         }
 
-        $initResult = $this->scannerService->initScan($directories ?: []);
+        $initResult = $this->scannerService->initScan($directories ?: [], $scanMode);
 
         return response()->json([
             'success' => true,
@@ -140,8 +153,8 @@ class ScannerController extends Controller
         $setting = AppSetting::where('key', 'scanner_monitored_directories')->first();
         $directories = $setting ? json_decode($setting->value, true) : [];
 
-        // 3. Initialize fresh scan
-        $initResult = $this->scannerService->initScan($directories ?: []);
+        // 3. Initialize fresh scan (always uses 'fresh' mode)
+        $initResult = $this->scannerService->initScan($directories ?: [], 'fresh');
 
         return response()->json([
             'success' => true,
@@ -157,16 +170,18 @@ class ScannerController extends Controller
             'path' => 'required|string',
             'type' => 'nullable|string|in:movies,series,mixed',
             'fresh' => 'nullable|boolean',
+            'scan_mode' => 'nullable|string|in:incremental,fresh',
         ]);
 
         $folderPath = rtrim(str_replace('\\', '/', trim($validated['path'])), '/');
+        $scanMode = $validated['scan_mode'] ?? 'incremental';
 
         // If fresh is requested for this specific folder, wipe existing items from this path
-        if (!empty($validated['fresh'])) {
+        if (! empty($validated['fresh']) || $scanMode === 'fresh') {
             $this->wipeFolderMedia($folderPath);
         }
 
-        $initResult = $this->scannerService->initScanForFolder($folderPath, $validated['type'] ?? 'mixed');
+        $initResult = $this->scannerService->initScanForFolder($folderPath, $validated['type'] ?? 'mixed', $scanMode);
 
         return response()->json([
             'success' => true,
@@ -180,10 +195,13 @@ class ScannerController extends Controller
         $batchSize = (int) $request->input('batch_size', 6);
         $result = $this->scannerService->processNextBatch($batchSize);
         $fullStatus = $this->scannerService->getScanStatus();
+        $stats = $this->getLibraryStats();
+        $fullStatus['stats'] = $stats;
 
         return response()->json([
             'success' => true,
             'status' => $fullStatus,
+            'stats' => $stats,
             'has_more' => $result['has_more'] ?? false,
             'result' => $result,
         ]);
@@ -192,6 +210,7 @@ class ScannerController extends Controller
     public function enrichMissing(): JsonResponse
     {
         $result = $this->scannerService->enrichMissingMetadata(25);
+
         return response()->json([
             'success' => true,
             'result' => $result,
@@ -201,6 +220,7 @@ class ScannerController extends Controller
     public function pauseScan(): JsonResponse
     {
         $this->scannerService->pauseScan();
+
         return response()->json([
             'success' => true,
             'status' => $this->scannerService->getScanStatus(),
@@ -210,6 +230,7 @@ class ScannerController extends Controller
     public function resumeScan(): JsonResponse
     {
         $this->scannerService->resumeScan();
+
         return response()->json([
             'success' => true,
             'status' => $this->scannerService->getScanStatus(),
@@ -219,6 +240,7 @@ class ScannerController extends Controller
     public function cancelScan(): JsonResponse
     {
         $this->scannerService->cancelScan();
+
         return response()->json([
             'success' => true,
             'status' => $this->scannerService->getScanStatus(),
@@ -227,7 +249,10 @@ class ScannerController extends Controller
 
     public function getStatus(): JsonResponse
     {
-        return response()->json($this->scannerService->getScanStatus());
+        $status = $this->scannerService->getScanStatus();
+        $status['stats'] = $this->getLibraryStats();
+
+        return response()->json($status);
     }
 
     public function clearDemoCatalog(): JsonResponse
@@ -248,6 +273,7 @@ class ScannerController extends Controller
             $item->subtitles()->delete();
             $item->genres()->detach();
             $item->delete();
+
             return response()->json(['success' => true]);
         }
 
@@ -262,6 +288,7 @@ class ScannerController extends Controller
             });
             $series->genres()->detach();
             $series->delete();
+
             return response()->json(['success' => true]);
         }
 
@@ -296,14 +323,15 @@ class ScannerController extends Controller
     protected function formatBytes(int $bytes): string
     {
         if ($bytes >= 1073741824 * 1024) {
-            return round($bytes / (1073741824 * 1024), 2) . ' TB';
+            return round($bytes / (1073741824 * 1024), 2).' TB';
         }
         if ($bytes >= 1073741824) {
-            return round($bytes / 1073741824, 2) . ' GB';
+            return round($bytes / 1073741824, 2).' GB';
         }
         if ($bytes >= 1048576) {
-            return round($bytes / 1048576, 1) . ' MB';
+            return round($bytes / 1048576, 1).' MB';
         }
-        return round($bytes / 1024, 1) . ' KB';
+
+        return round($bytes / 1024, 1).' KB';
     }
 }

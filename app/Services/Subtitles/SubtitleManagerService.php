@@ -6,11 +6,11 @@ use App\Models\Episode;
 use App\Models\MediaItem;
 use App\Models\Subtitle;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Log;
 
 class SubtitleManagerService
 {
     protected OpenSubtitlesService $openSubtitles;
+
     protected SubDlService $subDl;
 
     public function __construct(OpenSubtitlesService $openSubtitles, SubDlService $subDl)
@@ -29,7 +29,7 @@ class SubtitleManagerService
             $hasAr = $movie->subtitles->where('language', 'ar')->isNotEmpty();
             $hasEn = $movie->subtitles->where('language', 'en')->isNotEmpty();
 
-            if (!$hasAr || !$hasEn) {
+            if (! $hasAr || ! $hasEn) {
                 $missing[] = [
                     'id' => $movie->id,
                     'type' => 'movie',
@@ -37,8 +37,8 @@ class SubtitleManagerService
                     'title_ar' => $movie->title_ar,
                     'release_year' => $movie->release_year,
                     'file_path' => $movie->file_path,
-                    'missing_ar' => !$hasAr,
-                    'missing_en' => !$hasEn,
+                    'missing_ar' => ! $hasAr,
+                    'missing_en' => ! $hasEn,
                 ];
             }
         }
@@ -49,7 +49,7 @@ class SubtitleManagerService
             $hasAr = $ep->subtitles->where('language', 'ar')->isNotEmpty();
             $hasEn = $ep->subtitles->where('language', 'en')->isNotEmpty();
 
-            if (!$hasAr || !$hasEn) {
+            if (! $hasAr || ! $hasEn) {
                 $missing[] = [
                     'id' => $ep->id,
                     'type' => 'episode',
@@ -58,8 +58,8 @@ class SubtitleManagerService
                     'episode_number' => $ep->episode_number,
                     'title' => $ep->title,
                     'file_path' => $ep->file_path,
-                    'missing_ar' => !$hasAr,
-                    'missing_en' => !$hasEn,
+                    'missing_ar' => ! $hasAr,
+                    'missing_en' => ! $hasEn,
                 ];
             }
         }
@@ -76,7 +76,7 @@ class SubtitleManagerService
         $destDir = $media->file_path ? pathinfo($media->file_path, PATHINFO_DIRNAME) : storage_path('app/subtitles');
         $baseName = $media->file_path ? pathinfo($media->file_path, PATHINFO_FILENAME) : "media_{$media->id}";
 
-        if (!File::isDirectory($destDir)) {
+        if (! File::isDirectory($destDir)) {
             File::makeDirectory($destDir, 0755, true);
         }
 
@@ -84,7 +84,7 @@ class SubtitleManagerService
 
         // Sample SRT content
         $sampleContent = $langCode === 'ar' ?
-"1
+'1
 00:00:01,000 --> 00:00:04,500
 [موسيقى سينمائية تصويرية]
 
@@ -95,8 +95,8 @@ class SubtitleManagerService
 3
 00:00:10,000 --> 00:00:15,000
 الترجمة متزامنة بنجاح باللغة العربية.
-" :
-"1
+' :
+'1
 00:00:01,000 --> 00:00:04,500
 [Cinematic Score Playing]
 
@@ -107,7 +107,7 @@ Welcome to the Creative Media Streaming Library.
 3
 00:00:10,000 --> 00:00:15,000
 English subtitles synchronized successfully.
-";
+';
 
         File::put($srtPath, $sampleContent);
 

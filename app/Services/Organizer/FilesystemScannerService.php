@@ -2,12 +2,15 @@
 
 namespace App\Services\Organizer;
 
+use App\Services\Subtitles\EmbeddedSubtitleDetectorService;
 use Illuminate\Support\Facades\File;
 
 class FilesystemScannerService
 {
     protected array $videoExtensions = ['mkv', 'mp4', 'avi', 'mov', 'm4v', 'webm', 'ts', 'wmv', 'flv', 'iso'];
+
     protected array $subtitleExtensions = ['srt', 'vtt', 'sub', 'ass', 'ssa', 'idx', 'smi'];
+
     protected array $posterExtensions = ['jpg', 'jpeg', 'png', 'webp'];
 
     protected SceneNameParserService $parser;
@@ -21,7 +24,7 @@ class FilesystemScannerService
     {
         $normalizedPath = $this->normalizePath($path);
 
-        if (!is_dir($normalizedPath) && !is_dir($path)) {
+        if (! is_dir($normalizedPath) && ! is_dir($path)) {
             return [];
         }
 
@@ -59,7 +62,7 @@ class FilesystemScannerService
 
             if (in_array($ext, $this->videoExtensions)) {
                 $size = $file->getSize();
-                if (!$isTesting && $size < 15 * 1024 * 1024 && !str_contains(strtolower($filePath), 'test')) {
+                if (! $isTesting && $size < 15 * 1024 * 1024 && ! str_contains(strtolower($filePath), 'test')) {
                     continue;
                 }
 
@@ -149,13 +152,13 @@ class FilesystemScannerService
 
                 if (strtolower($imgDir) === strtolower($videoDir) || strtolower(pathinfo($imgDir, PATHINFO_DIRNAME)) === strtolower($videoDir) || strtolower($imgDir) === strtolower(pathinfo($videoDir, PATHINFO_DIRNAME))) {
                     // Match Poster
-                    if (!$v['local_poster']) {
+                    if (! $v['local_poster']) {
                         if (str_contains($imgName, 'poster') || str_contains($imgName, 'cover') || str_contains($imgName, 'folder') || str_starts_with(pathinfo($img['filename'], PATHINFO_FILENAME), $videoBase)) {
                             $v['local_poster'] = $img['path'];
                         }
                     }
                     // Match Backdrop / Fanart
-                    if (!$v['local_backdrop']) {
+                    if (! $v['local_backdrop']) {
                         if (str_contains($imgName, 'backdrop') || str_contains($imgName, 'fanart') || str_contains($imgName, 'background') || str_contains($imgName, 'banner')) {
                             $v['local_backdrop'] = $img['path'];
                         }
@@ -170,13 +173,13 @@ class FilesystemScannerService
     public function parseSubtitleMetadata(string $filename): array
     {
         $clean = preg_replace('/[._\-\[\]\(\)]+/', ' ', strtolower($filename));
-        $clean = ' ' . trim($clean) . ' ';
+        $clean = ' '.trim($clean).' ';
 
         $isForced = (bool) preg_match('/\b(forced|force)\b/i', $clean);
         $isSDH = (bool) preg_match('/\b(sdh|cc|hi)\b/i', $clean);
         $isCommentary = (bool) preg_match('/\b(commentary|director)\b/i', $clean);
 
-        $detector = app(\App\Services\Subtitles\EmbeddedSubtitleDetectorService::class);
+        $detector = app(EmbeddedSubtitleDetectorService::class);
         $lang = $detector->resolveLanguageFromContext('und', '', $filename);
         $langName = $detector->getLanguageName($lang);
 
@@ -201,17 +204,19 @@ class FilesystemScannerService
     public function normalizePath(string $path): string
     {
         $p = str_replace('\\', '/', trim($path));
+
         return rtrim($p, '/');
     }
 
     protected function formatBytes(int $bytes): string
     {
         if ($bytes >= 1073741824) {
-            return round($bytes / 1073741824, 2) . ' GB';
+            return round($bytes / 1073741824, 2).' GB';
         }
         if ($bytes >= 1048576) {
-            return round($bytes / 1048576, 2) . ' MB';
+            return round($bytes / 1048576, 2).' MB';
         }
-        return round($bytes / 1024, 2) . ' KB';
+
+        return round($bytes / 1024, 2).' KB';
     }
 }

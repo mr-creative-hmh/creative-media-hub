@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import { useScanner } from '@/composables/useScanner';
@@ -13,6 +14,8 @@ const { t, isRTL } = useI18n();
 const { scanStatus, isScanning, isPaused, openScanModal } = useScanner();
 const { activeDownloads } = useDownloader();
 
+const activeDownloadsCount = computed(() => activeDownloads.value.length);
+
 const navItems = [
     { nameKey: 'nav.dashboard', href: '/', icon: LayoutDashboard, pattern: '^/$|^/dashboard' },
     { nameKey: 'nav.movies', href: '/movies', icon: Film, pattern: '^/movies' },
@@ -23,7 +26,7 @@ const navItems = [
     { nameKey: 'nav.organizer', href: '/organizer', icon: FolderSync, pattern: '^/organizer' },
     { nameKey: 'nav.subtitles', href: '/subtitles', icon: Subtitles, pattern: '^/subtitles' },
     { nameKey: 'nav.analytics', href: '/analytics', icon: BarChart3, pattern: '^/analytics' },
-    { nameKey: 'nav.downloads', href: '/downloads', icon: DownloadCloud, pattern: '^/downloads', badge: activeDownloads },
+    { nameKey: 'nav.downloads', href: '/downloads', icon: DownloadCloud, pattern: '^/downloads' },
     { nameKey: 'nav.docs', href: '/docs', icon: BookOpen, pattern: '^/docs|^/guide' },
     { nameKey: 'nav.settings', href: '/settings', icon: Settings, pattern: '^/settings' },
 ];
@@ -74,10 +77,10 @@ const isActive = (pattern: string) => {
                 </div>
 
                 <span
-                    v-if="item.badge && item.badge.length > 0"
+                    v-if="item.href === '/downloads' && activeDownloadsCount > 0"
                     class="px-2 py-0.5 rounded-full bg-cyan-500 text-slate-950 font-black text-[10px] animate-pulse"
                 >
-                    {{ item.badge.length }}
+                    {{ activeDownloadsCount }}
                 </span>
             </Link>
         </div>

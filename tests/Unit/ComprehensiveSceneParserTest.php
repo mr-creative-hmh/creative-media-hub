@@ -2,19 +2,20 @@
 
 namespace Tests\Unit;
 
-use App\Services\Organizer\SceneNameParserService;
 use App\Services\Organizer\FilesystemScannerService;
+use App\Services\Organizer\SceneNameParserService;
 use PHPUnit\Framework\TestCase;
 
 class ComprehensiveSceneParserTest extends TestCase
 {
     protected SceneNameParserService $parser;
+
     protected FilesystemScannerService $scanner;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->parser = new SceneNameParserService();
+        $this->parser = new SceneNameParserService;
         $this->scanner = new FilesystemScannerService($this->parser);
     }
 
@@ -235,7 +236,7 @@ class ComprehensiveSceneParserTest extends TestCase
         $this->assertEquals('Extended Edition', $res3['edition']);
 
         $res4 = $this->parser->parse('Superman II (1980) [Richard Donner Cut].mkv');
-        $this->assertEquals("Richard Donner Cut", $res4['edition']);
+        $this->assertEquals('Richard Donner Cut', $res4['edition']);
 
         $res5 = $this->parser->parse('The Lord of the Rings: The Return of the King (2003) [Part 1].mkv');
         $this->assertEquals(1, $res5['part']);

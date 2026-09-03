@@ -1,12 +1,12 @@
 <?php
 
 use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\CollectionController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DiskOrganizerController;
 use App\Http\Controllers\DownloadManagerController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\MetadataManagementController;
-use App\Http\Controllers\CollectionController;
 use App\Http\Controllers\ScannerController;
 use App\Http\Controllers\SeriesController;
 use App\Http\Controllers\SettingsController;
@@ -30,7 +30,6 @@ Route::post('/api/media/{mediaItem}/update-metadata', [MediaController::class, '
 Route::delete('/api/media/{id}', [ScannerController::class, 'deleteSingleMedia'])->name('api.media.delete');
 Route::get('/api/vibes', [MediaController::class, 'getVibes'])->name('api.vibes');
 Route::get('/api/person/{person}', [MediaController::class, 'getCastExplorer'])->name('api.person');
-
 
 // Movie Collections & Boxsets (Harry Potter, MCU, Lord of the Rings, etc.)
 Route::get('/collections', [CollectionController::class, 'index'])->name('collections.index');

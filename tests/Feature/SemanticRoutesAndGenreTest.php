@@ -3,9 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\MediaItem;
-use App\Models\Series;
-use App\Models\Season;
-use App\Models\Episode;
 use App\Services\Organizer\PhysicalOrganizerService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -33,7 +30,7 @@ class SemanticRoutesAndGenreTest extends TestCase
             [
                 'path' => 'D:/Downloads/Gladiator.2000.1080p.mkv',
                 'genres' => ['Action', 'Drama', 'Adventure'],
-            ]
+            ],
         ], 'D:/Media', '{Type}/{Genre}/{Title} ({Year})/{Title} ({Year}) [{Resolution}].{ext}');
 
         $this->assertCount(1, $dryRun);

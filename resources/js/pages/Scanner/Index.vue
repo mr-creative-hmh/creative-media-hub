@@ -9,7 +9,7 @@ import {
     ScanLine, FolderPlus, Play, Pause, XCircle, RotateCcw,
     CheckCircle2, AlertCircle, FileVideo, HardDrive, Terminal,
     Layers, Cpu, RefreshCw, Trash2, Folder, Film, Tv, Sparkles,
-    Check, Filter, Clock, Info, ShieldAlert, ArrowRight, Image as ImageIcon
+    Check, Filter, Clock, Info, ShieldAlert, ArrowRight, Image as ImageIcon, MessageSquare
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -20,6 +20,7 @@ const props = defineProps<{
         total_series: number;
         total_episodes: number;
         total_subtitles: number;
+        total_collections?: number;
         storage_size_formatted: string;
     };
 }>();
@@ -27,6 +28,7 @@ const props = defineProps<{
 const { t, isRTL } = useI18n();
 const {
     scanStatus,
+    liveStats,
     isScanning,
     isPaused,
     pauseScan,
@@ -39,6 +41,10 @@ const {
     runBackgroundWorker,
     fetchStatus
 } = useScanner();
+
+const currentStats = computed(() => {
+    return liveStats.value || props.stats;
+});
 
 const monitoredDirs = ref([...props.directories]);
 const newDirPath = ref('');
@@ -130,8 +136,23 @@ const startScan = async () => {
         toastMessage.value = isRTL.value ? 'يرجى إضافة مجلد واحد على الأقل للمسح.' : 'Please add at least one folder to scan.';
         return;
     }
-    await startFullScan(monitoredDirs.value);
-    toastMessage.value = isRTL.value ? 'بدأ مسح المكتبة في الخلفية...' : 'Library scan started in background...';
+    await startFullScan(monitoredDirs.value, 'incremental');
+    toastMessage.value = isRTL.value ? 'بدأ المسح التدريجي للمكتبة في الخلفية...' : 'Incremental library scan started in background...';
+};
+
+const promptRescanIncremental = () => {
+    confirmModal.value = {
+        show: true,
+        title: isRTL.value ? 'إعادة مسح تدريجي للمكتبة' : 'Incremental Library Rescan',
+        message: isRTL.value ? 'سيتم فحص المجلدات المراقبة وإضافة الملفات الجديدة فقط (المفهرسة مسبقاً سيتم تخطيها). متابعة؟' : 'This will scan monitored folders and add only new files (previously indexed items will be skipped). Continue?',
+        confirmText: isRTL.value ? 'بدء مسح تدريجي' : 'Start Incremental Scan',
+        type: 'info',
+        action: async () => {
+            confirmModal.value.show = false;
+            await startFullScan(monitoredDirs.value, 'incremental');
+            toastMessage.value = isRTL.value ? 'بدأ المسح التدريجي للمكتبة!' : 'Incremental library scan started!';
+        },
+    };
 };
 
 const promptRescanFresh = () => {
@@ -171,20 +192,20 @@ const promptClearCatalog = () => {
 };
 
 const scanSingleFolder = async (dir: { path: string; type: string }) => {
-    await scanFolder(dir.path, dir.type, false);
-    toastMessage.value = isRTL.value ? `جاري مسح: ${dir.path}` : `Scanning folder: ${dir.path}`;
+    await scanFolder(dir.path, dir.type, false, 'incremental');
+    toastMessage.value = isRTL.value ? `جاري المسح التدريجي: ${dir.path}` : `Incremental scan started for: ${dir.path}`;
 };
 
 const promptFreshRescanFolder = (dir: { path: string; type: string }) => {
     confirmModal.value = {
         show: true,
         title: isRTL.value ? 'إعادة مسح نظيفة للمجلد' : 'Fresh Rescan Folder',
-        message: isRTL.value ? `سيتم إعادة فهرسة وتحديث الوسائط والبوسترات للمجلد: "${dir.path}". متابعة؟` : `This will re-index and refresh media items and metadata for: "${dir.path}". Continue?`,
-        confirmText: isRTL.value ? 'إعادة مسح' : 'Rescan Folder',
+        message: isRTL.value ? `سيتم مسح الفهرس السابق لهذا المجلد وإعادة فهرسة كل شيء من الصفر: "${dir.path}". متابعة؟` : `This will wipe previous index for this folder and re-scan everything from scratch: "${dir.path}". Continue?`,
+        confirmText: isRTL.value ? 'إعادة مسح نظيف' : 'Fresh Rescan',
         type: 'warning',
         action: async () => {
             confirmModal.value.show = false;
-            await scanFolder(dir.path, dir.type, true);
+            await scanFolder(dir.path, dir.type, true, 'fresh');
             toastMessage.value = isRTL.value ? `بدأ المسح النظيف للمجلد: ${dir.path}` : `Fresh scan started for: ${dir.path}`;
         },
     };
@@ -271,6 +292,15 @@ onMounted(() => {
                     </button>
 
                     <button
+                        @click="promptRescanIncremental"
+                        :disabled="isScanning"
+                        class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-cyan-300 border border-white/10 hover:border-cyan-500/40 text-xs font-bold transition-all cursor-pointer"
+                    >
+                        <RotateCcw class="w-4 h-4" />
+                        <span>{{ isRTL ? 'إعادة فحص تدريجي' : 'Incremental Rescan' }}</span>
+                    </button>
+
+                    <button
                         @click="promptClearCatalog"
                         :disabled="isClearing || isScanning"
                         class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer"
@@ -285,7 +315,7 @@ onMounted(() => {
                         class="flex items-center gap-2 px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-black shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
                     >
                         <Play class="w-4 h-4 fill-current" />
-                        <span>{{ isRTL ? 'بدء فحص كافة المجلدات' : 'Start Full Scan' }}</span>
+                        <span>{{ isRTL ? 'بدء فحص تدريجي للمجلدات' : 'Start Incremental Scan' }}</span>
                     </button>
                 </div>
             </div>
@@ -302,15 +332,15 @@ onMounted(() => {
             </div>
         </div>
 
-        <!-- 1. Stats Bento Row -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+        <!-- 1. Stats Bento Row (Live Reactive Stats + 5th Collections Card) -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
             <div class="glass-panel p-5 rounded-2xl border border-white/10 flex items-center gap-4">
                 <div class="w-11 h-11 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center shrink-0">
                     <Film class="w-5 h-5" />
                 </div>
                 <div>
                     <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'الأفلام المفهرسة' : 'Indexed Movies' }}</span>
-                    <span class="text-2xl font-black text-white mt-0.5 block">{{ stats.total_movies }}</span>
+                    <span class="text-2xl font-black text-white mt-0.5 block">{{ currentStats.total_movies }}</span>
                 </div>
             </div>
 
@@ -320,7 +350,17 @@ onMounted(() => {
                 </div>
                 <div>
                     <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'المسلسلات المفهرسة' : 'TV Series' }}</span>
-                    <span class="text-2xl font-black text-white mt-0.5 block">{{ stats.total_series }} <span class="text-xs text-slate-500">({{ stats.total_episodes }} ep)</span></span>
+                    <span class="text-2xl font-black text-white mt-0.5 block">{{ currentStats.total_series }} <span class="text-xs text-slate-500">({{ currentStats.total_episodes }} ep)</span></span>
+                </div>
+            </div>
+
+            <div class="glass-panel p-5 rounded-2xl border border-white/10 flex items-center gap-4">
+                <div class="w-11 h-11 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+                    <Layers class="w-5 h-5" />
+                </div>
+                <div>
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'سلاسل الأفلام' : 'Collections' }}</span>
+                    <span class="text-2xl font-black text-white mt-0.5 block">{{ currentStats.total_collections || 0 }}</span>
                 </div>
             </div>
 
@@ -330,23 +370,23 @@ onMounted(() => {
                 </div>
                 <div>
                     <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'حجم الوسائط' : 'Indexed Size' }}</span>
-                    <span class="text-2xl font-black text-white mt-0.5 block">{{ stats.storage_size_formatted }}</span>
+                    <span class="text-2xl font-black text-white mt-0.5 block">{{ currentStats.storage_size_formatted }}</span>
                 </div>
             </div>
 
-            <div class="glass-panel p-5 rounded-2xl border border-white/10 flex items-center gap-4">
+            <div class="glass-panel p-5 rounded-2xl border border-white/10 flex items-center gap-4 col-span-2 sm:col-span-1">
                 <div class="w-11 h-11 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0">
-                    <Layers class="w-5 h-5" />
+                    <MessageSquare class="w-5 h-5" />
                 </div>
                 <div>
                     <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'ملفات الترجمة' : 'Subtitles' }}</span>
-                    <span class="text-2xl font-black text-white mt-0.5 block">{{ stats.total_subtitles }}</span>
+                    <span class="text-2xl font-black text-white mt-0.5 block">{{ currentStats.total_subtitles }}</span>
                 </div>
             </div>
         </div>
 
         <!-- 2. Active Scan Progress & Control Bar -->
-        <div v-if="isScanning || scanStatus.status === 'running' || scanStatus.status === 'paused'" class="glass-panel rounded-3xl p-6 border border-cyan-500/30 mb-8 space-y-4 shadow-lg shadow-cyan-500/5 relative overflow-hidden">
+        <div v-if="isScanning || scanStatus.status === 'scanning' || scanStatus.status === 'paused'" class="glass-panel rounded-3xl p-6 border border-cyan-500/30 mb-8 space-y-4 shadow-lg shadow-cyan-500/5 relative overflow-hidden">
             <div class="ambient-glow bg-cyan-500/20 w-80 h-80 -top-20 -right-20 pointer-events-none"></div>
 
             <div class="flex items-center justify-between flex-wrap gap-4 relative z-10">
@@ -463,22 +503,22 @@ onMounted(() => {
 
                         <div class="flex items-center gap-2">
                             <button
+                                @click="scanSingleFolder(dir)"
+                                :disabled="isScanning"
+                                class="px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                            >
+                                <Play class="w-3 h-3 fill-current" />
+                                <span>{{ isRTL ? 'فحص تدريجي' : 'Inc. Scan' }}</span>
+                            </button>
+
+                            <button
                                 @click="promptFreshRescanFolder(dir)"
                                 :disabled="isScanning"
                                 class="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-amber-500/20 text-amber-300 border border-white/10 hover:border-amber-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                                 :title="isRTL ? 'إعادة فحص جديدة لهذا المجلد ومسح عناصره السابقة' : 'Wipe previous items from this folder and rescan freshly'"
                             >
                                 <RotateCcw class="w-3 h-3" />
-                                <span>{{ isRTL ? 'فحص جديد' : 'Fresh Rescan' }}</span>
-                            </button>
-
-                            <button
-                                @click="scanSingleFolder(dir)"
-                                :disabled="isScanning"
-                                class="px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                            >
-                                <Play class="w-3 h-3 fill-current" />
-                                <span>{{ isRTL ? 'فحص المجلد' : 'Scan' }}</span>
+                                <span>{{ isRTL ? 'فحص جديد' : 'Fresh' }}</span>
                             </button>
                         </div>
                     </div>
@@ -503,9 +543,9 @@ onMounted(() => {
                         v-model="newDirPath"
                         type="text"
                         :placeholder="isRTL ? 'مثال: D:/Movies أو /Volumes/Media/TV' : 'e.g. D:/Movies or C:/Users/hasan/Videos'"
-                        class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                        class="w-full ps-10 pe-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                     />
-                    <FolderPlus class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <FolderPlus class="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 </div>
 
                 <div class="flex items-center gap-2 w-full sm:w-auto">

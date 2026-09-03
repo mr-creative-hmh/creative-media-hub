@@ -4,7 +4,8 @@ import { useI18n } from '@/i18n/useI18n';
 import { router } from '@inertiajs/vue3';
 import {
     Filter, Sparkles, Star, Calendar, Clock,
-    Layers, Check, RotateCcw, Heart, Film, ArrowUpDown, Tv, Globe
+    Layers, Check, RotateCcw, Heart, Film, ArrowUpDown, Tv, Globe,
+    Search, X
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -15,6 +16,7 @@ const props = defineProps<{
 
 const { t, isRTL } = useI18n();
 
+const searchQuery = ref(props.filters.search || '');
 const selectedGenre = ref(props.filters.genre || '');
 const selectedOrigin = ref(props.filters.origin || '');
 const selectedResolution = ref(props.filters.resolution || '');
@@ -23,12 +25,13 @@ const selectedVibe = ref(props.filters.vibe || '');
 const favoriteOnly = ref(props.filters.favorite_only === '1' || props.filters.favorite_only === 1 || props.filters.favorite_only === true);
 
 const hasActiveFilters = computed(() => {
-    return !!(selectedGenre.value || selectedOrigin.value || selectedResolution.value || (selectedSort.value && selectedSort.value !== 'rating') || selectedVibe.value || favoriteOnly.value);
+    return !!(searchQuery.value.trim() || selectedGenre.value || selectedOrigin.value || selectedResolution.value || (selectedSort.value && selectedSort.value !== 'rating') || selectedVibe.value || favoriteOnly.value);
 });
 
 const applyFilters = () => {
     router.get(window.location.pathname, {
         ...props.filters,
+        search: searchQuery.value.trim() || undefined,
         genre: selectedGenre.value || undefined,
         origin: selectedOrigin.value || undefined,
         resolution: selectedResolution.value || undefined,
@@ -36,6 +39,15 @@ const applyFilters = () => {
         vibe: selectedVibe.value || undefined,
         favorite_only: favoriteOnly.value ? 1 : undefined,
     }, { preserveState: true, preserveScroll: true });
+};
+
+const handleSearch = () => {
+    applyFilters();
+};
+
+const clearSearch = () => {
+    searchQuery.value = '';
+    applyFilters();
 };
 
 const selectOrigin = (orig: string) => {
@@ -69,6 +81,7 @@ const toggleFavorite = () => {
 };
 
 const resetAllFilters = () => {
+    searchQuery.value = '';
     selectedGenre.value = '';
     selectedOrigin.value = '';
     selectedResolution.value = '';
@@ -98,7 +111,44 @@ const curatedVibes = [
 </script>
 
 <template>
-    <div class="glass-panel rounded-3xl p-5 mb-8 border border-slate-200 dark:border-white/10 space-y-4 shadow-sm relative overflow-hidden">
+    <div class="glass-panel rounded-3xl p-5 mb-8 border border-slate-200 dark:border-white/10 space-y-5 shadow-sm relative overflow-hidden">
+        <!-- Collections-Style Prominent Search Input Bar -->
+        <div class="relative w-full max-w-xl">
+            <div class="relative">
+                <Search
+                    class="absolute top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400"
+                    :class="isRTL ? 'right-4' : 'left-4'"
+                />
+                <input
+                    v-model="searchQuery"
+                    @keyup.enter="handleSearch"
+                    type="text"
+                    :placeholder="isRTL ? 'ابحث بالاسم، الممثل، المخرج أو سنة الإنتاج...' : 'Search by title, cast, director, or release year...'"
+                    class="w-full py-3 rounded-2xl bg-black/30 dark:bg-black/40 border border-slate-200 dark:border-white/15 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-all shadow-inner"
+                    :class="isRTL ? 'pr-11 pl-28' : 'pl-11 pr-28'"
+                />
+                <div
+                    class="absolute top-1/2 -translate-y-1/2 flex items-center gap-1.5"
+                    :class="isRTL ? 'left-2' : 'right-2'"
+                >
+                    <button
+                        v-if="searchQuery"
+                        @click="clearSearch"
+                        class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                        title="Clear"
+                    >
+                        <X class="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                        @click="handleSearch"
+                        class="px-3.5 py-1.5 rounded-xl bg-cyan-500 text-slate-950 text-xs font-black hover:bg-cyan-400 transition-all cursor-pointer shadow-md shadow-cyan-500/20"
+                    >
+                        {{ isRTL ? 'بحث' : 'Search' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- 0. Regional Origin Carousel (Arabic, Indian/Bollywood, Anime/Asian, Turkish, Hollywood, European) -->
         <div class="space-y-2">
             <div class="flex items-center justify-between">

@@ -4,8 +4,9 @@ namespace App\Services\Organizer;
 
 use App\Models\AppSetting;
 use App\Models\Episode;
-use App\Models\MediaItem;
 use App\Models\Genre;
+use App\Models\MediaItem;
+use App\Models\Series;
 use App\Models\Subtitle;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\Log;
 class PhysicalOrganizerService
 {
     protected SceneNameParserService $parser;
+
     protected const CACHE_KEY = 'organizer_execution_state';
 
     public function __construct(SceneNameParserService $parser)
@@ -38,10 +40,10 @@ class PhysicalOrganizerService
             $typeDir = $isSeries ? 'TV Shows' : 'Movies';
 
             $cleanTitle = $this->sanitizePathSegment($parsed['clean_title'] ?? ($parsed['title'] ?? ($parsed['series_title'] ?? 'Unknown')));
-            $year = !empty($parsed['year']) ? (string) $parsed['year'] : '';
+            $year = ! empty($parsed['year']) ? (string) $parsed['year'] : '';
             $seasonNum = isset($parsed['season']) ? (int) $parsed['season'] : 1;
             $episodeNum = isset($parsed['episode']) ? (int) $parsed['episode'] : 1;
-            $epTitle = !empty($parsed['episode_title']) ? $this->sanitizePathSegment($parsed['episode_title']) : '';
+            $epTitle = ! empty($parsed['episode_title']) ? $this->sanitizePathSegment($parsed['episode_title']) : '';
             if (preg_match('/^(episode|ep|part)\s*\d+$/i', $epTitle)) {
                 $epTitle = '';
             }
@@ -54,20 +56,20 @@ class PhysicalOrganizerService
             $genresList = $file['genres'] ?? [];
             if (empty($genresList)) {
                 if ($isSeries) {
-                    $dbSeries = \App\Models\Series::where('title', 'like', "%{$cleanTitle}%")->with('genres')->first();
+                    $dbSeries = Series::where('title', 'like', "%{$cleanTitle}%")->with('genres')->first();
                     if ($dbSeries && $dbSeries->genres->isNotEmpty()) {
                         $genresList = $dbSeries->genres->pluck('name_en')->toArray();
                     }
                 } else {
-                    $dbMovie = \App\Models\MediaItem::where('title', 'like', "%{$cleanTitle}%")->with('genres')->first();
+                    $dbMovie = MediaItem::where('title', 'like', "%{$cleanTitle}%")->with('genres')->first();
                     if ($dbMovie && $dbMovie->genres->isNotEmpty()) {
                         $genresList = $dbMovie->genres->pluck('name_en')->toArray();
                     }
                 }
             }
 
-            $primaryGenre = !empty($genresList[0]) ? $this->sanitizePathSegment($genresList[0]) : 'General';
-            $joinedGenres = !empty($genresList) ? $this->sanitizePathSegment(implode(' & ', array_slice($genresList, 0, 2))) : $primaryGenre;
+            $primaryGenre = ! empty($genresList[0]) ? $this->sanitizePathSegment($genresList[0]) : 'General';
+            $joinedGenres = ! empty($genresList) ? $this->sanitizePathSegment(implode(' & ', array_slice($genresList, 0, 2))) : $primaryGenre;
 
             $tokens = [
                 '{Type}' => $typeDir,
@@ -77,6 +79,7 @@ class PhysicalOrganizerService
                 '{Genres}' => $joinedGenres,
                 '{Resolution}' => $this->sanitizePathSegment($resTag),
                 '{Codec}' => $this->sanitizePathSegment($parsed['codec'] ?: 'x264'),
+                '{Source}' => $this->sanitizePathSegment($parsed['source'] ?? ''),
                 '{Edition}' => $this->sanitizePathSegment($parsed['edition'] ?? ''),
                 '{Group}' => $this->sanitizePathSegment($parsed['group'] ?? 'MEDIA'),
                 '{FirstLetter}' => $firstLetter,
@@ -109,7 +112,7 @@ class PhysicalOrganizerService
                     // File name with extension
                     $ext = pathinfo($segment, PATHINFO_EXTENSION);
                     $base = pathinfo($segment, PATHINFO_FILENAME);
-                    $cleanSegments[] = $this->sanitizePathSegment($base) . ($ext ? ".{$ext}" : '');
+                    $cleanSegments[] = $this->sanitizePathSegment($base).($ext ? ".{$ext}" : '');
                 } else {
                     $cleanSegments[] = $this->sanitizePathSegment($segment);
                 }
@@ -149,7 +152,7 @@ class PhysicalOrganizerService
             ];
 
             // Subtitle mapping with language preserving
-            if (!empty($file['subtitles'])) {
+            if (! empty($file['subtitles'])) {
                 $destDir = pathinfo($destination, PATHINFO_DIRNAME);
                 $destBase = pathinfo($destination, PATHINFO_FILENAME);
 
@@ -203,7 +206,7 @@ class PhysicalOrganizerService
     public function initExecution(array $plan, string $mode = 'move', bool $cleanupEmptyFolders = true): array
     {
         $selected = array_values(array_filter($plan, function ($item) {
-            return !empty($item['selected']) && ($item['status'] ?? 'ready') !== 'identical';
+            return ! empty($item['selected']) && ($item['status'] ?? 'ready') !== 'identical';
         }));
 
         $totalBytes = array_sum(array_column($selected, 'size_bytes'));
@@ -223,15 +226,15 @@ class PhysicalOrganizerService
             'cleaned_folders_count' => 0,
             'current_file' => '',
             'current_destination' => '',
-            'current_action' => count($selected) > 0 ? "Preparing {$mode} queue..." : "No items selected.",
+            'current_action' => count($selected) > 0 ? "Preparing {$mode} queue..." : 'No items selected.',
             'progress_percent' => 0,
             'started_at' => date('Y-m-d H:i:s'),
             'logs' => [
                 [
                     'time' => date('H:i:s'),
                     'type' => 'info',
-                    'message' => "Initialized {$mode} queue with " . count($selected) . " files (" . $this->formatBytes($totalBytes) . ")" . ($cleanupEmptyFolders ? " [Auto-Cleanup Enabled]" : ""),
-                ]
+                    'message' => "Initialized {$mode} queue with ".count($selected).' files ('.$this->formatBytes($totalBytes).')'.($cleanupEmptyFolders ? ' [Auto-Cleanup Enabled]' : ''),
+                ],
             ],
             'queue' => $selected,
             'source_dirs_to_clean' => [],
@@ -251,7 +254,7 @@ class PhysicalOrganizerService
     {
         $state = Cache::get(self::CACHE_KEY);
 
-        if (!$state || empty($state['is_active']) || empty($state['queue'])) {
+        if (! $state || empty($state['is_active']) || empty($state['queue'])) {
             if ($state) {
                 $state['is_active'] = false;
                 $state['is_completed'] = true;
@@ -259,6 +262,7 @@ class PhysicalOrganizerService
                 $state['current_action'] = 'All operations completed!';
                 Cache::put(self::CACHE_KEY, $state, now()->addHours(2));
             }
+
             return [
                 'has_more' => false,
                 'status' => $state ?: $this->getExecutionStatus(),
@@ -276,10 +280,10 @@ class PhysicalOrganizerService
 
             $state['current_file'] = $filename;
             $state['current_destination'] = $dest;
-            $state['current_action'] = ucfirst($mode) . "ing {$filename}...";
+            $state['current_action'] = ucfirst($mode)."ing {$filename}...";
 
             try {
-                if (!File::exists($source)) {
+                if (! File::exists($source)) {
                     $state['failed_count']++;
                     $errMsg = "Source not found: {$filename}";
                     $state['errors'][] = $errMsg;
@@ -289,16 +293,17 @@ class PhysicalOrganizerService
                         'message' => "[ERROR] {$errMsg}",
                     ];
                     $state['processed_count']++;
+
                     continue;
                 }
 
                 $destDir = pathinfo($dest, PATHINFO_DIRNAME);
-                if (!File::isDirectory($destDir)) {
+                if (! File::isDirectory($destDir)) {
                     File::makeDirectory($destDir, 0755, true, true);
                 }
 
                 $sourceDir = pathinfo($source, PATHINFO_DIRNAME);
-                if (!in_array($sourceDir, $state['source_dirs_to_clean'])) {
+                if (! in_array($sourceDir, $state['source_dirs_to_clean'])) {
                     $state['source_dirs_to_clean'][] = $sourceDir;
                 }
 
@@ -311,19 +316,19 @@ class PhysicalOrganizerService
 
                 // Handle Subtitles
                 $subsCount = 0;
-                if (!empty($item['subtitles'])) {
+                if (! empty($item['subtitles'])) {
                     foreach ($item['subtitles'] as $sub) {
                         $subSource = $sub['source'];
                         $subDest = $sub['destination'];
 
                         if (File::exists($subSource)) {
                             $subDestDir = pathinfo($subDest, PATHINFO_DIRNAME);
-                            if (!File::isDirectory($subDestDir)) {
+                            if (! File::isDirectory($subDestDir)) {
                                 File::makeDirectory($subDestDir, 0755, true, true);
                             }
 
                             $subSourceDir = pathinfo($subSource, PATHINFO_DIRNAME);
-                            if (!in_array($subSourceDir, $state['source_dirs_to_clean'])) {
+                            if (! in_array($subSourceDir, $state['source_dirs_to_clean'])) {
                                 $state['source_dirs_to_clean'][] = $subSourceDir;
                             }
 
@@ -342,7 +347,7 @@ class PhysicalOrganizerService
                 $state['logs'][] = [
                     'time' => date('H:i:s'),
                     'type' => 'success',
-                    'message' => "[" . strtoupper($mode) . "] {$filename} -> " . basename($dest) . ($subsCount > 0 ? " (+{$subsCount} subs)" : ""),
+                    'message' => '['.strtoupper($mode)."] {$filename} -> ".basename($dest).($subsCount > 0 ? " (+{$subsCount} subs)" : ''),
                 ];
                 $state['completed_items'][] = [
                     'source' => $source,
@@ -352,14 +357,14 @@ class PhysicalOrganizerService
                 ];
             } catch (\Throwable $e) {
                 $state['failed_count']++;
-                $err = "Failed {$filename}: " . $e->getMessage();
+                $err = "Failed {$filename}: ".$e->getMessage();
                 $state['errors'][] = $err;
                 $state['logs'][] = [
                     'time' => date('H:i:s'),
                     'type' => 'error',
                     'message' => "[ERROR] {$err}",
                 ];
-                Log::error("PhysicalOrganizerService error: " . $e->getMessage());
+                Log::error('PhysicalOrganizerService error: '.$e->getMessage());
             }
 
             $state['processed_count']++;
@@ -371,14 +376,14 @@ class PhysicalOrganizerService
 
         // When queue is empty, perform automatic cleanup of empty folders left behind!
         if (empty($queue)) {
-            if ($mode === 'move' && !empty($state['cleanup_empty_folders'])) {
+            if ($mode === 'move' && ! empty($state['cleanup_empty_folders'])) {
                 $cleanedCount = $this->cleanEmptyDirectories($state['source_dirs_to_clean'], $state['logs']);
                 $state['cleaned_folders_count'] = $cleanedCount;
                 if ($cleanedCount > 0) {
                     $state['logs'][] = [
                         'time' => date('H:i:s'),
                         'type' => 'success',
-                        'message' => "🧹 Cleaned up {$cleanedCount} empty leftover source folder" . ($cleanedCount > 1 ? 's' : '') . ".",
+                        'message' => "🧹 Cleaned up {$cleanedCount} empty leftover source folder".($cleanedCount > 1 ? 's' : '').'.',
                     ];
                 }
             }
@@ -402,7 +407,7 @@ class PhysicalOrganizerService
         Cache::put(self::CACHE_KEY, $state, now()->addHours(2));
 
         return [
-            'has_more' => !empty($queue),
+            'has_more' => ! empty($queue),
             'status' => $state,
         ];
     }
@@ -417,7 +422,7 @@ class PhysicalOrganizerService
         $disposableJunk = [
             'thumbs.db', 'desktop.ini', '.ds_store', 'ehthumbs.db',
             'www.yts.mx.txt', 'www.yts.lt.txt', 'www.yts.bz.txt', 'www.yify-torrents.com.txt',
-            'yify.txt', 'torrent-downloaded-from.txt'
+            'yify.txt', 'torrent-downloaded-from.txt',
         ];
         $disposableExtensions = ['txt', 'nfo', 'url', 'website', 'lnk', 'ini', 'db', 'torrent', 'sample', 'log'];
 
@@ -427,7 +432,7 @@ class PhysicalOrganizerService
         // 1. Gather all subdirectories recursively inside every source directory
         foreach ($sourceDirs as $sourceDir) {
             $sourceDir = rtrim(str_replace('\\', '/', $sourceDir), '/');
-            if (!File::isDirectory($sourceDir)) {
+            if (! File::isDirectory($sourceDir)) {
                 continue;
             }
 
@@ -446,7 +451,8 @@ class PhysicalOrganizerService
                         $allDirs[] = str_replace('\\', '/', $item->getPathname());
                     }
                 }
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
 
             $allDirs[] = $sourceDir;
         }
@@ -456,7 +462,7 @@ class PhysicalOrganizerService
         usort($allDirs, fn ($a, $b) => strlen($b) <=> strlen($a));
 
         foreach ($allDirs as $dir) {
-            if (!File::isDirectory($dir)) {
+            if (! File::isDirectory($dir)) {
                 continue;
             }
 
@@ -491,13 +497,13 @@ class PhysicalOrganizerService
                     || in_array($ext, $disposableExtensions)
                     || (in_array($ext, ['jpg', 'jpeg', 'png', 'webp']) && (str_contains($nameLower, 'yts') || str_contains($nameLower, 'poster') || str_contains($nameLower, 'cover') || str_contains($nameLower, 'banner') || @filesize($fullPath) < 500000));
 
-                if (!$isJunk) {
+                if (! $isJunk) {
                     $hasEssentialFiles = true;
                     break;
                 }
             }
 
-            if (!$hasEssentialFiles) {
+            if (! $hasEssentialFiles) {
                 foreach ($entries as $entry) {
                     $fullPath = "{$dir}/{$entry}";
                     if (File::isFile($fullPath)) {
@@ -505,12 +511,12 @@ class PhysicalOrganizerService
                     }
                 }
 
-                if (@rmdir($dir) || !File::isDirectory($dir)) {
+                if (@rmdir($dir) || ! File::isDirectory($dir)) {
                     $cleanedCount++;
                     $logs[] = [
                         'time' => date('H:i:s'),
                         'type' => 'info',
-                        'message' => "[CLEANUP] 🧹 Removed empty leftover folder: " . basename($dir),
+                        'message' => '[CLEANUP] 🧹 Removed empty leftover folder: '.basename($dir),
                     ];
                 }
             }
@@ -526,7 +532,7 @@ class PhysicalOrganizerService
     {
         $state = Cache::get(self::CACHE_KEY);
 
-        if (!$state) {
+        if (! $state) {
             return [
                 'is_active' => false,
                 'is_completed' => false,
@@ -578,11 +584,12 @@ class PhysicalOrganizerService
         $this->initExecution($plan, $mode, $cleanup);
         while (true) {
             $res = $this->processNextBatch(5);
-            if (!$res['has_more']) {
+            if (! $res['has_more']) {
                 break;
             }
         }
         $status = $this->getExecutionStatus();
+
         return [
             'success' => $status['failed_count'] === 0,
             'processed' => $status['processed_count'],
@@ -601,14 +608,15 @@ class PhysicalOrganizerService
     protected function formatBytes(int $bytes): string
     {
         if ($bytes >= 1073741824 * 1024) {
-            return round($bytes / (1073741824 * 1024), 2) . ' TB';
+            return round($bytes / (1073741824 * 1024), 2).' TB';
         }
         if ($bytes >= 1073741824) {
-            return round($bytes / 1073741824, 2) . ' GB';
+            return round($bytes / 1073741824, 2).' GB';
         }
         if ($bytes >= 1048576) {
-            return round($bytes / 1048576, 1) . ' MB';
+            return round($bytes / 1048576, 1).' MB';
         }
-        return round($bytes / 1024, 1) . ' KB';
+
+        return round($bytes / 1024, 1).' KB';
     }
 }

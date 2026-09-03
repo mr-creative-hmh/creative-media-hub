@@ -23,8 +23,8 @@ class CollectionController extends Controller
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('collection_name', 'like', "%{$search}%")
-                  ->orWhere('title', 'like', "%{$search}%")
-                  ->orWhere('title_ar', 'like', "%{$search}%");
+                    ->orWhere('title', 'like', "%{$search}%")
+                    ->orWhere('title_ar', 'like', "%{$search}%");
             });
         }
 
@@ -34,42 +34,42 @@ class CollectionController extends Controller
         $grouped = $allMoviesInCollections->groupBy('collection_name');
 
         $collections = $grouped
-            ->filter(fn($movies) => $movies->count() >= 2)
+            ->filter(fn ($movies) => $movies->count() >= 2)
             ->map(function ($movies, $name) {
-            $first = $movies->first();
-            $years = $movies->pluck('release_year')->filter()->sort()->values();
-            $yearSpan = $years->isNotEmpty() 
-                ? ($years->first() === $years->last() ? (string)$years->first() : "{$years->first()} - {$years->last()}") 
-                : null;
+                $first = $movies->first();
+                $years = $movies->pluck('release_year')->filter()->sort()->values();
+                $yearSpan = $years->isNotEmpty()
+                    ? ($years->first() === $years->last() ? (string) $years->first() : "{$years->first()} - {$years->last()}")
+                    : null;
 
-            $poster = $movies->pluck('collection_poster')->filter()->first() 
-                ?? $movies->pluck('poster_path')->filter()->first();
-            $backdrop = $movies->pluck('backdrop_path')->filter()->first();
-            $avgRating = round($movies->avg('rating'), 1);
-            $slug = Str::slug($name);
+                $poster = $movies->pluck('collection_poster')->filter()->first()
+                    ?? $movies->pluck('poster_path')->filter()->first();
+                $backdrop = $movies->pluck('backdrop_path')->filter()->first();
+                $avgRating = round($movies->avg('rating'), 1);
+                $slug = Str::slug($name);
 
-            return [
-                'name' => $name,
-                'slug' => $slug,
-                'movies_count' => $movies->count(),
-                'year_span' => $yearSpan,
-                'avg_rating' => $avgRating,
-                'poster_path' => $poster,
-                'backdrop_path' => $backdrop,
-                'movies' => $movies->map(fn($m) => [
-                    'id' => $m->id,
-                    'title' => $m->title,
-                    'title_ar' => $m->title_ar,
-                    'slug' => $m->slug ?: "movie-{$m->id}",
-                    'release_year' => $m->release_year,
-                    'rating' => $m->rating,
-                    'poster_path' => $m->poster_path,
-                    'backdrop_path' => $m->backdrop_path,
-                    'resolution' => $m->resolution,
-                    'runtime_minutes' => $m->runtime_minutes,
-                ])->values(),
-            ];
-        })->values()->sortByDesc('movies_count')->values();
+                return [
+                    'name' => $name,
+                    'slug' => $slug,
+                    'movies_count' => $movies->count(),
+                    'year_span' => $yearSpan,
+                    'avg_rating' => $avgRating,
+                    'poster_path' => $poster,
+                    'backdrop_path' => $backdrop,
+                    'movies' => $movies->map(fn ($m) => [
+                        'id' => $m->id,
+                        'title' => $m->title,
+                        'title_ar' => $m->title_ar,
+                        'slug' => $m->slug ?: "movie-{$m->id}",
+                        'release_year' => $m->release_year,
+                        'rating' => $m->rating,
+                        'poster_path' => $m->poster_path,
+                        'backdrop_path' => $m->backdrop_path,
+                        'resolution' => $m->resolution,
+                        'runtime_minutes' => $m->runtime_minutes,
+                    ])->values(),
+                ];
+            })->values()->sortByDesc('movies_count')->values();
 
         // Also fetch popular franchise suggestions that have at least 1 movie in library
         return Inertia::render('Collections/Index', [
@@ -94,7 +94,7 @@ class CollectionController extends Controller
             }
         }
 
-        if (!$matchedName) {
+        if (! $matchedName) {
             abort(404, 'Movie collection not found');
         }
 
@@ -104,6 +104,7 @@ class CollectionController extends Controller
             ->get()
             ->map(function ($m) {
                 $slug = $m->slug ?: "movie-{$m->id}";
+
                 return [
                     'id' => $m->id,
                     'type' => 'movie',
@@ -139,8 +140,8 @@ class CollectionController extends Controller
             });
 
         $years = $movies->pluck('release_year')->filter()->sort()->values();
-        $yearSpan = $years->isNotEmpty() 
-            ? ($years->first() === $years->last() ? (string)$years->first() : "{$years->first()} - {$years->last()}") 
+        $yearSpan = $years->isNotEmpty()
+            ? ($years->first() === $years->last() ? (string) $years->first() : "{$years->first()} - {$years->last()}")
             : null;
 
         $poster = $movies->first()['collection_poster'] ?? $movies->pluck('poster_path')->filter()->first();
@@ -156,7 +157,7 @@ class CollectionController extends Controller
                 'backdrop_path' => $backdrop,
                 'avg_rating' => round($movies->avg('rating'), 1),
                 'movies' => $movies,
-            ]
+            ],
         ]);
     }
 }

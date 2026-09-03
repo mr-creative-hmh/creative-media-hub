@@ -19,9 +19,19 @@ export interface ScanJobStatus {
     updated_at?: string;
 }
 
+export interface LibraryStats {
+    total_movies: number;
+    total_series: number;
+    total_episodes: number;
+    total_subtitles: number;
+    total_collections: number;
+    storage_size_formatted: string;
+}
+
 // Global shared reactive state
 const isScanModalOpen = ref(false);
 const isWorkerRunning = ref(false);
+const liveStats = ref<LibraryStats | null>(null);
 
 const scanStatus = ref<ScanJobStatus>({
     status: 'idle',
@@ -53,6 +63,9 @@ export function useScanner() {
                 const data = await res.json();
                 if (data && typeof data === 'object' && data.status) {
                     scanStatus.value = data;
+                    if (data.stats) {
+                        liveStats.value = data.stats;
+                    }
                     if (data.status === 'scanning' && !isWorkerRunning.value) {
                         runBackgroundWorker();
                     }
@@ -90,6 +103,11 @@ export function useScanner() {
                     if (data.status && typeof data.status === 'object') {
                         scanStatus.value = data.status;
                     }
+                    if (data.stats) {
+                        liveStats.value = data.stats;
+                    } else if (data.status && data.status.stats) {
+                        liveStats.value = data.status.stats;
+                    }
 
                     if (!data.has_more || scanStatus.value.status === 'completed' || scanStatus.value.status === 'cancelled') {
                         break;
@@ -117,7 +135,7 @@ export function useScanner() {
         isWorkerRunning.value = false;
     };
 
-    const startFullScan = async (directories?: any[]) => {
+    const startFullScan = async (directories?: any[], scanMode: 'incremental' | 'fresh' = 'incremental') => {
         try {
             const res = await fetch('/api/scanner/start', {
                 method: 'POST',
@@ -125,7 +143,7 @@ export function useScanner() {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
                 },
-                body: JSON.stringify({ directories: directories || [] }),
+                body: JSON.stringify({ directories: directories || [], scan_mode: scanMode }),
             });
             if (res.ok) {
                 const data = await res.json();
@@ -157,7 +175,7 @@ export function useScanner() {
         } catch (e) {}
     };
 
-    const scanFolder = async (path: string, type: string = 'mixed', fresh: boolean = false) => {
+    const scanFolder = async (path: string, type: string = 'mixed', fresh: boolean = false, scanMode: 'incremental' | 'fresh' = 'incremental') => {
         try {
             const res = await fetch('/api/scanner/scan-folder', {
                 method: 'POST',
@@ -165,7 +183,7 @@ export function useScanner() {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
                 },
-                body: JSON.stringify({ path, type, fresh }),
+                body: JSON.stringify({ path, type, fresh, scan_mode: scanMode }),
             });
             if (res.ok) {
                 const data = await res.json();
@@ -255,6 +273,7 @@ export function useScanner() {
     return {
         isScanModalOpen,
         scanStatus,
+        liveStats,
         isScanning,
         isPaused,
         openScanModal,

@@ -2,10 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Models\MediaItem;
-use App\Models\Series;
-use App\Models\Season;
 use App\Models\Episode;
+use App\Models\MediaItem;
+use App\Models\Season;
+use App\Models\Series;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -39,26 +39,26 @@ class MetadataRenameAndCollectionTest extends TestCase
 
         $response = $this->get(route('collections.show', 'the-matrix-collection'));
         $response->assertStatus(200);
-        $response->assertInertia(fn ($page) => 
-            $page->component('Collections/Show')
-                ->has('collection.movies', 2)
-                ->where('collection.name', 'The Matrix Collection')
+        $response->assertInertia(fn ($page) => $page->component('Collections/Show')
+            ->has('collection.movies', 2)
+            ->where('collection.name', 'The Matrix Collection')
         );
     }
 
     public function test_physical_file_rename_movie_updates_disk_and_database(): void
     {
-        $tempDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'cmh_test_' . uniqid();
-        mkdir($tempDir, 0777, true);
+        $root = sys_get_temp_dir().DIRECTORY_SEPARATOR.'cmh_test_'.uniqid();
+        $movieFolder = $root.DIRECTORY_SEPARATOR.'2.Fast.2.Furious.2003.BluRay.720p';
+        mkdir($movieFolder, 0777, true);
 
-        $oldFile = $tempDir . DIRECTORY_SEPARATOR . '2.Fast.2.Furious.2003.BluRay.720p.mkv';
+        $oldFile = $movieFolder.DIRECTORY_SEPARATOR.'2.Fast.2.Furious.2003.BluRay.720p.mkv';
         file_put_contents($oldFile, 'fake video stream data');
 
         $movie = MediaItem::create([
             'title' => '2 Fast 2 Furious',
             'release_year' => 2003,
             'file_path' => str_replace('\\', '/', $oldFile),
-            'folder_path' => str_replace('\\', '/', $tempDir),
+            'folder_path' => str_replace('\\', '/', $movieFolder),
         ]);
 
         $response = $this->postJson("/api/metadata/movie/{$movie->id}/rename-file");
@@ -66,21 +66,24 @@ class MetadataRenameAndCollectionTest extends TestCase
         $response->assertJson(['success' => true]);
 
         $movie->refresh();
-        $expectedNewFile = str_replace('\\', '/', $tempDir . DIRECTORY_SEPARATOR . '2 Fast 2 Furious (2003).mkv');
+        $expectedFolder = str_replace('\\', '/', $root.DIRECTORY_SEPARATOR.'2 Fast 2 Furious (2003)');
+        $expectedNewFile = str_replace('\\', '/', $expectedFolder.DIRECTORY_SEPARATOR.'2 Fast 2 Furious (2003).mkv');
 
         $this->assertEquals($expectedNewFile, $movie->file_path);
+        $this->assertEquals($expectedFolder, $movie->folder_path);
         $this->assertTrue(file_exists($expectedNewFile));
         $this->assertFalse(file_exists($oldFile));
 
         // Clean up
         @unlink($expectedNewFile);
-        @rmdir($tempDir);
+        @rmdir($expectedFolder);
+        @rmdir($root);
     }
 
     public function test_physical_folder_rename_series_updates_disk_and_database(): void
     {
-        $tempDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'cmh_series_test_' . uniqid();
-        $oldFolder = $tempDir . DIRECTORY_SEPARATOR . 'Breaking.Bad.Complete.Series';
+        $tempDir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'cmh_series_test_'.uniqid();
+        $oldFolder = $tempDir.DIRECTORY_SEPARATOR.'Breaking.Bad.Complete.Series';
         mkdir($oldFolder, 0777, true);
 
         $series = Series::create([
@@ -92,10 +95,10 @@ class MetadataRenameAndCollectionTest extends TestCase
         $season = Season::create([
             'series_id' => $series->id,
             'season_number' => 1,
-            
+
         ]);
 
-        $epFile = $oldFolder . DIRECTORY_SEPARATOR . 'S01E01.mkv';
+        $epFile = $oldFolder.DIRECTORY_SEPARATOR.'S01E01.mkv';
         file_put_contents($epFile, 'fake ep data');
 
         $episode = Episode::create([
@@ -113,13 +116,13 @@ class MetadataRenameAndCollectionTest extends TestCase
         $series->refresh();
         $episode->refresh();
 
-        $expectedNewFolder = str_replace('\\', '/', $tempDir . DIRECTORY_SEPARATOR . 'Breaking Bad (2008)');
+        $expectedNewFolder = str_replace('\\', '/', $tempDir.DIRECTORY_SEPARATOR.'Breaking Bad (2008)');
         $this->assertEquals($expectedNewFolder, $series->folder_path);
         $this->assertTrue(is_dir($expectedNewFolder));
         $this->assertFalse(is_dir($oldFolder));
 
         // Clean up
-        @unlink($expectedNewFolder . DIRECTORY_SEPARATOR . 'S01E01.mkv');
+        @unlink($expectedNewFolder.DIRECTORY_SEPARATOR.'S01E01.mkv');
         @rmdir($expectedNewFolder);
         @rmdir($tempDir);
     }

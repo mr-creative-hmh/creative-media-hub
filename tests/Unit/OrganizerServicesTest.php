@@ -13,7 +13,7 @@ class OrganizerServicesTest extends TestCase
 
     public function test_scene_parser_handles_movies_with_resolutions_and_codecs(): void
     {
-        $parser = new SceneNameParserService();
+        $parser = new SceneNameParserService;
         $res = $parser->parse('Interstellar.2014.IMAX.2160p.UHD.HDR.BluRay.x265-SPARKS.mkv');
 
         $this->assertEquals('movie', $res['type']);
@@ -27,7 +27,7 @@ class OrganizerServicesTest extends TestCase
 
     public function test_scene_parser_handles_tv_series_with_seasons_and_episodes(): void
     {
-        $parser = new SceneNameParserService();
+        $parser = new SceneNameParserService;
         $res = $parser->parse('Stranger.Things.S04E07.The.Massacre.at.Hawkins.Lab.1080p.NF.WEB-DL.DDP5.1.Atmos.x264-FLUX.mkv');
 
         $this->assertEquals('series', $res['type']);
@@ -41,7 +41,7 @@ class OrganizerServicesTest extends TestCase
 
     public function test_physical_organizer_generates_standard_dry_run_paths(): void
     {
-        $parser = new SceneNameParserService();
+        $parser = new SceneNameParserService;
         $organizer = new PhysicalOrganizerService($parser);
 
         $scanned = [
@@ -50,7 +50,7 @@ class OrganizerServicesTest extends TestCase
                 'filename' => 'Inception.2010.1080p.BluRay.x264.mkv',
                 'size_bytes' => 12000000000,
                 'parsed' => $parser->parse('Inception.2010.1080p.BluRay.x264.mkv'),
-            ]
+            ],
         ];
 
         $plan = $organizer->generateDryRun($scanned, 'C:/Media');

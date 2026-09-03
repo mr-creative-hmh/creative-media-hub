@@ -9,7 +9,6 @@ use App\Models\Person;
 use App\Models\Season;
 use App\Models\Series;
 use App\Models\Subtitle;
-use App\Models\WatchHistory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 

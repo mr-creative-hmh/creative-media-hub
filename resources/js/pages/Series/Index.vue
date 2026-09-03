@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import HeroBanner from '@/components/media/HeroBanner.vue';
@@ -25,6 +25,55 @@ const props = defineProps<{
 }>();
 
 const { t, isRTL } = useI18n();
+
+const handleDetails = (item: any) => {
+    if (!item) return;
+    const identifier = item.slug || item.id;
+    router.visit(`/series/${identifier}`);
+};
+
+const handlePlaySeries = (seriesItem: any, playFn: (item: any, playlist?: any[]) => void) => {
+    if (!seriesItem) return;
+    const firstSeason = seriesItem.seasons?.[0];
+    const firstEp = firstSeason?.episodes?.[0] || seriesItem.first_episode;
+    if (firstEp) {
+        const playlist = (firstSeason?.episodes || []).map((e: any) => ({
+            ...e,
+            id: e.id,
+            type: 'episode',
+            watchable_id: e.id,
+            watchable_type: 'episode',
+            series: seriesItem,
+            series_id: seriesItem.id,
+            series_title: seriesItem.title,
+            series_title_ar: seriesItem.title_ar,
+            season_number: firstSeason?.season_number || 1,
+            episode_number: e.episode_number || 1,
+            title: e.title,
+            title_ar: e.title_ar,
+            subtitles: e.subtitles || [],
+        }));
+
+        playFn({
+            ...firstEp,
+            id: firstEp.id,
+            type: 'episode',
+            watchable_id: firstEp.id,
+            watchable_type: 'episode',
+            series: seriesItem,
+            series_id: seriesItem.id,
+            series_title: seriesItem.title,
+            series_title_ar: seriesItem.title_ar,
+            season_number: firstSeason?.season_number || 1,
+            episode_number: firstEp.episode_number || 1,
+            title: firstEp.title,
+            title_ar: firstEp.title_ar,
+            subtitles: firstEp.subtitles || [],
+        }, playlist);
+    } else {
+        handleDetails(seriesItem);
+    }
+};
 </script>
 
 <template>
@@ -35,8 +84,9 @@ const { t, isRTL } = useI18n();
         <HeroBanner
             v-if="heroSeries && !filters.search && !filters.genre && !filters.vibe"
             :items="heroItems || (heroSeries ? [heroSeries] : [])"
-            @play="play"
-            @details="(item) => {}"
+            @play="(item) => handlePlaySeries(item, play)"
+            @details="handleDetails"
+            @info="handleDetails"
         />
 
         <!-- Filter & Search Studio (Zero Dropdowns) -->

@@ -7,7 +7,6 @@ use App\Models\Genre;
 use App\Models\MediaItem;
 use App\Models\Series;
 use App\Models\WatchHistory;
-use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class AnalyticsController extends Controller
@@ -24,11 +23,11 @@ class AnalyticsController extends Controller
 
         // Format storage
         if ($totalStorageBytes >= 1073741824) {
-            $storageFormatted = round($totalStorageBytes / 1073741824, 2) . ' GB';
+            $storageFormatted = round($totalStorageBytes / 1073741824, 2).' GB';
         } elseif ($totalStorageBytes >= 1048576) {
-            $storageFormatted = round($totalStorageBytes / 1048576, 2) . ' MB';
+            $storageFormatted = round($totalStorageBytes / 1048576, 2).' MB';
         } elseif ($totalStorageBytes > 0) {
-            $storageFormatted = round($totalStorageBytes / 1024, 2) . ' KB';
+            $storageFormatted = round($totalStorageBytes / 1024, 2).' KB';
         } else {
             $storageFormatted = '0 GB';
         }
@@ -50,12 +49,12 @@ class AnalyticsController extends Controller
         // Top Genres
         $genres = Genre::withCount(['mediaItems', 'series'])
             ->get()
-            ->map(fn($g) => [
+            ->map(fn ($g) => [
                 'name_en' => $g->name_en,
                 'name_ar' => $g->name_ar,
                 'count' => $g->media_items_count + $g->series_count,
             ])
-            ->filter(fn($g) => $g['count'] > 0)
+            ->filter(fn ($g) => $g['count'] > 0)
             ->sortByDesc('count')
             ->values()
             ->take(8);

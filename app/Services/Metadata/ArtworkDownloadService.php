@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Log;
 class ArtworkDownloadService
 {
     protected string $postersDir;
+
     protected string $backdropsDir;
 
     public function __construct()
@@ -21,24 +22,26 @@ class ArtworkDownloadService
 
     protected function ensureDirectoriesExist(): void
     {
-        if (!File::isDirectory($this->postersDir)) {
+        if (! File::isDirectory($this->postersDir)) {
             File::makeDirectory($this->postersDir, 0755, true);
         }
-        if (!File::isDirectory($this->backdropsDir)) {
+        if (! File::isDirectory($this->backdropsDir)) {
             File::makeDirectory($this->backdropsDir, 0755, true);
         }
     }
 
     public function downloadPoster(?string $remoteUrl): ?string
     {
-        if (empty($remoteUrl)) return null;
+        if (empty($remoteUrl)) {
+            return null;
+        }
 
         // If it's already a local storage path, return as is
         if (str_starts_with($remoteUrl, '/storage/') || str_starts_with($remoteUrl, 'storage/') || File::exists($remoteUrl)) {
             return $remoteUrl;
         }
 
-        if (!filter_var($remoteUrl, FILTER_VALIDATE_URL)) {
+        if (! filter_var($remoteUrl, FILTER_VALIDATE_URL)) {
             return $remoteUrl;
         }
 
@@ -56,10 +59,11 @@ class ArtworkDownloadService
             $response = Http::timeout(8)->get($remoteUrl);
             if ($response->successful()) {
                 File::put($localFilePath, $response->body());
+
                 return $publicUrl;
             }
         } catch (\Throwable $e) {
-            Log::warning("Failed to download poster from {$remoteUrl}: " . $e->getMessage());
+            Log::warning("Failed to download poster from {$remoteUrl}: ".$e->getMessage());
         }
 
         return $remoteUrl; // Fallback to remote URL if download fails
@@ -67,13 +71,15 @@ class ArtworkDownloadService
 
     public function downloadBackdrop(?string $remoteUrl): ?string
     {
-        if (empty($remoteUrl)) return null;
+        if (empty($remoteUrl)) {
+            return null;
+        }
 
         if (str_starts_with($remoteUrl, '/storage/') || str_starts_with($remoteUrl, 'storage/') || File::exists($remoteUrl)) {
             return $remoteUrl;
         }
 
-        if (!filter_var($remoteUrl, FILTER_VALIDATE_URL)) {
+        if (! filter_var($remoteUrl, FILTER_VALIDATE_URL)) {
             return $remoteUrl;
         }
 
@@ -91,10 +97,11 @@ class ArtworkDownloadService
             $response = Http::timeout(8)->get($remoteUrl);
             if ($response->successful()) {
                 File::put($localFilePath, $response->body());
+
                 return $publicUrl;
             }
         } catch (\Throwable $e) {
-            Log::warning("Failed to download backdrop from {$remoteUrl}: " . $e->getMessage());
+            Log::warning("Failed to download backdrop from {$remoteUrl}: ".$e->getMessage());
         }
 
         return $remoteUrl;

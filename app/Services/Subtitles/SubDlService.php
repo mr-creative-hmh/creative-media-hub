@@ -20,6 +20,7 @@ class SubDlService
 
             if ($response->successful() && $response->json('status')) {
                 $subtitles = $response->json('subtitles', []);
+
                 return array_map(function ($s) {
                     return [
                         'provider' => 'SubDL',
@@ -32,7 +33,7 @@ class SubDlService
                 }, $subtitles);
             }
         } catch (\Exception $e) {
-            Log::warning("SubDL search failed: " . $e->getMessage());
+            Log::warning('SubDL search failed: '.$e->getMessage());
         }
 
         return [];

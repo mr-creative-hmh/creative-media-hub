@@ -4,7 +4,6 @@ namespace App\Services\Subtitles;
 
 use App\Services\Media\FfmpegLocatorService;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Log;
 
 class EmbeddedSubtitleDetectorService
 {
@@ -82,7 +81,7 @@ class EmbeddedSubtitleDetectorService
 
     public function detectEmbeddedSubtitles(string $videoPath): array
     {
-        if (!File::exists($videoPath) || filesize($videoPath) < 1024) {
+        if (! File::exists($videoPath) || filesize($videoPath) < 1024) {
             return [];
         }
 
@@ -90,7 +89,7 @@ class EmbeddedSubtitleDetectorService
 
         // 1. FFprobe Detection
         $ffprobeTracks = $this->detectViaFfprobe($videoPath);
-        if (!empty($ffprobeTracks)) {
+        if (! empty($ffprobeTracks)) {
             return $ffprobeTracks;
         }
 
@@ -107,11 +106,11 @@ class EmbeddedSubtitleDetectorService
     public function extractToWebVtt(string $videoPath, int $streamIndex, string $format = 'srt'): string
     {
         $cacheDir = storage_path('app/subtitles/cache');
-        if (!File::isDirectory($cacheDir)) {
+        if (! File::isDirectory($cacheDir)) {
             File::makeDirectory($cacheDir, 0755, true, true);
         }
 
-        $cacheKey = md5($videoPath . '_' . $streamIndex . '_' . filemtime($videoPath));
+        $cacheKey = md5($videoPath.'_'.$streamIndex.'_'.filemtime($videoPath));
         $cacheFile = "{$cacheDir}/{$cacheKey}.vtt";
 
         if (File::exists($cacheFile) && filesize($cacheFile) > 20) {
@@ -120,7 +119,7 @@ class EmbeddedSubtitleDetectorService
 
         $vtt = $this->extractViaFfmpeg($videoPath, $streamIndex);
 
-        if (empty($vtt) || !str_starts_with(trim($vtt), 'WEBVTT')) {
+        if (empty($vtt) || ! str_starts_with(trim($vtt), 'WEBVTT')) {
             $vtt = $this->extractMatroskaBlocksToVtt($videoPath, $streamIndex);
         }
 
@@ -129,24 +128,29 @@ class EmbeddedSubtitleDetectorService
         }
 
         File::put($cacheFile, $vtt);
+
         return $vtt;
     }
 
     protected function detectViaFfprobe(string $videoPath): array
     {
         $ffprobeBin = FfmpegLocatorService::getFfprobePath();
-        if (!$ffprobeBin) {
+        if (! $ffprobeBin) {
             return [];
         }
 
         $escaped = escapeshellarg($videoPath);
-        $cmd = escapeshellarg($ffprobeBin) . " -v quiet -print_format json -show_streams -select_streams s {$escaped}";
+        $cmd = escapeshellarg($ffprobeBin)." -v quiet -print_format json -show_streams -select_streams s {$escaped}";
         $output = @shell_exec($cmd);
 
-        if (!$output) return [];
+        if (! $output) {
+            return [];
+        }
 
         $data = @json_decode($output, true);
-        if (empty($data['streams'])) return [];
+        if (empty($data['streams'])) {
+            return [];
+        }
 
         $tracks = [];
         foreach ($data['streams'] as $idx => $stream) {
@@ -175,12 +179,12 @@ class EmbeddedSubtitleDetectorService
     protected function extractViaFfmpeg(string $videoPath, int $streamIndex): ?string
     {
         $ffmpegBin = FfmpegLocatorService::getFfmpegPath();
-        if (!$ffmpegBin) {
+        if (! $ffmpegBin) {
             return null;
         }
 
         $escaped = escapeshellarg($videoPath);
-        $cmd = escapeshellarg($ffmpegBin) . " -nostats -loglevel error -hide_banner -i {$escaped} -map 0:s:{$streamIndex} -f webvtt -";
+        $cmd = escapeshellarg($ffmpegBin)." -nostats -loglevel error -hide_banner -i {$escaped} -map 0:s:{$streamIndex} -f webvtt -";
         $vtt = @shell_exec($cmd);
 
         return $vtt ?: null;
@@ -189,12 +193,14 @@ class EmbeddedSubtitleDetectorService
     protected function parseMatroskaSubtitles(string $videoPath): array
     {
         $fp = @fopen($videoPath, 'rb');
-        if (!$fp) return [];
+        if (! $fp) {
+            return [];
+        }
 
         $headerChunk = fread($fp, 1024 * 1024 * 3);
         fclose($fp);
 
-        if (!$headerChunk || strlen($headerChunk) < 50) {
+        if (! $headerChunk || strlen($headerChunk) < 50) {
             return [];
         }
 
@@ -242,12 +248,16 @@ class EmbeddedSubtitleDetectorService
     protected function parseMp4Subtitles(string $videoPath): array
     {
         $fp = @fopen($videoPath, 'rb');
-        if (!$fp) return [];
+        if (! $fp) {
+            return [];
+        }
 
         $headerChunk = fread($fp, 1024 * 1024 * 2);
         fclose($fp);
 
-        if (!$headerChunk) return [];
+        if (! $headerChunk) {
+            return [];
+        }
 
         $tracks = [];
         $streamIndex = 0;
@@ -273,7 +283,9 @@ class EmbeddedSubtitleDetectorService
     {
         $vtt = "WEBVTT\n\n";
         $fp = @fopen($videoPath, 'rb');
-        if (!$fp) return $vtt;
+        if (! $fp) {
+            return $vtt;
+        }
 
         $content = fread($fp, 1024 * 1024 * 4);
         fclose($fp);
@@ -283,7 +295,7 @@ class EmbeddedSubtitleDetectorService
                 $start = str_replace(',', '.', $cue[1]);
                 $end = str_replace(',', '.', $cue[2]);
                 $text = trim(preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $cue[3]));
-                if (!empty($text)) {
+                if (! empty($text)) {
                     $vtt .= "{$start} --> {$end}\n{$text}\n\n";
                 }
             }
@@ -297,7 +309,7 @@ class EmbeddedSubtitleDetectorService
      */
     public function detectLanguageFromFileContent(string $filePath): string
     {
-        if (!file_exists($filePath) || filesize($filePath) === 0) {
+        if (! file_exists($filePath) || filesize($filePath) === 0) {
             return 'und';
         }
 
@@ -308,7 +320,9 @@ class EmbeddedSubtitleDetectorService
         $tokens = preg_split('/[\._\-\s]+/', $baseNameWithoutExt);
         foreach (array_reverse($tokens) as $tok) {
             $tok = trim($tok);
-            if (in_array($tok, ['forced', 'sdh', 'cc', 'default', 'sub', 'subs'], true)) continue;
+            if (in_array($tok, ['forced', 'sdh', 'cc', 'default', 'sub', 'subs'], true)) {
+                continue;
+            }
             if (str_contains($tok, '-')) {
                 $subtoks = explode('-', $tok);
                 $tok = $subtoks[0];
@@ -322,7 +336,9 @@ class EmbeddedSubtitleDetectorService
 
         // 2. Statistical content analysis for untagged files (.srt, .vtt)
         $raw = @file_get_contents($filePath, false, null, 0, 8192);
-        if (!$raw) return 'und';
+        if (! $raw) {
+            return 'und';
+        }
 
         // Detect and normalize encoding
         try {
@@ -330,7 +346,8 @@ class EmbeddedSubtitleDetectorService
             if ($encoding && $encoding !== 'UTF-8') {
                 $raw = @mb_convert_encoding($raw, 'UTF-8', $encoding);
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+        }
 
         // Clean subtitle headers, timestamps, and formatting markup
         $clean = preg_replace('/\d{2}:\d{2}:\d{2}[,\.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,\.]\d{3}/', ' ', $raw);
@@ -357,15 +374,17 @@ class EmbeddedSubtitleDetectorService
 
     public function resolveLanguageFromContext(string $rawLang, string $title = '', string $filePath = '', int $trackIndex = 0): string
     {
-        $filename = !empty($filePath) ? strtolower(basename($filePath)) : '';
+        $filename = ! empty($filePath) ? strtolower(basename($filePath)) : '';
 
         // 1. Explicit filename extension pattern takes priority
-        if (!empty($filename)) {
+        if (! empty($filename)) {
             $baseNameWithoutExt = preg_replace('/\.(?:srt|vtt|ass|ssa|sub)$/i', '', $filename);
             $tokens = preg_split('/[\._\-\s]+/', $baseNameWithoutExt);
             foreach (array_reverse($tokens) as $tok) {
                 $tok = trim($tok);
-                if (in_array($tok, ['forced', 'sdh', 'cc', 'default', 'sub', 'subs'], true)) continue;
+                if (in_array($tok, ['forced', 'sdh', 'cc', 'default', 'sub', 'subs'], true)) {
+                    continue;
+                }
                 if (str_contains($tok, '-')) {
                     $subtoks = explode('-', $tok);
                     $tok = $subtoks[0];
@@ -380,7 +399,7 @@ class EmbeddedSubtitleDetectorService
 
         // 2. Direct language code matching from container track metadata
         $lang = strtolower(trim($rawLang));
-        if (!empty($lang) && $lang !== 'und') {
+        if (! empty($lang) && $lang !== 'und') {
             foreach (self::$langDefinitions as $code => $names) {
                 if ($lang === $code || in_array($lang, $names, true)) {
                     return $code;
@@ -389,7 +408,7 @@ class EmbeddedSubtitleDetectorService
         }
 
         // 3. Inspect file contents on disk if available
-        if (!empty($filePath) && file_exists($filePath)) {
+        if (! empty($filePath) && file_exists($filePath)) {
             $contentLang = $this->detectLanguageFromFileContent($filePath);
             if ($contentLang !== 'und') {
                 return $contentLang;
@@ -401,13 +420,13 @@ class EmbeddedSubtitleDetectorService
 
         foreach (self::$langDefinitions as $code => $names) {
             foreach ($names as $name) {
-                if (preg_match('/\b' . preg_quote($name, '/') . '\b/i', $haystack)) {
+                if (preg_match('/\b'.preg_quote($name, '/').'\b/i', $haystack)) {
                     return $code;
                 }
             }
         }
 
-        return !empty($rawLang) ? $rawLang : 'und';
+        return ! empty($rawLang) ? $rawLang : 'und';
     }
 
     protected function buildHumanTrackLabel(string $langCode, string $langName, string $title, int $idx, string $codec): string
@@ -415,17 +434,18 @@ class EmbeddedSubtitleDetectorService
         $codecUpper = strtoupper($codec);
 
         if ($langCode !== 'und') {
-            if ($title && !str_starts_with(strtolower($title), 'subtitle') && strtolower($title) !== strtolower($langName)) {
+            if ($title && ! str_starts_with(strtolower($title), 'subtitle') && strtolower($title) !== strtolower($langName)) {
                 return "{$langName} - {$title}";
             }
+
             return "{$langName}";
         }
 
         if ($title && trim($title) !== '') {
-            return "{$title} (Track " . ($idx + 1) . ")";
+            return "{$title} (Track ".($idx + 1).')';
         }
 
-        return "Subtitle Track " . ($idx + 1) . " ({$codecUpper})";
+        return 'Subtitle Track '.($idx + 1)." ({$codecUpper})";
     }
 
     public function normalizeLanguageCode(string $code): string
@@ -436,18 +456,21 @@ class EmbeddedSubtitleDetectorService
                 return $canonical;
             }
         }
+
         return strlen($code) === 2 ? $code : 'und';
     }
 
     public function getLanguageName(string $code): string
     {
         $normalized = $this->normalizeLanguageCode($code);
+
         return self::$languageMap[$normalized]['name'] ?? 'Track';
     }
 
     public function getLanguageArabicName(string $code): string
     {
         $normalized = $this->normalizeLanguageCode($code);
+
         return self::$languageMap[$normalized]['ar'] ?? 'ترجمة';
     }
 }

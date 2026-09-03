@@ -2,7 +2,6 @@
 
 namespace App\Services\Scanner;
 
-use App\Models\AppSetting;
 use App\Models\Episode;
 use App\Models\Genre;
 use App\Models\MediaItem;
@@ -10,34 +9,42 @@ use App\Models\Season;
 use App\Models\Series;
 use App\Models\Subtitle;
 use App\Services\Metadata\MetadataAggregator;
+use App\Services\Metadata\TmdbProvider;
 use App\Services\Metadata\WebArtworkSearchService;
 use App\Services\Organizer\FilesystemScannerService;
 use App\Services\Organizer\SceneNameParserService;
 use App\Services\Subtitles\EmbeddedSubtitleDetectorService;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class VirtualLibraryScannerService
 {
     protected FilesystemScannerService $fsScanner;
+
     protected SceneNameParserService $nameParser;
+
     protected MetadataAggregator $metadata;
+
     protected WebArtworkSearchService $webArtwork;
+
     protected EmbeddedSubtitleDetectorService $embeddedSubDetector;
+
+    protected MediaProbeService $mediaProbe;
 
     public function __construct(
         FilesystemScannerService $fsScanner,
         SceneNameParserService $nameParser,
         MetadataAggregator $metadata,
         WebArtworkSearchService $webArtwork,
-        EmbeddedSubtitleDetectorService $embeddedSubDetector
+        EmbeddedSubtitleDetectorService $embeddedSubDetector,
+        MediaProbeService $mediaProbe
     ) {
         $this->fsScanner = $fsScanner;
         $this->nameParser = $nameParser;
         $this->metadata = $metadata;
         $this->webArtwork = $webArtwork;
         $this->embeddedSubDetector = $embeddedSubDetector;
+        $this->mediaProbe = $mediaProbe;
     }
 
     public function getScanStatus(): array
@@ -55,19 +62,24 @@ class VirtualLibraryScannerService
         ]);
     }
 
-    public function initScan(array $directories): array
+    public function initScan(array $directories, string $scanMode = 'incremental'): array
     {
         $allFiles = [];
         foreach ($directories as $dir) {
             $path = $dir['path'] ?? '';
             $typeHint = $dir['type'] ?? 'mixed';
-            if (!empty($path) && (is_dir($path) || is_dir(str_replace('\\', '/', $path)))) {
+            if (! empty($path) && (is_dir($path) || is_dir(str_replace('\\', '/', $path)))) {
                 $scanned = $this->fsScanner->scanDirectory($path, true);
                 foreach ($scanned as $f) {
                     $f['type_hint'] = $typeHint;
                     $allFiles[] = $f;
                 }
             }
+        }
+
+        // In incremental mode, filter out already-indexed files
+        if ($scanMode === 'incremental') {
+            $allFiles = $this->filterAlreadyIndexedFiles($allFiles);
         }
 
         $totalFiles = count($allFiles);
@@ -80,12 +92,13 @@ class VirtualLibraryScannerService
             'current_file' => null,
             'queue' => $allFiles,
             'scanned_items' => [],
+            'scan_mode' => $scanMode,
             'logs' => [
                 [
                     'time' => now()->format('H:i:s'),
                     'level' => 'info',
-                    'message' => "Scanner initialized. Found {$totalFiles} video files to index.",
-                ]
+                    'message' => "Scanner initialized ({$scanMode}). Found {$totalFiles} video files to index.",
+                ],
             ],
             'started_at' => now()->toDateTimeString(),
             'updated_at' => now()->toDateTimeString(),
@@ -96,10 +109,11 @@ class VirtualLibraryScannerService
         return [
             'total_files' => $totalFiles,
             'status' => $jobData['status'],
+            'scan_mode' => $scanMode,
         ];
     }
 
-    public function initScanForFolder(string $folderPath, string $typeHint = 'mixed'): array
+    public function initScanForFolder(string $folderPath, string $typeHint = 'mixed', string $scanMode = 'incremental'): array
     {
         $allFiles = [];
         $cleanPath = rtrim(str_replace('\\', '/', $folderPath), '/');
@@ -112,6 +126,11 @@ class VirtualLibraryScannerService
             }
         }
 
+        // In incremental mode, filter out already-indexed files
+        if ($scanMode === 'incremental') {
+            $allFiles = $this->filterAlreadyIndexedFiles($allFiles);
+        }
+
         $totalFiles = count($allFiles);
 
         $jobData = [
@@ -122,12 +141,13 @@ class VirtualLibraryScannerService
             'current_file' => null,
             'queue' => $allFiles,
             'scanned_items' => [],
+            'scan_mode' => $scanMode,
             'logs' => [
                 [
                     'time' => now()->format('H:i:s'),
                     'level' => 'info',
-                    'message' => "Folder scanner initialized for {$cleanPath}. Found {$totalFiles} files.",
-                ]
+                    'message' => "Folder scanner initialized for {$cleanPath} ({$scanMode}). Found {$totalFiles} files.",
+                ],
             ],
             'started_at' => now()->toDateTimeString(),
             'updated_at' => now()->toDateTimeString(),
@@ -138,6 +158,7 @@ class VirtualLibraryScannerService
         return [
             'total_files' => $totalFiles,
             'status' => $jobData['status'],
+            'scan_mode' => $scanMode,
         ];
     }
 
@@ -161,6 +182,7 @@ class VirtualLibraryScannerService
                 ];
                 Cache::put('virtual_scanner_job_status', $jobData, now()->addHours(6));
             }
+
             return [
                 'status' => $jobData['status'],
                 'has_more' => false,
@@ -199,7 +221,7 @@ class VirtualLibraryScannerService
                 ];
 
                 $subCount = count($file['subtitles'] ?? []);
-                $subText = $subCount > 0 ? " (+{$subCount} subtitles)" : "";
+                $subText = $subCount > 0 ? " (+{$subCount} subtitles)" : '';
 
                 $logs[] = [
                     'time' => now()->format('H:i:s'),
@@ -211,7 +233,7 @@ class VirtualLibraryScannerService
                 $logs[] = [
                     'time' => now()->format('H:i:s'),
                     'level' => 'error',
-                    'message' => "Failed to index {$file['filename']}: " . substr($e->getMessage(), 0, 80),
+                    'message' => "Failed to index {$file['filename']}: ".substr($e->getMessage(), 0, 80),
                 ];
             }
         }
@@ -225,7 +247,7 @@ class VirtualLibraryScannerService
         $jobData['progress_percent'] = min(100, (int) round(($jobData['processed_files'] / $total) * 100));
 
         $hasMore = count($queue) > 0;
-        if (!$hasMore) {
+        if (! $hasMore) {
             $jobData['status'] = 'completed';
             $jobData['progress_percent'] = 100;
             $jobData['logs'][] = [
@@ -308,13 +330,19 @@ class VirtualLibraryScannerService
         $existing = MediaItem::where('file_path', $file['path'])->first();
         if ($existing) {
             $this->attachAllSubtitles($existing, $file);
+
             return $existing;
         }
 
-        $resolution = $parsed['resolution'] ?? '1080p FHD';
-        $videoCodec = $parsed['codec'] ?? 'H.264 / AVC';
-        $audioCodec = $parsed['audio'] ?? 'AAC';
-        $runtimeMinutes = 110;
+        // Probe actual file for accurate technical metadata
+        $probeData = $this->mediaProbe->probe($file['path']);
+
+        // Use probed data > parsed filename data > fallback to Unknown
+        // Note: probeData now returns array with null/0 defaults, not null
+        $resolution = $probeData['resolution'] ?? $parsed['resolution'] ?? 'Unknown';
+        $videoCodec = $probeData['video_codec'] ?? $parsed['codec'] ?? 'Unknown';
+        $audioCodec = $probeData['audio_codec'] ?? $parsed['audio'] ?? 'Unknown';
+        $runtimeMinutes = ($probeData['duration'] ?? 0) > 0 ? (int) round($probeData['duration'] / 60) : 110;
 
         $posterUrl = $file['local_poster'] ?? null;
         $backdropUrl = $file['local_backdrop'] ?? null;
@@ -323,19 +351,20 @@ class VirtualLibraryScannerService
         $meta = [];
         try {
             $meta = $this->metadata->aggregateMovieMetadata($cleanTitle, $year, 'en', true);
-            if (!empty($meta['poster_path']) && empty($posterUrl)) {
+            if (! empty($meta['poster_path']) && empty($posterUrl)) {
                 $posterUrl = $meta['poster_path'];
             }
-            if (!empty($meta['backdrop_path']) && empty($backdropUrl)) {
+            if (! empty($meta['backdrop_path']) && empty($backdropUrl)) {
                 $backdropUrl = $meta['backdrop_path'];
             }
-            if (!empty($meta['runtime_minutes'])) {
+            if (! empty($meta['runtime_minutes'])) {
                 $runtimeMinutes = $meta['runtime_minutes'];
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+        }
 
-        $movie = retry(4, function () use ($cleanTitle, $year, $meta, $file, $posterUrl, $backdropUrl, $resolution, $videoCodec, $audioCodec, $runtimeMinutes) {
-            $colName = $meta['collection_name'] ?? \App\Services\Metadata\TmdbProvider::inferCollectionFromTitle($meta['title'] ?? $cleanTitle);
+        $movie = retry(4, function () use ($cleanTitle, $year, $meta, $file, $posterUrl, $backdropUrl, $resolution, $videoCodec, $audioCodec, $runtimeMinutes, $probeData) {
+            $colName = $meta['collection_name'] ?? TmdbProvider::inferCollectionFromTitle($meta['title'] ?? $cleanTitle);
             $origLang = $meta['original_language'] ?? (preg_match('/\p{Arabic}/u', $cleanTitle) ? 'ar' : 'en');
             $origCountry = $meta['origin_country'] ?? (preg_match('/\p{Arabic}/u', $cleanTitle) ? 'EG' : null);
 
@@ -356,16 +385,28 @@ class VirtualLibraryScannerService
                 'rating' => $meta['rating'] ?? 7.5,
                 'runtime_minutes' => $runtimeMinutes,
                 'file_path' => $file['path'],
+                'folder_path' => str_replace('\\', '/', dirname($file['path'])),
                 'file_size_bytes' => $file['size_bytes'] ?? 0,
                 'resolution' => $resolution,
                 'video_codec' => $videoCodec,
                 'audio_codec' => $audioCodec,
+                'video_profile' => $probeData['video_profile'] ?? null,
+                'video_bitrate' => $probeData['video_bitrate'] ?? 0,
+                'audio_channels' => $probeData['audio_channels'] ?? 0,
+                'audio_channel_layout' => $probeData['audio_channel_layout'] ?? null,
+                'audio_bitrate' => $probeData['audio_bitrate'] ?? 0,
+                'framerate' => $probeData['framerate'] ?? 0,
+                'container_format' => $probeData['container'] ?? null,
+                'hdr_format' => $probeData['hdr_format'] ?? null,
+                'color_space' => $probeData['color_space'] ?? null,
+                'color_transfer' => $probeData['color_transfer'] ?? null,
+                'total_bitrate' => $probeData['total_bitrate'] ?? 0,
                 'poster_path' => $posterUrl,
                 'backdrop_path' => $backdropUrl,
                 'is_favorite' => false,
             ]);
 
-            if (!empty($meta['genres'])) {
+            if (! empty($meta['genres'])) {
                 $genreIds = [];
                 foreach ($meta['genres'] as $gName) {
                     $genre = Genre::firstOrCreate(
@@ -398,12 +439,18 @@ class VirtualLibraryScannerService
             ->orWhere('original_title', 'like', $showTitle)
             ->first();
 
-        if (!$series) {
-            $series = retry(4, function () use ($showTitle, $year) {
+        $epPath = str_replace('\\', '/', $file['path']);
+        $epDir = dirname($epPath);
+        $epDirBase = strtolower(basename($epDir));
+        $seriesFolder = preg_match('/^(season\s*\d+|s\d+|specials?)$/i', $epDirBase) ? dirname($epDir) : $epDir;
+
+        if (! $series) {
+            $series = retry(4, function () use ($showTitle, $year, $seriesFolder) {
                 return Series::create([
                     'title' => $showTitle,
                     'original_title' => $showTitle,
                     'release_year' => $year,
+                    'folder_path' => $seriesFolder,
                     'overview' => "Experience the complete series of {$showTitle}.",
                     'rating' => 8.0,
                     'status' => 'Continuing',
@@ -429,7 +476,7 @@ class VirtualLibraryScannerService
                         'rating' => $meta['rating'] ?? 8.0,
                     ]);
 
-                    if (!empty($meta['genres'])) {
+                    if (! empty($meta['genres'])) {
                         $genreIds = [];
                         foreach ($meta['genres'] as $gName) {
                             $g = Genre::firstOrCreate(
@@ -441,7 +488,8 @@ class VirtualLibraryScannerService
                         $series->genres()->sync($genreIds);
                     }
                 }, 100);
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
         }
 
         $season = Season::firstOrCreate(
@@ -452,15 +500,21 @@ class VirtualLibraryScannerService
         $existingEp = Episode::where('file_path', $file['path'])->first();
         if ($existingEp) {
             $this->attachAllSubtitles($existingEp, $file);
+
             return $existingEp;
         }
 
-        $resolution = $parsed['resolution'] ?? '1080p FHD';
-        $videoCodec = $parsed['codec'] ?? 'H.264 / AVC';
-        $audioCodec = $parsed['audio'] ?? 'AAC';
-        $runtimeMinutes = 45;
+        // Probe actual file for accurate technical metadata
+        $probeData = $this->mediaProbe->probe($file['path']);
 
-        $episode = retry(4, function () use ($series, $season, $epNum, $epTitle, $file, $resolution, $videoCodec, $audioCodec, $runtimeMinutes) {
+        // Use probed data > parsed filename data > fallback to Unknown
+        // Note: probeData now returns array with null/0 defaults, not null
+        $resolution = $probeData['resolution'] ?? $parsed['resolution'] ?? 'Unknown';
+        $videoCodec = $probeData['video_codec'] ?? $parsed['codec'] ?? 'Unknown';
+        $audioCodec = $probeData['audio_codec'] ?? $parsed['audio'] ?? 'Unknown';
+        $runtimeMinutes = ($probeData['duration'] ?? 0) > 0 ? (int) round($probeData['duration'] / 60) : 45;
+
+        $episode = retry(4, function () use ($series, $season, $epNum, $epTitle, $file, $resolution, $videoCodec, $audioCodec, $runtimeMinutes, $probeData) {
             $ep = Episode::create([
                 'series_id' => $series->id,
                 'season_id' => $season->id,
@@ -473,15 +527,54 @@ class VirtualLibraryScannerService
                 'resolution' => $resolution,
                 'video_codec' => $videoCodec,
                 'audio_codec' => $audioCodec,
+                'video_profile' => $probeData['video_profile'] ?? null,
+                'video_bitrate' => $probeData['video_bitrate'] ?? 0,
+                'audio_channels' => $probeData['audio_channels'] ?? 0,
+                'audio_channel_layout' => $probeData['audio_channel_layout'] ?? null,
+                'audio_bitrate' => $probeData['audio_bitrate'] ?? 0,
+                'framerate' => $probeData['framerate'] ?? 0,
+                'container_format' => $probeData['container'] ?? null,
+                'hdr_format' => $probeData['hdr_format'] ?? null,
+                'color_space' => $probeData['color_space'] ?? null,
+                'color_transfer' => $probeData['color_transfer'] ?? null,
+                'total_bitrate' => $probeData['total_bitrate'] ?? 0,
                 'still_path' => null,
             ]);
 
-                        return $ep;
+            return $ep;
         }, 150);
 
         $this->attachAllSubtitles($episode, $file);
 
         return $episode;
+    }
+
+    protected function filterAlreadyIndexedFiles(array $files): array
+    {
+        if (empty($files)) {
+            return [];
+        }
+
+        $paths = array_column($files, 'path');
+        $paths = array_filter($paths, fn ($p) => ! empty($p));
+
+        if (empty($paths)) {
+            return $files;
+        }
+
+        // Get all already indexed file paths in a single query
+        $indexedPaths = MediaItem::whereIn('file_path', $paths)
+            ->pluck('file_path')
+            ->toArray();
+
+        $indexedEpisodes = Episode::whereIn('file_path', $paths)
+            ->pluck('file_path')
+            ->toArray();
+
+        $allIndexed = array_merge($indexedPaths, $indexedEpisodes);
+
+        // Filter out files that are already indexed
+        return array_filter($files, fn ($f) => ! in_array($f['path'] ?? '', $allIndexed, true));
     }
 
     protected function attachAllSubtitles(mixed $model, array $file): void
@@ -490,10 +583,12 @@ class VirtualLibraryScannerService
         $isFirst = count($existingSubPaths) === 0;
 
         // 1. External Subtitle Files matching video
-        if (!empty($file['subtitles'])) {
+        if (! empty($file['subtitles'])) {
             foreach ($file['subtitles'] as $sub) {
                 $subPath = $sub['path'] ?? '';
-                if (in_array($subPath, $existingSubPaths, true)) continue;
+                if (in_array($subPath, $existingSubPaths, true)) {
+                    continue;
+                }
 
                 $lang = $sub['language'] ?? 'und';
                 $langName = $sub['language_name'] ?? 'Unknown';
@@ -525,7 +620,9 @@ class VirtualLibraryScannerService
             $embedded = $this->embeddedSubDetector->detectEmbeddedSubtitles($file['path']);
             foreach ($embedded as $sub) {
                 $subKey = "embedded:{$sub['stream_index']}:{$file['path']}";
-                if (in_array($subKey, $existingSubPaths, true)) continue;
+                if (in_array($subKey, $existingSubPaths, true)) {
+                    continue;
+                }
 
                 $model->subtitles()->create([
                     'language' => $sub['language'] ?? 'und',
@@ -539,7 +636,8 @@ class VirtualLibraryScannerService
                 $existingSubPaths[] = $subKey;
                 $isFirst = false;
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+        }
     }
 
     public function enrichMissingMetadata(int $limit = 50): array
@@ -574,7 +672,7 @@ class VirtualLibraryScannerService
                         'runtime_minutes' => $meta['runtime_minutes'] ?? $movie->runtime_minutes,
                     ]);
 
-                    if (!empty($meta['genres'])) {
+                    if (! empty($meta['genres'])) {
                         $genreIds = [];
                         foreach ($meta['genres'] as $gName) {
                             $g = Genre::firstOrCreate(
@@ -587,7 +685,8 @@ class VirtualLibraryScannerService
                     }
                 }, 100);
                 $enrichedCount++;
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
         }
 
         $seriesList = Series::whereNull('poster_path')
@@ -617,7 +716,7 @@ class VirtualLibraryScannerService
                         'rating' => $meta['rating'] ?? $series->rating,
                     ]);
 
-                    if (!empty($meta['genres'])) {
+                    if (! empty($meta['genres'])) {
                         $genreIds = [];
                         foreach ($meta['genres'] as $gName) {
                             $g = Genre::firstOrCreate(
@@ -630,7 +729,8 @@ class VirtualLibraryScannerService
                     }
                 }, 100);
                 $enrichedCount++;
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
         }
 
         return [

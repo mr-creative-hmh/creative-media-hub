@@ -15,6 +15,7 @@ use Inertia\Response;
 class DiskOrganizerController extends Controller
 {
     protected FilesystemScannerService $scanner;
+
     protected PhysicalOrganizerService $organizer;
 
     public function __construct(FilesystemScannerService $scanner, PhysicalOrganizerService $organizer)
@@ -26,7 +27,7 @@ class DiskOrganizerController extends Controller
     public function index(): Response
     {
         $defaultDir = str_replace('\\', '/', base_path('storage/app/media'));
-        if (!file_exists($defaultDir)) {
+        if (! file_exists($defaultDir)) {
             @mkdir($defaultDir, 0755, true);
         }
 
@@ -44,7 +45,7 @@ class DiskOrganizerController extends Controller
                 'path' => $m->file_path,
                 'filename' => basename($m->file_path),
                 'size_bytes' => $m->file_size_bytes,
-                'size_formatted' => $m->file_size_bytes ? round($m->file_size_bytes / (1024 * 1024 * 1024), 2) . ' GB' : '1.4 GB',
+                'size_formatted' => $m->file_size_bytes ? round($m->file_size_bytes / (1024 * 1024 * 1024), 2).' GB' : '1.4 GB',
                 'parsed' => [
                     'type' => 'movie',
                     'title' => $m->title,
@@ -62,7 +63,7 @@ class DiskOrganizerController extends Controller
                 'path' => $ep->file_path,
                 'filename' => basename($ep->file_path),
                 'size_bytes' => $ep->file_size_bytes,
-                'size_formatted' => $ep->file_size_bytes ? round($ep->file_size_bytes / (1024 * 1024), 1) . ' MB' : '450 MB',
+                'size_formatted' => $ep->file_size_bytes ? round($ep->file_size_bytes / (1024 * 1024), 1).' MB' : '450 MB',
                 'parsed' => [
                     'type' => 'series',
                     'series_title' => $ep->season?->series?->title ?? 'TV Show',
@@ -75,7 +76,7 @@ class DiskOrganizerController extends Controller
             ];
         });
 
-        $all = $movies->concat($episodes)->values()->filter(fn ($f) => !empty($f['path']) && file_exists($f['path']))->values();
+        $all = $movies->concat($episodes)->values()->filter(fn ($f) => ! empty($f['path']) && file_exists($f['path']))->values();
 
         return response()->json([
             'count' => $all->count(),

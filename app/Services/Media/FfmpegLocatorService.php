@@ -3,11 +3,11 @@
 namespace App\Services\Media;
 
 use App\Models\AppSetting;
-use Illuminate\Support\Facades\File;
 
 class FfmpegLocatorService
 {
     protected static ?string $cachedFfmpegPath = null;
+
     protected static ?string $cachedFfprobePath = null;
 
     /**
@@ -27,7 +27,8 @@ class FfmpegLocatorService
                     return self::$cachedFfmpegPath = $custom;
                 }
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+        }
 
         $userProfile = getenv('USERPROFILE') ?: 'C:\\Users\\hasan';
         $localAppData = getenv('LOCALAPPDATA') ?: "{$userProfile}\\AppData\\Local";
@@ -35,11 +36,11 @@ class FfmpegLocatorService
         // 2. Direct exact known paths
         $candidates = [
             "{$localAppData}\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build\\bin\\ffmpeg.exe",
-            "C:\\Users\\hasan\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build\\bin\\ffmpeg.exe",
+            'C:\\Users\\hasan\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build\\bin\\ffmpeg.exe',
             "{$localAppData}\\Microsoft\\WinGet\\Links\\ffmpeg.exe",
-            "C:\\tools\\ffmpeg\\bin\\ffmpeg.exe",
-            "C:\\ffmpeg\\bin\\ffmpeg.exe",
-            "C:\\ProgramData\\chocolatey\\bin\\ffmpeg.exe",
+            'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe',
+            'C:\\ffmpeg\\bin\\ffmpeg.exe',
+            'C:\\ProgramData\\chocolatey\\bin\\ffmpeg.exe',
             "{$userProfile}\\scoop\\shims\\ffmpeg.exe",
         ];
 
@@ -53,17 +54,17 @@ class FfmpegLocatorService
         $packagesDir = "{$localAppData}\\Microsoft\\WinGet\\Packages";
         if (is_dir($packagesDir)) {
             $files = self::findFileRecursive($packagesDir, 'ffmpeg.exe');
-            if (!empty($files)) {
+            if (! empty($files)) {
                 return self::$cachedFfmpegPath = $files[0];
             }
         }
 
         // 4. Check system PATH via where command
         $isWin = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
-        $testCmd = $isWin ? "where ffmpeg 2>NUL" : "which ffmpeg 2>/dev/null";
+        $testCmd = $isWin ? 'where ffmpeg 2>NUL' : 'which ffmpeg 2>/dev/null';
         $out = [];
         @exec($testCmd, $out, $code);
-        if ($code === 0 && !empty($out[0]) && trim($out[0]) !== '' && file_exists(trim($out[0]))) {
+        if ($code === 0 && ! empty($out[0]) && trim($out[0]) !== '' && file_exists(trim($out[0]))) {
             return self::$cachedFfmpegPath = trim($out[0]);
         }
 
@@ -86,7 +87,8 @@ class FfmpegLocatorService
                     return self::$cachedFfprobePath = $custom;
                 }
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+        }
 
         $ffmpeg = self::getFfmpegPath();
         if ($ffmpeg && $ffmpeg !== 'ffmpeg' && file_exists($ffmpeg)) {
@@ -101,10 +103,10 @@ class FfmpegLocatorService
 
         $candidates = [
             "{$localAppData}\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build\\bin\\ffprobe.exe",
-            "C:\\Users\\hasan\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build\\bin\\ffprobe.exe",
+            'C:\\Users\\hasan\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build\\bin\\ffprobe.exe',
             "{$localAppData}\\Microsoft\\WinGet\\Links\\ffprobe.exe",
-            "C:\\tools\\ffmpeg\\bin\\ffprobe.exe",
-            "C:\\ffmpeg\\bin\\ffprobe.exe",
+            'C:\\tools\\ffmpeg\\bin\\ffprobe.exe',
+            'C:\\ffmpeg\\bin\\ffprobe.exe',
         ];
 
         foreach ($candidates as $cand) {
@@ -129,7 +131,9 @@ class FfmpegLocatorService
                     $matches[] = $item->getPathname();
                 }
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+        }
+
         return $matches;
     }
 

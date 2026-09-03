@@ -75,6 +75,7 @@ class AniListProvider implements MetadataProviderInterface
 
             if ($response->successful()) {
                 $items = $response->json('data.Page.media', []);
+
                 return array_map(function ($item) {
                     return [
                         'provider' => 'AniList',
@@ -91,7 +92,7 @@ class AniListProvider implements MetadataProviderInterface
                 }, $items);
             }
         } catch (\Exception $e) {
-            Log::warning("AniList searchMedia failed: " . $e->getMessage());
+            Log::warning('AniList searchMedia failed: '.$e->getMessage());
         }
 
         return [];
@@ -124,7 +125,9 @@ class AniListProvider implements MetadataProviderInterface
 
             if ($response->successful()) {
                 $item = $response->json('data.Media');
-                if (!$item) return null;
+                if (! $item) {
+                    return null;
+                }
 
                 return [
                     'provider' => 'AniList',
@@ -142,7 +145,7 @@ class AniListProvider implements MetadataProviderInterface
                 ];
             }
         } catch (\Exception $e) {
-            Log::warning("AniList getMediaDetails failed: " . $e->getMessage());
+            Log::warning('AniList getMediaDetails failed: '.$e->getMessage());
         }
 
         return null;

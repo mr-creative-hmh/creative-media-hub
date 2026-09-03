@@ -16,11 +16,11 @@ class LocalNfoProvider implements MetadataProviderInterface
         return [
             [
                 'provider' => 'Local Parser',
-                'id' => 'local-' . md5($title . $year),
+                'id' => 'local-'.md5($title.$year),
                 'title' => $title,
                 'release_year' => $year,
-                'overview' => "Locally organized media: {$title} (" . ($year ?? 'Unknown') . ")",
-            ]
+                'overview' => "Locally organized media: {$title} (".($year ?? 'Unknown').')',
+            ],
         ];
     }
 
@@ -29,11 +29,11 @@ class LocalNfoProvider implements MetadataProviderInterface
         return [
             [
                 'provider' => 'Local Parser',
-                'id' => 'local-' . md5($title . $year),
+                'id' => 'local-'.md5($title.$year),
                 'title' => $title,
                 'release_year' => $year,
-                'overview' => "Locally organized series: {$title} (" . ($year ?? 'Unknown') . ")",
-            ]
+                'overview' => "Locally organized series: {$title} (".($year ?? 'Unknown').')',
+            ],
         ];
     }
 

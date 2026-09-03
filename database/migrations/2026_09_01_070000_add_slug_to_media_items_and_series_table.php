@@ -9,13 +9,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('media_items', function (Blueprint $table) {
-            if (!Schema::hasColumn('media_items', 'slug')) {
+            if (! Schema::hasColumn('media_items', 'slug')) {
                 $table->string('slug')->nullable()->index()->after('title');
             }
         });
 
         Schema::table('series', function (Blueprint $table) {
-            if (!Schema::hasColumn('series', 'slug')) {
+            if (! Schema::hasColumn('series', 'slug')) {
                 $table->string('slug')->nullable()->index()->after('title');
             }
         });

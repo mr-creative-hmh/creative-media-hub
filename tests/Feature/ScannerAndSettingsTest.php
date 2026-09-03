@@ -3,11 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Episode;
-use App\Models\MediaItem;
-use App\Models\Season;
 use App\Models\Series;
-use App\Models\Subtitle;
-use App\Services\Metadata\ArtworkDownloadService;
 use App\Services\Organizer\FilesystemScannerService;
 use App\Services\Organizer\PhysicalOrganizerService;
 use App\Services\Organizer\SceneNameParserService;
@@ -51,25 +47,28 @@ class ScannerAndSettingsTest extends TestCase
     public function test_series_episodes_group_under_single_show_and_seasons(): void
     {
         $testDir = storage_path('app/test_series_media');
-        if (!File::isDirectory($testDir)) {
+        if (! File::isDirectory($testDir)) {
             File::makeDirectory($testDir, 0755, true);
         }
 
-        File::put("{$testDir}/Dark.Matter.S01E01.1080p.mkv", 'video1');
+        // Create files > 15MB to pass the scanner's size filter (test env may not be detected correctly)
+        File::put("{$testDir}/Dark.Matter.S01E01.1080p.mkv", str_repeat('x', 20 * 1024 * 1024));
         File::put("{$testDir}/Dark.Matter.S01E01.ar.srt", 'sub1_ar');
         File::put("{$testDir}/Dark.Matter.S01E01.en.srt", 'sub1_en');
-        File::put("{$testDir}/Dark.Matter.S01E02.1080p.mkv", 'video2');
-        File::put("{$testDir}/Dark.Matter.S02E01.1080p.mkv", 'video3');
+        File::put("{$testDir}/Dark.Matter.S01E02.1080p.mkv", str_repeat('x', 20 * 1024 * 1024));
+        File::put("{$testDir}/Dark.Matter.S02E01.1080p.mkv", str_repeat('x', 20 * 1024 * 1024));
 
         $scanner = app(VirtualLibraryScannerService::class);
         $scanner->initScan([
-            ['path' => $testDir, 'type' => 'series']
+            ['path' => $testDir, 'type' => 'series'],
         ]);
 
         // Process batches until done
         while (true) {
             $batchRes = $scanner->processBatch(10);
-            if (!$batchRes['has_more']) break;
+            if (! $batchRes['has_more']) {
+                break;
+            }
         }
 
         $this->assertGreaterThanOrEqual(1, Series::count());
@@ -90,7 +89,7 @@ class ScannerAndSettingsTest extends TestCase
     public function test_physical_organizer_dry_run_generates_correct_actions(): void
     {
         $testDir = storage_path('app/test_organizer_media');
-        if (!File::isDirectory($testDir)) {
+        if (! File::isDirectory($testDir)) {
             File::makeDirectory($testDir, 0755, true);
         }
 

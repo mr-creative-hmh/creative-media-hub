@@ -12,7 +12,7 @@ class ArabicAndFolderParserTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->parser = new SceneNameParserService();
+        $this->parser = new SceneNameParserService;
     }
 
     /**

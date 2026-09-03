@@ -2,12 +2,12 @@
 
 namespace App\Providers;
 
+use App\Database\WindowsResilientSQLiteConnection;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Database\Connection;
-use App\Database\WindowsResilientSQLiteConnection;
 use Illuminate\Validation\Rules\Password;
 
 class AppServiceProvider extends ServiceProvider
@@ -32,7 +32,8 @@ class AppServiceProvider extends ServiceProvider
                 DB::statement('PRAGMA temp_store=MEMORY;');
                 DB::statement('PRAGMA mmap_size=268435456;');
                 DB::statement('PRAGMA busy_timeout=10000;');
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
         }
     }
 

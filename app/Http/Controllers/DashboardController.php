@@ -41,7 +41,9 @@ class DashboardController extends Controller
             ->get()
             ->map(function ($h) {
                 $item = $h->watchable;
-                if (!$item) return null;
+                if (! $item) {
+                    return null;
+                }
 
                 $percent = $h->duration_seconds > 0 ? min(100, round(($h->progress_seconds / $h->duration_seconds) * 100)) : 0;
                 $hrs = floor($h->progress_seconds / 3600);
@@ -52,6 +54,7 @@ class DashboardController extends Controller
                 if ($item instanceof MediaItem) {
                     $item->loadMissing('subtitles');
                     $slug = $item->slug ?: "movie-{$item->id}";
+
                     return [
                         'id' => $item->id,
                         'watchable_id' => $item->id,
@@ -106,6 +109,7 @@ class DashboardController extends Controller
                         'stream_url' => route('stream.episode', $item->id),
                     ];
                 }
+
                 return null;
             })
             ->filter()
@@ -126,11 +130,11 @@ class DashboardController extends Controller
         // 5. Quick Stats
         $totalBytes = MediaItem::sum('file_size_bytes') + Episode::sum('file_size_bytes');
         if ($totalBytes >= 1099511627776) {
-            $totalStorageFormatted = round($totalBytes / 1099511627776, 2) . ' TB';
+            $totalStorageFormatted = round($totalBytes / 1099511627776, 2).' TB';
         } elseif ($totalBytes >= 1073741824) {
-            $totalStorageFormatted = round($totalBytes / 1073741824, 2) . ' GB';
+            $totalStorageFormatted = round($totalBytes / 1073741824, 2).' GB';
         } elseif ($totalBytes > 0) {
-            $totalStorageFormatted = round($totalBytes / 1048576, 2) . ' MB';
+            $totalStorageFormatted = round($totalBytes / 1048576, 2).' MB';
         } else {
             $totalStorageFormatted = '0 GB';
         }
@@ -200,21 +204,22 @@ class DashboardController extends Controller
         $vibes = array_map(function ($vibe) {
             $genreSlug = strtolower($vibe['genre']);
             $movies = MediaItem::with(['genres', 'subtitles'])
-                ->whereHas('genres', fn($q) => $q->where('slug', 'like', "%{$genreSlug}%")->orWhere('name_en', 'like', "%{$vibe['genre']}%"))
+                ->whereHas('genres', fn ($q) => $q->where('slug', 'like', "%{$genreSlug}%")->orWhere('name_en', 'like', "%{$vibe['genre']}%"))
                 ->orderByDesc('rating')
                 ->limit(6)
                 ->get()
-                ->map(fn($m) => array_merge($m->toArray(), ['type' => 'movie']));
+                ->map(fn ($m) => array_merge($m->toArray(), ['type' => 'movie']));
 
             $series = Series::with(['genres'])
-                ->whereHas('genres', fn($q) => $q->where('slug', 'like', "%{$genreSlug}%")->orWhere('name_en', 'like', "%{$vibe['genre']}%"))
+                ->whereHas('genres', fn ($q) => $q->where('slug', 'like', "%{$genreSlug}%")->orWhere('name_en', 'like', "%{$vibe['genre']}%"))
                 ->orderByDesc('rating')
                 ->limit(4)
                 ->get()
-                ->map(fn($s) => array_merge($s->toArray(), ['type' => 'series']));
+                ->map(fn ($s) => array_merge($s->toArray(), ['type' => 'series']));
 
             $vibe['matches'] = $movies->concat($series)->shuffle()->values()->all();
             $vibe['match_count'] = count($vibe['matches']);
+
             return $vibe;
         }, $vibesList);
 

@@ -67,6 +67,17 @@ const openMovieDetails = (movie: MovieDetail) => {
     selectedDetailMovie.value = movie;
 };
 
+const playCollectionMovie = (movie: any, playFn: (item: any, playlist?: any[]) => void) => {
+    if (!movie) return;
+    const playlist = (props.collection.movies || []).map((m: any) => ({
+        ...m,
+        type: 'movie',
+        watchable_id: m.id,
+        watchable_type: 'media_item',
+    }));
+    playFn(movie, playlist);
+};
+
 const handleToggleFavorite = async (item: any) => {
     try {
         const res = await fetch(`/movies/${item.id}/favorite`, {
@@ -160,7 +171,7 @@ const handleToggleFavorite = async (item: any) => {
                     <!-- Hero Quick Action -->
                     <div v-if="collection.movies.length > 0" class="shrink-0">
                         <button
-                            @click="play(collection.movies[0])"
+                            @click="playCollectionMovie(collection.movies[0], play)"
                             class="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-sm shadow-xl shadow-cyan-500/20 active:scale-95 transition-all flex items-center gap-2.5 cursor-pointer"
                         >
                             <Play class="w-4 h-4 fill-current" />
@@ -257,7 +268,7 @@ const handleToggleFavorite = async (item: any) => {
                             </button>
 
                             <button
-                                @click="play(movie)"
+                                @click="playCollectionMovie(movie, play)"
                                 class="px-5 py-2.5 rounded-xl bg-cyan-500 text-slate-950 font-black text-xs hover:bg-cyan-400 flex items-center gap-2 shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
                             >
                                 <Play class="w-4 h-4 fill-current" />
@@ -274,7 +285,7 @@ const handleToggleFavorite = async (item: any) => {
             :show="!!selectedDetailMovie"
             :item="selectedDetailMovie"
             @close="selectedDetailMovie = null"
-            @play="play(selectedDetailMovie)"
+            @play="playCollectionMovie(selectedDetailMovie, play)"
             @toggle-favorite="handleToggleFavorite"
         />
     </AppLayout>

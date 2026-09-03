@@ -108,6 +108,7 @@ class TmdbProvider implements MetadataProviderInterface
     }
 
     protected string $baseUrl = 'https://api.themoviedb.org/3';
+
     protected ?string $apiKey;
 
     public function __construct(?string $apiKey = null)
@@ -128,13 +129,16 @@ class TmdbProvider implements MetadataProviderInterface
     public function isConfigured(): bool
     {
         $key = $this->getApiKey();
-        return !empty($key);
+
+        return ! empty($key);
     }
 
     public function searchMovie(string $title, ?int $year = null, string $lang = 'en'): array
     {
         $key = $this->getApiKey();
-        if (!$key) return [];
+        if (! $key) {
+            return [];
+        }
 
         try {
             $response = Http::timeout(8)->get("{$this->baseUrl}/search/movie", [
@@ -145,10 +149,10 @@ class TmdbProvider implements MetadataProviderInterface
             ]);
 
             if ($response->successful()) {
-                return array_map(fn($item) => $this->formatMovieSummary($item), $response->json('results', []));
+                return array_map(fn ($item) => $this->formatMovieSummary($item), $response->json('results', []));
             }
         } catch (\Exception $e) {
-            Log::warning("TMDb searchMovie failed: " . $e->getMessage());
+            Log::warning('TMDb searchMovie failed: '.$e->getMessage());
         }
 
         return [];
@@ -157,7 +161,9 @@ class TmdbProvider implements MetadataProviderInterface
     public function searchSeries(string $title, ?int $year = null, string $lang = 'en'): array
     {
         $key = $this->getApiKey();
-        if (!$key) return [];
+        if (! $key) {
+            return [];
+        }
 
         try {
             $response = Http::timeout(8)->get("{$this->baseUrl}/search/tv", [
@@ -168,10 +174,10 @@ class TmdbProvider implements MetadataProviderInterface
             ]);
 
             if ($response->successful()) {
-                return array_map(fn($item) => $this->formatSeriesSummary($item), $response->json('results', []));
+                return array_map(fn ($item) => $this->formatSeriesSummary($item), $response->json('results', []));
             }
         } catch (\Exception $e) {
-            Log::warning("TMDb searchSeries failed: " . $e->getMessage());
+            Log::warning('TMDb searchSeries failed: '.$e->getMessage());
         }
 
         return [];
@@ -180,7 +186,9 @@ class TmdbProvider implements MetadataProviderInterface
     public function getMovieDetails(string|int $id, string $lang = 'en'): ?array
     {
         $key = $this->getApiKey();
-        if (!$key) return null;
+        if (! $key) {
+            return null;
+        }
 
         try {
             $response = Http::timeout(10)->get("{$this->baseUrl}/movie/{$id}", [
@@ -195,17 +203,17 @@ class TmdbProvider implements MetadataProviderInterface
                 $titleAr = null;
                 $overviewAr = null;
                 $taglineAr = null;
-                if (!empty($data['translations']['translations'])) {
+                if (! empty($data['translations']['translations'])) {
                     foreach ($data['translations']['translations'] as $tr) {
                         if (($tr['iso_639_1'] ?? '') === 'ar') {
                             $trData = $tr['data'] ?? [];
-                            if (!empty($trData['title'])) {
+                            if (! empty($trData['title'])) {
                                 $titleAr = $trData['title'];
                             }
-                            if (!empty($trData['overview'])) {
+                            if (! empty($trData['overview'])) {
                                 $overviewAr = $trData['overview'];
                             }
-                            if (!empty($trData['tagline'])) {
+                            if (! empty($trData['tagline'])) {
                                 $taglineAr = $trData['tagline'];
                             }
                         }
@@ -214,18 +222,18 @@ class TmdbProvider implements MetadataProviderInterface
 
                 // Available alternative artwork for Cover Studio
                 $availablePosters = [];
-                if (!empty($data['images']['posters'])) {
+                if (! empty($data['images']['posters'])) {
                     foreach (array_slice($data['images']['posters'], 0, 12) as $img) {
-                        if (!empty($img['file_path'])) {
+                        if (! empty($img['file_path'])) {
                             $availablePosters[] = "https://image.tmdb.org/t/p/w780{$img['file_path']}";
                         }
                     }
                 }
 
                 $availableBackdrops = [];
-                if (!empty($data['images']['backdrops'])) {
+                if (! empty($data['images']['backdrops'])) {
                     foreach (array_slice($data['images']['backdrops'], 0, 10) as $img) {
-                        if (!empty($img['file_path'])) {
+                        if (! empty($img['file_path'])) {
                             $availableBackdrops[] = "https://image.tmdb.org/t/p/original{$img['file_path']}";
                         }
                     }
@@ -234,11 +242,11 @@ class TmdbProvider implements MetadataProviderInterface
                 $collectionName = null;
                 $collectionId = null;
                 $collectionPoster = null;
-                if (!empty($data['belongs_to_collection'])) {
+                if (! empty($data['belongs_to_collection'])) {
                     $collectionId = $data['belongs_to_collection']['id'] ?? null;
                     $collectionName = $data['belongs_to_collection']['name'] ?? null;
-                    if (!empty($data['belongs_to_collection']['poster_path'])) {
-                        $collectionPoster = "https://image.tmdb.org/t/p/w780" . $data['belongs_to_collection']['poster_path'];
+                    if (! empty($data['belongs_to_collection']['poster_path'])) {
+                        $collectionPoster = 'https://image.tmdb.org/t/p/w780'.$data['belongs_to_collection']['poster_path'];
                     }
                 }
                 if (empty($collectionName)) {
@@ -246,9 +254,9 @@ class TmdbProvider implements MetadataProviderInterface
                 }
 
                 $origLang = $data['original_language'] ?? null;
-                $originCountry = !empty($data['production_countries'][0]['iso_3166_1']) 
-                    ? $data['production_countries'][0]['iso_3166_1'] 
-                    : (!empty($data['origin_country'][0]) ? $data['origin_country'][0] : null);
+                $originCountry = ! empty($data['production_countries'][0]['iso_3166_1'])
+                    ? $data['production_countries'][0]['iso_3166_1']
+                    : (! empty($data['origin_country'][0]) ? $data['origin_country'][0] : null);
 
                 return [
                     'provider' => 'TMDb',
@@ -277,20 +285,20 @@ class TmdbProvider implements MetadataProviderInterface
                     'available_backdrops' => $availableBackdrops,
                     'genres' => array_column($data['genres'] ?? [], 'name'),
                     'trailer_url' => $this->extractTrailer($data['videos']['results'] ?? []),
-                    'cast' => array_slice(array_map(fn($c) => [
+                    'cast' => array_slice(array_map(fn ($c) => [
                         'name' => $c['name'],
                         'character' => $c['character'] ?? '',
                         'profile_path' => isset($c['profile_path']) ? "https://image.tmdb.org/t/p/w500{$c['profile_path']}" : null,
                         'order' => $c['order'] ?? 0,
                     ], $data['credits']['cast'] ?? []), 0, 12),
-                    'directors' => array_map(fn($d) => [
+                    'directors' => array_map(fn ($d) => [
                         'name' => $d['name'],
                         'profile_path' => isset($d['profile_path']) ? "https://image.tmdb.org/t/p/w500{$d['profile_path']}" : null,
-                    ], array_filter($data['credits']['crew'] ?? [], fn($c) => ($c['job'] ?? '') === 'Director')),
+                    ], array_filter($data['credits']['crew'] ?? [], fn ($c) => ($c['job'] ?? '') === 'Director')),
                 ];
             }
         } catch (\Exception $e) {
-            Log::warning("TMDb getMovieDetails failed: " . $e->getMessage());
+            Log::warning('TMDb getMovieDetails failed: '.$e->getMessage());
         }
 
         return null;
@@ -299,7 +307,9 @@ class TmdbProvider implements MetadataProviderInterface
     public function getSeriesDetails(string|int $id, string $lang = 'en'): ?array
     {
         $key = $this->getApiKey();
-        if (!$key) return null;
+        if (! $key) {
+            return null;
+        }
 
         try {
             $response = Http::timeout(10)->get("{$this->baseUrl}/tv/{$id}", [
@@ -313,14 +323,14 @@ class TmdbProvider implements MetadataProviderInterface
                 // Extract Arabic Title & Overview from translations
                 $titleAr = null;
                 $overviewAr = null;
-                if (!empty($data['translations']['translations'])) {
+                if (! empty($data['translations']['translations'])) {
                     foreach ($data['translations']['translations'] as $tr) {
                         if (($tr['iso_639_1'] ?? '') === 'ar') {
                             $trData = $tr['data'] ?? [];
-                            if (!empty($trData['name'])) {
+                            if (! empty($trData['name'])) {
                                 $titleAr = $trData['name'];
                             }
-                            if (!empty($trData['overview'])) {
+                            if (! empty($trData['overview'])) {
                                 $overviewAr = $trData['overview'];
                             }
                         }
@@ -328,18 +338,18 @@ class TmdbProvider implements MetadataProviderInterface
                 }
 
                 $availablePosters = [];
-                if (!empty($data['images']['posters'])) {
+                if (! empty($data['images']['posters'])) {
                     foreach (array_slice($data['images']['posters'], 0, 12) as $img) {
-                        if (!empty($img['file_path'])) {
+                        if (! empty($img['file_path'])) {
                             $availablePosters[] = "https://image.tmdb.org/t/p/w780{$img['file_path']}";
                         }
                     }
                 }
 
                 $availableBackdrops = [];
-                if (!empty($data['images']['backdrops'])) {
+                if (! empty($data['images']['backdrops'])) {
                     foreach (array_slice($data['images']['backdrops'], 0, 10) as $img) {
-                        if (!empty($img['file_path'])) {
+                        if (! empty($img['file_path'])) {
                             $availableBackdrops[] = "https://image.tmdb.org/t/p/original{$img['file_path']}";
                         }
                     }
@@ -365,7 +375,7 @@ class TmdbProvider implements MetadataProviderInterface
                     'available_backdrops' => $availableBackdrops,
                     'genres' => array_column($data['genres'] ?? [], 'name'),
                     'trailer_url' => $this->extractTrailer($data['videos']['results'] ?? []),
-                    'seasons' => array_map(fn($s) => [
+                    'seasons' => array_map(fn ($s) => [
                         'season_number' => $s['season_number'],
                         'title' => $s['name'],
                         'overview' => $s['overview'] ?? '',
@@ -376,7 +386,7 @@ class TmdbProvider implements MetadataProviderInterface
                 ];
             }
         } catch (\Exception $e) {
-            Log::warning("TMDb getSeriesDetails failed: " . $e->getMessage());
+            Log::warning('TMDb getSeriesDetails failed: '.$e->getMessage());
         }
 
         return null;
@@ -385,7 +395,9 @@ class TmdbProvider implements MetadataProviderInterface
     public function getSeasonEpisodes(string|int $seriesId, int $seasonNumber, string $lang = 'en'): array
     {
         $key = $this->getApiKey();
-        if (!$key) return [];
+        if (! $key) {
+            return [];
+        }
 
         try {
             $response = Http::timeout(8)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
@@ -393,7 +405,7 @@ class TmdbProvider implements MetadataProviderInterface
             ]);
 
             if ($response->successful()) {
-                return array_map(fn($ep) => [
+                return array_map(fn ($ep) => [
                     'episode_number' => $ep['episode_number'],
                     'title' => $ep['name'] ?? "Episode {$ep['episode_number']}",
                     'overview' => $ep['overview'] ?? '',
@@ -404,7 +416,7 @@ class TmdbProvider implements MetadataProviderInterface
                 ], $response->json('episodes', []));
             }
         } catch (\Exception $e) {
-            Log::warning("TMDb getSeasonEpisodes failed: " . $e->getMessage());
+            Log::warning('TMDb getSeasonEpisodes failed: '.$e->getMessage());
         }
 
         return [];
@@ -449,6 +461,7 @@ class TmdbProvider implements MetadataProviderInterface
                 return "https://www.youtube.com/watch?v={$v['key']}";
             }
         }
+
         return null;
     }
 }

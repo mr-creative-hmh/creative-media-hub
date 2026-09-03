@@ -22,7 +22,7 @@ class SubtitleManagerServiceTest extends TestCase
             'file_path' => 'C:/Media/Movies/Dune 2/Dune2.mkv',
         ]);
 
-        $manager = new SubtitleManagerService(new OpenSubtitlesService(), new SubDlService());
+        $manager = new SubtitleManagerService(new OpenSubtitlesService, new SubDlService);
         $missing = $manager->findMissingSubtitles();
 
         $this->assertNotEmpty($missing);
@@ -38,7 +38,7 @@ class SubtitleManagerServiceTest extends TestCase
             'file_path' => storage_path('framework/testing/Inception.mkv'),
         ]);
 
-        $manager = new SubtitleManagerService(new OpenSubtitlesService(), new SubDlService());
+        $manager = new SubtitleManagerService(new OpenSubtitlesService, new SubDlService);
         $sub = $manager->downloadAndAttachMockSubtitle($movie, 'ar');
 
         $this->assertInstanceOf(Subtitle::class, $sub);

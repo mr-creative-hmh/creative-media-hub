@@ -26,7 +26,10 @@ onMounted(() => {
     startBackgroundWorker();
 });
 
-const handlePlay = (item: any) => {
+const handlePlay = (item: any, playlist?: any[]) => {
+    if (playlist && Array.isArray(playlist)) {
+        item.playlist = playlist;
+    }
     activePlayerItem.value = item;
 };
 
@@ -73,6 +76,7 @@ const closePlayer = () => {
         <CinemaPlayer
             v-if="activePlayerItem"
             :item="activePlayerItem"
+            :playlist="activePlayerItem.playlist || []"
             :initial-progress="activePlayerItem.progress_seconds || activePlayerItem.initial_progress || 0"
             @close="closePlayer"
         />

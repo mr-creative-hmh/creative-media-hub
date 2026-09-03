@@ -24,7 +24,12 @@ import {
     Clock,
     Activity,
     Layers,
-    Type
+    Type,
+    SkipBack,
+    SkipForward,
+    Download,
+    Search,
+    Loader2
 } from 'lucide-vue-next';
 
 interface SubtitleItem {
@@ -45,6 +50,7 @@ interface CueItem {
 const props = defineProps<{
     item: any;
     initialProgress?: number;
+    playlist?: any[];
 }>();
 
 const emit = defineEmits<{
@@ -53,6 +59,9 @@ const emit = defineEmits<{
 }>();
 
 const { isRTL } = useI18n();
+
+// Active Item for smooth in-player playlist navigation (Series episodes, Collections movies)
+const activeItem = ref(props.item);
 
 // Player DOM & State
 const videoRef = ref<HTMLVideoElement | null>(null);
@@ -81,7 +90,31 @@ const hasAppliedInitialSeek = ref(false);
 const showEqualizer = ref(false);
 const showSubtitlesMenu = ref(false);
 const showPlaybackSpeedMenu = ref(false);
+const showSubtitleSearchModal = ref(false);
 const playbackRate = ref(1.0);
+
+// Playlist Management (Series & Collections)
+const currentPlaylist = computed<any[]>(() => {
+    if (props.playlist && Array.isArray(props.playlist) && props.playlist.length > 0) {
+        return props.playlist;
+    }
+    if (activeItem.value?.playlist && Array.isArray(activeItem.value.playlist)) {
+        return activeItem.value.playlist;
+    }
+    return [];
+});
+
+const currentIndex = computed(() => {
+    if (!currentPlaylist.value || currentPlaylist.value.length === 0) return -1;
+    return currentPlaylist.value.findIndex((p: any) => {
+        const pType = p.type || (p.season_id || p.episode_number ? 'episode' : 'movie');
+        const aType = activeItem.value?.type || (activeItem.value?.season_id || activeItem.value?.episode_number ? 'episode' : 'movie');
+        return String(p.id) === String(activeItem.value?.id) && pType === aType;
+    });
+});
+
+const hasPrevious = computed(() => currentIndex.value > 0);
+const hasNext = computed(() => currentIndex.value >= 0 && currentIndex.value < currentPlaylist.value.length - 1);
 
 // Subtitles State & Cue Engine
 const availableSubtitles = ref<SubtitleItem[]>([]);
@@ -92,10 +125,19 @@ const parsedCues = ref<CueItem[]>([]);
 const activeCueText = ref<string>('');
 const isFetchingSubtitle = ref(false);
 
+// In-Player Subtitle Search State
+const subtitleSearchQuery = ref('');
+const subtitleSearchLang = ref('ar');
+const isSearchingSubtitles = ref(false);
+const isDownloadingSubtitle = ref(false);
+const subtitleSearchResults = ref<any[]>([]);
+const subtitleSearchError = ref<string | null>(null);
+
 // Audio Enhancer & Equalizer State (Web Audio API)
 const vocalBoost = ref(true);
 const bassBoost = ref(false);
 const nightMode = ref(false);
+const audioDelayMs = ref(0); // Audio-to-video sync delay in milliseconds (0 to 1500ms)
 
 const toastNotice = ref<string | null>(null);
 let toastTimeout: any = null;
@@ -114,6 +156,7 @@ let voiceFilterNode: BiquadFilterNode | null = null;
 let bassFilterNode: BiquadFilterNode | null = null;
 let trebleFilterNode: BiquadFilterNode | null = null;
 let compressorNode: DynamicsCompressorNode | null = null;
+let delayNode: DelayNode | null = null;
 let gainNode: GainNode | null = null;
 let isAudioPipelineInitialized = false;
 
@@ -122,14 +165,21 @@ let progressSaveInterval: any = null;
 let bufferTrackInterval: any = null;
 let serverCachePollInterval: any = null;
 
-const isEpisode = computed(() => {
-    return props.item?.type === 'episode' 
-        || props.item?.watchable_type === 'episode' 
-        || !!props.item?.episode_number 
-        || !!props.item?.season_id;
+// Watch audio delay and update DelayNode in real-time
+watch(audioDelayMs, (newVal) => {
+    if (delayNode) {
+        delayNode.delayTime.value = Math.max(0, newVal / 1000);
+    }
 });
 
-// Auto-detect if media requires Ultra-Fast Server Remuxing (MKV containers, DTS, Dolby Digital Plus, AC3, EAC3, HEVC, AVI, XviD)
+const isEpisode = computed(() => {
+    return activeItem.value?.type === 'episode' 
+        || activeItem.value?.watchable_type === 'episode' 
+        || !!activeItem.value?.episode_number 
+        || !!activeItem.value?.season_id;
+});
+
+// Auto-detect if media requires Ultra-Fast Server Remuxing
 const checkNeedsRemux = (item: any) => {
     if (!item) return false;
     const path = (item.file_path || '').toLowerCase();
@@ -146,18 +196,75 @@ const remuxStartOffset = ref(isRemuxStream.value && initialSec > 0 ? Math.floor(
 
 // Stable Stream URL: Direct Stream vs Server-Side Remux
 const streamUrl = computed(() => {
+    if (!activeItem.value) return '';
     if (isRemuxStream.value) {
         const startParam = remuxStartOffset.value > 0 ? `?start=${remuxStartOffset.value}` : '';
         if (isEpisode.value) {
-            return `/stream/remux/episode/${props.item.id}${startParam}`;
+            return `/stream/remux/episode/${activeItem.value.id}${startParam}`;
         }
-        return `/stream/remux/movie/${props.item.id}${startParam}`;
+        return `/stream/remux/movie/${activeItem.value.id}${startParam}`;
     }
 
     if (isEpisode.value) {
-        return `/stream/episode/${props.item.id}`;
+        return `/stream/episode/${activeItem.value.id}`;
     }
-    return `/stream/movie/${props.item.id}`;
+    return `/stream/movie/${activeItem.value.id}`;
+});
+
+const changeActiveItem = (newItem: any) => {
+    savePlaybackProgress();
+    stopServerStreamingCache();
+    activeItem.value = newItem;
+    hasAppliedInitialSeek.value = false;
+    currentTime.value = 0;
+    const dur = Number(newItem?.duration_seconds) || (Number(newItem?.runtime_minutes) ? Number(newItem.runtime_minutes) * 60 : 0);
+    duration.value = dur > 0 ? dur : 0;
+    isDurationLocked.value = dur > 0;
+    isRemuxStream.value = checkNeedsRemux(newItem);
+    remuxStartOffset.value = 0;
+    selectedSubtitleId.value = 'off';
+    activeCueText.value = '';
+    parsedCues.value = [];
+    availableSubtitles.value = [];
+
+    setTimeout(() => {
+        fetchSubtitles();
+        fetchMediaDuration();
+        if (videoRef.value) {
+            videoRef.value.load();
+            videoRef.value.play().catch(() => {});
+        }
+    }, 50);
+
+    showToast(isRTL.value ? `تشغيل: ${playerHeaderTitle.value}` : `Playing: ${playerHeaderTitle.value}`);
+};
+
+const playNext = () => {
+    if (!hasNext.value) return;
+    const nextItem = currentPlaylist.value[currentIndex.value + 1];
+    if (nextItem) changeActiveItem(nextItem);
+};
+
+const playPrevious = () => {
+    if (!hasPrevious.value) return;
+    const prevItem = currentPlaylist.value[currentIndex.value - 1];
+    if (prevItem) changeActiveItem(prevItem);
+};
+
+const onVideoEnded = () => {
+    savePlaybackProgress();
+    if (hasNext.value) {
+        showToast(isRTL.value ? 'جاري الانتقال للعنصر التالي تلقائياً...' : 'Autoplaying next in 2s...');
+        setTimeout(() => {
+            playNext();
+        }, 1800);
+    }
+};
+
+watch(() => props.item, (newVal) => {
+    if (newVal && newVal.id !== activeItem.value?.id) {
+        changeActiveItem(newVal);
+    }
 });
 
 const toggleRemuxStream = () => {
@@ -209,19 +316,19 @@ const progressPercent = computed(() => {
 
 // Media Meta Display (Resolution, Codec, Audio)
 const displayResolution = computed(() => {
-    return props.item?.resolution || props.item?.video_resolution || '1080p FHD';
+    return activeItem.value?.resolution || activeItem.value?.video_resolution || '1080p FHD';
 });
 
 const displayCodec = computed(() => {
-    return props.item?.video_codec || props.item?.codec || 'H.264 / HEVC';
+    return activeItem.value?.video_codec || activeItem.value?.codec || 'H.264 / HEVC';
 });
 
 const displayAudio = computed(() => {
-    return props.item?.audio_codec || 'AAC 5.1';
+    return activeItem.value?.audio_codec || 'AAC 5.1';
 });
 
 const displayYear = computed(() => {
-    return props.item?.release_year || props.item?.year || (props.item?.series?.release_year ?? '');
+    return activeItem.value?.release_year || activeItem.value?.year || (activeItem.value?.series?.release_year ?? '');
 });
 
 // Extract Series Name, Season Number, and Episode Number robustly
@@ -229,14 +336,14 @@ const playerHeaderTitle = computed(() => {
     if (isEpisode.value) {
         let sName = '';
         if (isRTL.value) {
-            sName = props.item?.series?.title_ar || props.item?.series_title_ar || props.item?.series_name_ar || props.item?.series?.title || props.item?.series_title || '';
+            sName = activeItem.value?.series?.title_ar || activeItem.value?.series_title_ar || activeItem.value?.series_name_ar || activeItem.value?.series?.title || activeItem.value?.series_title || '';
         } else {
-            sName = props.item?.series?.title || props.item?.series_title || props.item?.series_name || '';
+            sName = activeItem.value?.series?.title || activeItem.value?.series_title || activeItem.value?.series_name || '';
         }
 
         // If sName is still empty, parse from item.title or fallback
-        if (!sName && props.item?.title) {
-            const parts = props.item.title.split(/\s*-\s*(?:Season|الموسم|S\d+)/i);
+        if (!sName && activeItem.value?.title) {
+            const parts = activeItem.value.title.split(/\s*-\s*(?:Season|الموسم|S\d+)/i);
             if (parts[0] && !parts[0].toLowerCase().startsWith('episode') && !parts[0].toLowerCase().startsWith('الحلقة')) {
                 sName = parts[0].trim();
             }
@@ -253,17 +360,17 @@ const playerHeaderTitle = computed(() => {
         }
 
         // Determine Season Number
-        let s = props.item?.season_number;
-        if (!s && props.item?.season?.season_number) s = props.item.season.season_number;
+        let s = activeItem.value?.season_number;
+        if (!s && activeItem.value?.season?.season_number) s = activeItem.value.season.season_number;
         if (!s) {
-            const m = (props.item?.file_path || props.item?.title || '').match(/S(\d+)E\d+/i);
+            const m = (activeItem.value?.file_path || activeItem.value?.title || '').match(/S(\d+)E\d+/i);
             s = m ? parseInt(m[1], 10) : 1;
         }
 
         // Determine Episode Number
-        let e = props.item?.episode_number;
+        let e = activeItem.value?.episode_number;
         if (!e) {
-            const m = (props.item?.file_path || props.item?.title || '').match(/S\d+E(\d+)/i);
+            const m = (activeItem.value?.file_path || activeItem.value?.title || '').match(/S\d+E(\d+)/i);
             e = m ? parseInt(m[1], 10) : 1;
         }
 
@@ -273,10 +380,10 @@ const playerHeaderTitle = computed(() => {
         return `${sName} - ${seasonLabel} - ${episodeLabel}`;
     }
 
-    if (isRTL.value && props.item?.title_ar) {
-        return props.item.title_ar;
+    if (isRTL.value && activeItem.value?.title_ar) {
+        return activeItem.value.title_ar;
     }
-    return props.item?.title || 'Media';
+    return activeItem.value?.title || 'Media';
 });
 
 // =========================================================================
@@ -408,7 +515,7 @@ const updateBufferProgress = () => {
 const checkServerCacheStatus = async () => {
     try {
         const type = isEpisode.value ? 'episode' : 'movie';
-        const res = await fetch(`/api/stream/cache-status?type=${type}&id=${props.item.id}`);
+        const res = await fetch(`/api/stream/cache-status?type=${type}&id=${activeItem.value.id}`);
         if (res.ok) {
             const data = await res.json();
             if (data.is_cached) {
@@ -428,7 +535,7 @@ const checkServerCacheStatus = async () => {
 const fetchMediaDuration = async () => {
     try {
         const type = isEpisode.value ? 'episode' : 'movie';
-        const res = await fetch(`/api/media/duration?type=${type}&id=${props.item.id}`);
+        const res = await fetch(`/api/media/duration?type=${type}&id=${activeItem.value.id}`);
         const data = await res.json();
         if (data.duration_seconds && data.duration_seconds > 0) {
             duration.value = data.duration_seconds;
@@ -440,19 +547,108 @@ const fetchMediaDuration = async () => {
 const fetchSubtitles = async () => {
     try {
         const type = isEpisode.value ? 'episode' : 'movie';
-        const res = await fetch(`/api/subtitles/for-media?type=${type}&id=${props.item.id}`);
+        const res = await fetch(`/api/subtitles/for-media?type=${type}&id=${activeItem.value.id}`);
         const data = await res.json();
         if (data.subtitles) {
             availableSubtitles.value = data.subtitles;
             // Subtitles default to OFF as requested by user
             selectedSubtitleId.value = 'off';
-            currentCues.value = [];
+            parsedCues.value = [];
             activeCueText.value = '';
         }
     } catch (e) {}
 };
 
-// Web Audio API Pipeline (Voice Enhancer / Equalizer)
+// In-Player Subtitle Search & Download Actions
+const openSubtitleSearchModal = () => {
+    showSubtitlesMenu.value = false;
+    showSubtitleSearchModal.value = true;
+    let query = activeItem.value?.title || '';
+    if (isEpisode.value) {
+        let s = activeItem.value?.season_number;
+        let e = activeItem.value?.episode_number;
+        let sName = activeItem.value?.series?.title || activeItem.value?.series_title || '';
+        if (sName) {
+            query = sName;
+        }
+        if (s && e) {
+            query += ` S${String(s).padStart(2, '0')}E${String(e).padStart(2, '0')}`;
+        }
+    }
+    subtitleSearchQuery.value = query;
+    performSubtitleSearch();
+};
+
+const performSubtitleSearch = async () => {
+    if (!subtitleSearchQuery.value.trim()) return;
+    isSearchingSubtitles.value = true;
+    subtitleSearchError.value = null;
+    subtitleSearchResults.value = [];
+    try {
+        const res = await fetch('/api/subtitles/verify-engine', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+            body: JSON.stringify({
+                query: subtitleSearchQuery.value.trim(),
+                language: subtitleSearchLang.value,
+            }),
+        });
+        if (res.ok) {
+            const data = await res.json();
+            subtitleSearchResults.value = data.results || [];
+        } else {
+            subtitleSearchError.value = isRTL.value ? 'فشل البحث عن الترجمة' : 'Failed to search subtitles';
+        }
+    } catch (e: any) {
+        subtitleSearchError.value = e.message || 'Error';
+    } finally {
+        isSearchingSubtitles.value = false;
+    }
+};
+
+const downloadAndApplySubtitle = async (result: any) => {
+    isDownloadingSubtitle.value = true;
+    try {
+        const res = await fetch('/api/subtitles/download', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+            body: JSON.stringify({
+                media_id: activeItem.value.id,
+                media_type: isEpisode.value ? 'episode' : 'movie',
+                language: result.language || subtitleSearchLang.value,
+            }),
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (data.subtitle) {
+                const newSub = data.subtitle;
+                const existingIdx = availableSubtitles.value.findIndex(s => String(s.id) === String(newSub.id));
+                if (existingIdx >= 0) {
+                    availableSubtitles.value[existingIdx] = newSub;
+                } else {
+                    availableSubtitles.value.push(newSub);
+                }
+                showSubtitleSearchModal.value = false;
+                await selectSubtitle(newSub.id);
+                showToast(isRTL.value ? 'تم تنزيل وتفعيل الترجمة بنجاح!' : 'Subtitle downloaded & activated!');
+            }
+        } else {
+            showToast(isRTL.value ? 'تعذر تنزيل الترجمة' : 'Failed to download subtitle');
+        }
+    } catch (e) {
+        showToast(isRTL.value ? 'حدث خطأ أثناء التنزيل' : 'Error downloading subtitle');
+    } finally {
+        isDownloadingSubtitle.value = false;
+    }
+};
+
+// Web Audio API Pipeline (Voice Enhancer / Equalizer / Audio Delay Sync)
 const initAudioPipeline = () => {
     if (isAudioPipelineInitialized || !videoRef.value) return;
     try {
@@ -485,6 +681,10 @@ const initAudioPipeline = () => {
         compressorNode.attack.value = 0.003;
         compressorNode.release.value = 0.25;
 
+        // Native Delay Node for Audio/Video Sync Compensation
+        delayNode = audioCtx.createDelay(5.0);
+        delayNode.delayTime.value = Math.max(0, audioDelayMs.value / 1000);
+
         gainNode = audioCtx.createGain();
         gainNode.gain.value = volume.value;
 
@@ -492,7 +692,8 @@ const initAudioPipeline = () => {
         voiceFilterNode.connect(bassFilterNode);
         bassFilterNode.connect(trebleFilterNode);
         trebleFilterNode.connect(compressorNode);
-        compressorNode.connect(gainNode);
+        compressorNode.connect(delayNode);
+        delayNode.connect(gainNode);
         gainNode.connect(audioCtx.destination);
 
         isAudioPipelineInitialized = true;
@@ -734,15 +935,15 @@ const formatTime = (seconds: number) => {
 };
 
 const savePlaybackProgress = async () => {
-    if (!currentTime.value || currentTime.value <= 3) return;
+    if (!currentTime.value || currentTime.value <= 3 || !activeItem.value) return;
     const dur = Math.floor(duration.value);
     const current = Math.floor(currentTime.value);
 
     emit('update:progress', current);
     try {
-        localStorage.setItem(`progress_${isEpisode.value ? 'episode' : 'movie'}_${props.item.id}`, String(current));
+        localStorage.setItem(`progress_${isEpisode.value ? 'episode' : 'movie'}_${activeItem.value.id}`, String(current));
         if (dur > 0) {
-            localStorage.setItem(`duration_${isEpisode.value ? 'episode' : 'movie'}_${props.item.id}`, String(dur));
+            localStorage.setItem(`duration_${isEpisode.value ? 'episode' : 'movie'}_${activeItem.value.id}`, String(dur));
         }
 
         await fetch('/api/watch-history/progress', {
@@ -753,8 +954,8 @@ const savePlaybackProgress = async () => {
             },
             body: JSON.stringify({
                 watchable_type: isEpisode.value ? 'episode' : 'media_item',
-                watchable_id: props.item.id,
-                media_item_id: isEpisode.value ? (props.item.series_id || props.item.series?.id) : props.item.id,
+                watchable_id: activeItem.value.id,
+                media_item_id: isEpisode.value ? (activeItem.value.series_id || activeItem.value.series?.id) : activeItem.value.id,
                 progress_seconds: current,
                 duration_seconds: dur,
                 completed: dur > 0 && current >= dur - 30
@@ -767,7 +968,7 @@ const stopServerStreamingCache = () => {
     try {
         const payload = JSON.stringify({
             type: isEpisode.value ? 'episode' : 'movie',
-            id: props.item?.id
+            id: activeItem.value?.id
         });
         if (navigator.sendBeacon) {
             navigator.sendBeacon('/api/stream/stop', payload);
@@ -785,6 +986,17 @@ const stopServerStreamingCache = () => {
 // Keyboard Shortcuts
 const onKeyDown = (e: KeyboardEvent) => {
     if (['input', 'textarea'].includes((e.target as HTMLElement).tagName.toLowerCase())) return;
+
+    if (e.shiftKey && (e.key === 'N' || e.key === 'n')) {
+        e.preventDefault();
+        playNext();
+        return;
+    }
+    if (e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+        e.preventDefault();
+        playPrevious();
+        return;
+    }
 
     switch (e.key) {
         case ' ':
@@ -989,6 +1201,7 @@ onBeforeUnmount(() => {
             @pause="onVideoPause"
             @waiting="onVideoWaiting"
             @playing="onVideoPlaying"
+            @ended="onVideoEnded"
             @error="handleVideoError"
             @click="togglePlay"
             crossorigin="anonymous"
@@ -1092,8 +1305,19 @@ onBeforeUnmount(() => {
 
                 <!-- Main Controls Row -->
                 <div class="flex items-center justify-between pt-1">
-                    <!-- Left: Play/Pause, Seek, Volume -->
-                    <div class="flex items-center gap-2 sm:gap-4">
+                    <!-- Left: Play/Pause, Next/Previous, Seek, Volume -->
+                    <div class="flex items-center gap-1.5 sm:gap-2.5">
+                        <!-- Previous Episode / Item Button -->
+                        <button
+                            v-if="currentPlaylist.length > 0"
+                            @click="playPrevious"
+                            :disabled="!hasPrevious"
+                            class="w-9 h-9 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-90 disabled:opacity-30 disabled:cursor-not-allowed"
+                            :title="isRTL ? 'العنصر السابق (Shift+P)' : 'Previous (Shift+P)'"
+                        >
+                            <SkipBack class="w-4 h-4 fill-current" />
+                        </button>
+
                         <button
                             @click="togglePlay"
                             class="w-10 h-10 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-lg shadow-cyan-500/20"
@@ -1101,6 +1325,17 @@ onBeforeUnmount(() => {
                         >
                             <Play v-if="!isPlaying" class="w-5 h-5 fill-current ml-0.5" />
                             <Pause v-else class="w-5 h-5 fill-current" />
+                        </button>
+
+                        <!-- Next Episode / Item Button -->
+                        <button
+                            v-if="currentPlaylist.length > 0"
+                            @click="playNext"
+                            :disabled="!hasNext"
+                            class="w-9 h-9 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-90 disabled:opacity-30 disabled:cursor-not-allowed"
+                            :title="isRTL ? 'العنصر التالي (Shift+N)' : 'Next (Shift+N)'"
+                        >
+                            <SkipForward class="w-4 h-4 fill-current" />
                         </button>
 
                         <button
@@ -1236,6 +1471,17 @@ onBeforeUnmount(() => {
                                         </button>
                                     </div>
 
+                                    <!-- Online Subtitle Search & Download Trigger -->
+                                    <div class="border-t border-white/10 pt-2">
+                                        <button
+                                            @click="openSubtitleSearchModal"
+                                            class="w-full px-3 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+                                        >
+                                            <Search class="w-3.5 h-3.5" />
+                                            <span>{{ isRTL ? 'بحث وتحميل ترجمة أونلاين...' : 'Search & Download Subtitles...' }}</span>
+                                        </button>
+                                    </div>
+
                                     <!-- Subtitle Size & Sync Options -->
                                     <div v-if="selectedSubtitleId !== 'off'" class="border-t border-white/10 pt-2.5 flex flex-col gap-2">
                                         <!-- Font Size -->
@@ -1287,7 +1533,7 @@ onBeforeUnmount(() => {
                             <button
                                 @click="showEqualizer = !showEqualizer; showSubtitlesMenu = false; showPlaybackSpeedMenu = false;"
                                 class="w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer"
-                                :class="vocalBoost || bassBoost || nightMode ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
+                                :class="vocalBoost || bassBoost || nightMode || audioDelayMs !== 0 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
                                 title="Cinema Audio Enhancer"
                             >
                                 <Sliders class="w-4 h-4" />
@@ -1351,6 +1597,43 @@ onBeforeUnmount(() => {
                                                 <Check v-if="nightMode" class="w-3 h-3" />
                                             </div>
                                         </button>
+
+                                        <!-- Audio / Video Sync Slider (Delay compensation when sound is ahead) -->
+                                        <div class="border-t border-white/10 pt-2.5 flex flex-col gap-2">
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                                                    <Clock class="w-3.5 h-3.5 text-cyan-400" />
+                                                    <span>{{ isRTL ? 'مزامنة وتأخير الصوت' : 'Audio Sync / Delay' }}</span>
+                                                </span>
+                                                <span class="text-xs font-mono font-bold text-cyan-300">
+                                                    {{ audioDelayMs > 0 ? `+${audioDelayMs}` : audioDelayMs }} ms
+                                                </span>
+                                            </div>
+                                            <div class="text-[10px] text-slate-400 leading-tight">
+                                                {{ isRTL ? 'استخدم التأخير (+) عندما يسبق الصوت حركة الفيديو' : 'Add positive delay (+) when audio leads video' }}
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <input
+                                                    type="range"
+                                                    min="-500"
+                                                    max="1500"
+                                                    step="25"
+                                                    v-model.number="audioDelayMs"
+                                                    class="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                                                />
+                                            </div>
+                                            <div class="flex items-center justify-between gap-1 pt-0.5">
+                                                <button
+                                                    v-for="preset in [0, 100, 250, 500]"
+                                                    :key="preset"
+                                                    @click="audioDelayMs = preset"
+                                                    class="px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer"
+                                                    :class="audioDelayMs === preset ? 'bg-cyan-500 text-slate-950' : 'bg-white/5 hover:bg-white/10 text-slate-400'"
+                                                >
+                                                    {{ preset === 0 ? '0ms' : `+${preset}ms` }}
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </transition>
@@ -1365,6 +1648,117 @@ onBeforeUnmount(() => {
                             <Minimize2 v-if="isFullscreen" class="w-4 h-4" />
                             <Maximize2 v-else class="w-4 h-4" />
                         </button>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- In-Player Subtitle Search & Download Modal -->
+        <transition name="fade">
+            <div
+                v-if="showSubtitleSearchModal"
+                class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+                @click.self="showSubtitleSearchModal = false"
+            >
+                <div class="relative w-full max-w-lg bg-slate-950 border border-purple-500/30 rounded-3xl p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+                    <div class="flex items-center justify-between border-b border-white/10 pb-3">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                                <Search class="w-4 h-4" />
+                            </div>
+                            <div>
+                                <h3 class="font-black text-sm text-white">
+                                    {{ isRTL ? 'البحث عن ملفات الترجمة وتحميلها فوراً' : 'Search & Download Subtitles' }}
+                                </h3>
+                                <p class="text-[11px] text-slate-400">
+                                    {{ isRTL ? 'محرك SubDL و OpenSubtitles المباشر' : 'SubDL & OpenSubtitles live engine' }}
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            @click="showSubtitleSearchModal = false"
+                            class="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer"
+                        >
+                            <X class="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    <!-- Search Input & Lang Selector -->
+                    <div class="space-y-2.5">
+                        <div class="flex items-center gap-2">
+                            <input
+                                v-model="subtitleSearchQuery"
+                                @keyup.enter="performSubtitleSearch"
+                                type="text"
+                                :placeholder="isRTL ? 'اسم الفيلم أو المسلسل...' : 'Movie or series title...'"
+                                class="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/15 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
+                            />
+                            <button
+                                @click="performSubtitleSearch"
+                                :disabled="isSearchingSubtitles"
+                                class="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                            >
+                                <Loader2 v-if="isSearchingSubtitles" class="w-3.5 h-3.5 animate-spin" />
+                                <Search v-else class="w-3.5 h-3.5" />
+                                <span>{{ isRTL ? 'بحث' : 'Search' }}</span>
+                            </button>
+                        </div>
+
+                        <!-- Language Choice Pills -->
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-slate-400">{{ isRTL ? 'اللغة:' : 'Language:' }}</span>
+                            <button
+                                v-for="l in [{ id: 'ar', label: 'العربية (AR)' }, { id: 'en', label: 'English (EN)' }]"
+                                :key="l.id"
+                                @click="subtitleSearchLang = l.id; performSubtitleSearch()"
+                                class="px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                                :class="subtitleSearchLang === l.id ? 'bg-purple-500 text-white' : 'bg-white/5 text-slate-400 hover:text-white'"
+                            >
+                                {{ l.label }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Results List -->
+                    <div class="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar min-h-[160px]">
+                        <div v-if="isSearchingSubtitles" class="py-12 flex flex-col items-center justify-center gap-3 text-slate-400">
+                            <Loader2 class="w-7 h-7 text-purple-400 animate-spin" />
+                            <span class="text-xs">{{ isRTL ? 'جاري فحص مزودي الترجمة...' : 'Scanning subtitle providers...' }}</span>
+                        </div>
+
+                        <div v-else-if="subtitleSearchResults.length === 0" class="py-12 text-center text-slate-400 text-xs">
+                            {{ isRTL ? 'لا توجد نتائج بحث مطابقة. جرب البحث باسم مختلف.' : 'No matching subtitles found. Try refining search title.' }}
+                        </div>
+
+                        <div
+                            v-else
+                            v-for="(sub, idx) in subtitleSearchResults"
+                            :key="idx"
+                            class="p-3 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-purple-500/40 transition-all flex items-center justify-between gap-3"
+                        >
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 mb-0.5">
+                                    <span class="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px] font-mono font-bold uppercase">
+                                        {{ sub.language || subtitleSearchLang }}
+                                    </span>
+                                    <span class="text-[11px] text-slate-400 truncate">
+                                        {{ sub.provider || 'SubDL' }}
+                                    </span>
+                                </div>
+                                <div class="text-xs font-bold text-white truncate" :title="sub.release || sub.file_name">
+                                    {{ sub.release || sub.file_name || 'Subtitle Release Track' }}
+                                </div>
+                            </div>
+
+                            <button
+                                @click="downloadAndApplySubtitle(sub)"
+                                :disabled="isDownloadingSubtitle"
+                                class="shrink-0 px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shadow-md shadow-purple-500/20"
+                            >
+                                <Download class="w-3.5 h-3.5" />
+                                <span>{{ isRTL ? 'تحميل وتفعيل' : 'Get & Apply' }}</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

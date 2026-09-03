@@ -4,8 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\AppSetting;
 use App\Services\Metadata\AniListProvider;
-use App\Services\Metadata\OmdbProvider;
-use App\Services\Metadata\TmdbProvider;
 use App\Services\Metadata\TvMazeProvider;
 use App\Services\Metadata\WikipediaProvider;
 use App\Services\Subtitles\OpenSubtitlesService;
@@ -80,14 +78,15 @@ class SettingsController extends Controller
                         return response()->json(['success' => false, 'message' => 'TMDb API key is required to test.'], 422);
                     }
                     $res = Http::timeout(6)->withToken($apiKey)->get('https://api.themoviedb.org/3/configuration');
-                    if (!$res->successful()) {
+                    if (! $res->successful()) {
                         $res = Http::timeout(6)->get("https://api.themoviedb.org/3/configuration?api_key={$apiKey}");
                     }
                     $latency = round((microtime(true) - $startTime) * 1000);
                     if ($res->successful()) {
                         return response()->json(['success' => true, 'message' => "TMDb API authenticated successfully! ({$latency}ms)", 'latency_ms' => $latency]);
                     }
-                    return response()->json(['success' => false, 'message' => 'TMDb returned error: ' . ($res->json('status_message') ?? 'Invalid API key.')], 400);
+
+                    return response()->json(['success' => false, 'message' => 'TMDb returned error: '.($res->json('status_message') ?? 'Invalid API key.')], 400);
 
                 case 'omdb':
                     $apiKey = $key ?: (AppSetting::where('key', 'omdb_api_key')->value('value') ?: config('services.omdb.key'));
@@ -99,44 +98,50 @@ class SettingsController extends Controller
                     if ($res->successful() && $res->json('Response') !== 'False') {
                         return response()->json(['success' => true, 'message' => "OMDb API verified! IMDb score reachable. ({$latency}ms)", 'latency_ms' => $latency]);
                     }
-                    return response()->json(['success' => false, 'message' => 'OMDb error: ' . ($res->json('Error') ?? 'Invalid key.')], 400);
+
+                    return response()->json(['success' => false, 'message' => 'OMDb error: '.($res->json('Error') ?? 'Invalid key.')], 400);
 
                 case 'opensubtitles':
                     $apiKey = $key ?: AppSetting::where('key', 'opensubtitles_api_key')->value('value');
                     $service = new OpenSubtitlesService($apiKey);
                     $res = $service->searchSubtitles(['query' => 'Inception', 'languages' => 'ar,en']);
                     $latency = round((microtime(true) - $startTime) * 1000);
-                    return response()->json(['success' => true, 'message' => "OpenSubtitles service active! Found " . count($res) . " test subtitles. ({$latency}ms)", 'latency_ms' => $latency]);
+
+                    return response()->json(['success' => true, 'message' => 'OpenSubtitles service active! Found '.count($res)." test subtitles. ({$latency}ms)", 'latency_ms' => $latency]);
 
                 case 'tvmaze':
-                    $tvmaze = new TvMazeProvider();
+                    $tvmaze = new TvMazeProvider;
                     $res = $tvmaze->searchSeries('Breaking Bad');
                     $latency = round((microtime(true) - $startTime) * 1000);
+
                     return response()->json(['success' => true, 'message' => "TVMaze Free API working seamlessly! ({$latency}ms)", 'latency_ms' => $latency]);
 
                 case 'anilist':
-                    $anilist = new AniListProvider();
+                    $anilist = new AniListProvider;
                     $res = $anilist->searchAnime('Attack on Titan');
                     $latency = round((microtime(true) - $startTime) * 1000);
+
                     return response()->json(['success' => true, 'message' => "AniList GraphQL Engine verified! ({$latency}ms)", 'latency_ms' => $latency]);
 
                 case 'wikipedia':
-                    $wiki = new WikipediaProvider();
+                    $wiki = new WikipediaProvider;
                     $res = $wiki->getPlotSummary('Inception', 'ar');
                     $latency = round((microtime(true) - $startTime) * 1000);
+
                     return response()->json(['success' => true, 'message' => "Wikipedia Arabic translation engine active! ({$latency}ms)", 'latency_ms' => $latency]);
 
                 case 'subdl':
-                    $subdl = new SubDlService();
+                    $subdl = new SubDlService;
                     $res = $subdl->searchSubtitles('Inception');
                     $latency = round((microtime(true) - $startTime) * 1000);
+
                     return response()->json(['success' => true, 'message' => "SubDL Free Cloud scraper verified! ({$latency}ms)", 'latency_ms' => $latency]);
 
                 default:
                     return response()->json(['success' => false, 'message' => 'Unknown provider.'], 404);
             }
         } catch (\Throwable $e) {
-            return response()->json(['success' => false, 'message' => 'Connection test failed: ' . $e->getMessage()], 500);
+            return response()->json(['success' => false, 'message' => 'Connection test failed: '.$e->getMessage()], 500);
         }
     }
 }

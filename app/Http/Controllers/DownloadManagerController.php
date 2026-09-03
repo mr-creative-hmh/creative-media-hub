@@ -30,6 +30,7 @@ class DownloadManagerController extends Controller
     public function list(): JsonResponse
     {
         $downloads = DownloadItem::orderByDesc('created_at')->get();
+
         return response()->json($downloads);
     }
 
@@ -55,30 +56,35 @@ class DownloadManagerController extends Controller
     public function processBatch(): JsonResponse
     {
         $result = $this->downloadService->processBatch();
+
         return response()->json($result);
     }
 
     public function pause(int $id): JsonResponse
     {
         $success = $this->downloadService->pause($id);
+
         return response()->json(['success' => $success]);
     }
 
     public function resume(int $id): JsonResponse
     {
         $success = $this->downloadService->resume($id);
+
         return response()->json(['success' => $success]);
     }
 
     public function retry(int $id): JsonResponse
     {
         $success = $this->downloadService->retry($id);
+
         return response()->json(['success' => $success]);
     }
 
     public function destroy(int $id): JsonResponse
     {
         $success = $this->downloadService->delete($id, false);
+
         return response()->json(['success' => $success]);
     }
 }

@@ -41,14 +41,15 @@ class WikipediaProvider implements MetadataProviderInterface
     public function getPlotSummary(string $title, string $lang = 'ar'): ?string
     {
         $details = $this->fetchWikiSummary($title, $lang);
-        if (!empty($details['overview'])) {
+        if (! empty($details['overview'])) {
             return $details['overview'];
         }
 
         // If not found in requested lang, search first
         $searchResults = $this->searchWiki($title, $lang === 'ar' ? 'فيلم' : 'film', $lang);
-        if (!empty($searchResults[0]['id'])) {
+        if (! empty($searchResults[0]['id'])) {
             $details = $this->fetchWikiSummary($searchResults[0]['id'], $lang);
+
             return $details['overview'] ?? null;
         }
 
@@ -79,10 +80,11 @@ class WikipediaProvider implements MetadataProviderInterface
                         'title' => $t,
                     ];
                 }
+
                 return $results;
             }
         } catch (\Exception $e) {
-            Log::warning("Wikipedia searchWiki failed: " . $e->getMessage());
+            Log::warning('Wikipedia searchWiki failed: '.$e->getMessage());
         }
 
         return [];
@@ -93,10 +95,11 @@ class WikipediaProvider implements MetadataProviderInterface
         $domain = $lang === 'ar' ? 'ar.wikipedia.org' : 'en.wikipedia.org';
 
         try {
-            $response = Http::timeout(5)->get("https://{$domain}/api/rest_v1/page/summary/" . urlencode($pageTitle));
+            $response = Http::timeout(5)->get("https://{$domain}/api/rest_v1/page/summary/".urlencode($pageTitle));
 
             if ($response->successful()) {
                 $data = $response->json();
+
                 return [
                     'provider' => 'Wikipedia',
                     'title' => $data['title'] ?? '',
@@ -105,7 +108,7 @@ class WikipediaProvider implements MetadataProviderInterface
                 ];
             }
         } catch (\Exception $e) {
-            Log::warning("Wikipedia fetchWikiSummary failed: " . $e->getMessage());
+            Log::warning('Wikipedia fetchWikiSummary failed: '.$e->getMessage());
         }
 
         return null;

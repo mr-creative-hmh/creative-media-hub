@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue';
+import { useI18n } from '@/i18n/useI18n';
 
 export interface DownloadItem {
     id: number;
@@ -20,6 +21,8 @@ const isWorkerRunning = ref(false);
 let workerInterval: any = null;
 
 export function useDownloader() {
+    const { isRTL } = useI18n();
+
     const activeDownloads = computed(() =>
         downloads.value.filter(d => d.status === 'downloading' || d.status === 'queued')
     );
@@ -60,10 +63,10 @@ export function useDownloader() {
     };
 
     const getETA = (item: DownloadItem) => {
-        if (item.status === 'completed') return 'Completed';
-        if (item.status === 'paused') return 'Paused';
-        if (item.status === 'queued') return 'In Queue';
-        if (item.speed_bytes_sec <= 0) return 'Calculating...';
+        if (item.status === 'completed') return isRTL.value ? 'مكتمل' : 'Completed';
+        if (item.status === 'paused') return isRTL.value ? 'متوقف' : 'Paused';
+        if (item.status === 'queued') return isRTL.value ? 'في الانتظار' : 'In Queue';
+        if (item.speed_bytes_sec <= 0) return isRTL.value ? 'جاري الحساب...' : 'Calculating...';
 
         const remainingBytes = Math.max(0, item.total_bytes - item.downloaded_bytes);
         const seconds = Math.ceil(remainingBytes / item.speed_bytes_sec);

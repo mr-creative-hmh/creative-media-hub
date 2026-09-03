@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Support\Str;
 
 class MediaItem extends Model
 {
@@ -13,13 +14,12 @@ class MediaItem extends Model
     {
         parent::boot();
         static::saving(function ($model) {
-            if (empty($model->slug) && !empty($model->title)) {
-                $base = \Illuminate\Support\Str::slug($model->title . ($model->release_year ? " {$model->release_year}" : ''));
-                $model->slug = $base ?: 'movie-' . uniqid();
+            if (empty($model->slug) && ! empty($model->title)) {
+                $base = Str::slug($model->title.($model->release_year ? " {$model->release_year}" : ''));
+                $model->slug = $base ?: 'movie-'.uniqid();
             }
         });
     }
-
 
     use HasFactory;
 
@@ -33,6 +33,11 @@ class MediaItem extends Model
         'file_size_bytes' => 'integer',
         'mood_tags' => 'array',
         'is_favorite' => 'boolean',
+        'video_bitrate' => 'integer',
+        'audio_channels' => 'integer',
+        'audio_bitrate' => 'integer',
+        'framerate' => 'decimal:2',
+        'total_bitrate' => 'integer',
     ];
 
     public function genres(): MorphToMany
@@ -79,7 +84,7 @@ class MediaItem extends Model
 
     public function scopeByGenre($query, $genreSlug)
     {
-        return $query->whereHas('genres', fn($q) => $q->where('slug', $genreSlug));
+        return $query->whereHas('genres', fn ($q) => $q->where('slug', $genreSlug));
     }
 
     public function scopeByResolution($query, $resolution)
@@ -96,11 +101,15 @@ class MediaItem extends Model
     {
         if (is_numeric($value)) {
             $item = $this->where('id', $value)->first();
-            if ($item) return $item;
+            if ($item) {
+                return $item;
+            }
         }
 
         $item = $this->where('slug', $value)->first();
-        if ($item) return $item;
+        if ($item) {
+            return $item;
+        }
 
         return $this->where('title', str_replace('-', ' ', $value))->firstOrFail();
     }

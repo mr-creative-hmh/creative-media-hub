@@ -563,7 +563,12 @@ const saveManualEdit = async () => {
                         type="checkbox"
                         class="rounded border-white/20 bg-slate-900 text-cyan-500 focus:ring-cyan-500"
                     />
-                    <span>{{ isRTL ? 'إعادة تسمية الملف الفعلي على القرص تلقائياً عند حفظ المطابقة' : 'Automatically rename physical disk file when match is saved' }}</span>
+                    <span>
+                        {{ isSeriesType
+                            ? (isRTL ? 'إعادة تسمية مجلد المسلسل وملفات الحلقات على القرص تلقائياً' : 'Automatically rename series folder & all episode files on disk')
+                            : (isRTL ? 'إعادة تسمية ملف الفيلم ومجلده على القرص تلقائياً' : 'Automatically rename movie file & folder on disk')
+                        }}
+                    </span>
                 </label>
             </div>
 

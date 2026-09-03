@@ -18,8 +18,11 @@ use Inertia\Response;
 class SubtitleController extends Controller
 {
     protected SubtitleManagerService $manager;
+
     protected OpenSubtitlesService $openSubtitles;
+
     protected SubDlService $subDl;
+
     protected EmbeddedSubtitleDetectorService $detector;
 
     public function __construct(
@@ -139,7 +142,7 @@ class SubtitleController extends Controller
             ? Episode::find($id)
             : MediaItem::find($id);
 
-        if (!$model) {
+        if (! $model) {
             return response()->json(['subtitles' => []]);
         }
 

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Support\Str;
 
 class Series extends Model
 {
@@ -13,13 +14,12 @@ class Series extends Model
     {
         parent::boot();
         static::saving(function ($model) {
-            if (empty($model->slug) && !empty($model->title)) {
-                $base = \Illuminate\Support\Str::slug($model->title . ($model->release_year ? " {$model->release_year}" : ''));
-                $model->slug = $base ?: 'series-' . uniqid();
+            if (empty($model->slug) && ! empty($model->title)) {
+                $base = Str::slug($model->title.($model->release_year ? " {$model->release_year}" : ''));
+                $model->slug = $base ?: 'series-'.uniqid();
             }
         });
     }
-
 
     use HasFactory;
 
@@ -69,11 +69,15 @@ class Series extends Model
     {
         if (is_numeric($value)) {
             $item = $this->where('id', $value)->first();
-            if ($item) return $item;
+            if ($item) {
+                return $item;
+            }
         }
 
         $item = $this->where('slug', $value)->first();
-        if ($item) return $item;
+        if ($item) {
+            return $item;
+        }
 
         return $this->where('title', str_replace('-', ' ', $value))->firstOrFail();
     }

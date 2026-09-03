@@ -11,6 +11,7 @@ class Person extends Model
     use HasFactory;
 
     protected $table = 'people';
+
     protected $guarded = [];
 
     public function mediaItems(): MorphToMany

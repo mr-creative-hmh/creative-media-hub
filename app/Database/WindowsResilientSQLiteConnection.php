@@ -9,7 +9,7 @@ class WindowsResilientSQLiteConnection extends SQLiteConnection
     /**
      * Get a schema builder instance for the connection.
      *
-     * @return \App\Database\WindowsResilientSQLiteBuilder
+     * @return WindowsResilientSQLiteBuilder
      */
     public function getSchemaBuilder()
     {

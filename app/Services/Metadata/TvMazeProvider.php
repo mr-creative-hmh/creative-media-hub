@@ -31,7 +31,9 @@ class TvMazeProvider implements MetadataProviderInterface
                 $results = [];
                 foreach ($response->json() as $entry) {
                     $show = $entry['show'] ?? [];
-                    if (empty($show)) continue;
+                    if (empty($show)) {
+                        continue;
+                    }
 
                     $premieredYear = isset($show['premiered']) ? (int) substr($show['premiered'], 0, 4) : null;
                     if ($year && $premieredYear && abs($premieredYear - $year) > 1) {
@@ -50,10 +52,11 @@ class TvMazeProvider implements MetadataProviderInterface
                         'rating' => isset($show['rating']['average']) ? (float) $show['rating']['average'] : null,
                     ];
                 }
+
                 return $results;
             }
         } catch (\Exception $e) {
-            Log::warning("TVMaze searchSeries failed: " . $e->getMessage());
+            Log::warning('TVMaze searchSeries failed: '.$e->getMessage());
         }
 
         return [];
@@ -114,7 +117,7 @@ class TvMazeProvider implements MetadataProviderInterface
                 ];
             }
         } catch (\Exception $e) {
-            Log::warning("TVMaze getSeriesDetails failed: " . $e->getMessage());
+            Log::warning('TVMaze getSeriesDetails failed: '.$e->getMessage());
         }
 
         return null;
@@ -140,10 +143,11 @@ class TvMazeProvider implements MetadataProviderInterface
                         ];
                     }
                 }
+
                 return $episodes;
             }
         } catch (\Exception $e) {
-            Log::warning("TVMaze getSeasonEpisodes failed: " . $e->getMessage());
+            Log::warning('TVMaze getSeasonEpisodes failed: '.$e->getMessage());
         }
 
         return [];

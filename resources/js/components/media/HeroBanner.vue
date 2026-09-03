@@ -6,15 +6,19 @@ import { Play, Info, Star, ChevronLeft, ChevronRight, Sparkles, Film, Video, Clo
 const props = defineProps<{
     items?: any[];
     item?: any;
+    featuredItems?: any[];
 }>();
 
-const emit = defineEmits(['play', 'details']);
+const emit = defineEmits(['play', 'details', 'info']);
 
 const { t, isRTL } = useI18n();
 
 const slides = computed<any[]>(() => {
     if (props.items && Array.isArray(props.items) && props.items.length > 0) {
         return props.items;
+    }
+    if (props.featuredItems && Array.isArray(props.featuredItems) && props.featuredItems.length > 0) {
+        return props.featuredItems;
     }
     if (props.item) {
         return [props.item];
@@ -169,7 +173,7 @@ onUnmounted(() => {
                     <span>{{ t('common.play_now') }}</span>
                 </button>
                 <button
-                    @click="emit('details', currentSlide)"
+                    @click="emit('details', currentSlide); emit('info', currentSlide);"
                     class="flex items-center gap-2 px-5 py-3 rounded-xl bg-white/15 hover:bg-white/25 border border-white/20 text-white font-bold text-sm backdrop-blur-md hover:scale-105 active:scale-95 transition-all cursor-pointer"
                 >
                     <Info class="w-4 h-4 text-cyan-300" />

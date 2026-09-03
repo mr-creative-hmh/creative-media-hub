@@ -4,8 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\MediaItem;
 use App\Models\Subtitle;
-use App\Models\User;
-use App\Models\WatchHistory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 

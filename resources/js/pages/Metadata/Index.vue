@@ -133,7 +133,7 @@ const handleItemUpdated = (updatedItem: any) => {
     }
 
     // Refresh server state to update all stats and lists
-    router.reload({ preserveScroll: true });
+    router.reload();
 };
 
 const quickReparse = async (item: any) => {
@@ -173,7 +173,7 @@ const quickConvert = async (item: any) => {
         const data = await res.json();
         if (data.success) {
             showToast(data.message || 'Media type converted!', 'info');
-            router.reload({ preserveScroll: true });
+            router.reload();
         } else {
             showToast(data.message || 'Conversion failed.', 'danger');
         }
@@ -191,21 +191,33 @@ const confirmRenameFile = (item: any) => {
     const cleanTitle = (item.title || 'media').replace(/[\\/:*?"<>|]/g, ' ').trim();
     const newName = `${cleanTitle}${item.release_year ? ` (${item.release_year})` : ''}${item.type === 'movie' ? ext : ''}`;
 
+    const isSeries = item.type === 'series';
+
     confirmModal.value = {
         show: true,
-        title: isRTL.value ? 'إعادة تسمية الملف الفعلي على القرص' : 'Rename Physical File on Disk',
-        message: isRTL.value
-            ? `هل تريد إعادة تسمية الملف من:
+        title: isSeries
+            ? (isRTL.value ? 'إعادة تسمية مجلد وحلقات المسلسل على القرص' : 'Rename Series Folder & Episodes on Disk')
+            : (isRTL.value ? 'إعادة تسمية ملف الفيلم ومجلده على القرص' : 'Rename Physical Movie File & Folder on Disk'),
+        message: isSeries
+            ? (isRTL.value
+                ? `هل تريد إعادة تسمية مجلد المسلسل (${oldName}) وجميع ملفات الحلقات لتطابق الاسم القياسي الجديد:
+"${newName}"؟`
+                : `Do you want to rename the series folder (${oldName}) and all physical episode files on disk to match:
+"${newName}"?`)
+            : (isRTL.value
+                ? `هل تريد إعادة تسمية الملف من:
 "${oldName}"
 
 إلى الاسم القياسي الجديد:
 "${newName}"؟`
-            : `Do you want to rename the physical file on disk from:
+                : `Do you want to rename the physical file on disk from:
 "${oldName}"
 
 to the clean standard title:
-"${newName}"?`,
-        confirmText: isRTL.value ? 'تأكيد إعادة التسمية' : 'Rename File Now',
+"${newName}"?`),
+        confirmText: isSeries
+            ? (isRTL.value ? 'تأكيد إعادة تسمية المسلسل والحلقات' : 'Rename Series & Episodes Now')
+            : (isRTL.value ? 'تأكيد إعادة التسمية' : 'Rename File Now'),
         type: 'info',
         action: async () => {
             confirmModal.value.show = false;
@@ -262,7 +274,7 @@ const confirmDeleteItem = (item: any) => {
                 if (data.success) {
                     showToast(data.message || (isRTL.value ? 'تم حذف العنصر من الفهرس!' : 'Item removed from library index!'), 'info');
                     localItems.value = localItems.value.filter(i => !(i.id === item.id && i.type === item.type));
-                    router.reload({ preserveScroll: true });
+                    router.reload();
                 } else {
                     showToast(data.message || 'Failed to delete index.', 'danger');
                 }
@@ -302,7 +314,7 @@ const triggerBatchEnrich = async () => {
                 });
                 const data = await res.json();
                 showToast(data.message || (isRTL.value ? 'اكتملت المعالجة الذكية!' : 'Batch enrichment finished!'), 'success');
-                router.reload({ preserveScroll: true });
+                router.reload();
             } catch (e) {
                 console.error(e);
                 showToast('Error running batch enrichment.', 'danger');

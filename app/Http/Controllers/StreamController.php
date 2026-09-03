@@ -35,6 +35,7 @@ class StreamController extends Controller
         }
 
         $sampleUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+
         return redirect()->away($sampleUrl);
     }
 
@@ -51,6 +52,7 @@ class StreamController extends Controller
         }
 
         $sampleUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
+
         return redirect()->away($sampleUrl);
     }
 
@@ -69,6 +71,7 @@ class StreamController extends Controller
 
             if ($videoPath && File::exists($videoPath)) {
                 $vtt = $this->embeddedSubDetector->extractToWebVtt($videoPath, $streamIndex, $subtitle->format ?? 'srt');
+
                 return response($vtt, 200, [
                     'Content-Type' => 'text/vtt; charset=utf-8',
                     'Access-Control-Allow-Origin' => '*',
@@ -78,7 +81,7 @@ class StreamController extends Controller
         }
 
         // External Subtitle File
-        if (!$path || !File::exists($path)) {
+        if (! $path || ! File::exists($path)) {
             return response("WEBVTT\n\n", 200, ['Content-Type' => 'text/vtt; charset=utf-8']);
         }
 
@@ -143,19 +146,23 @@ class StreamController extends Controller
 
         $history = $query->limit(12)->get()->map(function ($h) {
             $item = $h->watchable;
-            if (!$item) return null;
+            if (! $item) {
+                return null;
+            }
 
             $percent = $h->duration_seconds > 0 ? min(100, round(($h->progress_seconds / $h->duration_seconds) * 100)) : 0;
             $formatTime = function ($sec) {
                 $hrs = floor($sec / 3600);
                 $mins = floor(($sec % 3600) / 60);
                 $secs = $sec % 60;
+
                 return $hrs > 0 ? sprintf('%d:%02d:%02d', $hrs, $mins, $secs) : sprintf('%02d:%02d', $mins, $secs);
             };
 
             if ($item instanceof MediaItem) {
                 $item->loadMissing('subtitles');
                 $slug = $item->slug ?: "movie-{$item->id}";
+
                 return [
                     'id' => $item->id,
                     'watchable_id' => $item->id,
@@ -228,13 +235,13 @@ class StreamController extends Controller
         ]);
     }
 
-            public function getCacheStatus(Request $request)
+    public function getCacheStatus(Request $request)
     {
         $type = $request->input('type', 'movie');
         $id = (int) $request->input('id');
 
         $model = $type === 'episode' ? Episode::find($id) : MediaItem::find($id);
-        if (!$model || !$model->file_path || !file_exists($model->file_path)) {
+        if (! $model || ! $model->file_path || ! file_exists($model->file_path)) {
             return response()->json(['is_cached' => false, 'cached_percent' => 0]);
         }
 
@@ -258,6 +265,7 @@ class StreamController extends Controller
             $origSize = filesize($model->file_path);
             $partSize = filesize($activePart);
             $pct = $origSize > 0 ? min(99, max(5, round(($partSize / $origSize) * 100))) : 0;
+
             return response()->json([
                 'is_cached' => false,
                 'cached_percent' => $pct,
@@ -290,12 +298,12 @@ class StreamController extends Controller
         $id = (int) $request->input('id');
 
         $model = $type === 'episode' ? Episode::find($id) : MediaItem::find($id);
-        if (!$model || !$model->file_path || !File::exists($model->file_path)) {
+        if (! $model || ! $model->file_path || ! File::exists($model->file_path)) {
             return response()->json(['duration_seconds' => 0, 'runtime_minutes' => 0]);
         }
 
         // Return cached exact duration from database if present
-        if (!empty($model->duration_seconds) && $model->duration_seconds > 0) {
+        if (! empty($model->duration_seconds) && $model->duration_seconds > 0) {
             return response()->json([
                 'duration_seconds' => (int) $model->duration_seconds,
                 'runtime_minutes' => max(1, (int) round($model->duration_seconds / 60)),
@@ -306,11 +314,11 @@ class StreamController extends Controller
         $ffprobe = FfmpegLocatorService::getFfprobePath();
         if ($ffprobe) {
             $escaped = escapeshellarg($model->file_path);
-            $cmd = escapeshellarg($ffprobe) . " -v quiet -print_format json -show_format {$escaped}";
+            $cmd = escapeshellarg($ffprobe)." -v quiet -print_format json -show_format {$escaped}";
             $out = @shell_exec($cmd);
             if ($out) {
                 $data = @json_decode($out, true);
-                if (!empty($data['format']['duration']) && is_numeric($data['format']['duration'])) {
+                if (! empty($data['format']['duration']) && is_numeric($data['format']['duration'])) {
                     $secs = (int) round((float) $data['format']['duration']);
                     if ($secs > 0) {
                         $mins = max(1, (int) round($secs / 60));
@@ -328,6 +336,7 @@ class StreamController extends Controller
         }
 
         $fallbackMins = $model->runtime_minutes ?: 45;
+
         return response()->json([
             'duration_seconds' => $fallbackMins * 60,
             'runtime_minutes' => $fallbackMins,
@@ -369,7 +378,7 @@ class StreamController extends Controller
             $range = $request->header('Range');
             if (preg_match('/bytes=(\d+)-(\d+)?/', $range, $matches)) {
                 $start = (int) $matches[1];
-                if (!empty($matches[2])) {
+                if (! empty($matches[2])) {
                     $end = (int) $matches[2];
                 }
                 $status = 206;
@@ -386,10 +395,12 @@ class StreamController extends Controller
             $remaining = $length;
             $chunkSize = 1024 * 256; // 256KB buffer for ultra-smooth throughput
 
-            while (!feof($file) && $remaining > 0 && (connection_status() === CONNECTION_NORMAL)) {
+            while (! feof($file) && $remaining > 0 && (connection_status() === CONNECTION_NORMAL)) {
                 $bytesToRead = min($chunkSize, $remaining);
                 $buffer = fread($file, $bytesToRead);
-                if ($buffer === false) break;
+                if ($buffer === false) {
+                    break;
+                }
 
                 echo $buffer;
                 flush();
@@ -414,7 +425,7 @@ class StreamController extends Controller
             $content
         );
 
-        return $vtt . $normalized;
+        return $vtt.$normalized;
     }
 
     public function streamRemuxMovie(MediaItem $mediaItem, Request $request)
@@ -429,7 +440,7 @@ class StreamController extends Controller
 
     protected function streamRemuxFile(string $filePath, Request $request, ?string $videoCodec = null, string $modelType = 'media', int $modelId = 0)
     {
-        if (!file_exists($filePath)) {
+        if (! file_exists($filePath)) {
             abort(404, 'Media file not found');
         }
 
@@ -449,7 +460,7 @@ class StreamController extends Controller
             str_contains($vc, 'h.264') ||
             str_contains($vc, 'h264') ||
             str_contains($vc, 'avc')
-        ) && !str_contains($vc, 'hevc') && ($ext !== 'avi');
+        ) && ! str_contains($vc, 'hevc') && ($ext !== 'avi');
 
         if ($isNativeH264 && $request->query('transcode') !== '1') {
             $videoArgs = ['-c:v', 'copy'];
@@ -459,12 +470,12 @@ class StreamController extends Controller
                 '-preset', 'ultrafast',
                 '-tune', 'zerolatency',
                 '-crf', '22',
-                '-pix_fmt', 'yuv420p'
+                '-pix_fmt', 'yuv420p',
             ];
         }
 
         $cacheDir = storage_path('app/cache/media_streams');
-        if (!is_dir($cacheDir)) {
+        if (! is_dir($cacheDir)) {
             @mkdir($cacheDir, 0777, true);
         }
 
@@ -480,7 +491,7 @@ class StreamController extends Controller
 
         // Launch background transcode worker to cache the full file to disk so caching continues even when paused
         $partFile = "{$cacheDir}/{$cacheKey}.part.mp4";
-        if (!file_exists($lockFile) && !file_exists($cachedFile)) {
+        if (! file_exists($lockFile) && ! file_exists($cachedFile)) {
             @file_put_contents($lockFile, date('Y-m-d H:i:s'));
             $bgCmd = array_merge(
                 [
@@ -495,13 +506,16 @@ class StreamController extends Controller
                 ],
                 $videoArgs,
                 [
+                    '-af', 'aresample=async=1000:min_hard_comp=0.100000:first_pts=0',
                     '-c:a', 'aac',
                     '-b:a', '192k',
                     '-ac', '2',
                     '-sn',
+                    '-avoid_negative_ts', 'make_zero',
+                    '-max_muxing_queue_size', '1024',
                     '-movflags', '+faststart',
                     '-f', 'mp4',
-                    escapeshellarg($partFile)
+                    escapeshellarg($partFile),
                 ]
             );
 
@@ -512,10 +526,10 @@ class StreamController extends Controller
                 $batWinPart = str_replace('/', '\\', $partFile);
                 $batWinLock = str_replace('/', '\\', $lockFile);
                 $batWinBat = str_replace('/', '\\', $batFile);
-                
-                $batContent = "@echo off\r\n" . $bgCmdStr . "\r\nmove /Y \"{$batWinPart}\" \"{$batWinCached}\" > NUL 2>&1\r\ndel /F /Q \"{$batWinLock}\" \"{$batWinBat}\" > NUL 2>&1\r\n";
+
+                $batContent = "@echo off\r\n".$bgCmdStr."\r\nmove /Y \"{$batWinPart}\" \"{$batWinCached}\" > NUL 2>&1\r\ndel /F /Q \"{$batWinLock}\" \"{$batWinBat}\" > NUL 2>&1\r\n";
                 @file_put_contents($batFile, $batContent);
-                @pclose(popen("start \"\" /B cmd /c \"\"{$batFile}\"\"", "r"));
+                @pclose(popen("start \"\" /B cmd /c \"\"{$batFile}\"\"", 'r'));
             } else {
                 $finalBgCmd = "({$bgCmdStr} && mv '{$partFile}' '{$cachedFile}' && rm -f '{$lockFile}') > /dev/null 2>&1 &";
                 @exec($finalBgCmd);
@@ -535,14 +549,17 @@ class StreamController extends Controller
             ],
             $videoArgs,
             [
+                '-af', 'aresample=async=1000:min_hard_comp=0.100000:first_pts=0',
                 '-c:a', 'aac',
                 '-b:a', '192k',
                 '-ac', '2',
                 '-sn',
+                '-avoid_negative_ts', 'make_zero',
+                '-max_muxing_queue_size', '1024',
                 '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
                 '-flush_packets', '1',
                 '-f', 'mp4',
-                'pipe:1'
+                'pipe:1',
             ]
         );
 
@@ -564,7 +581,7 @@ class StreamController extends Controller
             if (is_resource($process)) {
                 fclose($pipes[0]);
 
-                while (!feof($pipes[1])) {
+                while (! feof($pipes[1])) {
                     $chunk = fread($pipes[1], 65536);
                     if ($chunk !== false && strlen($chunk) > 0) {
                         echo $chunk;

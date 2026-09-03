@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Log;
 class OpenSubtitlesService
 {
     protected string $baseUrl = 'https://api.opensubtitles.com/api/v1';
+
     protected ?string $apiKey;
 
     public function __construct(?string $apiKey = null)
@@ -28,18 +29,18 @@ class OpenSubtitlesService
                 'languages' => $params['languages'] ?? 'ar,en',
             ];
 
-            if (!empty($params['imdb_id'])) {
+            if (! empty($params['imdb_id'])) {
                 $queryParams['imdb_id'] = preg_replace('/[^0-9]/', '', $params['imdb_id']);
-            } elseif (!empty($params['tmdb_id'])) {
+            } elseif (! empty($params['tmdb_id'])) {
                 $queryParams['tmdb_id'] = $params['tmdb_id'];
-            } elseif (!empty($params['query'])) {
+            } elseif (! empty($params['query'])) {
                 $queryParams['query'] = $params['query'];
             }
 
-            if (!empty($params['season_number'])) {
+            if (! empty($params['season_number'])) {
                 $queryParams['season_number'] = $params['season_number'];
             }
-            if (!empty($params['episode_number'])) {
+            if (! empty($params['episode_number'])) {
                 $queryParams['episode_number'] = $params['episode_number'];
             }
 
@@ -47,8 +48,10 @@ class OpenSubtitlesService
 
             if ($response->successful()) {
                 $data = $response->json('data', []);
+
                 return array_map(function ($item) {
                     $attr = $item['attributes'] ?? [];
+
                     return [
                         'provider' => 'OpenSubtitles',
                         'subtitle_id' => (string) ($attr['files'][0]['file_id'] ?? $item['id']),
@@ -62,7 +65,7 @@ class OpenSubtitlesService
                 }, $data);
             }
         } catch (\Exception $e) {
-            Log::warning("OpenSubtitles search failed: " . $e->getMessage());
+            Log::warning('OpenSubtitles search failed: '.$e->getMessage());
         }
 
         return [];
@@ -70,12 +73,14 @@ class OpenSubtitlesService
 
     public function computeFileHash(string $filePath): ?string
     {
-        if (!File::exists($filePath) || File::size($filePath) < 65536) {
+        if (! File::exists($filePath) || File::size($filePath) < 65536) {
             return null;
         }
 
         $handle = fopen($filePath, 'rb');
-        if (!$handle) return null;
+        if (! $handle) {
+            return null;
+        }
 
         $fileSize = filesize($filePath);
         $hash = [$fileSize & 0xFFFF, ($fileSize >> 16) & 0xFFFF, 0, 0];

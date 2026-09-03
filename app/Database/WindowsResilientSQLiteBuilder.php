@@ -19,7 +19,7 @@ class WindowsResilientSQLiteBuilder extends SQLiteBuilder
         $tables = $this->connection->select("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
         foreach ($tables as $table) {
             $tableName = is_object($table) ? ($table->name ?? reset($table)) : (is_array($table) ? ($table['name'] ?? reset($table)) : $table);
-            $this->connection->statement('DROP TABLE IF EXISTS "' . $tableName . '"');
+            $this->connection->statement('DROP TABLE IF EXISTS "'.$tableName.'"');
         }
 
         $this->connection->statement($this->grammar->compileEnableForeignKeyConstraints());
@@ -35,7 +35,7 @@ class WindowsResilientSQLiteBuilder extends SQLiteBuilder
         $views = $this->connection->select("SELECT name FROM sqlite_master WHERE type='view'");
         foreach ($views as $view) {
             $viewName = is_object($view) ? ($view->name ?? reset($view)) : (is_array($view) ? ($view['name'] ?? reset($view)) : $view);
-            $this->connection->statement('DROP VIEW IF EXISTS "' . $viewName . '"');
+            $this->connection->statement('DROP VIEW IF EXISTS "'.$viewName.'"');
         }
     }
 }

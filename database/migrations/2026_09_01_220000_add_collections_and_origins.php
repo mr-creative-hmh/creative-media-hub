@@ -9,28 +9,28 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('media_items', function (Blueprint $table) {
-            if (!Schema::hasColumn('media_items', 'collection_name')) {
+            if (! Schema::hasColumn('media_items', 'collection_name')) {
                 $table->string('collection_name')->nullable()->index();
             }
-            if (!Schema::hasColumn('media_items', 'collection_id')) {
+            if (! Schema::hasColumn('media_items', 'collection_id')) {
                 $table->unsignedBigInteger('collection_id')->nullable()->index();
             }
-            if (!Schema::hasColumn('media_items', 'collection_poster')) {
+            if (! Schema::hasColumn('media_items', 'collection_poster')) {
                 $table->string('collection_poster')->nullable();
             }
-            if (!Schema::hasColumn('media_items', 'original_language')) {
+            if (! Schema::hasColumn('media_items', 'original_language')) {
                 $table->string('original_language', 10)->nullable()->index();
             }
-            if (!Schema::hasColumn('media_items', 'origin_country')) {
+            if (! Schema::hasColumn('media_items', 'origin_country')) {
                 $table->string('origin_country', 10)->nullable()->index();
             }
         });
 
         Schema::table('series', function (Blueprint $table) {
-            if (!Schema::hasColumn('series', 'original_language')) {
+            if (! Schema::hasColumn('series', 'original_language')) {
                 $table->string('original_language', 10)->nullable()->index();
             }
-            if (!Schema::hasColumn('series', 'origin_country')) {
+            if (! Schema::hasColumn('series', 'origin_country')) {
                 $table->string('origin_country', 10)->nullable()->index();
             }
         });

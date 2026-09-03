@@ -157,7 +157,7 @@ watch(() => scanStatus.value.logs?.length, async () => {
                 </div>
                 <div class="p-3.5 rounded-2xl bg-white/5 border border-white/10">
                     <span class="text-[10px] uppercase font-bold text-slate-500 block">{{ isRTL ? 'أحدث ملف' : 'Current Stream' }}</span>
-                    <span class="text-[11px] font-bold text-slate-300 mt-1 truncate block font-mono" :title="scanStatus.current_file">
+                    <span class="text-[11px] font-bold text-slate-300 mt-1 truncate block font-mono" :title="scanStatus.current_file || undefined">
                         {{ scanStatus.current_file ? scanStatus.current_file.split('/').pop() : '-' }}
                     </span>
                 </div>
@@ -223,7 +223,7 @@ watch(() => scanStatus.value.logs?.length, async () => {
                 <div class="flex items-center gap-2">
                     <button
                         v-if="scanStatus.status === 'idle' || scanStatus.status === 'completed' || scanStatus.status === 'cancelled'"
-                        @click="startFullScan"
+                        @click="() => startFullScan()"
                         class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-cyan-500/20"
                     >
                         <Play class="w-3.5 h-3.5 fill-current" />

@@ -19,6 +19,11 @@ class Episode extends Model
         'rating' => 'float',
         'air_date' => 'date',
         'file_size_bytes' => 'integer',
+        'video_bitrate' => 'integer',
+        'audio_channels' => 'integer',
+        'audio_bitrate' => 'integer',
+        'framerate' => 'decimal:2',
+        'total_bitrate' => 'integer',
     ];
 
     public function series(): BelongsTo

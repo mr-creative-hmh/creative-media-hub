@@ -37,7 +37,7 @@ class SceneNameParserService
         'movies', 'movie', 'films', 'film', 'cinema', 'افلام', 'أفلام', 'فلم', 'فيلم',
         'series', 'tv', 'tv shows', 'tv-shows', 'shows', 'مسلسلات', 'مسلسل', 'برامج',
         'media', 'videos', 'video', 'downloads', 'download', 'incoming', 'completed',
-        'new folder', 'temp', 'desktop', 'documents', 'hard drive', 'usb', 'external'
+        'new folder', 'temp', 'desktop', 'documents', 'hard drive', 'usb', 'external',
     ];
 
     /**
@@ -59,7 +59,7 @@ class SceneNameParserService
         $rawExt = pathinfo($filename, PATHINFO_EXTENSION);
         $baseName = pathinfo($filename, PATHINFO_FILENAME);
         $validMediaExts = ['mp4', 'mkv', 'webm', 'avi', 'mov', 'm4v', 'flv', 'wmv', 'ts', 'm2ts', 'iso', 'srt', 'vtt', 'ass', 'sub', 'idx'];
-        if (!in_array(strtolower($rawExt), $validMediaExts)) {
+        if (! in_array(strtolower($rawExt), $validMediaExts)) {
             $baseName = $filename;
             $extension = 'mkv';
         } else {
@@ -114,7 +114,7 @@ class SceneNameParserService
         }
 
         // 1. Check 3D
-        if (preg_match('/\b(3d|mvc|sbs|tab|half-sbs|half-ou|3d-hsbs)\b/i', $working . ' ' . $parentFolder)) {
+        if (preg_match('/\b(3d|mvc|sbs|tab|half-sbs|half-ou|3d-hsbs)\b/i', $working.' '.$parentFolder)) {
             $is3D = true;
         }
 
@@ -123,7 +123,7 @@ class SceneNameParserService
             '/(?:\[|\()?(director\'?s\s*cut)(?:\]|\))?/i' => "Director's Cut",
             '/(?:\[|\()?(extended(?:\s*edition|\s*cut)?)(?:\]|\))?/i' => 'Extended Edition',
             '/(?:\[|\()?(ultimate(?:\s*edition|\s*cut)?)(?:\]|\))?/i' => 'Ultimate Edition',
-            '/(?:\[|\()?(richard\s*donner\s*cut)(?:\]|\))?/i' => "Richard Donner Cut",
+            '/(?:\[|\()?(richard\s*donner\s*cut)(?:\]|\))?/i' => 'Richard Donner Cut',
             '/(?:\[|\()?(theatrical(?:\s*cut|\s*edition)?)(?:\]|\))?/i' => 'Theatrical Cut',
             '/(?:\[|\()?(unrated(?:\s*edition|\s*cut)?)(?:\]|\))?/i' => 'Unrated',
             '/(?:\[|\()?(remastered)(?:\]|\))?/i' => 'Remastered',
@@ -135,7 +135,7 @@ class SceneNameParserService
         ];
 
         foreach ($editionPatterns as $pattern => $edName) {
-            if (preg_match($pattern, $working . ' ' . $parentFolder)) {
+            if (preg_match($pattern, $working.' '.$parentFolder)) {
                 $edition = $edName;
                 break;
             }
@@ -145,7 +145,7 @@ class SceneNameParserService
         if (preg_match('/^(?:E)?(\d{1,3})[.\-\s_]+(.*?)$/i', trim($working), $numPrefixMatch)) {
             $restOfName = trim($numPrefixMatch[2]);
             $hasYearInRest = preg_match('/(19\d\d|20\d\d)/', $restOfName);
-            if (($isInsideMovieTree || $isCollectionFolder || $hasYearInRest) && !$isInsideSeriesTree && !$isParentSeasonFolder) {
+            if (($isInsideMovieTree || $isCollectionFolder || $hasYearInRest) && ! $isInsideSeriesTree && ! $isParentSeasonFolder) {
                 $part = (int) $numPrefixMatch[1];
                 $working = $restOfName;
                 $baseName = $restOfName;
@@ -166,7 +166,7 @@ class SceneNameParserService
             $rawSeriesPart = $tvMatch[1];
             $airDate = "{$tvMatch[2]}-{$tvMatch[3]}-{$tvMatch[4]}";
             $season = (int) $tvMatch[2];
-            $episode = (int) ($tvMatch[3] . $tvMatch[4]);
+            $episode = (int) ($tvMatch[3].$tvMatch[4]);
             $seriesTitle = $this->cleanTitleString($rawSeriesPart);
             $cleanTitle = $seriesTitle;
 
@@ -175,7 +175,7 @@ class SceneNameParserService
                 'title' => $cleanTitle,
                 'clean_title' => $cleanTitle,
                 'series_title' => $cleanTitle,
-            'collection_name' => $collectionName ?? $detectedCollectionName ?? null,
+                'collection_name' => $collectionName ?? $detectedCollectionName ?? null,
                 'type' => 'series',
                 'season' => $season,
                 'episode' => $episode,
@@ -209,7 +209,7 @@ class SceneNameParserService
         // 6. Extract Release Group at end
         if (preg_match('/-(?:\[)?([a-zA-Z0-9\.]+)(?:\])?$/i', $working, $gMatches)) {
             $groupCandidate = $gMatches[1];
-            if (!preg_match('/^(?:x264|x265|h264|h265|hevc|1080p|720p|576p|540p|480p|360p|240p|2160p|4k|aac|ddp|mp4|mkv|\d+)$/i', $groupCandidate)) {
+            if (! preg_match('/^(?:x264|x265|h264|h265|hevc|1080p|720p|576p|540p|480p|360p|240p|2160p|4k|aac|ddp|mp4|mkv|\d+)$/i', $groupCandidate)) {
                 $group = $groupCandidate;
                 $working = substr($working, 0, -strlen($gMatches[0]));
             }
@@ -221,7 +221,7 @@ class SceneNameParserService
         // 7. Detect Parent Folder Season context (English & Arabic)
         // Matches: Season 1, Season 01, S1, S01, الموسم الأول, الموسم 1, موسم 2, الجزء 1, etc.
         $seasonFolderRegex = '/^(?:Season|Series|Staffel|Saison|الموسم|موسم|الجزء|جزء)\s*(\d{1,2}|الاولى|الاول|الأولى|الأول|الثانية|الثاني|الثالثة|الثالث|الرابعة|الرابع|الخامسة|الخامس|السادسة|السادس|السابعة|السابع|الثامنة|الثامن|التاسعة|التاسع|العاشرة|العاشر)$/ui';
-        
+
         if ($parentFolder && preg_match($seasonFolderRegex, trim($parentFolder), $sMatches)) {
             $type = 'series';
             $isParentSeasonFolder = true;
@@ -307,9 +307,9 @@ class SceneNameParserService
             $candidateEp = (int) $epMatch[1];
             $isParentGeneric = in_array(strtolower(trim($parentFolder)), $this->genericFolderNames);
             $hasYear = preg_match('/(19\d\d|20\d\d)/', $working);
-            
+
             // Only trigger as series if not inside movie tree and no movie release year is present
-            if (($isParentSeasonFolder || $isInsideSeriesTree || (!$isParentGeneric && !empty($parentFolder))) && !$isInsideMovieTree && !$hasYear && !$isCollectionFolder) {
+            if (($isParentSeasonFolder || $isInsideSeriesTree || (! $isParentGeneric && ! empty($parentFolder))) && ! $isInsideMovieTree && ! $hasYear && ! $isCollectionFolder) {
                 $type = 'series';
                 $isSeriesDetected = true;
                 $episode = $candidateEp;
@@ -318,7 +318,7 @@ class SceneNameParserService
             }
         }
         // Pattern I: Known pilot/special named episode
-        elseif ($parentFolder && !in_array(strtolower($parentFolder), $this->genericFolderNames) && !preg_match('/\b(19\d\d|20\d\d)\b/', $baseName)) {
+        elseif ($parentFolder && ! in_array(strtolower($parentFolder), $this->genericFolderNames) && ! preg_match('/\b(19\d\d|20\d\d)\b/', $baseName)) {
             $knownEpisodeNames = ['pilot', 'winter is coming', 'the duel', 'finale', 'prologue', 'special', 'ova'];
             $cleanBaseLower = strtolower(trim(preg_replace('/[._\-]/', ' ', $baseName)));
             if (in_array($cleanBaseLower, $knownEpisodeNames) || $edition === 'OVA') {
@@ -336,31 +336,31 @@ class SceneNameParserService
 
         if ($isSeriesDetected) {
             // Determine Series Title
-            if (!empty($rawSeriesPart)) {
+            if (! empty($rawSeriesPart)) {
                 $seriesTitle = $this->cleanTitleString($rawSeriesPart);
             }
 
             // If seriesTitle is missing or generic (e.g. file was just "01.mp4" or "Episode 05.mkv"), resolve from folder hierarchy
             if (empty($seriesTitle) || is_numeric($seriesTitle) || strtolower($seriesTitle) === 'unknown series' || in_array(strtolower($seriesTitle), $this->genericFolderNames)) {
-                if ($isParentSeasonFolder && $grandparentFolder && !in_array(strtolower($grandparentFolder), $this->genericFolderNames)) {
+                if ($isParentSeasonFolder && $grandparentFolder && ! in_array(strtolower($grandparentFolder), $this->genericFolderNames)) {
                     $seriesTitle = $this->cleanTitleString($grandparentFolder);
-                } elseif ($parentFolder && !in_array(strtolower($parentFolder), $this->genericFolderNames)) {
+                } elseif ($parentFolder && ! in_array(strtolower($parentFolder), $this->genericFolderNames)) {
                     $seriesTitle = $this->cleanTitleString($parentFolder);
-                } elseif ($grandparentFolder && !in_array(strtolower($grandparentFolder), $this->genericFolderNames)) {
+                } elseif ($grandparentFolder && ! in_array(strtolower($grandparentFolder), $this->genericFolderNames)) {
                     $seriesTitle = $this->cleanTitleString($grandparentFolder);
                 }
             }
 
             // Episode Title from remaining string
-            if ($rawAfterPart && !$episodeTitle) {
+            if ($rawAfterPart && ! $episodeTitle) {
                 $cleanEp = $this->cleanTitleString($rawAfterPart);
-                if (!empty($cleanEp) && !is_numeric($cleanEp) && !preg_match($qualityTokensRegex, $cleanEp)) {
+                if (! empty($cleanEp) && ! is_numeric($cleanEp) && ! preg_match($qualityTokensRegex, $cleanEp)) {
                     $episodeTitle = $cleanEp;
                 }
             }
 
             // Check parent/grandparent directory for series year if missing
-            if (!$year) {
+            if (! $year) {
                 $dirToCheck = $isParentSeasonFolder ? $grandparentFolder : $parentFolder;
                 if ($dirToCheck && preg_match('/\b(19\d\d|20\d\d)\b/', $dirToCheck, $dirYMatch)) {
                     $year = (int) $dirYMatch[1];
@@ -372,7 +372,7 @@ class SceneNameParserService
             // Movie Title Extraction
             $isGenericMovieFile = in_array(strtolower(trim($baseName)), ['movie', 'film', 'video', 'main', 'cd1', 'cd2', 'فيلم', 'فلم', 'فيديو']);
 
-            if ($isGenericMovieFile && $parentFolder && !in_array(strtolower($parentFolder), $this->genericFolderNames)) {
+            if ($isGenericMovieFile && $parentFolder && ! in_array(strtolower($parentFolder), $this->genericFolderNames)) {
                 // Use folder name as movie title (e.g. The Godfather (1972)/movie.mp4)
                 $cleanTitle = $this->cleanTitleString($parentFolder);
                 if (preg_match('/\b(19\d\d|20\d\d)\b/', $parentFolder, $dirYMatch)) {
@@ -390,7 +390,7 @@ class SceneNameParserService
                     $cleanTitle = $this->cleanTitleString($working);
                 }
 
-                if (!$year && $parentFolder && preg_match('/\b(19\d\d|20\d\d)\b/', $parentFolder, $dirYMatch)) {
+                if (! $year && $parentFolder && preg_match('/\b(19\d\d|20\d\d)\b/', $parentFolder, $dirYMatch)) {
                     $year = (int) $dirYMatch[1];
                 }
             }
@@ -401,7 +401,7 @@ class SceneNameParserService
         }
 
         // 10. Detect Technical Specs across full path & filename
-        $fullSpecsString = $working . ' ' . $filename . ' ' . $parentFolder . ' ' . $grandparentFolder;
+        $fullSpecsString = $working.' '.$filename.' '.$parentFolder.' '.$grandparentFolder;
 
         if (preg_match('/\b(2160p|4k|uhd)\b/i', $fullSpecsString)) {
             $resolution = '4K UHD';
@@ -423,7 +423,7 @@ class SceneNameParserService
             $resolution = '240p';
         }
 
-        if (!$resolution && preg_match('/\b(\d{3,4})x(\d{3,4})\b/i', $fullSpecsString, $dimMatch)) {
+        if (! $resolution && preg_match('/\b(\d{3,4})x(\d{3,4})\b/i', $fullSpecsString, $dimMatch)) {
             $resolution = $this->calculateResolutionFromDimensions((int) $dimMatch[1], (int) $dimMatch[2]);
         }
 
@@ -519,7 +519,8 @@ class SceneNameParserService
     public function convertArabicDigits(string $str): string
     {
         $arabic = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-        $latin  = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        $latin = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+
         return str_replace($arabic, $latin, $str);
     }
 
@@ -552,6 +553,7 @@ class SceneNameParserService
         if ($minDim >= 320) {
             return '360p';
         }
+
         return '240p';
     }
 
@@ -572,10 +574,10 @@ class SceneNameParserService
         $s = preg_replace('/\b(?:الحلقة|حلقة|ح)\s*(\d+|[\p{Arabic}]+)?\b/ui', ' ', $s);
         $s = preg_replace('/\bS\d{1,2}\b/i', ' ', $s);
         $s = preg_replace('/\b(?:2160p|1440p|1080p|1080i|720p|576p|540p|480p|360p|240p|4k|2k|bluray|remux|web-dl|webdl|webrip|hdtv|dvdrip|dvd|x264|x265|hevc|aac|dts|ac3|atmos|hdr|10bit|8bit|ddp5\.1|ddp)\b/i', ' ', $s);
-        
+
         // Strip Arabic release tags
         $s = preg_replace('/\b(?:مترجم|مدبلج|نسخة\s*اصلية|نسخة\s*أصلية|نسخة|حصريا|جودة\s*عالية|عالي\s*الجودة|كامل|بلوراي|دي\s*في\s*دي|اونلاين|مشاهدة|تحميل)\b/ui', ' ', $s);
-        
+
         $s = preg_replace('/\b(19\d\d|20\d\d)\b/', ' ', $s);
 
         // Protect hyphenated names (Spider-Man, X-Men, Ant-Man, Iron-Man)
@@ -593,7 +595,7 @@ class SceneNameParserService
         $s = trim($s, " \t\n\r\0\x0B-_.:");
 
         // Only apply English Title Case if there are Latin letters and not primarily Arabic
-        if (preg_match('/[a-zA-Z]/', $s) && !preg_match('/[\p{Arabic}]/u', $s)) {
+        if (preg_match('/[a-zA-Z]/', $s) && ! preg_match('/[\p{Arabic}]/u', $s)) {
             $s = $this->toProperTitleCase($s);
         }
 
@@ -612,14 +614,17 @@ class SceneNameParserService
             // Handle hyphenated words (e.g. Spider-Man)
             if (str_contains($word, '-')) {
                 $parts = explode('-', $word);
-                $capitalizedParts = array_map(function($p) use ($minorWords, $idx) {
-                    if (empty($p)) return $p;
+                $capitalizedParts = array_map(function ($p) {
+                    if (empty($p)) {
+                        return $p;
+                    }
+
                     return ucfirst(strtolower($p));
                 }, $parts);
                 $word = implode('-', $capitalizedParts);
             } else {
                 $lower = strtolower($word);
-                if ($idx === 0 || $prevWordEndedWithColon || !in_array($lower, $minorWords)) {
+                if ($idx === 0 || $prevWordEndedWithColon || ! in_array($lower, $minorWords)) {
                     $word = ucfirst($lower);
                 } else {
                     $word = $lower;
@@ -633,7 +638,8 @@ class SceneNameParserService
 
     public function isSampleOrExtra(string $filename, string $parentFolder): bool
     {
-        $combined = strtolower($filename . ' ' . $parentFolder);
+        $combined = strtolower($filename.' '.$parentFolder);
+
         return (bool) preg_match('/\b(sample|trailer|trailers|featurette|featurettes|behindthescenes|deleted|deletedscenes|extra|extras|preview|bonus|interview|short)\b/i', $combined);
     }
 }

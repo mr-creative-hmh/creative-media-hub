@@ -9,12 +9,13 @@ use App\Services\Metadata\ArtworkDownloadService;
 use App\Services\Metadata\MetadataAggregator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
 class MediaController extends Controller
 {
     protected MetadataAggregator $metadata;
+
     protected ArtworkDownloadService $artwork;
 
     public function __construct(MetadataAggregator $metadata, ArtworkDownloadService $artwork)
@@ -30,9 +31,9 @@ class MediaController extends Controller
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('title_ar', 'like', "%{$search}%")
-                  ->orWhere('overview', 'like', "%{$search}%")
-                  ->orWhereHas('people', fn($p) => $p->where('name', 'like', "%{$search}%"));
+                    ->orWhere('title_ar', 'like', "%{$search}%")
+                    ->orWhere('overview', 'like', "%{$search}%")
+                    ->orWhereHas('people', fn ($p) => $p->where('name', 'like', "%{$search}%"));
             });
         }
 
@@ -61,23 +62,23 @@ class MediaController extends Controller
             match ($origin) {
                 'arabic' => $query->where(function ($q) {
                     $q->where('original_language', 'ar')
-                      ->orWhereIn('origin_country', ['EG', 'SA', 'SY', 'LB', 'AE', 'KW', 'JO', 'MA', 'IQ', 'TN', 'DZ', 'SD', 'YE', 'OM', 'QA', 'BH'])
-                      ->orWhereNotNull('title_ar')
-                      ->orWhere('title', 'like', '%فيلم%')
-                      ->orWhere('title', 'like', '%مسلسل%');
+                        ->orWhereIn('origin_country', ['EG', 'SA', 'SY', 'LB', 'AE', 'KW', 'JO', 'MA', 'IQ', 'TN', 'DZ', 'SD', 'YE', 'OM', 'QA', 'BH'])
+                        ->orWhereNotNull('title_ar')
+                        ->orWhere('title', 'like', '%فيلم%')
+                        ->orWhere('title', 'like', '%مسلسل%');
                 }),
                 'indian' => $query->where(function ($q) {
                     $q->whereIn('original_language', ['hi', 'te', 'ta', 'ml', 'kn', 'mr', 'bn', 'pa', 'ur'])
-                      ->orWhere('origin_country', 'IN');
+                        ->orWhere('origin_country', 'IN');
                 }),
                 'asian' => $query->where(function ($q) {
                     $q->whereIn('original_language', ['ja', 'ko', 'zh', 'cn', 'hk', 'tw', 'th'])
-                      ->orWhereIn('origin_country', ['JP', 'KR', 'CN', 'HK', 'TW', 'TH'])
-                      ->orWhereHas('genres', fn($g) => $g->where('slug', 'like', '%anime%'));
+                        ->orWhereIn('origin_country', ['JP', 'KR', 'CN', 'HK', 'TW', 'TH'])
+                        ->orWhereHas('genres', fn ($g) => $g->where('slug', 'like', '%anime%'));
                 }),
                 'turkish' => $query->where(function ($q) {
                     $q->where('original_language', 'tr')
-                      ->orWhere('origin_country', 'TR');
+                        ->orWhere('origin_country', 'TR');
                 }),
                 'hollywood' => $query->where(function ($q) {
                     $q->where(function ($sub) {
@@ -87,7 +88,7 @@ class MediaController extends Controller
                 }),
                 'european' => $query->where(function ($q) {
                     $q->whereIn('original_language', ['fr', 'de', 'it', 'es', 'pt', 'ru', 'sv', 'da', 'no', 'nl', 'pl'])
-                      ->orWhereIn('origin_country', ['FR', 'DE', 'IT', 'ES', 'SE', 'DK', 'NO', 'NL', 'PL', 'RU']);
+                        ->orWhereIn('origin_country', ['FR', 'DE', 'IT', 'ES', 'SE', 'DK', 'NO', 'NL', 'PL', 'RU']);
                 }),
                 default => null,
             };
@@ -157,7 +158,7 @@ class MediaController extends Controller
 
     public function toggleFavorite(MediaItem $mediaItem)
     {
-        $mediaItem->update(['is_favorite' => !$mediaItem->is_favorite]);
+        $mediaItem->update(['is_favorite' => ! $mediaItem->is_favorite]);
 
         return response()->json([
             'status' => 'success',
@@ -183,9 +184,11 @@ class MediaController extends Controller
             if (empty($results) && $cleanQuery !== $query) {
                 $results = $this->metadata->searchMovie($query, $year);
             }
+
             return response()->json(['results' => $results]);
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('searchMetadata error: ' . $e->getMessage());
+            Log::warning('searchMetadata error: '.$e->getMessage());
+
             return response()->json(['results' => []]);
         }
     }
@@ -272,10 +275,10 @@ class MediaController extends Controller
             'backdrop_path' => 'nullable|string',
         ]);
 
-        if (!empty($validated['poster_path']) && filter_var($validated['poster_path'], FILTER_VALIDATE_URL)) {
+        if (! empty($validated['poster_path']) && filter_var($validated['poster_path'], FILTER_VALIDATE_URL)) {
             $validated['poster_path'] = $this->artwork->downloadPoster($validated['poster_path']);
         }
-        if (!empty($validated['backdrop_path']) && filter_var($validated['backdrop_path'], FILTER_VALIDATE_URL)) {
+        if (! empty($validated['backdrop_path']) && filter_var($validated['backdrop_path'], FILTER_VALIDATE_URL)) {
             $validated['backdrop_path'] = $this->artwork->downloadBackdrop($validated['backdrop_path']);
         }
 
@@ -292,6 +295,7 @@ class MediaController extends Controller
     public function getVibes()
     {
         $allMoods = MediaItem::whereNotNull('mood_tags')->pluck('mood_tags')->flatten()->unique()->values();
+
         return response()->json($allMoods);
     }
 
@@ -312,7 +316,7 @@ class MediaController extends Controller
             ? MediaItem::with(['genres', 'subtitles', 'people'])->find($slug)
             : MediaItem::with(['genres', 'subtitles', 'people'])->where('slug', $slug)->first();
 
-        if (!$movie) {
+        if (! $movie) {
             $movie = MediaItem::with(['genres', 'subtitles', 'people'])->where('title', str_replace('-', ' ', $slug))->firstOrFail();
         }
 
@@ -321,7 +325,7 @@ class MediaController extends Controller
         $genres = Genre::orderBy('name_en')->get();
 
         $collectionMovies = [];
-        if (!empty($movie->collection_name)) {
+        if (! empty($movie->collection_name)) {
             $collectionMovies = MediaItem::where('collection_name', $movie->collection_name)
                 ->where('id', '!=', $movie->id)
                 ->orderBy('release_year')
@@ -337,5 +341,4 @@ class MediaController extends Controller
             'autoPlay' => $request->boolean('play'),
         ]);
     }
-
 }

@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Log;
 class OmdbProvider implements MetadataProviderInterface
 {
     protected string $baseUrl = 'https://www.omdbapi.com';
+
     protected ?string $apiKey;
 
     public function __construct(?string $apiKey = null)
@@ -30,7 +31,9 @@ class OmdbProvider implements MetadataProviderInterface
     public function searchMovie(string $title, ?int $year = null, string $lang = 'en'): array
     {
         $key = $this->getApiKey();
-        if (empty($key)) return [];
+        if (empty($key)) {
+            return [];
+        }
 
         try {
             $response = Http::timeout(6)->get($this->baseUrl, [
@@ -53,7 +56,7 @@ class OmdbProvider implements MetadataProviderInterface
                 }, $response['Search'] ?? []);
             }
         } catch (\Exception $e) {
-            Log::warning("OMDb searchMovie failed: " . $e->getMessage());
+            Log::warning('OMDb searchMovie failed: '.$e->getMessage());
         }
 
         return [];
@@ -62,7 +65,9 @@ class OmdbProvider implements MetadataProviderInterface
     public function searchSeries(string $title, ?int $year = null, string $lang = 'en'): array
     {
         $key = $this->getApiKey();
-        if (empty($key)) return [];
+        if (empty($key)) {
+            return [];
+        }
 
         try {
             $response = Http::timeout(6)->get($this->baseUrl, [
@@ -85,7 +90,7 @@ class OmdbProvider implements MetadataProviderInterface
                 }, $response['Search'] ?? []);
             }
         } catch (\Exception $e) {
-            Log::warning("OMDb searchSeries failed: " . $e->getMessage());
+            Log::warning('OMDb searchSeries failed: '.$e->getMessage());
         }
 
         return [];
@@ -94,7 +99,9 @@ class OmdbProvider implements MetadataProviderInterface
     public function getMovieDetails(string|int $id, string $lang = 'en'): ?array
     {
         $key = $this->getApiKey();
-        if (empty($key)) return null;
+        if (empty($key)) {
+            return null;
+        }
 
         try {
             $response = Http::timeout(6)->get($this->baseUrl, [
@@ -105,6 +112,7 @@ class OmdbProvider implements MetadataProviderInterface
 
             if ($response->successful() && ($response['Response'] ?? '') === 'True') {
                 $data = $response->json();
+
                 return [
                     'provider' => 'OMDb',
                     'imdb_id' => $data['imdbID'] ?? null,
@@ -121,7 +129,7 @@ class OmdbProvider implements MetadataProviderInterface
                 ];
             }
         } catch (\Exception $e) {
-            Log::warning("OMDb getMovieDetails failed: " . $e->getMessage());
+            Log::warning('OMDb getMovieDetails failed: '.$e->getMessage());
         }
 
         return null;
@@ -135,7 +143,9 @@ class OmdbProvider implements MetadataProviderInterface
     public function getSeasonEpisodes(string|int $seriesId, int $seasonNumber, string $lang = 'en'): array
     {
         $key = $this->getApiKey();
-        if (empty($key)) return [];
+        if (empty($key)) {
+            return [];
+        }
 
         try {
             $response = Http::timeout(6)->get($this->baseUrl, [
@@ -155,7 +165,7 @@ class OmdbProvider implements MetadataProviderInterface
                 }, $response['Episodes'] ?? []);
             }
         } catch (\Exception $e) {
-            Log::warning("OMDb getSeasonEpisodes failed: " . $e->getMessage());
+            Log::warning('OMDb getSeasonEpisodes failed: '.$e->getMessage());
         }
 
         return [];

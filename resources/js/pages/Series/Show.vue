@@ -55,6 +55,45 @@ const selectedSeason = () => {
 const handleMetadataUpdated = (updatedItem: any) => {
     Object.assign(props.series, updatedItem);
 };
+
+const playEpisode = (ep: any, playFn: (item: any, playlist?: any[]) => void) => {
+    const seasonEps = selectedSeason()?.episodes || [];
+    const playlist = seasonEps.map((e: any) => ({
+        ...e,
+        id: e.id,
+        type: 'episode',
+        watchable_id: e.id,
+        watchable_type: 'episode',
+        series: props.series,
+        series_id: props.series.id,
+        season_number: selectedSeason()?.season_number || 1,
+        episode_number: e.episode_number,
+        runtime_minutes: e.runtime_minutes || 22,
+        duration_seconds: (e.runtime_minutes ? e.runtime_minutes * 60 : 1320),
+        subtitles: e.subtitles || [],
+        title: e.title,
+        title_ar: e.title_ar
+    }));
+
+    const currentItem = {
+        ...ep,
+        id: ep.id,
+        type: 'episode',
+        watchable_id: ep.id,
+        watchable_type: 'episode',
+        series: props.series,
+        series_id: props.series.id,
+        season_number: selectedSeason()?.season_number || 1,
+        episode_number: ep.episode_number,
+        runtime_minutes: ep.runtime_minutes || 22,
+        duration_seconds: (ep.runtime_minutes ? ep.runtime_minutes * 60 : 1320),
+        subtitles: ep.subtitles || [],
+        title: ep.title,
+        title_ar: ep.title_ar
+    };
+
+    playFn(currentItem, playlist);
+};
 </script>
 
 <template>
@@ -152,22 +191,7 @@ const handleMetadataUpdated = (updatedItem: any) => {
             <div
                 v-for="ep in selectedSeason()?.episodes"
                 :key="ep.id"
-                @click="play({
-                    ...ep,
-                    id: ep.id,
-                    type: 'episode',
-                    watchable_id: ep.id,
-                    watchable_type: 'episode',
-                    series: series,
-                    series_id: series.id,
-                    season_number: selectedSeason()?.season_number || 1,
-                    episode_number: ep.episode_number,
-                    runtime_minutes: ep.runtime_minutes || 22,
-                    duration_seconds: (ep.runtime_minutes ? ep.runtime_minutes * 60 : 1320),
-                    subtitles: ep.subtitles || [],
-                    title: ep.title,
-                    title_ar: ep.title_ar
-                })"
+                @click="playEpisode(ep, play)"
                 class="glass-panel group rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 hover:border-cyan-500/50 transition-all flex flex-col shadow-sm bg-white dark:bg-[#121622]"
             >
                 <div class="relative aspect-video w-full overflow-hidden bg-slate-900">

@@ -84,9 +84,9 @@ const strategies = [
         nameEn: 'Resolution Partitioned (4K, 1080p, 720p)',
         descAr: 'فصل أفلام 4K UHD و 1080p في مجلدات رئيسية مستقلة حسب الجودة.',
         descEn: 'Isolates 4K UHD, 1080p FHD, and 720p content into dedicated root tiers.',
-        movie: '{Type}/{Resolution}/{Title} ({Year}) [{Codec}].{ext}',
+        movie: '{Type}/{Resolution}/{Title} ({Year}) [{Source}].{ext}',
         series: '{Type}/{Resolution}/{Title}/Season {Season:02}/{Title} - S{Season:02}E{Episode:02}.{ext}',
-        exampleMovie: 'Movies/1080p/Dune (2021) [HEVC].mkv',
+        exampleMovie: 'Movies/1080p/Dune (2021) [BluRay].mkv',
         exampleSeries: 'TV Shows/1080p/The Last of Us/Season 01/The Last of Us - S01E01.mkv',
     },
         {
@@ -100,6 +100,18 @@ const strategies = [
         series: '{Type}/{Genre}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} [{Resolution}].{ext}',
         exampleMovie: 'Movies/Action/Inception (2010)/Inception (2010) [1080p].mkv',
         exampleSeries: 'TV Shows/Animation/Rick and Morty (2013)/Season 01/Rick and Morty - S01E01 [1080p].mkv',
+    },
+    {
+        id: 'source',
+        tag: 'Source Quality (BluRay/WEB)',
+        nameAr: 'التقسيم حسب مصدر الجودة (BluRay، WEB-DL، WEBRip)',
+        nameEn: 'Source Quality Partitioned (BluRay, WEB-DL, WEBRip, HDTV)',
+        descAr: 'يفصل النسخ عالية الجودة (BluRay Remux) عن النسخ المضغوطة (WEBRip/WEB-DL) لأفضل تجربة مشاهدة.',
+        descEn: 'Separates high-fidelity BluRay remuxes from compressed WEB-DL/WEBRip releases.',
+        movie: '{Type}/{Source}/{Title} ({Year})/{Title} ({Year}) [{Resolution} {Codec}].{ext}',
+        series: '{Type}/{Source}/{Title}/Season {Season:02}/{Title} - S{Season:02}E{Episode:02}.{ext}',
+        exampleMovie: 'Movies/BluRay/Dune (2021)/Dune (2021) [2160p HEVC].mkv',
+        exampleSeries: 'TV Shows/WEB-DL/The Last of Us/Season 01/The Last of Us - S01E01.mkv',
     },
 {
         id: 'custom',
@@ -137,6 +149,11 @@ const tokens = [
     { token: '{Year}', desc: 'Release Year (e.g. 2010)' },
     { token: '{Resolution}', desc: '1080p / 2160p / 720p' },
     { token: '{Codec}', desc: 'HEVC / x264 / AV1' },
+    { token: '{Source}', desc: 'BluRay / WEBRip / WEB-DL / HDTV' },
+    { token: '{Genre}', desc: 'Primary Genre (e.g. Action)' },
+    { token: '{Genres}', desc: 'Joined Genres (e.g. Action & Sci-Fi)' },
+    { token: '{Edition}', desc: "Director's Cut / Extended" },
+    { token: '{Group}', desc: 'Release Group (e.g. FLUX)' },
     { token: '{Season:02}', desc: '01, 02, 03' },
     { token: '{Episode:02}', desc: '01, 02, 03' },
     { token: '{EpisodeTitle}', desc: 'Episode Name' },
@@ -203,6 +220,7 @@ const executionStatus = ref({
     processed_count: 0,
     successful_count: 0,
     failed_count: 0,
+    cleaned_folders_count: 0,
     progress_percent: 0,
     current_action: 'Idle',
     current_file: '',
@@ -733,12 +751,12 @@ onUnmounted(() => {
             <!-- Filters & Search Toolbar -->
             <div class="flex flex-col sm:flex-row gap-3 items-center justify-between bg-slate-900/40 p-4 rounded-2xl border border-white/10">
                 <div class="relative w-full sm:w-80">
-                    <Search class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <Search class="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2" />
                     <input
                         v-model="searchQuery"
                         type="text"
                         :placeholder="isRTL ? 'بحث بالاسم أو المسار...' : 'Filter files or paths...'"
-                        class="w-full bg-slate-950 border border-white/15 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                        class="w-full bg-slate-950 border border-white/15 rounded-xl ps-9 pe-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
                     />
                 </div>
 

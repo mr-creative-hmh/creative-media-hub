@@ -16,7 +16,7 @@ class MetadataAggregatorTest extends TestCase
 {
     public function test_local_provider_always_returns_fallback_movie_summary(): void
     {
-        $local = new LocalNfoProvider();
+        $local = new LocalNfoProvider;
         $results = $local->searchMovie('Inception', 2010);
 
         $this->assertNotEmpty($results);
@@ -28,12 +28,12 @@ class MetadataAggregatorTest extends TestCase
     {
         $aggregator = new MetadataAggregator(
             new TmdbProvider('invalid_key_for_testing'),
-            new TvMazeProvider(),
+            new TvMazeProvider,
             new OmdbProvider('invalid_key'),
-            new AniListProvider(),
-            new WikipediaProvider(),
-            new LocalNfoProvider(),
-            new ArtworkDownloadService()
+            new AniListProvider,
+            new WikipediaProvider,
+            new LocalNfoProvider,
+            new ArtworkDownloadService
         );
 
         $providers = $aggregator->getProvidersList();
