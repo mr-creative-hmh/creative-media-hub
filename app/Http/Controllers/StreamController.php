@@ -439,6 +439,9 @@ class StreamController extends Controller
             'Content-Type' => $contentType,
             'Accept-Ranges' => 'bytes',
             'Access-Control-Allow-Origin' => '*',
+            'Access-Control-Allow-Methods' => 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers' => 'Range, Content-Type, Accept',
+            'Access-Control-Expose-Headers' => 'Content-Length, Content-Range, Accept-Ranges',
             'Cache-Control' => 'public, max-age=3600',
         ];
 
@@ -552,8 +555,10 @@ class StreamController extends Controller
         $cachedFile = "{$cacheDir}/{$cacheKey}.mp4";
         $lockFile = "{$cacheDir}/{$cacheKey}.lock";
 
-        // If complete cached file is ready on disk and we are starting from 0, stream directly with Byte-Range HTTP 206
-        if (file_exists($cachedFile) && filesize($cachedFile) > 1024 * 1024 && $startSeconds == 0) {
+        $audioDelayMs = (int) $request->query('audio_delay', 0);
+
+        // If complete cached file is ready on disk and we are starting from 0 AND no audio delay was requested, stream directly with Byte-Range HTTP 206
+        if (file_exists($cachedFile) && filesize($cachedFile) > 1024 * 1024 && $startSeconds == 0 && $audioDelayMs == 0) {
             return $this->streamFileRange($cachedFile, $request);
         }
 
@@ -604,6 +609,19 @@ class StreamController extends Controller
             }
         }
 
+        // Build audio filter chain supporting audio-to-video delay compensation
+        $audioFilters = [];
+        if ($audioDelayMs > 0) {
+            // Audio leads video -> delay audio by $audioDelayMs
+            $audioFilters[] = "adelay={$audioDelayMs}|{$audioDelayMs}";
+        } elseif ($audioDelayMs < 0) {
+            // Audio lags behind video -> advance audio by trimming the start
+            $trimSec = abs($audioDelayMs) / 1000.0;
+            $audioFilters[] = "atrim=start={$trimSec},asetpts=PTS-STARTPTS";
+        }
+        $audioFilters[] = 'aresample=async=1000:min_hard_comp=0.100000:first_pts=0';
+        $audioFilterStr = implode(',', $audioFilters);
+
         $cmd = array_merge(
             [
                 $ffmpegPath,
@@ -617,7 +635,7 @@ class StreamController extends Controller
             ],
             $videoArgs,
             [
-                '-af', 'aresample=async=1000:min_hard_comp=0.100000:first_pts=0',
+                '-af', $audioFilterStr,
                 '-c:a', 'aac',
                 '-b:a', '192k',
                 '-ac', '2',
@@ -666,9 +684,13 @@ class StreamController extends Controller
             }
         }, 200, [
             'Content-Type' => 'video/mp4',
-            'Cache-Control' => 'public, max-age=86400',
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
             'X-Accel-Buffering' => 'no',
             'Accept-Ranges' => 'bytes',
+            'Access-Control-Allow-Origin' => '*',
+            'Access-Control-Allow-Methods' => 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers' => 'Range, Content-Type, Accept',
+            'Access-Control-Expose-Headers' => 'Content-Length, Content-Range, Accept-Ranges',
         ]);
     }
 }

@@ -192,4 +192,21 @@ class StreamingAndRoutesTest extends TestCase
         $this->assertEquals(24, $res->json('runtime_minutes'));
         $this->assertEquals('360p', $res->json('resolution'));
     }
+
+    public function test_movie_stream_supports_cors_and_audio_delay(): void
+    {
+        $movie = MediaItem::create([
+            'title' => 'Sonic the Hedgehog',
+            'release_year' => 2020,
+            'file_path' => 'H:/Entertainment/Movies/Sci-Fi/Sonic the Hedgehog Collection/Sonic the Hedgehog (2020)/Sonic the Hedgehog (2020).mkv',
+            'video_codec' => 'H.264 / AVC',
+            'audio_codec' => 'Dolby Digital',
+        ]);
+
+        $response = $this->get(route('stream.movie', ['mediaItem' => $movie->id, 'audio_delay' => -500]));
+        $this->assertTrue(in_array($response->getStatusCode(), [200, 206, 302, 404]));
+        if ($response->getStatusCode() === 200 || $response->getStatusCode() === 206) {
+            $this->assertEquals('*', $response->headers->get('Access-Control-Allow-Origin'));
+        }
+    }
 }

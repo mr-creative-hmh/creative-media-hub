@@ -135,10 +135,34 @@ const subtitleSearchResults = ref<any[]>([]);
 const subtitleSearchError = ref<string | null>(null);
 
 // Audio Enhancer & Equalizer State (Web Audio API)
+// Audio Enhancer & Equalizer State (Web Audio API)
 const vocalBoost = ref(true);
 const bassBoost = ref(false);
 const nightMode = ref(false);
-const audioDelayMs = ref(0); // Audio-to-video sync delay in milliseconds (0 to 1500ms)
+
+const isEpisode = computed(() => {
+    return activeItem.value?.type === 'episode' 
+        || activeItem.value?.watchable_type === 'episode' 
+        || !!activeItem.value?.episode_number 
+        || !!activeItem.value?.season_id;
+});
+
+const itemKey = computed(() => {
+    if (!activeItem.value) return 'default';
+    const type = isEpisode.value ? 'episode' : 'movie';
+    return `${type}_${activeItem.value.id}`;
+});
+
+const getSavedAudioDelay = (): number => {
+    try {
+        const saved = localStorage.getItem(`audio_sync_${itemKey.value}`);
+        return saved !== null ? parseInt(saved, 10) : 0;
+    } catch {
+        return 0;
+    }
+};
+
+const audioDelayMs = ref(0); // Audio-to-video sync delay in milliseconds (-3000 to +3000ms)
 
 const toastNotice = ref<string | null>(null);
 let toastTimeout: any = null;
@@ -165,20 +189,50 @@ let controlsTimeout: any = null;
 let progressSaveInterval: any = null;
 let bufferTrackInterval: any = null;
 let serverCachePollInterval: any = null;
+let audioDelayDebounceTimer: any = null;
 
-// Watch audio delay and update DelayNode in real-time
-watch(audioDelayMs, (newVal) => {
-    if (delayNode) {
-        delayNode.delayTime.value = Math.max(0, newVal / 1000);
+const applyAudioDelay = (delayVal: number, commitToStream = true) => {
+    audioDelayMs.value = delayVal;
+    try {
+        localStorage.setItem(`audio_sync_${itemKey.value}`, String(delayVal));
+    } catch {}
+
+    // Instant local preview via Web Audio DelayNode if positive
+    if (delayNode && audioCtx) {
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(() => {});
+        }
+        if (delayVal >= 0) {
+            delayNode.delayTime.setTargetAtTime(delayVal / 1000, audioCtx.currentTime, 0.05);
+        } else {
+            delayNode.delayTime.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+        }
     }
-});
 
-const isEpisode = computed(() => {
-    return activeItem.value?.type === 'episode' 
-        || activeItem.value?.watchable_type === 'episode' 
-        || !!activeItem.value?.episode_number 
-        || !!activeItem.value?.season_id;
-});
+    if (!commitToStream) return;
+
+    clearTimeout(audioDelayDebounceTimer);
+    audioDelayDebounceTimer = setTimeout(() => {
+        if (videoRef.value) {
+            const cur = currentTime.value;
+            remuxStartOffset.value = cur;
+            videoRef.value.load();
+            videoRef.value.play().catch(() => {});
+        }
+        const label = delayVal === 0 
+            ? (isRTL.value ? 'مزامنة الصوت: متطابق (0ms)' : 'Audio Sync: In Sync (0ms)')
+            : (isRTL.value 
+                ? `مزامنة الصوت: ${delayVal > 0 ? '+' : ''}${delayVal}ms (${delayVal < 0 ? 'تقديم الصوت' : 'تأخير الصوت'})` 
+                : `Audio Sync: ${delayVal > 0 ? '+' : ''}${delayVal}ms (${delayVal < 0 ? 'Audio Advanced' : 'Audio Delayed'})`
+              );
+        showToast(label);
+    }, 400);
+};
+
+const nudgeAudioDelay = (deltaMs: number) => {
+    const nextVal = Math.min(3000, Math.max(-3000, audioDelayMs.value + deltaMs));
+    applyAudioDelay(nextVal, true);
+};
 
 // Auto-detect if media requires Ultra-Fast Server Remuxing
 const checkNeedsRemux = (item: any) => {
@@ -195,15 +249,30 @@ const checkNeedsRemux = (item: any) => {
 const isRemuxStream = ref(checkNeedsRemux(props.item));
 const remuxStartOffset = ref(isRemuxStream.value && initialSec > 0 ? initialSec : 0);
 
-// Stable Stream URL: Direct Stream vs Server-Side Remux
+// Stable Stream URL: Direct Stream vs Server-Side Remux with Audio Delay Offset
 const streamUrl = computed(() => {
     if (!activeItem.value) return '';
+    const delayParam = audioDelayMs.value !== 0 ? `audio_delay=${audioDelayMs.value}` : '';
     if (isRemuxStream.value) {
-        const startParam = remuxStartOffset.value > 0 ? `?start=${Math.round(remuxStartOffset.value * 100) / 100}` : '';
+        const params: string[] = [];
+        if (remuxStartOffset.value > 0) params.push(`start=${Math.round(remuxStartOffset.value * 100) / 100}`);
+        if (delayParam) params.push(delayParam);
+        const queryString = params.length > 0 ? `?${params.join('&')}` : '';
         if (isEpisode.value) {
-            return `/stream/remux/episode/${activeItem.value.id}${startParam}`;
+            return `/stream/remux/episode/${activeItem.value.id}${queryString}`;
         }
-        return `/stream/remux/movie/${activeItem.value.id}${startParam}`;
+        return `/stream/remux/movie/${activeItem.value.id}${queryString}`;
+    }
+
+    if (delayParam) {
+        // If native stream has an audio sync offset, route via remux so FFmpeg applies the exact offset
+        const params: string[] = [delayParam];
+        if (currentTime.value > 0) params.push(`start=${Math.round(currentTime.value * 100) / 100}`);
+        const queryString = `?${params.join('&')}`;
+        if (isEpisode.value) {
+            return `/stream/remux/episode/${activeItem.value.id}${queryString}`;
+        }
+        return `/stream/remux/movie/${activeItem.value.id}${queryString}`;
     }
 
     if (isEpisode.value) {
@@ -225,6 +294,7 @@ const changeActiveItem = (newItem: any) => {
     isDurationLocked.value = exactDur > 0;
     isRemuxStream.value = checkNeedsRemux(newItem);
     remuxStartOffset.value = 0;
+    audioDelayMs.value = getSavedAudioDelay();
     selectedSubtitleId.value = 'off';
     activeCueText.value = '';
     parsedCues.value = [];
@@ -705,6 +775,9 @@ const initAudioPipeline = () => {
         if (!AudioContextClass) return;
 
         audioCtx = new AudioContextClass();
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(() => {});
+        }
         sourceNode = audioCtx.createMediaElementSource(videoRef.value);
 
         voiceFilterNode = audioCtx.createBiquadFilter();
@@ -1105,6 +1178,7 @@ const handleClose = () => {
 
 onMounted(() => {
     window.addEventListener('keydown', onKeyDown);
+    audioDelayMs.value = getSavedAudioDelay();
     fetchSubtitles();
     fetchMediaDuration();
 
@@ -1652,39 +1726,65 @@ onBeforeUnmount(() => {
                                             </div>
                                         </button>
 
-                                        <!-- Audio / Video Sync Slider (Delay compensation when sound is ahead) -->
+                                        <!-- Audio / Video Sync Slider (Delay & Advance compensation) -->
                                         <div class="border-t border-white/10 pt-2.5 flex flex-col gap-2">
                                             <div class="flex items-center justify-between">
                                                 <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                                                     <Clock class="w-3.5 h-3.5 text-cyan-400" />
-                                                    <span>{{ isRTL ? 'مزامنة وتأخير الصوت' : 'Audio Sync / Delay' }}</span>
+                                                    <span>{{ isRTL ? 'مزامنة وتعديل توقيت الصوت' : 'Audio / Video Sync' }}</span>
                                                 </span>
-                                                <span class="text-xs font-mono font-bold text-cyan-300">
+                                                <span class="text-xs font-mono font-bold" :class="audioDelayMs === 0 ? 'text-slate-400' : (audioDelayMs < 0 ? 'text-amber-400' : 'text-cyan-400')">
                                                     {{ audioDelayMs > 0 ? `+${audioDelayMs}` : audioDelayMs }} ms
+                                                    <span class="text-[9px] font-sans font-normal opacity-80">
+                                                        {{ audioDelayMs === 0 ? (isRTL ? '(متطابق)' : '(Synced)') : (audioDelayMs < 0 ? (isRTL ? '(تقديم)' : '(Advanced)') : (isRTL ? '(تأخير)' : '(Delayed)')) }}
+                                                    </span>
                                                 </span>
                                             </div>
                                             <div class="text-[10px] text-slate-400 leading-tight">
-                                                {{ isRTL ? 'استخدم التأخير (+) عندما يسبق الصوت حركة الفيديو' : 'Add positive delay (+) when audio leads video' }}
+                                                {{ isRTL ? 'اختر (-) لتقديم الصوت إذا كان متأخراً عن الصورة، أو (+) لتأخير الصوت إذا كان سابقاً للصورة' : 'Use (-) to advance audio if sound lags picture, or (+) to delay audio if sound leads picture' }}
                                             </div>
-                                            <div class="flex items-center gap-2">
+
+                                            <!-- Slider & Nudge Buttons -->
+                                            <div class="flex items-center gap-1.5">
+                                                <button
+                                                    type="button"
+                                                    @click="nudgeAudioDelay(-50)"
+                                                    class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white font-mono text-[10px] font-bold transition-all cursor-pointer flex-shrink-0"
+                                                    :title="isRTL ? 'تقديم الصوت بمقدار 50 ميلي ثانية' : 'Advance Audio by 50ms'"
+                                                >
+                                                    -50ms
+                                                </button>
                                                 <input
                                                     type="range"
-                                                    min="-500"
-                                                    max="1500"
+                                                    min="-3000"
+                                                    max="3000"
                                                     step="25"
-                                                    v-model.number="audioDelayMs"
+                                                    :value="audioDelayMs"
+                                                    @input="applyAudioDelay(Number(($event.target as HTMLInputElement).value), false)"
+                                                    @change="applyAudioDelay(Number(($event.target as HTMLInputElement).value), true)"
                                                     class="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-cyan-400"
                                                 />
-                                            </div>
-                                            <div class="flex items-center justify-between gap-1 pt-0.5">
                                                 <button
-                                                    v-for="preset in [0, 100, 250, 500]"
-                                                    :key="preset"
-                                                    @click="audioDelayMs = preset"
-                                                    class="px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer"
-                                                    :class="audioDelayMs === preset ? 'bg-cyan-500 text-slate-950' : 'bg-white/5 hover:bg-white/10 text-slate-400'"
+                                                    type="button"
+                                                    @click="nudgeAudioDelay(50)"
+                                                    class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white font-mono text-[10px] font-bold transition-all cursor-pointer flex-shrink-0"
+                                                    :title="isRTL ? 'تأخير الصوت بمقدار 50 ميلي ثانية' : 'Delay Audio by 50ms'"
                                                 >
-                                                    {{ preset === 0 ? '0ms' : `+${preset}ms` }}
+                                                    +50ms
+                                                </button>
+                                            </div>
+
+                                            <!-- Quick Presets -->
+                                            <div class="grid grid-cols-7 gap-1 pt-0.5">
+                                                <button
+                                                    v-for="preset in [-1000, -500, -250, 0, 250, 500, 1000]"
+                                                    :key="preset"
+                                                    type="button"
+                                                    @click="applyAudioDelay(preset, true)"
+                                                    class="px-1 py-1 rounded-lg text-[9px] font-mono font-bold transition-all cursor-pointer text-center"
+                                                    :class="audioDelayMs === preset ? (preset < 0 ? 'bg-amber-400 text-slate-950' : (preset > 0 ? 'bg-cyan-400 text-slate-950' : 'bg-white text-slate-950')) : 'bg-white/5 hover:bg-white/10 text-slate-400'"
+                                                >
+                                                    {{ preset === 0 ? '0' : (preset > 0 ? `+${preset}` : preset) }}
                                                 </button>
                                             </div>
                                         </div>
