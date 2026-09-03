@@ -5,6 +5,7 @@ import Navbar from './Navbar.vue';
 import Sidebar from './Sidebar.vue';
 import CinemaPlayer from '@/components/player/CinemaPlayer.vue';
 import ScannerStatusModal from '@/components/scanner/ScannerStatusModal.vue';
+import PageTransitionLoader from '@/components/common/PageTransitionLoader.vue';
 import { useScanner } from '@/composables/useScanner';
 import { useDownloader } from '@/composables/useDownloader';
 
@@ -83,5 +84,8 @@ const closePlayer = () => {
 
         <!-- Global Fast Background Scanner Status Modal -->
         <ScannerStatusModal />
+
+        <!-- Global Cinema Page Transition Island Loader -->
+        <PageTransitionLoader />
     </div>
 </template>
