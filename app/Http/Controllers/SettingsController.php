@@ -31,6 +31,7 @@ class SettingsController extends Controller
 
         return Inertia::render('Settings/Index', [
             'settings' => $settings,
+            'media_cache' => $this->calculateCacheStats(),
         ]);
     }
 
@@ -143,5 +144,80 @@ class SettingsController extends Controller
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => 'Connection test failed: '.$e->getMessage()], 500);
         }
+    }
+
+    public function getMediaCacheStats(): JsonResponse
+    {
+        return response()->json($this->calculateCacheStats());
+    }
+
+    public function clearMediaCache(): JsonResponse
+    {
+        $cacheDir = storage_path('app/cache/media_streams');
+        $freedBytes = 0;
+        $deletedCount = 0;
+
+        if (is_dir($cacheDir)) {
+            $files = glob($cacheDir.'/*');
+            if ($files) {
+                foreach ($files as $file) {
+                    if (is_file($file)) {
+                        $size = (int) @filesize($file);
+                        if (@unlink($file)) {
+                            $freedBytes += $size;
+                            $deletedCount++;
+                        }
+                    }
+                }
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Media cache cleared successfully! Freed {$this->formatBytes($freedBytes)} ({$deletedCount} files deleted).",
+            'freed_bytes' => $freedBytes,
+            'freed_formatted' => $this->formatBytes($freedBytes),
+            'stats' => $this->calculateCacheStats(),
+        ]);
+    }
+
+    private function calculateCacheStats(): array
+    {
+        $cacheDir = storage_path('app/cache/media_streams');
+        $totalBytes = 0;
+        $fileCount = 0;
+
+        if (is_dir($cacheDir)) {
+            $files = glob($cacheDir.'/*');
+            if ($files) {
+                foreach ($files as $file) {
+                    if (is_file($file)) {
+                        $totalBytes += (int) @filesize($file);
+                        $fileCount++;
+                    }
+                }
+            }
+        }
+
+        return [
+            'size_bytes' => $totalBytes,
+            'formatted_size' => $this->formatBytes($totalBytes),
+            'file_count' => $fileCount,
+        ];
+    }
+
+    private function formatBytes(int $bytes): string
+    {
+        if ($bytes >= 1073741824) {
+            return round($bytes / 1073741824, 2).' GB';
+        }
+        if ($bytes >= 1048576) {
+            return round($bytes / 1048576, 1).' MB';
+        }
+        if ($bytes >= 1024) {
+            return round($bytes / 1024, 1).' KB';
+        }
+
+        return $bytes.' B';
     }
 }

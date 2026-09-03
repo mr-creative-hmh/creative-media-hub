@@ -132,5 +132,7 @@ Route::get('/docs', function () {
 Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
 Route::post('/api/settings', [SettingsController::class, 'update'])->name('api.settings.update');
 Route::post('/api/settings/test-provider', [SettingsController::class, 'testProvider'])->name('api.settings.test-provider');
+Route::get('/api/settings/media-cache-stats', [SettingsController::class, 'getMediaCacheStats'])->name('api.settings.media-cache-stats');
+Route::post('/api/settings/clear-media-cache', [SettingsController::class, 'clearMediaCache'])->name('api.settings.clear-media-cache');
 
 require __DIR__.'/settings.php';

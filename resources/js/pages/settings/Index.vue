@@ -6,7 +6,7 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import {
     Settings as SettingsIcon, Save, Key, Globe, Sparkles,
     CheckCircle2, AlertCircle, ArrowUp, ArrowDown, ShieldCheck,
-    Layers, Cpu, Database, HardDrive, RefreshCw, Zap, Check, X
+    Layers, Cpu, Database, HardDrive, RefreshCw, Zap, Check, X, Trash2
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -19,6 +19,11 @@ const props = defineProps<{
         auto_fetch_metadata: boolean;
         auto_fetch_subtitles: boolean;
         preferred_providers: string[];
+    };
+    media_cache?: {
+        size_bytes: number;
+        formatted_size: string;
+        file_count: number;
     };
 }>();
 
@@ -182,6 +187,53 @@ const saveSettings = async () => {
         }
     } finally {
         isSaving.value = false;
+    }
+};
+
+// Media Stream Cache Management
+const mediaCacheStats = ref(props.media_cache || {
+    size_bytes: 0,
+    formatted_size: '0 B',
+    file_count: 0,
+});
+const isClearingCache = ref(false);
+const cacheSuccessMessage = ref<string | null>(null);
+
+const clearMediaCache = async () => {
+    isClearingCache.value = true;
+    cacheSuccessMessage.value = null;
+    try {
+        const res = await fetch('/api/settings/clear-media-cache', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+        });
+        const data = await res.json();
+        if (data.success) {
+            mediaCacheStats.value = data.stats;
+            cacheSuccessMessage.value = isRTL.value 
+                ? `تم تنظيف الكاش بنجاح! تم تحرير ${data.freed_formatted} (${data.stats.file_count} ملفات متبقية)` 
+                : data.message;
+            setTimeout(() => {
+                cacheSuccessMessage.value = null;
+            }, 6000);
+        }
+    } catch (e) {
+        console.error('Failed to clear media cache:', e);
+    } finally {
+        isClearingCache.value = false;
+    }
+};
+
+const refreshCacheStats = async () => {
+    try {
+        const res = await fetch('/api/settings/media-cache-stats');
+        const data = await res.json();
+        mediaCacheStats.value = data;
+    } catch (e) {
+        console.error('Failed to refresh cache stats:', e);
     }
 };
 </script>
@@ -434,6 +486,68 @@ const saveSettings = async () => {
                             <option value="en">English</option>
                         </select>
                     </div>
+                </div>
+            </div>
+
+            <!-- 4. Media Cache & Storage Management -->
+            <div class="glass-panel rounded-3xl p-6 sm:p-8 border border-white/10 space-y-6">
+                <div class="flex items-center justify-between pb-4 border-b border-white/10">
+                    <div class="flex items-center gap-2.5">
+                        <HardDrive class="w-5 h-5 text-purple-400" />
+                        <div>
+                            <h3 class="font-bold text-base text-white">
+                                {{ isRTL ? 'إدارة التخزين المؤقت للبث (Media Streams & Transcode Cache)' : 'Media Streams & Transcode Cache' }}
+                            </h3>
+                            <p class="text-xs text-slate-400">
+                                {{ isRTL ? 'إدارة المساحة المستهلكة من قبل البث المباشر المحسن والملفات المؤقتة المحولة.' : 'Manage disk space occupied by server remux streams and transcode cache.' }}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        @click="refreshCacheStats"
+                        class="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all cursor-pointer"
+                        title="Refresh Cache Stats"
+                    >
+                        <RefreshCw class="w-4 h-4" />
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <!-- Stat: Cache Size -->
+                    <div class="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col justify-between">
+                        <span class="text-xs text-slate-400 font-semibold">{{ isRTL ? 'حجم الملفات المؤقتة' : 'Current Cache Size' }}</span>
+                        <div class="text-2xl font-black text-cyan-400 mt-2 font-mono">
+                            {{ mediaCacheStats.formatted_size }}
+                        </div>
+                    </div>
+
+                    <!-- Stat: Cached Items Count -->
+                    <div class="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col justify-between">
+                        <span class="text-xs text-slate-400 font-semibold">{{ isRTL ? 'عدد الملفات المؤقتة' : 'Cached Stream Files' }}</span>
+                        <div class="text-2xl font-black text-purple-400 mt-2 font-mono">
+                            {{ mediaCacheStats.file_count }}
+                        </div>
+                    </div>
+
+                    <!-- Action: Clean Cache Button -->
+                    <div class="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col justify-between">
+                        <span class="text-xs text-slate-400 font-semibold">{{ isRTL ? 'تحرير مساحة القرص' : 'Storage Cleanup' }}</span>
+                        <button
+                            type="button"
+                            @click="clearMediaCache"
+                            :disabled="isClearingCache || mediaCacheStats.file_count === 0"
+                            class="mt-2 w-full py-2.5 px-4 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 hover:text-white border border-red-500/30 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-lg"
+                        >
+                            <RefreshCw v-if="isClearingCache" class="w-4 h-4 animate-spin" />
+                            <Trash2 v-else class="w-4 h-4 text-red-400" />
+                            <span>{{ isClearingCache ? (isRTL ? 'جاري التنظيف...' : 'Clearing...') : (isRTL ? 'تنظيف كاش الوسائط' : 'Clean Media Cache') }}</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div v-if="cacheSuccessMessage" class="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-2">
+                    <CheckCircle2 class="w-4 h-4 shrink-0 text-emerald-400" />
+                    <span>{{ cacheSuccessMessage }}</span>
                 </div>
             </div>
         </div>

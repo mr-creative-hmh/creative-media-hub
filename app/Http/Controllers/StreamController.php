@@ -579,7 +579,7 @@ class StreamController extends Controller
                 ],
                 $videoArgs,
                 [
-                    '-af', 'aresample=async=1000:min_hard_comp=0.100000:first_pts=0',
+                    '-af', 'aresample=async=1000:min_hard_comp=0.100000',
                     '-c:a', 'aac',
                     '-b:a', '192k',
                     '-ac', '2',
@@ -619,7 +619,7 @@ class StreamController extends Controller
             $trimSec = abs($audioDelayMs) / 1000.0;
             $audioFilters[] = "atrim=start={$trimSec},asetpts=PTS-STARTPTS";
         }
-        $audioFilters[] = 'aresample=async=1000:min_hard_comp=0.100000:first_pts=0';
+        $audioFilters[] = 'aresample=async=1000:min_hard_comp=0.100000';
         $audioFilterStr = implode(',', $audioFilters);
 
         $cmd = array_merge(
