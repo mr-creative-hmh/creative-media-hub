@@ -58,6 +58,18 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 ### 💬 Subtitle Synchronization & Download Center
 ![Subtitles Showcase](docs/screenshots/subtitles.png)
 
+### 🧲 Smart Downloader & Torrent Multi-File Selection
+![Smart Downloader Showcase](docs/screenshots/downloads.png)
+
+### 📊 Storage Capacity & Streaming Concurrency Analytics
+![Analytics Showcase](docs/screenshots/analytics.png)
+
+### ⚙️ Engine Settings & Stream Cache Manager
+![Settings Showcase](docs/screenshots/settings.png)
+
+### 📖 Interactive Documentation Center
+![Documentation Showcase](docs/screenshots/docs.png)
+
 </div>
 
 ---
