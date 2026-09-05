@@ -150,21 +150,37 @@ class SubtitleHealthCheckService
                 }
             }
 
+            $issues = [];
+            if ($needsEncodingFix) {
+                $issues[] = $dryRun ? 'non_utf8_encoding' : 'converted_to_utf8';
+            }
+
             $isAlreadyStandard = (strtolower($fileName) === strtolower($targetFileName));
+            $mediaModel = $this->findAdjacentMediaModel($normalizedPath, $mediaBaseName);
 
             if ($isAlreadyStandard) {
                 $results['already_standard_count']++;
-                // Still ensure database record has correct language set
+                // Ensure database record has correct language and media linkage set
                 if (! $dryRun) {
-                    Subtitle::where('file_path', $normalizedPath)->update([
+                    $updated = Subtitle::where('file_path', $normalizedPath)->update([
                         'language' => $langCode,
                         'language_name' => $langResult['name_en'],
                     ]);
-                }
 
-                $issues = [];
-                if ($needsEncodingFix) {
-                    $issues[] = $dryRun ? 'non_utf8_encoding' : 'converted_to_utf8';
+                    if ($updated === 0 && $mediaModel) {
+                        Subtitle::updateOrCreate(
+                            ['file_path' => $normalizedPath],
+                            [
+                                'subtitlable_id' => $mediaModel->id,
+                                'subtitlable_type' => get_class($mediaModel),
+                                'language' => $langCode,
+                                'language_name' => $langResult['name_en'],
+                                'format' => strtolower(pathinfo($normalizedPath, PATHINFO_EXTENSION)),
+                                'is_embedded' => false,
+                                'is_default' => ($langCode === 'ar'),
+                            ]
+                        );
+                    }
                 }
 
                 $results['items'][] = [
@@ -198,12 +214,27 @@ class SubtitleHealthCheckService
                             File::move($normalizedPath, $targetPath);
                             $results['renamed_count']++;
 
-                            // Update database record with new path and language
-                            Subtitle::where('file_path', $normalizedPath)->update([
+                            // Update database record with new path and language, preserving model ID
+                            $updated = Subtitle::where('file_path', $normalizedPath)->update([
                                 'file_path' => $targetPath,
                                 'language' => $langCode,
                                 'language_name' => $langResult['name_en'],
                             ]);
+
+                            if ($updated === 0 && $mediaModel) {
+                                Subtitle::updateOrCreate(
+                                    ['file_path' => $targetPath],
+                                    [
+                                        'subtitlable_id' => $mediaModel->id,
+                                        'subtitlable_type' => get_class($mediaModel),
+                                        'language' => $langCode,
+                                        'language_name' => $langResult['name_en'],
+                                        'format' => strtolower(pathinfo($targetPath, PATHINFO_EXTENSION)),
+                                        'is_embedded' => false,
+                                        'is_default' => ($langCode === 'ar'),
+                                    ]
+                                );
+                            }
                         }
                     } catch (\Throwable $e) {
                         Log::error("Failed to rename subtitle: {$normalizedPath} to {$targetPath}", ['error' => $e->getMessage()]);
@@ -236,15 +267,16 @@ class SubtitleHealthCheckService
     }
 
     /**
-     * Resolve directories to inspect.
+     * Resolve directories or single file to inspect.
      *
      * @return string[]
      */
     protected function resolveDirectories(?string $targetPath = null): array
     {
         if (! empty($targetPath)) {
-            $norm = rtrim(str_replace('\\', '/', trim($targetPath)), '/');
-            if (File::isDirectory($norm)) {
+            $cleaned = trim($targetPath, " \t\n\r\0\x0B\"'");
+            $norm = rtrim(str_replace('\\', '/', $cleaned), '/');
+            if (is_file($norm) || is_dir($norm)) {
                 return [$norm];
             }
         }
@@ -257,7 +289,7 @@ class SubtitleHealthCheckService
             $parsed = json_decode($monitoredSetting->value, true) ?: [];
             foreach ($parsed as $item) {
                 $p = rtrim(str_replace('\\', '/', $item['path'] ?? ''), '/');
-                if (! empty($p) && File::isDirectory($p)) {
+                if (! empty($p) && is_dir($p)) {
                     $dirs[] = $p;
                 }
             }
@@ -265,52 +297,65 @@ class SubtitleHealthCheckService
 
         // 2. Download destinations
         $destMovies = AppSetting::get('download_folder_movies');
-        if ($destMovies && File::isDirectory($destMovies)) {
+        if ($destMovies && is_dir($destMovies)) {
             $dirs[] = rtrim(str_replace('\\', '/', $destMovies), '/');
         }
 
         $destSeries = AppSetting::get('download_folder_series');
-        if ($destSeries && File::isDirectory($destSeries)) {
+        if ($destSeries && is_dir($destSeries)) {
             $dirs[] = rtrim(str_replace('\\', '/', $destSeries), '/');
         }
 
-        // 3. Unique directories from indexed MediaItems & Episodes
-        $mediaDirs = MediaItem::whereNotNull('file_path')
-            ->limit(100)
-            ->pluck('file_path')
-            ->map(fn ($p) => dirname(str_replace('\\', '/', $p)))
-            ->unique();
+        // 3. Root directories from indexed MediaItems & Episodes
+        $allMediaPaths = MediaItem::whereNotNull('file_path')->pluck('file_path');
+        $allEpisodePaths = Episode::whereNotNull('file_path')->pluck('file_path');
 
-        foreach ($mediaDirs as $md) {
-            if (File::isDirectory($md)) {
-                $dirs[] = $md;
+        $rootDirs = [];
+        foreach ($allMediaPaths->concat($allEpisodePaths) as $fp) {
+            $cleanP = str_replace('\\', '/', $fp);
+            $d = dirname($cleanP);
+            while (in_array(strtolower(basename($d)), ['s01', 's02', 's03', 's04', 's05', 's06', 's07', 's08', 's09', 's10', 'season 1', 'season 2', 'season 3', 'subs', 'subtitles'])) {
+                $d = dirname($d);
+            }
+            $parentRoot = dirname($d);
+            if ($parentRoot && is_dir($parentRoot) && strlen($parentRoot) > 3) {
+                $rootDirs[$parentRoot] = true;
+            } elseif (is_dir($d)) {
+                $rootDirs[$d] = true;
             }
         }
-
-        $episodeDirs = Episode::whereNotNull('file_path')
-            ->limit(100)
-            ->pluck('file_path')
-            ->map(fn ($p) => dirname(str_replace('\\', '/', $p)))
-            ->unique();
-
-        foreach ($episodeDirs as $ed) {
-            if (File::isDirectory($ed)) {
-                $dirs[] = $ed;
-            }
-        }
+        $dirs = array_merge($dirs, array_keys($rootDirs));
 
         // 4. Default media storage fallback
         $storageMedia = rtrim(str_replace('\\', '/', storage_path('app/media')), '/');
-        if (File::isDirectory($storageMedia)) {
+        if (is_dir($storageMedia)) {
             $dirs[] = $storageMedia;
         }
 
         $storageSubs = rtrim(str_replace('\\', '/', storage_path('app/subtitles')), '/');
-        if (File::isDirectory($storageSubs)) {
+        if (is_dir($storageSubs)) {
             $dirs[] = $storageSubs;
         }
 
-        return array_values(array_unique($dirs));
+        // Filter out redundant subdirectories if their parent is already included
+        $uniqueDirs = array_values(array_unique(array_filter($dirs)));
+        sort($uniqueDirs);
+
+        $filtered = [];
+        foreach ($uniqueDirs as $candidate) {
+            $isSubdir = false;
+            foreach ($filtered as $parent) {
+                if (str_starts_with($candidate, $parent.'/')) {
+                    $isSubdir = true;
+                    break;
+                }
+            }
+            if (! $isSubdir && is_dir($candidate)) {
+                $filtered[] = $candidate;
+            }
+        }
+
+        return $filtered;
     }
 
     /**
@@ -322,30 +367,116 @@ class SubtitleHealthCheckService
     protected function collectSubtitleFiles(array $directories): array
     {
         $subFiles = [];
+        $skipDirs = [
+            '$recycle.bin', 'system volume information', '.git', 'node_modules',
+            'vendor', '.cache', '__macosx', '.idea', '.vscode',
+        ];
 
-        foreach ($directories as $dir) {
-            if (! File::isDirectory($dir)) {
+        foreach ($directories as $entry) {
+            $normEntry = str_replace('\\', '/', $entry);
+
+            // Handle direct single file target
+            if (is_file($normEntry)) {
+                $ext = strtolower(pathinfo($normEntry, PATHINFO_EXTENSION));
+                if (in_array($ext, $this->subtitleExtensions, true)) {
+                    $subFiles[] = realpath($normEntry) ?: $normEntry;
+                }
+
+                continue;
+            }
+
+            if (! is_dir($normEntry)) {
                 continue;
             }
 
             try {
-                $files = File::allFiles($dir);
-                foreach ($files as $file) {
-                    $ext = strtolower($file->getExtension());
-                    if (in_array($ext, $this->subtitleExtensions, true)) {
-                        $fn = $file->getFilename();
-                        if (str_starts_with($fn, '.') || str_starts_with($fn, '._')) {
-                            continue;
+                $dirIterator = new \RecursiveDirectoryIterator(
+                    $normEntry,
+                    \RecursiveDirectoryIterator::SKIP_DOTS | \RecursiveDirectoryIterator::FOLLOW_SYMLINKS
+                );
+
+                $filterIterator = new \RecursiveCallbackFilterIterator(
+                    $dirIterator,
+                    function ($current, $key, $iterator) use ($skipDirs) {
+                        $filename = $current->getFilename();
+
+                        // Skip hidden files, system files, and macOS resource forks
+                        if (str_starts_with($filename, '.') || str_starts_with($filename, '._')) {
+                            return false;
                         }
-                        $subFiles[] = $file->getRealPath();
+
+                        if ($current->isDir()) {
+                            $lower = strtolower($filename);
+                            if (in_array($lower, $skipDirs, true)) {
+                                return false;
+                            }
+
+                            return true;
+                        }
+
+                        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+
+                        return in_array($ext, $this->subtitleExtensions, true);
+                    }
+                );
+
+                $iterator = new \RecursiveIteratorIterator(
+                    $filterIterator,
+                    \RecursiveIteratorIterator::LEAVES_ONLY,
+                    \RecursiveIteratorIterator::CATCH_GET_CHILD
+                );
+
+                foreach ($iterator as $fileInfo) {
+                    if ($fileInfo->isFile()) {
+                        $subFiles[] = str_replace('\\', '/', $fileInfo->getPathname());
                     }
                 }
             } catch (\Throwable $e) {
-                Log::warning("Error traversing directory {$dir} for subtitles: ".$e->getMessage());
+                Log::warning("Error traversing directory {$normEntry} for subtitles: ".$e->getMessage());
             }
         }
 
         return array_values(array_unique($subFiles));
+    }
+
+    /**
+     * Find adjacent media item or episode in the database.
+     */
+    protected function findAdjacentMediaModel(string $subPath, string $mediaBaseName): MediaItem|Episode|null
+    {
+        // 1. Try finding by file_path matching video filename
+        $episode = Episode::where('file_path', 'LIKE', "%/{$mediaBaseName}.%")->first()
+            ?? Episode::where('file_path', 'LIKE', "%\\{$mediaBaseName}.%")->first();
+        if ($episode) {
+            return $episode;
+        }
+
+        $movie = MediaItem::where('file_path', 'LIKE', "%/{$mediaBaseName}.%")->first()
+            ?? MediaItem::where('file_path', 'LIKE', "%\\{$mediaBaseName}.%")->first();
+        if ($movie) {
+            return $movie;
+        }
+
+        // 2. Check by episode season/number if SxxExx pattern exists
+        if (preg_match('/[sS](\d{1,2})[eE](\d{1,2})/i', $mediaBaseName, $m)) {
+            $seasonNum = (int) $m[1];
+            $episodeNum = (int) $m[2];
+
+            $seriesFolder = basename(dirname(dirname($subPath)));
+            $ep = Episode::where('season_number', $seasonNum)
+                ->where('episode_number', $episodeNum)
+                ->whereHas('series', function ($q) use ($seriesFolder) {
+                    $q->where('title', 'LIKE', "%{$seriesFolder}%")
+                        ->orWhere('folder_path', 'LIKE', "%{$seriesFolder}%");
+                })
+                ->first();
+
+            if ($ep) {
+                return $ep;
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -323,4 +323,79 @@ HTML;
         $this->assertTrue(mb_check_encoding($diskContent, 'UTF-8'));
         $this->assertStringContainsString('حوار عربي جميل رقم 1', $diskContent);
     }
+
+    public function test_health_checker_recursively_scans_deep_subdirectories(): void
+    {
+        $s01Dir = "{$this->testDir}/TV Shows/Chernobyl/S01";
+        $s02Dir = "{$this->testDir}/TV Shows/Chernobyl/S02";
+        File::makeDirectory($s01Dir, 0755, true, true);
+        File::makeDirectory($s02Dir, 0755, true, true);
+
+        $dummySrt = "1\n00:00:01,000 --> 00:00:03,000\nDialogue line one.\n\n2\n00:00:04,000 --> 00:00:06,000\nDialogue line two.\n\n3\n00:00:07,000 --> 00:00:09,000\nDialogue line three.\n\n4\n00:00:10,000 --> 00:00:12,000\nDialogue line four.\n\n5\n00:00:13,000 --> 00:00:15,000\nDialogue line five.\n\n6\n00:00:16,000 --> 00:00:18,000\nDialogue line six.\n";
+
+        File::put("{$s01Dir}/Chernobyl.S01E01.en.srt", $dummySrt);
+        File::put("{$s01Dir}/Chernobyl.S01E02.en.srt", $dummySrt);
+        File::put("{$s02Dir}/Chernobyl.S02E01.en.srt", $dummySrt);
+
+        $service = app(SubtitleHealthCheckService::class);
+        $results = $service->checkAndNormalize([
+            'dry_run' => true,
+            'target_path' => "{$this->testDir}/TV Shows/Chernobyl",
+        ]);
+
+        $this->assertEquals(3, $results['total_scanned']);
+        $this->assertEquals(3, $results['valid_count']);
+    }
+
+    public function test_health_checker_handles_quoted_and_single_file_target_paths(): void
+    {
+        $s01Dir = "{$this->testDir}/Series/Show/S01";
+        File::makeDirectory($s01Dir, 0755, true, true);
+
+        $dummySrt = "1\n00:00:01,000 --> 00:00:03,000\nDialogue line one.\n\n2\n00:00:04,000 --> 00:00:06,000\nDialogue line two.\n\n3\n00:00:07,000 --> 00:00:09,000\nDialogue line three.\n\n4\n00:00:10,000 --> 00:00:12,000\nDialogue line four.\n\n5\n00:00:13,000 --> 00:00:15,000\nDialogue line five.\n\n6\n00:00:16,000 --> 00:00:18,000\nDialogue line six.\n";
+        $subFile = "{$s01Dir}/Show.S01E01.en.srt";
+        File::put($subFile, $dummySrt);
+
+        $service = app(SubtitleHealthCheckService::class);
+
+        // 1. Quoted path
+        $quotedPath = '"'."{$this->testDir}/Series/Show".'"';
+        $resQuoted = $service->checkAndNormalize([
+            'dry_run' => true,
+            'target_path' => $quotedPath,
+        ]);
+        $this->assertEquals(1, $resQuoted['total_scanned']);
+
+        // 2. Direct single file path
+        $resFile = $service->checkAndNormalize([
+            'dry_run' => true,
+            'target_path' => $subFile,
+        ]);
+        $this->assertEquals(1, $resFile['total_scanned']);
+        $this->assertEquals('Show.S01E01.en.srt', $resFile['items'][0]['file_name']);
+    }
+
+    public function test_for_media_auto_discovers_and_self_heals_adjacent_subtitles(): void
+    {
+        $movieFile = "{$this->testDir}/Dune (2021).mkv";
+        File::put($movieFile, 'DUMMY_VIDEO');
+
+        $movie = MediaItem::create([
+            'title' => 'Dune',
+            'release_year' => 2021,
+            'file_path' => $movieFile,
+        ]);
+
+        $arSrt = "{$this->testDir}/Dune (2021).ar.srt";
+        $dummySrt = "1\n00:00:01,000 --> 00:00:03,000\nكثيب رائع جداً.\n\n2\n00:00:04,000 --> 00:00:06,000\nمرحبا بك في أراكيس.\n";
+        File::put($arSrt, $dummySrt);
+
+        $response = $this->getJson("/api/subtitles/for-media?type=movie&id={$movie->id}");
+        $response->assertStatus(200);
+
+        $subs = $response->json('subtitles');
+        $this->assertCount(1, $subs);
+        $this->assertEquals('ar', $subs[0]['language']);
+        $this->assertEquals($arSrt, $subs[0]['file_path']);
+    }
 }

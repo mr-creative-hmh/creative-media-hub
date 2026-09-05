@@ -87,7 +87,28 @@ class StreamController extends Controller
 
         // External Subtitle File
         if (! $path || ! File::exists($path)) {
-            return response("WEBVTT\n\n", 200, ['Content-Type' => 'text/vtt; charset=utf-8']);
+            if ($path) {
+                $dir = dirname(str_replace('\\', '/', $path));
+                $fn = basename($path);
+                $candidates = [
+                    $dir.'/'.preg_replace('/\.2\./', '.', $fn),
+                    $dir.'/'.preg_replace('/(\.[a-z]{2,3})\.srt$/i', '.2$1.srt', $fn),
+                ];
+                foreach ($candidates as $cand) {
+                    if (File::exists($cand)) {
+                        $path = $cand;
+                        $subtitle->update(['file_path' => $cand]);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (! $path || ! File::exists($path)) {
+            return response("WEBVTT\n\n", 200, [
+                'Content-Type' => 'text/vtt; charset=utf-8',
+                'Cache-Control' => 'no-cache, no-store, must-revalidate',
+            ]);
         }
 
         $rawContent = File::get($path);
@@ -103,7 +124,7 @@ class StreamController extends Controller
         return response($vtt, 200, [
             'Content-Type' => 'text/vtt; charset=utf-8',
             'Access-Control-Allow-Origin' => '*',
-            'Cache-Control' => 'no-cache',
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
         ]);
     }
 

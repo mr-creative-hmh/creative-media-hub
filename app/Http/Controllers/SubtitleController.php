@@ -237,8 +237,26 @@ class SubtitleController extends Controller
                 ->count();
 
             if ($existingEmbedded === 0) {
-                $this->detector->detectAndRegisterEmbeddedSubtitles($model);
+                $embeddedTracks = $this->detector->detectEmbeddedSubtitles($model->file_path);
+                foreach ($embeddedTracks as $track) {
+                    Subtitle::updateOrCreate(
+                        [
+                            'subtitlable_id' => $model->id,
+                            'subtitlable_type' => get_class($model),
+                            'file_path' => "embedded:{$track['index']}:{$model->file_path}",
+                        ],
+                        [
+                            'language' => $track['language'] ?? 'und',
+                            'language_name' => $track['title'] ?? 'Embedded',
+                            'format' => $track['format'] ?? 'srt',
+                            'is_embedded' => true,
+                            'is_default' => (bool) ($track['is_default'] ?? false),
+                        ]
+                    );
+                }
             }
+
+            $this->syncAdjacentExternalSubtitles($model);
         }
 
         // Return all subtitles ordered with Arabic first, English second
@@ -257,6 +275,104 @@ class SubtitleController extends Controller
         return response()->json([
             'subtitles' => $subs,
         ]);
+    }
+
+    /**
+     * Self-heal broken paths and auto-discover adjacent external subtitle files on disk.
+     */
+    protected function syncAdjacentExternalSubtitles($model): void
+    {
+        $videoPath = str_replace('\\', '/', $model->file_path);
+        $videoDir = dirname($videoPath);
+        $videoBase = pathinfo($videoPath, PATHINFO_FILENAME);
+
+        // 1. Verify existing external subtitle records in DB
+        $existingExternal = Subtitle::where('subtitlable_id', $model->id)
+            ->where('subtitlable_type', get_class($model))
+            ->where('is_embedded', false)
+            ->get();
+
+        foreach ($existingExternal as $sub) {
+            if ($sub->file_path && ! File::exists($sub->file_path)) {
+                $subName = basename($sub->file_path);
+                $cleanedName = preg_replace('/\.2\./', '.', $subName);
+                $altPath = "{$videoDir}/{$cleanedName}";
+
+                if (File::exists($altPath)) {
+                    $sub->update(['file_path' => $altPath]);
+                } else {
+                    $langPath = "{$videoDir}/{$videoBase}.{$sub->language}.srt";
+                    if (File::exists($langPath)) {
+                        $sub->update(['file_path' => $langPath]);
+                    } else {
+                        $sub->delete();
+                    }
+                }
+            }
+        }
+
+        // 2. Discover adjacent subtitle files on disk matching video basename
+        $searchDirs = [$videoDir];
+        if (File::isDirectory("{$videoDir}/Subs")) {
+            $searchDirs[] = "{$videoDir}/Subs";
+        }
+        if (File::isDirectory("{$videoDir}/Subtitles")) {
+            $searchDirs[] = "{$videoDir}/Subtitles";
+        }
+
+        $subExtensions = ['srt', 'vtt', 'sub', 'ass', 'ssa'];
+        foreach ($searchDirs as $dir) {
+            try {
+                $files = File::files($dir);
+                foreach ($files as $file) {
+                    $ext = strtolower($file->getExtension());
+                    if (! in_array($ext, $subExtensions, true)) {
+                        continue;
+                    }
+
+                    $fn = $file->getFilename();
+                    $filePath = str_replace('\\', '/', $file->getRealPath());
+
+                    // Check if subtitle matches this video or episode code
+                    $isMatch = str_starts_with(strtolower($fn), strtolower($videoBase));
+                    if (! $isMatch && preg_match('/[sS](\d{1,2})[eE](\d{1,2})/i', $fn, $subEp)) {
+                        if (preg_match('/[sS](\d{1,2})[eE](\d{1,2})/i', $videoBase, $vidEp)) {
+                            if ((int) $subEp[1] === (int) $vidEp[1] && (int) $subEp[2] === (int) $vidEp[2]) {
+                                $isMatch = true;
+                            }
+                        }
+                    }
+
+                    if ($isMatch) {
+                        $langCode = 'en';
+                        $langName = 'English';
+                        if (preg_match('/\b(ar|ara|arabic)\b/i', $fn)) {
+                            $langCode = 'ar';
+                            $langName = 'Arabic';
+                        } elseif (preg_match('/\b(en|eng|english)\b/i', $fn)) {
+                            $langCode = 'en';
+                            $langName = 'English';
+                        }
+
+                        Subtitle::updateOrCreate(
+                            [
+                                'subtitlable_id' => $model->id,
+                                'subtitlable_type' => get_class($model),
+                                'file_path' => $filePath,
+                            ],
+                            [
+                                'language' => $langCode,
+                                'language_name' => $langName,
+                                'format' => $ext,
+                                'is_embedded' => false,
+                                'is_default' => ($langCode === 'ar'),
+                            ]
+                        );
+                    }
+                }
+            } catch (\Throwable $e) {
+            }
+        }
     }
 
     public function autoSync(Request $request): JsonResponse
