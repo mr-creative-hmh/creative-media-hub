@@ -8,6 +8,7 @@ use App\Models\Subtitle;
 use App\Models\WatchHistory;
 use App\Services\Media\FfmpegLocatorService;
 use App\Services\Subtitles\EmbeddedSubtitleDetectorService;
+use App\Services\Subtitles\SubtitleLanguageDetectorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -16,9 +17,14 @@ class StreamController extends Controller
 {
     protected EmbeddedSubtitleDetectorService $embeddedSubDetector;
 
-    public function __construct(EmbeddedSubtitleDetectorService $embeddedSubDetector)
-    {
+    protected SubtitleLanguageDetectorService $subLanguageDetector;
+
+    public function __construct(
+        EmbeddedSubtitleDetectorService $embeddedSubDetector,
+        SubtitleLanguageDetectorService $subLanguageDetector
+    ) {
         $this->embeddedSubDetector = $embeddedSubDetector;
+        $this->subLanguageDetector = $subLanguageDetector;
     }
 
     /**
@@ -85,7 +91,14 @@ class StreamController extends Controller
         }
 
         $rawContent = File::get($path);
-        $vtt = $this->convertToCleanWebVTT($rawContent, $subtitle->format ?? 'srt');
+        $cleanUtf8 = $this->subLanguageDetector->sanitizeToUtf8($rawContent);
+
+        // Self-heal file on disk if it was non-UTF-8 and is writable
+        if ($cleanUtf8 !== $rawContent && is_writable($path)) {
+            @file_put_contents($path, $cleanUtf8);
+        }
+
+        $vtt = $this->convertToCleanWebVTT($cleanUtf8, $subtitle->format ?? 'srt');
 
         return response($vtt, 200, [
             'Content-Type' => 'text/vtt; charset=utf-8',
@@ -475,6 +488,7 @@ class StreamController extends Controller
 
     protected function convertToCleanWebVTT(string $content, string $format = 'srt'): string
     {
+        $content = $this->subLanguageDetector->sanitizeToUtf8($content);
         $vtt = "WEBVTT\n\n";
         $content = str_replace(["\r\n", "\r"], "\n", $content);
 

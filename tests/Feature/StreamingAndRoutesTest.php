@@ -45,6 +45,47 @@ class StreamingAndRoutesTest extends TestCase
         $this->assertStringContainsString('text/vtt', $response->headers->get('Content-Type'));
     }
 
+    public function test_subtitle_endpoint_converts_windows_1256_arabic_to_valid_utf8_webvtt(): void
+    {
+        $movie = MediaItem::create([
+            'title' => 'Chernobyl',
+            'release_year' => 2019,
+        ]);
+
+        $testDir = storage_path('framework/testing');
+        if (! file_exists($testDir)) {
+            mkdir($testDir, 0777, true);
+        }
+
+        $filePath = $testDir.'/test_arabic_1256.srt';
+        $arabicUtf8 = "1\n00:00:01,000 --> 00:00:05,000\nأين يكمن خطر الأكاذيب؟\n\n";
+        $arabic1256 = iconv('UTF-8', 'WINDOWS-1256//IGNORE', $arabicUtf8);
+        file_put_contents($filePath, $arabic1256);
+
+        $sub = Subtitle::create([
+            'subtitlable_id' => $movie->id,
+            'subtitlable_type' => MediaItem::class,
+            'file_path' => $filePath,
+            'language' => 'ar',
+            'format' => 'srt',
+        ]);
+
+        $response = $this->get(route('stream.subtitle', $sub));
+        $response->assertStatus(200);
+        $this->assertStringContainsString('text/vtt', $response->headers->get('Content-Type'));
+
+        $content = $response->getContent();
+        $this->assertTrue(mb_check_encoding($content, 'UTF-8'), 'Response must be valid UTF-8');
+        $this->assertStringContainsString('أين يكمن خطر الأكاذيب؟', $content);
+        $this->assertStringNotContainsString('?????', $content);
+
+        // Self-healed on disk
+        $diskContent = file_get_contents($filePath);
+        $this->assertTrue(mb_check_encoding($diskContent, 'UTF-8'), 'File on disk should be self-healed to UTF-8');
+
+        @unlink($filePath);
+    }
+
     public function test_save_progress_records_timestamp(): void
     {
         $movie = MediaItem::create([

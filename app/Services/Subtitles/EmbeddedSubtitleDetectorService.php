@@ -127,6 +127,8 @@ class EmbeddedSubtitleDetectorService
             $vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:05.000\n[Embedded Subtitle Track Active]\n\n";
         }
 
+        $vtt = app(SubtitleLanguageDetectorService::class)->sanitizeToUtf8($vtt);
+
         File::put($cacheFile, $vtt);
 
         return $vtt;
@@ -342,10 +344,7 @@ class EmbeddedSubtitleDetectorService
 
         // Detect and normalize encoding
         try {
-            $encoding = @mb_detect_encoding($raw, ['UTF-8', 'CP1256', 'CP1252', 'ISO-8859-1', 'ASCII'], true);
-            if ($encoding && $encoding !== 'UTF-8') {
-                $raw = @mb_convert_encoding($raw, 'UTF-8', $encoding);
-            }
+            $raw = app(SubtitleLanguageDetectorService::class)->sanitizeToUtf8($raw);
         } catch (\Throwable $e) {
         }
 

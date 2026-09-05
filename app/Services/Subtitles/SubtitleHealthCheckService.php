@@ -50,6 +50,7 @@ class SubtitleHealthCheckService
             'deleted_count' => 0,
             'renamed_count' => 0,
             'already_standard_count' => 0,
+            'encoding_fixed_count' => 0,
             'dry_run' => $dryRun,
             'language_breakdown' => [],
             'items' => [],
@@ -134,6 +135,21 @@ class SubtitleHealthCheckService
             $targetFileName = "{$mediaBaseName}.{$langCode}{$modifier}.{$targetExt}";
             $targetPath = "{$dirName}/{$targetFileName}";
 
+            // Check and normalize encoding (e.g. Windows-1256 / ISO-8859-6 to clean UTF-8)
+            $rawContent = @file_get_contents($normalizedPath);
+            $needsEncodingFix = ($rawContent !== false && ! mb_check_encoding($rawContent, 'UTF-8'));
+            if ($needsEncodingFix && ! $dryRun) {
+                try {
+                    $cleanUtf8 = $this->languageDetector->sanitizeToUtf8($rawContent);
+                    if (mb_check_encoding($cleanUtf8, 'UTF-8')) {
+                        File::put($normalizedPath, $cleanUtf8);
+                        $results['encoding_fixed_count']++;
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning("Failed to normalize encoding for {$normalizedPath}: {$e->getMessage()}");
+                }
+            }
+
             $isAlreadyStandard = (strtolower($fileName) === strtolower($targetFileName));
 
             if ($isAlreadyStandard) {
@@ -146,19 +162,24 @@ class SubtitleHealthCheckService
                     ]);
                 }
 
+                $issues = [];
+                if ($needsEncodingFix) {
+                    $issues[] = $dryRun ? 'non_utf8_encoding' : 'converted_to_utf8';
+                }
+
                 $results['items'][] = [
                     'original_path' => $normalizedPath,
                     'file_name' => $fileName,
                     'is_valid' => true,
                     'cue_count' => $validation['cue_count'],
                     'file_size' => $validation['file_size'],
-                    'issues' => [],
+                    'issues' => $issues,
                     'detected_language' => $langCode,
                     'language_name' => $langResult['name_en'],
                     'language_name_ar' => $langResult['name_ar'],
                     'flag' => $langResult['flag'],
                     'confidence' => $langResult['confidence'],
-                    'action' => 'already_standard',
+                    'action' => $needsEncodingFix ? ($dryRun ? 'would_normalize_utf8' : 'normalized_utf8') : 'already_standard',
                     'target_filename' => $targetFileName,
                 ];
             } else {
@@ -196,7 +217,7 @@ class SubtitleHealthCheckService
                     'is_valid' => true,
                     'cue_count' => $validation['cue_count'],
                     'file_size' => $validation['file_size'],
-                    'issues' => [],
+                    'issues' => $issues,
                     'detected_language' => $langCode,
                     'language_name' => $langResult['name_en'],
                     'language_name_ar' => $langResult['name_ar'],

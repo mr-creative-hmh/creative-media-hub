@@ -292,4 +292,35 @@ HTML;
             '--path' => $this->testDir,
         ])->assertExitCode(0);
     }
+
+    public function test_health_checker_normalizes_windows_1256_to_utf8_on_disk(): void
+    {
+        $videoFile = "{$this->testDir}/Chernobyl (2019).mp4";
+        File::put($videoFile, 'VIDEO');
+
+        $srtFile = "{$this->testDir}/Chernobyl (2019).ar.srt";
+        $contentUtf8 = '';
+        for ($i = 1; $i <= 6; $i++) {
+            $s = sprintf('%02d', $i * 4);
+            $contentUtf8 .= "{$i}\n00:00:{$s},000 --> 00:00:".($s + 2).",000\nحوار عربي جميل رقم {$i} بدون استفهام.\n\n";
+        }
+        $content1256 = iconv('UTF-8', 'WINDOWS-1256//IGNORE', $contentUtf8);
+        File::put($srtFile, $content1256);
+
+        $this->assertFalse(mb_check_encoding(File::get($srtFile), 'UTF-8'));
+
+        $service = app(SubtitleHealthCheckService::class);
+        $results = $service->checkAndNormalize([
+            'dry_run' => false,
+            'target_path' => $this->testDir,
+        ]);
+
+        $this->assertEquals(1, $results['total_scanned']);
+        $this->assertEquals(1, $results['valid_count']);
+        $this->assertEquals(1, $results['encoding_fixed_count']);
+
+        $diskContent = File::get($srtFile);
+        $this->assertTrue(mb_check_encoding($diskContent, 'UTF-8'));
+        $this->assertStringContainsString('حوار عربي جميل رقم 1', $diskContent);
+    }
 }

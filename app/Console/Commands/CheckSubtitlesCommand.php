@@ -64,6 +64,7 @@ class CheckSubtitlesCommand extends Command
         $this->line("• Invalid/Corrupt Stubs: <fg=red>{$results['invalid_count']}</>");
         $this->line('• Deleted Files: <fg=red>'.($dryRun ? "{$results['invalid_count']} (Flagged for deletion)" : "{$results['deleted_count']} deleted").'</>');
         $this->line('• Standardized Renames: <fg=cyan>'.($dryRun ? "{$results['renamed_count']} (Would rename)" : "{$results['renamed_count']} renamed").'</>');
+        $this->line("• Encodings Converted to UTF-8: <fg=yellow>{$results['encoding_fixed_count']}</>");
         $this->line("• Already Standard: <fg=gray>{$results['already_standard_count']}</>");
 
         if (! empty($results['language_breakdown'])) {
