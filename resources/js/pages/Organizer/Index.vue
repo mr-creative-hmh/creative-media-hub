@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -587,14 +587,52 @@ const resetOrganizer = () => {
     isExecuting.value = false;
 };
 
-onMounted(() => {
-    fetchPlanStatus();
-});
-
-onUnmounted(() => {
-    if (executionPollTimer) {
-        clearInterval(executionPollTimer);
-    }
+const handleStepNav = (e: any) => {
+    if (e.detail?.step) {
+        step.value = e.detail.step;
+        if (planJobStatus.value.plan_items && planJobStatus.value.plan_items.length > 0) {
+            onPlanReady(planJobStatus.value.plan_items);
+        }
+    }
+};
+
+watch(
+    () => [planJobStatus.value.status, planJobStatus.value.plan_items],
+    ([newStatus, items]) => {
+        if (newStatus === 'completed' && Array.isArray(items) && items.length > 0) {
+            onPlanReady(items);
+        }
+    },
+    { deep: true, immediate: true }
+);
+
+onMounted(async () => {
+    if (typeof window !== 'undefined') {
+        window.addEventListener('cmh:navigate-step', handleStepNav);
+    }
+    await fetchPlanStatus();
+
+    if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('step') === '2') {
+            if (planJobStatus.value.plan_items && planJobStatus.value.plan_items.length > 0) {
+                onPlanReady(planJobStatus.value.plan_items);
+            } else {
+                step.value = 2;
+            }
+        } else if (planJobStatus.value.status === 'completed' && planJobStatus.value.plan_items && planJobStatus.value.plan_items.length > 0 && plan.value.length === 0) {
+            onPlanReady(planJobStatus.value.plan_items);
+        }
+    }
+});
+
+onUnmounted(() => {
+    if (typeof window !== 'undefined') {
+        window.removeEventListener('cmh:navigate-step', handleStepNav);
+    }
+    if (executionPollTimer) {
+        clearInterval(executionPollTimer);
+    }
 });
 </script>
 

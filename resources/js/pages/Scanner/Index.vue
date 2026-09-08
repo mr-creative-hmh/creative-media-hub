@@ -6,7 +6,7 @@ import { useScanner } from '@/composables/useScanner';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ConfirmModal from '@/components/common/ConfirmModal.vue';
 import {
-    ScanLine, DownloadCloud, FolderPlus, Play, Pause, XCircle, RotateCcw,
+    ScanLine, FolderPlus, Play, Pause, XCircle, RotateCcw,
     CheckCircle2, AlertCircle, FileVideo, HardDrive, Terminal,
     Layers, Cpu, RefreshCw, Trash2, Folder, Film, Tv, Sparkles,
     Check, Filter, Clock, Info, ShieldAlert, ShieldCheck, ArrowRight, Image as ImageIcon, MessageSquare
@@ -307,16 +307,6 @@ onMounted(() => {
                         <RotateCcw class="w-4 h-4" />
                         <span>{{ isRTL ? 'إعادة فحص تدريجي' : 'Incremental Rescan' }}</span>
                     </button>
-
-                    <a
-                        href="/api/database/backup/export"
-                        class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
-                        :title="isRTL ? 'تنزيل نسخة احتياطية فورية لقاعدة البيانات' : 'Download instant database backup'"
-                        download
-                    >
-                        <DownloadCloud class="w-4 h-4 text-cyan-400" />
-                        <span>{{ isRTL ? 'نسخ احتياطي (JSON)' : 'Backup Library' }}</span>
-                    </a>
 
                     <button
                         @click="promptClearCatalog"

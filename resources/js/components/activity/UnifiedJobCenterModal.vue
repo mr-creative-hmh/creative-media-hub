@@ -147,6 +147,9 @@ const triggerConfirmAction = async () => {
 
 const navigateToEnginePage = (path: string) => {
     closeActivityCenter();
+    if (typeof window !== 'undefined' && path.includes('step=2')) {
+        window.dispatchEvent(new CustomEvent('cmh:navigate-step', { detail: { step: 2 } }));
+    }
     router.visit(path);
 };
 </script>
