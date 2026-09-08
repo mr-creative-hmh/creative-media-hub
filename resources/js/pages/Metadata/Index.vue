@@ -97,6 +97,68 @@ const openFixMatch = (item: any) => {
     showFixModal.value = true;
 };
 
+const cardVerifications = ref<Record<string, { checking?: boolean; exists?: boolean; size_formatted?: string; candidate_path?: string | null }>>({});
+
+const verifyCardDisk = async (item: any) => {
+    const key = `${item.type}_${item.id}`;
+    cardVerifications.value[key] = { checking: true };
+    try {
+        const res = await fetch(`/api/metadata/${item.type}/${item.id}/verify-file`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+        });
+        const data = await res.json();
+        if (data.success) {
+            cardVerifications.value[key] = {
+                checking: false,
+                exists: data.exists,
+                size_formatted: data.size_formatted,
+                candidate_path: data.candidate_path,
+            };
+        } else {
+            cardVerifications.value[key] = { checking: false, exists: false };
+        }
+    } catch (e) {
+        cardVerifications.value[key] = { checking: false, exists: false };
+    }
+};
+
+const autoRelinkCard = async (item: any, newPath: string) => {
+    const key = `${item.type}_${item.id}`;
+    cardVerifications.value[key] = { checking: true };
+    try {
+        const res = await fetch(`/api/metadata/${item.type}/${item.id}/relocate-file`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+            body: JSON.stringify({ new_path: newPath }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            if (item.type === 'movie' && data.item) {
+                item.file_path = data.item.file_path;
+                item.folder_path = data.item.folder_path;
+            } else if (data.series) {
+                item.folder_path = data.series.folder_path;
+            }
+            cardVerifications.value[key] = {
+                checking: false,
+                exists: true,
+                size_formatted: data.item?.size ? (data.item.size / (1024*1024*1024)).toFixed(2) + ' GB' : undefined,
+            };
+        } else {
+            cardVerifications.value[key] = { checking: false, exists: false };
+        }
+    } catch (e) {
+        cardVerifications.value[key] = { checking: false, exists: false };
+    }
+};
+
 const copyFilePath = async (item: any) => {
     const textToCopy = item.file_path || item.folder_path || '';
     if (!textToCopy) return;

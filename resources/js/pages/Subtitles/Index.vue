@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
+import { useSubtitleJob } from '@/composables/useSubtitleJob';
 import { Head } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -7,7 +8,8 @@ import {
     Subtitles, Download, Check, AlertCircle, Sparkles,
     Search, Cpu, CheckCircle2, Globe, ArrowDownToLine, RefreshCw,
     Film, Tv, HardDrive, FileText, CheckCheck, ChevronLeft, ChevronRight, SlidersHorizontal,
-    ShieldCheck, Trash2, Tag, Eye, Play, AlertTriangle, Filter, FolderCheck
+    ShieldCheck, Trash2, Tag, Eye, Play, AlertTriangle, Filter, FolderCheck,
+    Pause, XCircle, Terminal
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -20,6 +22,19 @@ const { t, isRTL } = useI18n();
 const activeMainTab = ref<'checker' | 'missing' | 'cloud'>('checker');
 
 // ================= SUBTITLE CHECKER STATE =================
+const {
+    isSubtitleModalOpen,
+    subtitleStatus,
+    isSubtitleRunning,
+    isSubtitlePaused,
+    isSubtitleCompleted,
+    openSubtitleModal,
+    startHealthJob,
+    pauseHealthJob,
+    resumeHealthJob,
+    cancelHealthJob,
+    fetchSubtitleStatus
+} = useSubtitleJob();
 const isCheckingHealth = ref(false);
 const healthResults = ref<any | null>(null);
 const checkerDryRun = ref(true);
@@ -32,37 +47,22 @@ const checkerCurrentPage = ref(1);
 const checkerPerPage = ref(15);
 
 const runHealthCheck = async () => {
-    isCheckingHealth.value = true;
-    try {
-        const res = await fetch('/api/subtitles/check', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
-            },
-            body: JSON.stringify({
-                dry_run: checkerDryRun.value,
-                delete_invalid: checkerDeleteInvalid.value,
-                auto_rename: checkerAutoRename.value,
-                target_path: checkerCustomPath.value.trim() || undefined,
-            }),
-        });
-
-        if (res.ok) {
-            healthResults.value = await res.json();
-            checkerCurrentPage.value = 1;
-            showToastNotice(
-                checkerDryRun.value
-                    ? (isRTL.value ? 'اكتملت المعاينة التجريبية لفحص الترجمات!' : 'Subtitle preview scan completed!')
-                    : (isRTL.value ? 'تم فحص وتنظيف وتسمية الترجمات بنجاح!' : 'Subtitles checked, cleaned, and renamed successfully!')
-            );
-        }
-    } catch (e) {
-        showToastNotice(isRTL.value ? 'حدث خطأ أثناء فحص الترجمات' : 'Error checking subtitles');
-    } finally {
-        isCheckingHealth.value = false;
-    }
+    await startHealthJob({
+        dry_run: checkerDryRun.value,
+        delete_invalid: checkerDeleteInvalid.value,
+        auto_rename: checkerAutoRename.value,
+        target_path: checkerCustomPath.value.trim() || undefined,
+    });
 };
+
+watch(() => subtitleStatus.value.items, (newItems) => {
+    if (newItems && newItems.length > 0) {
+        healthResults.value = {
+            summary: subtitleStatus.value.summary,
+            items: newItems,
+        };
+    }
+}, { deep: true, immediate: true });
 
 const filteredCheckerItems = computed(() => {
     if (!healthResults.value || !healthResults.value.items) return [];
@@ -224,9 +224,8 @@ onMounted(() => {
         activeMainTab.value = 'cloud';
     } else {
         activeMainTab.value = 'checker';
-        // Auto-run a dry-run check on initial entry if empty
-        runHealthCheck();
     }
+    fetchSubtitleStatus();
 });
 </script>
 
@@ -333,10 +332,10 @@ onMounted(() => {
                     <!-- Primary Execution Button -->
                     <button
                         @click="runHealthCheck"
-                        :disabled="isCheckingHealth"
+                        :disabled="isSubtitleRunning"
                         class="px-6 py-3 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs sm:text-sm shadow-xl shadow-cyan-500/25 active:scale-95 transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50 shrink-0"
                     >
-                        <RefreshCw v-if="isCheckingHealth" class="w-4 h-4 animate-spin" />
+                        <RefreshCw v-if="isSubtitleRunning" class="w-4 h-4 animate-spin text-slate-950" />
                         <Play v-else class="w-4 h-4 fill-slate-950" />
                         <span>{{ checkerDryRun ? (isRTL ? 'بدء المعاينة والفحص (Dry-Run)' : 'Run Preview Scan (Dry-Run)') : (isRTL ? 'تطبيق الفحص والتطهير الفعلي' : 'Execute Health Clean & Rename') }}</span>
                     </button>

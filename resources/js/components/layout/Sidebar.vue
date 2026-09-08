@@ -4,15 +4,17 @@ import { Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import { useScanner } from '@/composables/useScanner';
 import { useDownloader } from '@/composables/useDownloader';
+import { useActivityCenter } from '@/composables/useActivityCenter';
 import {
     LayoutDashboard, Film, Layers, Tv, ScanLine, FolderSync,
     Subtitles, BarChart3, DownloadCloud, Settings, Sparkles,
-    RefreshCw, Pause, Play, HardDrive, BookOpen
+    RefreshCw, Pause, Play, HardDrive, BookOpen, Activity
 } from 'lucide-vue-next';
 
 const { t, isRTL } = useI18n();
 const { scanStatus, isScanning, isPaused, openScanModal } = useScanner();
 const { activeDownloads } = useDownloader();
+const { isAnyRunning, isAnyPaused, activeJobsCount, openActivityCenter } = useActivityCenter();
 
 const activeDownloadsCount = computed(() => activeDownloads.value.length);
 
@@ -27,7 +29,7 @@ const navItems = [
     { nameKey: 'nav.subtitles', href: '/subtitles', icon: Subtitles, pattern: '^/subtitles' },
     { nameKey: 'nav.analytics', href: '/analytics', icon: BarChart3, pattern: '^/analytics' },
     { nameKey: 'nav.downloads', href: '/downloads', icon: DownloadCloud, pattern: '^/downloads' },
-    { nameKey: 'nav.docs', href: '/docs', icon: BookOpen, pattern: '^/docs|^/guide' },
+    { nameKey: 'nav.docs', href: '/docs', icon: BookOpen, Activity, pattern: '^/docs|^/guide' },
     { nameKey: 'nav.settings', href: '/settings', icon: Settings, pattern: '^/settings' },
 ];
 
@@ -85,27 +87,28 @@ const isActive = (pattern: string) => {
             </Link>
         </div>
 
-        <!-- Virtual Scanner Quick Status in Sidebar Footer -->
+        <!-- Universal Activity & Job Center in Sidebar Footer -->
         <div class="mt-auto pt-4 space-y-2">
             <div class="rounded-2xl bg-gradient-to-b from-cyan-950/40 to-slate-900/60 border border-cyan-500/20 p-3.5 relative overflow-hidden">
                 <div class="ambient-glow bg-cyan-500 w-20 h-20 -top-8 -right-8 pointer-events-none"></div>
                 <div class="flex items-center justify-between mb-1">
-                    <h4 class="font-bold text-xs text-cyan-300 uppercase tracking-wider">
-                        {{ isRTL ? 'الفاحص الافتراضي' : 'Virtual Scanner' }}
+                    <h4 class="font-bold text-xs text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <Activity class="w-3.5 h-3.5 text-cyan-400" />
+                        <span>{{ isRTL ? 'مركز العمليات الموحد' : 'Universal Job Center' }}</span>
                     </h4>
                     <span
                         class="w-2 h-2 rounded-full"
-                        :class="isScanning ? 'bg-cyan-400 animate-ping' : isPaused ? 'bg-amber-400' : 'bg-emerald-500 animate-pulse'"
+                        :class="isAnyRunning ? 'bg-cyan-400 animate-ping' : isAnyPaused ? 'bg-amber-400' : 'bg-emerald-500 animate-pulse'"
                     ></span>
                 </div>
                 <p class="text-[11px] text-slate-400 mb-2.5 leading-relaxed">
-                    {{ isRTL ? 'مراقبة المجلدات وفهرسة الوسائط في الخلفية بدون نقل الملفات.' : 'Monitor local folders and index media in background without moving files.' }}
+                    {{ isRTL ? 'إدارة وتتبع الفاحص الافتراضي ومنظم القرص الفعلي وفاحص الترجمات مباشرة.' : 'Live unified control for Virtual Scanner, Disk Organizer, and Subtitles.' }}
                 </p>
                 <button
-                    @click="openScanModal"
+                    @click="openActivityCenter()"
                     class="inline-flex items-center justify-center w-full py-1.5 rounded-xl bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500 hover:text-slate-950 border border-cyan-500/30 text-xs font-bold transition-all shadow-sm cursor-pointer"
                 >
-                    {{ isRTL ? 'لوحة الفاحص السريعة' : 'Quick Scanner Modal' }}
+                    {{ isRTL ? 'فتح مركز العمليات الموحد' : 'Open Universal Job Center' }}
                 </button>
             </div>
         </div>

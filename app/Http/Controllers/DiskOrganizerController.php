@@ -7,6 +7,7 @@ use App\Models\Episode;
 use App\Models\MediaItem;
 use App\Services\Organizer\FilesystemScannerService;
 use App\Services\Organizer\PhysicalOrganizerService;
+use App\Services\Organizer\OrganizerWatcherService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -18,10 +19,16 @@ class DiskOrganizerController extends Controller
 
     protected PhysicalOrganizerService $organizer;
 
-    public function __construct(FilesystemScannerService $scanner, PhysicalOrganizerService $organizer)
-    {
+    protected OrganizerWatcherService $watcher;
+
+    public function __construct(
+        FilesystemScannerService $scanner,
+        PhysicalOrganizerService $organizer,
+        OrganizerWatcherService $watcher
+    ) {
         $this->scanner = $scanner;
         $this->organizer = $organizer;
+        $this->watcher = $watcher;
     }
 
     public function index(): Response
@@ -32,9 +39,10 @@ class DiskOrganizerController extends Controller
         }
 
         return Inertia::render('Organizer/Index', [
-            'defaultMovieTemplate' => AppSetting::get('movie_naming_template', '{Type}/{Title} ({Year})/{Title} ({Year}) [{Resolution}].{ext}'),
-            'defaultSeriesTemplate' => AppSetting::get('series_naming_template', '{Type}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} - {EpisodeTitle} [{Resolution}].{ext}'),
+            'defaultMovieTemplate' => AppSetting::get('movie_naming_template', '{Type}/{Genre}/{Title} ({Year})/{Title} ({Year}).{ext}'),
+            'defaultSeriesTemplate' => AppSetting::get('series_naming_template', '{Type}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02}.{ext}'),
             'defaultWorkingDir' => $defaultDir,
+            'watcherStatus' => $this->watcher->getStatus(),
         ]);
     }
 
@@ -159,6 +167,17 @@ class DiskOrganizerController extends Controller
         return response()->json($this->organizer->getExecutionStatus());
     }
 
+    
+    public function pauseExecution(): JsonResponse
+    {
+        return response()->json($this->organizer->pauseExecution());
+    }
+
+    public function resumeExecution(): JsonResponse
+    {
+        return response()->json($this->organizer->resumeExecution());
+    }
+
     public function cancelExecution(): JsonResponse
     {
         return response()->json($this->organizer->cancelExecution());
@@ -174,5 +193,115 @@ class DiskOrganizerController extends Controller
         $result = $this->organizer->execute($validated['plan'], $validated['mode']);
 
         return response()->json($result);
+    }
+
+    public function getWatcherStatus(): JsonResponse
+    {
+        return response()->json($this->watcher->getStatus());
+    }
+
+    public function toggleWatcher(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'enabled' => 'required|boolean',
+        ]);
+
+        $this->watcher->setEnabled($validated['enabled']);
+
+        return response()->json($this->watcher->getStatus());
+    }
+
+    public function updateWatchedFolders(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'action' => 'required|in:add,remove',
+            'path' => 'required|string',
+        ]);
+
+        if ($validated['action'] === 'add') {
+            $folders = $this->watcher->addFolder($validated['path']);
+        } else {
+            $folders = $this->watcher->removeFolder($validated['path']);
+        }
+
+        return response()->json([
+            'success' => true,
+            'folders' => $folders,
+            'status' => $this->watcher->getStatus(),
+        ]);
+    }
+
+    public function runWatcherNow(Request $request): JsonResponse
+    {
+        $dryRunOnly = (bool) $request->input('dry_run', true);
+        $result = $this->watcher->checkAndOrganize($dryRunOnly);
+
+        return response()->json($result);
+    }
+
+    public function browseDirectory(Request $request): JsonResponse
+    {
+        $path = $request->query('path');
+        $result = $this->scanner->browseDirectory($path ? (string) $path : null);
+
+        return response()->json($result);
+    }
+
+    public function startPlan(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'source_path' => 'nullable|string',
+            'target_root' => 'required|string',
+            'movie_template' => 'nullable|string',
+            'series_template' => 'nullable|string',
+            'source_mode' => 'nullable|string|in:virtual,folder',
+            'recursive' => 'nullable|boolean',
+            'files' => 'nullable|array',
+        ]);
+
+        $result = $this->organizer->startPlanJob(
+            $validated['source_path'] ?? '',
+            $validated['target_root'],
+            $validated['movie_template'] ?? null,
+            $validated['series_template'] ?? null,
+            $validated['source_mode'] ?? 'folder',
+            $validated['recursive'] ?? true,
+            ['files' => $validated['files'] ?? null]
+        );
+
+        return response()->json($result, ($result['success'] ?? true) ? 200 : 422);
+    }
+
+    public function initPlan(Request $request): JsonResponse
+    {
+        return $this->startPlan($request);
+    }
+
+    public function processPlanBatch(Request $request): JsonResponse
+    {
+        $batchSize = (int) $request->input('batch_size', 15);
+        $result = $this->organizer->processPlanJobBatch($batchSize);
+
+        return response()->json($result);
+    }
+
+    public function getPlanStatus(): JsonResponse
+    {
+        return response()->json($this->organizer->getPlanJobStatus());
+    }
+
+    public function pausePlan(): JsonResponse
+    {
+        return response()->json($this->organizer->pausePlanJob());
+    }
+
+    public function resumePlan(): JsonResponse
+    {
+        return response()->json($this->organizer->resumePlanJob());
+    }
+
+    public function cancelPlan(): JsonResponse
+    {
+        return response()->json($this->organizer->cancelPlanJob());
     }
 }

@@ -835,4 +835,208 @@ class MetadataManagementController extends Controller
             'result' => $result,
         ]);
     }
+
+    public function verifyFile(Request $request, string $type, int $id): JsonResponse
+    {
+        if ($type === 'movie') {
+            $item = MediaItem::find($id);
+            if (! $item) {
+                return response()->json(['success' => false, 'message' => 'Movie not found.'], 404);
+            }
+
+            $filePath = str_replace('\\', '/', $item->file_path ?? '');
+            $exists = ! empty($filePath) && file_exists($filePath);
+
+            $candidatePath = null;
+            if (! $exists) {
+                $candidatePath = $this->findCandidateMoviePath($item);
+            }
+
+            return response()->json([
+                'success' => true,
+                'exists' => $exists,
+                'current_path' => $filePath,
+                'file_size' => $exists ? filesize($filePath) : null,
+                'size_formatted' => $exists ? $this->formatBytes(filesize($filePath)) : null,
+                'candidate_path' => $candidatePath,
+            ]);
+        } else {
+            $series = Series::with(['seasons.episodes'])->find($id);
+            if (! $series) {
+                return response()->json(['success' => false, 'message' => 'Series not found.'], 404);
+            }
+
+            $folderPath = str_replace('\\', '/', $series->folder_path ?? '');
+            $folderExists = ! empty($folderPath) && is_dir($folderPath);
+
+            $totalEpisodes = 0;
+            $existingEpisodes = 0;
+            foreach ($series->seasons as $season) {
+                foreach ($season->episodes as $ep) {
+                    $totalEpisodes++;
+                    if ($ep->file_path && file_exists($ep->file_path)) {
+                        $existingEpisodes++;
+                    }
+                }
+            }
+
+            $candidatePath = null;
+            if (! $folderExists) {
+                $candidatePath = $this->findCandidateSeriesPath($series);
+            }
+
+            return response()->json([
+                'success' => true,
+                'exists' => $folderExists,
+                'current_path' => $folderPath,
+                'total_episodes' => $totalEpisodes,
+                'existing_episodes' => $existingEpisodes,
+                'candidate_path' => $candidatePath,
+            ]);
+        }
+    }
+
+    public function relocateFile(Request $request, string $type, int $id): JsonResponse
+    {
+        $newPath = str_replace('\\', '/', trim($request->input('new_path', '')));
+        if (empty($newPath)) {
+            return response()->json(['success' => false, 'message' => 'New path is required.'], 422);
+        }
+
+        if ($type === 'movie') {
+            if (! file_exists($newPath) || is_dir($newPath)) {
+                return response()->json(['success' => false, 'message' => 'Specified file does not exist on disk.'], 404);
+            }
+
+            $item = MediaItem::find($id);
+            if (! $item) {
+                return response()->json(['success' => false, 'message' => 'Movie not found.'], 404);
+            }
+
+            $item->update([
+                'file_path' => $newPath,
+                'folder_path' => dirname($newPath),
+                'size' => filesize($newPath),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Movie file path updated successfully!',
+                'item' => $item,
+            ]);
+        } else {
+            if (! is_dir($newPath)) {
+                return response()->json(['success' => false, 'message' => 'Specified series folder does not exist on disk.'], 404);
+            }
+
+            $series = Series::with(['seasons.episodes'])->find($id);
+            if (! $series) {
+                return response()->json(['success' => false, 'message' => 'Series not found.'], 404);
+            }
+
+            $series->update(['folder_path' => $newPath]);
+
+            $relinkedCount = 0;
+            foreach ($series->seasons as $season) {
+                foreach ($season->episodes as $ep) {
+                    if ($ep->file_path && ! file_exists($ep->file_path)) {
+                        $epFilename = basename($ep->file_path);
+                        $finder = new \Symfony\Component\Finder\Finder();
+                        try {
+                            $finder->files()->in($newPath)->name($epFilename);
+                            foreach ($finder as $file) {
+                                $ep->update(['file_path' => str_replace('\\', '/', $file->getRealPath())]);
+                                $relinkedCount++;
+                                break;
+                            }
+                        } catch (\Throwable $e) {}
+                    }
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "Series folder updated successfully! (Relinked {$relinkedCount} episodes)",
+                'series' => $series,
+            ]);
+        }
+    }
+
+    protected function findCandidateMoviePath(MediaItem $item): ?string
+    {
+        $searchDirs = [
+            'H:/Entertainment/Movies',
+            'D:/Downloads',
+        ];
+        
+        $monitoredJson = AppSetting::where('key', 'scanner_monitored_directories')->first()?->value;
+        if ($monitoredJson) {
+            $monitored = json_decode($monitoredJson, true);
+            if (is_array($monitored)) {
+                $searchDirs = array_unique(array_merge($searchDirs, $monitored));
+            }
+        }
+
+        $cleanTitle = trim(preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $item->title ?? ''));
+        $cleanTitle = preg_replace('/\s+/', ' ', $cleanTitle);
+        $cleanTitleLower = strtolower($cleanTitle);
+
+        foreach ($searchDirs as $dir) {
+            if (! is_dir($dir)) continue;
+            try {
+                $finder = new \Symfony\Component\Finder\Finder();
+                $finder->files()->in($dir)->depth('< 4')->name('/\.(mp4|mkv|avi|mov|m4v)$/i');
+                foreach ($finder as $file) {
+                    $filename = $file->getFilename();
+                    $filenameLower = strtolower($filename);
+                    if ($cleanTitleLower && str_contains($filenameLower, $cleanTitleLower)) {
+                        if ($item->release_year && str_contains($filenameLower, (string) $item->release_year)) {
+                            return str_replace('\\', '/', $file->getRealPath());
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        return null;
+    }
+
+    protected function findCandidateSeriesPath(Series $series): ?string
+    {
+        $searchDirs = [
+            'H:/Entertainment/TV Shows',
+            'D:/Downloads',
+        ];
+        
+        $cleanTitle = trim(preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $series->title ?? ''));
+        $cleanTitle = preg_replace('/\s+/', ' ', $cleanTitle);
+        $cleanTitleLower = strtolower($cleanTitle);
+
+        foreach ($searchDirs as $dir) {
+            if (! is_dir($dir)) continue;
+            try {
+                $finder = new \Symfony\Component\Finder\Finder();
+                $finder->directories()->in($dir)->depth('< 3');
+                foreach ($finder as $directory) {
+                    $dirNameLower = strtolower($directory->getFilename());
+                    if ($cleanTitleLower && str_contains($dirNameLower, $cleanTitleLower)) {
+                        return str_replace('\\', '/', $directory->getRealPath());
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        return null;
+    }
+
+    protected function formatBytes(int $bytes, int $precision = 2): string
+    {
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        $bytes = max($bytes, 0);
+        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = min($pow, count($units) - 1);
+        $bytes /= pow(1024, $pow);
+
+        return round($bytes, $precision).' '.$units[$pow];
+    }
 }

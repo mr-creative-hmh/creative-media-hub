@@ -1,3 +1,4 @@
+import { isActivityCenterOpen, openActivityCenter, closeActivityCenter } from './useActivityCenterState';
 import { ref, computed } from 'vue';
 import { router } from '@inertiajs/vue3';
 
@@ -31,6 +32,8 @@ export interface LibraryStats {
 // Global shared reactive state
 const isScanModalOpen = ref(false);
 const isWorkerRunning = ref(false);
+const isExplicitlyPaused = ref(false);
+const isExplicitlyCancelled = ref(false);
 const liveStats = ref<LibraryStats | null>(null);
 
 const scanStatus = ref<ScanJobStatus>({
@@ -44,16 +47,18 @@ const scanStatus = ref<ScanJobStatus>({
 });
 
 export function useScanner() {
-    const isScanning = computed(() => scanStatus.value.status === 'scanning');
-    const isPaused = computed(() => scanStatus.value.status === 'paused');
+    const isScanning = computed(() => scanStatus.value.status === 'scanning' && !isExplicitlyPaused.value && !isExplicitlyCancelled.value);
+    const isPaused = computed(() => scanStatus.value.status === 'paused' || isExplicitlyPaused.value);
+
+    const getCsrfToken = () => (document.querySelector('meta[name="csrf-token"]') as any)?.content || '';
 
     const openScanModal = () => {
-        isScanModalOpen.value = true;
+        openActivityCenter('scanner');
         fetchStatus();
     };
 
     const closeScanModal = () => {
-        isScanModalOpen.value = false;
+        closeActivityCenter();
     };
 
     const fetchStatus = async () => {
@@ -62,11 +67,16 @@ export function useScanner() {
             if (res.ok) {
                 const data = await res.json();
                 if (data && typeof data === 'object' && data.status) {
+                    if (isExplicitlyCancelled.value) {
+                        data.status = 'cancelled';
+                    } else if (isExplicitlyPaused.value) {
+                        data.status = 'paused';
+                    }
                     scanStatus.value = data;
                     if (data.stats) {
                         liveStats.value = data.stats;
                     }
-                    if (data.status === 'scanning' && !isWorkerRunning.value) {
+                    if (data.status === 'scanning' && !isWorkerRunning.value && !isExplicitlyPaused.value && !isExplicitlyCancelled.value) {
                         runBackgroundWorker();
                     }
                 }
@@ -80,10 +90,10 @@ export function useScanner() {
 
         let consecutiveErrors = 0;
 
-        while (scanStatus.value.status === 'scanning' || scanStatus.value.status === 'paused') {
-            if (scanStatus.value.status === 'paused') {
+        while (!isExplicitlyCancelled.value && (scanStatus.value.status === 'scanning' || scanStatus.value.status === 'paused' || isExplicitlyPaused.value)) {
+            if (isExplicitlyPaused.value || scanStatus.value.status === 'paused') {
                 // If paused, wait and poll status without terminating worker
-                await new Promise((r) => setTimeout(r, 600));
+                await new Promise((r) => setTimeout(r, 500));
                 continue;
             }
 
@@ -92,7 +102,7 @@ export function useScanner() {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                        'X-CSRF-TOKEN': getCsrfToken(),
                     },
                     body: JSON.stringify({ batch_size: 10 }),
                 });
@@ -100,9 +110,19 @@ export function useScanner() {
                 if (res.ok) {
                     consecutiveErrors = 0;
                     const data = await res.json();
+
+                    if (isExplicitlyCancelled.value) {
+                        scanStatus.value.status = 'cancelled';
+                        break;
+                    }
+
                     if (data.status && typeof data.status === 'object') {
+                        if (isExplicitlyPaused.value) {
+                            data.status.status = 'paused';
+                        }
                         scanStatus.value = data.status;
                     }
+
                     if (data.stats) {
                         liveStats.value = data.stats;
                     } else if (data.status && data.status.stats) {
@@ -129,19 +149,21 @@ export function useScanner() {
                 await new Promise((r) => setTimeout(r, 1000));
             }
 
-            await new Promise((r) => setTimeout(r, 100));
+            await new Promise((r) => setTimeout(r, 80));
         }
 
         isWorkerRunning.value = false;
     };
 
     const startFullScan = async (directories?: any[], scanMode: 'incremental' | 'fresh' = 'incremental') => {
+        isExplicitlyCancelled.value = false;
+        isExplicitlyPaused.value = false;
         try {
             const res = await fetch('/api/scanner/start', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    'X-CSRF-TOKEN': getCsrfToken(),
                 },
                 body: JSON.stringify({ directories: directories || [], scan_mode: scanMode }),
             });
@@ -156,12 +178,14 @@ export function useScanner() {
     };
 
     const rescanFresh = async () => {
+        isExplicitlyCancelled.value = false;
+        isExplicitlyPaused.value = false;
         try {
             const res = await fetch('/api/scanner/rescan-fresh', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    'X-CSRF-TOKEN': getCsrfToken(),
                 },
                 body: JSON.stringify({}),
             });
@@ -176,12 +200,14 @@ export function useScanner() {
     };
 
     const scanFolder = async (path: string, type: string = 'mixed', fresh: boolean = false, scanMode: 'incremental' | 'fresh' = 'incremental') => {
+        isExplicitlyCancelled.value = false;
+        isExplicitlyPaused.value = false;
         try {
             const res = await fetch('/api/scanner/scan-folder', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    'X-CSRF-TOKEN': getCsrfToken(),
                 },
                 body: JSON.stringify({ path, type, fresh, scan_mode: scanMode }),
             });
@@ -201,7 +227,7 @@ export function useScanner() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    'X-CSRF-TOKEN': getCsrfToken(),
                 },
             });
             if (res.ok) {
@@ -216,30 +242,36 @@ export function useScanner() {
     };
 
     const pauseScan = async () => {
+        isExplicitlyPaused.value = true;
+        scanStatus.value.status = 'paused';
         try {
-            scanStatus.value.status = 'paused';
             const res = await fetch('/api/scanner/pause', {
                 method: 'POST',
                 headers: {
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': getCsrfToken(),
                 },
             });
             if (res.ok) {
                 const data = await res.json();
                 if (data.status) {
                     scanStatus.value = data.status;
+                    scanStatus.value.status = 'paused';
                 }
             }
         } catch (e) {}
     };
 
     const resumeScan = async () => {
+        isExplicitlyPaused.value = false;
+        isExplicitlyCancelled.value = false;
+        scanStatus.value.status = 'scanning';
         try {
-            scanStatus.value.status = 'scanning';
             const res = await fetch('/api/scanner/resume', {
                 method: 'POST',
                 headers: {
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': getCsrfToken(),
                 },
             });
             if (res.ok) {
@@ -253,25 +285,30 @@ export function useScanner() {
     };
 
     const cancelScan = async () => {
+        isExplicitlyCancelled.value = true;
+        isExplicitlyPaused.value = false;
+        isWorkerRunning.value = false;
+        scanStatus.value.status = 'cancelled';
         try {
-            scanStatus.value.status = 'cancelled';
             const res = await fetch('/api/scanner/cancel', {
                 method: 'POST',
                 headers: {
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': getCsrfToken(),
                 },
             });
             if (res.ok) {
                 const data = await res.json();
                 if (data.status) {
                     scanStatus.value = data.status;
+                    scanStatus.value.status = 'cancelled';
                 }
             }
         } catch (e) {}
     };
 
     return {
-        isScanModalOpen,
+        isScanModalOpen: isActivityCenterOpen,
         scanStatus,
         liveStats,
         isScanning,

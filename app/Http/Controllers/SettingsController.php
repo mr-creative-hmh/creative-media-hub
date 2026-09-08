@@ -8,6 +8,8 @@ use App\Services\Metadata\TvMazeProvider;
 use App\Services\Metadata\WikipediaProvider;
 use App\Services\Subtitles\OpenSubtitlesService;
 use App\Services\Subtitles\SubDlService;
+use App\Services\Database\DatabaseBackupService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -16,6 +18,10 @@ use Inertia\Response;
 
 class SettingsController extends Controller
 {
+    public function __construct(
+        protected DatabaseBackupService $backupService
+    ) {}
+
     public function index(): Response
     {
         $settings = [
@@ -32,6 +38,14 @@ class SettingsController extends Controller
         return Inertia::render('Settings/Index', [
             'settings' => $settings,
             'media_cache' => $this->calculateCacheStats(),
+            'initial_backups' => $this->backupService->listLocalBackups(),
+            'database_stats' => [
+                'media_items' => DB::table('media_items')->count(),
+                'series' => DB::table('series')->count(),
+                'episodes' => DB::table('episodes')->count(),
+                'subtitles' => DB::table('subtitles')->count(),
+                'genres' => DB::table('genres')->count(),
+            ],
         ]);
     }
 

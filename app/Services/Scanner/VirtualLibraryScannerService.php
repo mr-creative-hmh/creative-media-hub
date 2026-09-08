@@ -171,6 +171,34 @@ class VirtualLibraryScannerService
     {
         $jobData = $this->getScanStatus();
 
+        // If paused, immediately return without processing any files and keep has_more = true
+        if (($jobData['status'] ?? '') === 'paused') {
+            return [
+                'status' => 'paused',
+                'has_more' => true,
+                'progress_percent' => $jobData['progress_percent'] ?? 0,
+                'processed_files' => $jobData['processed_files'] ?? 0,
+                'total_files' => $jobData['total_files'] ?? 0,
+                'current_file' => null,
+                'latest_scanned' => [],
+                'latest_logs' => [],
+            ];
+        }
+
+        // If cancelled, immediately return has_more = false
+        if (($jobData['status'] ?? '') === 'cancelled') {
+            return [
+                'status' => 'cancelled',
+                'has_more' => false,
+                'progress_percent' => $jobData['progress_percent'] ?? 0,
+                'processed_files' => $jobData['processed_files'] ?? 0,
+                'total_files' => $jobData['total_files'] ?? 0,
+                'current_file' => null,
+                'latest_scanned' => [],
+                'latest_logs' => [],
+            ];
+        }
+
         if (empty($jobData['queue']) || $jobData['status'] !== 'scanning') {
             if ($jobData['status'] === 'scanning') {
                 $jobData['status'] = 'completed';
@@ -255,6 +283,16 @@ class VirtualLibraryScannerService
                 'level' => 'success',
                 'message' => 'All files processed and indexed successfully!',
             ];
+        }
+
+        // Check if an asynchronous pause or cancel occurred while this batch was running
+        $latestInCache = Cache::get('virtual_scanner_job_status');
+        if ($latestInCache && ($latestInCache['status'] === 'paused')) {
+            $jobData['status'] = 'paused';
+        } elseif ($latestInCache && ($latestInCache['status'] === 'cancelled')) {
+            $jobData['status'] = 'cancelled';
+            $jobData['queue'] = [];
+            $hasMore = false;
         }
 
         Cache::put('virtual_scanner_job_status', $jobData, now()->addHours(6));

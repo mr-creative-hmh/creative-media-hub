@@ -21,6 +21,7 @@ creative-media-hub/
 │       ├── Media/              # Codec detection, FFprobe wrappers & media helpers
 │       ├── Metadata/           # MetadataAggregator & provider adapters (TMDb, OMDb)
 │       ├── Organizer/          # SceneNameParser & NTFS Hardlink organizer
+│       ├── Database/           # Full & selective disaster recovery, snapshot management
 │       ├── Scanner/            # VirtualLibraryScanner & batch queue workers
 │       ├── Streaming/          # FFmpeg locator, process reaper & remux engine
 │       └── Subtitles/          # SubDL, OpenSubtitles, health auditor & normalizer
@@ -40,6 +41,7 @@ creative-media-hub/
 │   ├── js/
 │   │   ├── app.ts              # Inertia & Vue 3 application bootstrap
 │   │   ├── components/         # Modular Vue 3 components
+│   │   │   ├── activity/       # UnifiedJobCenterModal (universal background task orchestrator)
 │   │   │   ├── common/         # Orbit loaders, transit island, modal shells
 │   │   │   ├── layout/         # Navigation bars, search drawers, page shells
 │   │   │   ├── media/          # Hero banner, media cards, detail modals, trays

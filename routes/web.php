@@ -10,6 +10,7 @@ use App\Http\Controllers\MetadataManagementController;
 use App\Http\Controllers\ScannerController;
 use App\Http\Controllers\SeriesController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\DatabaseBackupController;
 use App\Http\Controllers\StreamController;
 use App\Http\Controllers\SubtitleController;
 use Illuminate\Support\Facades\Route;
@@ -53,6 +54,8 @@ Route::post('/api/metadata/lookup-id', [MetadataManagementController::class, 'lo
 Route::post('/api/metadata/{type}/{id}/reparse', [MetadataManagementController::class, 'reparseItem'])->name('api.metadata.reparse');
 Route::post('/api/metadata/{type}/{id}/convert-type', [MetadataManagementController::class, 'convertType'])->name('api.metadata.convert-type');
 Route::post('/api/metadata/{type}/{id}/rename-file', [MetadataManagementController::class, 'renameFile'])->name('api.metadata.rename-file');
+Route::post('/api/metadata/{type}/{id}/verify-file', [MetadataManagementController::class, 'verifyFile'])->name('api.metadata.verify-file');
+Route::post('/api/metadata/{type}/{id}/relocate-file', [MetadataManagementController::class, 'relocateFile'])->name('api.metadata.relocate-file');
 Route::delete('/api/metadata/{type}/{id}', [MetadataManagementController::class, 'deleteItem'])->name('api.metadata.delete-item');
 
 // Virtual Media Scanner & Background Job Control Center
@@ -75,12 +78,27 @@ Route::post('/api/scanner/clear-catalog', [ScannerController::class, 'clearDemoC
 Route::get('/organizer', [DiskOrganizerController::class, 'index'])->name('organizer.index');
 Route::get('/api/organizer/load-virtual', [DiskOrganizerController::class, 'loadFromVirtualLibrary'])->name('api.organizer.load-virtual');
 Route::post('/api/organizer/scan', [DiskOrganizerController::class, 'scan'])->name('api.organizer.scan');
+Route::get('/api/organizer/browse-directory', [DiskOrganizerController::class, 'browseDirectory'])->name('api.organizer.browse-directory');
+Route::post('/api/organizer/plan/start', [DiskOrganizerController::class, 'startPlan'])->name('api.organizer.plan.start');
+Route::post('/api/organizer/plan/init', [DiskOrganizerController::class, 'startPlan'])->name('api.organizer.plan.init');
+Route::post('/api/organizer/plan/process-batch', [DiskOrganizerController::class, 'processPlanBatch'])->name('api.organizer.plan.process-batch');
+Route::post('/api/organizer/plan/batch', [DiskOrganizerController::class, 'processPlanBatch'])->name('api.organizer.plan.batch');
+Route::get('/api/organizer/plan/status', [DiskOrganizerController::class, 'getPlanStatus'])->name('api.organizer.plan.status');
+Route::post('/api/organizer/plan/pause', [DiskOrganizerController::class, 'pausePlan'])->name('api.organizer.plan.pause');
+Route::post('/api/organizer/plan/resume', [DiskOrganizerController::class, 'resumePlan'])->name('api.organizer.plan.resume');
+Route::post('/api/organizer/plan/cancel', [DiskOrganizerController::class, 'cancelPlan'])->name('api.organizer.plan.cancel');
 Route::post('/api/organizer/dry-run', [DiskOrganizerController::class, 'dryRun'])->name('api.organizer.dry-run');
 Route::post('/api/organizer/execute', [DiskOrganizerController::class, 'execute'])->name('api.organizer.execute');
 Route::post('/api/organizer/execute/init', [DiskOrganizerController::class, 'initExecution'])->name('api.organizer.execute-init');
 Route::post('/api/organizer/execute/batch', [DiskOrganizerController::class, 'processBatch'])->name('api.organizer.execute-batch');
 Route::get('/api/organizer/execute/status', [DiskOrganizerController::class, 'getExecutionStatus'])->name('api.organizer.execute-status');
+Route::post('/api/organizer/execute/pause', [DiskOrganizerController::class, 'pauseExecution'])->name('api.organizer.execute-pause');
+Route::post('/api/organizer/execute/resume', [DiskOrganizerController::class, 'resumeExecution'])->name('api.organizer.execute-resume');
 Route::post('/api/organizer/execute/cancel', [DiskOrganizerController::class, 'cancelExecution'])->name('api.organizer.execute-cancel');
+Route::get('/api/organizer/watcher', [DiskOrganizerController::class, 'getWatcherStatus'])->name('api.organizer.watcher.status');
+Route::post('/api/organizer/watcher/toggle', [DiskOrganizerController::class, 'toggleWatcher'])->name('api.organizer.watcher.toggle');
+Route::post('/api/organizer/watcher/folder', [DiskOrganizerController::class, 'updateWatchedFolders'])->name('api.organizer.watcher.folder');
+Route::post('/api/organizer/watcher/run-now', [DiskOrganizerController::class, 'runWatcherNow'])->name('api.organizer.watcher.run-now');
 
 // Free Subtitles Hub, Live Scraper Diagnostic & Downloader
 Route::get('/subtitles', [SubtitleController::class, 'index'])->name('subtitles.index');
@@ -90,6 +108,12 @@ Route::get('/api/subtitles/for-media', [SubtitleController::class, 'forMedia'])-
 Route::get('/api/subtitles/list', [SubtitleController::class, 'forMedia'])->name('api.subtitles.list');
 Route::post('/api/subtitles/verify-engine', [SubtitleController::class, 'verifyEngine'])->name('api.subtitles.verify-engine');
 Route::post('/api/subtitles/check', [SubtitleController::class, 'checkHealth'])->name('api.subtitles.check');
+Route::post('/api/subtitles/health-check/start', [SubtitleController::class, 'startHealthJob'])->name('api.subtitles.health-start');
+Route::post('/api/subtitles/health-check/batch', [SubtitleController::class, 'processHealthBatch'])->name('api.subtitles.health-batch');
+Route::get('/api/subtitles/health-check/status', [SubtitleController::class, 'getHealthJobStatus'])->name('api.subtitles.health-status');
+Route::post('/api/subtitles/health-check/pause', [SubtitleController::class, 'pauseHealthJob'])->name('api.subtitles.health-pause');
+Route::post('/api/subtitles/health-check/resume', [SubtitleController::class, 'resumeHealthJob'])->name('api.subtitles.health-resume');
+Route::post('/api/subtitles/health-check/cancel', [SubtitleController::class, 'cancelHealthJob'])->name('api.subtitles.health-cancel');
 
 // Cinema Video & Subtitle Streaming Engine (HTTP 206 Partial Content + Audio Transcoding)
 Route::get('/stream/movie/{mediaItem}', [StreamController::class, 'streamMovie'])->name('stream.movie');
@@ -133,3 +157,14 @@ Route::post('/api/settings', [SettingsController::class, 'update'])->name('api.s
 Route::post('/api/settings/test-provider', [SettingsController::class, 'testProvider'])->name('api.settings.test-provider');
 Route::get('/api/settings/media-cache-stats', [SettingsController::class, 'getMediaCacheStats'])->name('api.settings.media-cache-stats');
 Route::post('/api/settings/clear-media-cache', [SettingsController::class, 'clearMediaCache'])->name('api.settings.clear-media-cache');
+
+// Database Backup & Disaster Recovery
+Route::get('/api/database/backups', [DatabaseBackupController::class, 'listBackups'])->name('api.database.backups.list');
+Route::post('/api/database/backups/create', [DatabaseBackupController::class, 'createBackup'])->name('api.database.backups.create');
+Route::get('/api/database/backup/export', [DatabaseBackupController::class, 'exportJson'])->name('api.database.backup.export');
+Route::get('/api/database/backups/download/{filename}', [DatabaseBackupController::class, 'downloadLocal'])->name('api.database.backups.download');
+Route::delete('/api/database/backups/{filename}', [DatabaseBackupController::class, 'deleteLocal'])->name('api.database.backups.delete');
+Route::post('/api/database/restore/upload', [DatabaseBackupController::class, 'restoreUpload'])->name('api.database.restore.upload');
+Route::post('/api/database/restore/local', [DatabaseBackupController::class, 'restoreLocal'])->name('api.database.restore.local');
+Route::get('/api/library/backup', [DatabaseBackupController::class, 'exportJson'])->name('api.library.backup');
+Route::post('/api/library/restore', [DatabaseBackupController::class, 'restoreUpload'])->name('api.library.restore');

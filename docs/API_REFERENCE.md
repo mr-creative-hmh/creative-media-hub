@@ -179,3 +179,76 @@
   }
   ```
 
+
+---
+
+## 7. Database Disaster Recovery & Backup Endpoints
+
+### 7.1. List Backups
+- **`GET /api/database/backups`**  
+  Returns an array of all local backup files in `storage/app/backups` with file sizes, timestamps, and item count summaries.
+
+### 7.2. Create Local Snapshot
+- **`POST /api/database/backups/create`**  
+  Creates a timestamped or named local snapshot (`.json` and/or `.sqlite`).
+  ```json
+  {
+    "name": "pre_upgrade_snapshot",
+    "format": "both"
+  }
+  ```
+
+### 7.3. Stream Download JSON Backup
+- **`GET /api/database/backup/export`** (and alias **`GET /api/library/backup`**)  
+  Directly stream downloads the active database catalog as a structured JSON file.
+
+### 7.4. Download / Delete Local Backup File
+- **`GET /api/database/backups/download/{filename}`**  
+  Downloads a specific local backup file.
+- **`DELETE /api/database/backups/{filename}`**  
+  Deletes a specific local backup file.
+
+### 7.5. Selective Restore from Uploaded File
+- **`POST /api/database/restore/upload`**  
+  Restores database records from an uploaded `.json`, `.sqlite`, or `.db` file.
+  - Payload (`multipart/form-data`):
+    - `backup_file`: File
+    - `mode`: `"overwrite"` or `"merge"`
+    - `sections[]`: Array of sections (e.g. `["movies", "series"]`)
+
+### 7.6. Selective Restore from Local Snapshot
+- **`POST /api/database/restore/local`**  
+  Restores database records from a local snapshot file.
+  ```json
+  {
+    "filename": "snapshot_2026-09-08_020000.json",
+    "mode": "overwrite",
+    "sections": ["movies", "subtitles"]
+  }
+  ```
+
+---
+
+## 8. Downloads Watcher & Auto-Organizer Endpoints
+
+### 8.1. Watcher Status
+- **`GET /api/organizer/watch/status`**  
+  Returns active monitoring status, watched folder paths, and scheduled scan stats.
+
+### 8.2. Toggle Active State
+- **`POST /api/organizer/watch/toggle`**  
+  Toggles the watcher daemon on/off and persists the state in `app_settings`.
+  ```json
+  {
+    "active": true
+  }
+  ```
+
+### 8.3. Update Watched Folders
+- **`POST /api/organizer/watch/folders`**  
+  Updates the array of watched directory paths on disk.
+  ```json
+  {
+    "folders": ["H:/Torrents/Complete", "C:/Users/hasan/Downloads"]
+  }
+  ```

@@ -87,6 +87,12 @@ class SceneNameParserService
         $group = null;
         $isParentSeasonFolder = false;
 
+                // Remove soft hyphens, zero-width spaces, and normalize typographical quotes/pipes
+        $filename = str_replace(["\xad", "\xe2\x80\x8b", "¦"], ['', '', '-'], $filename);
+        $filename = str_replace('الحزء', 'الجزء', $filename);
+        // Strip common YouTube channel and production promotional prefixes
+        $filename = preg_replace('/^(?:Future Cinema & TV Productions|المستقبل للإنتاج|قناة .*? الرسمية)[\s\-–¦|]+(?:مسلسل\s+)?/ui', '', $filename);
+
         $working = $baseName;
 
         // Check if path indicates series or movies library ancestor
@@ -111,6 +117,11 @@ class SceneNameParserService
         } elseif ($grandparentFolder && preg_match('/^(.*?)(?:\s+(?:Collection|Trilogy|Anthology|Saga|Boxset|سلسلة|أفلام|سلسلة أفلام))$/ui', trim($grandparentFolder), $gcMatch)) {
             $isCollectionFolder = true;
             $detectedCollectionName = trim($grandparentFolder);
+        }
+
+        // Deep Franchise & Collection Knowledge Base Lookup
+        if (! $detectedCollectionName) {
+            $detectedCollectionName = $this->detectFranchiseOrCollection($baseName, $parentFolder, $grandparentFolder);
         }
 
         // 1. Check 3D
@@ -555,6 +566,134 @@ class SceneNameParserService
         }
 
         return '240p';
+    }
+
+    
+    /**
+     * Map of keywords/patterns to canonical movie collection and franchise names.
+     */
+    protected array $canonicalFranchises = [
+        'fast & furious' => 'Fast & Furious',
+        'fast and furious' => 'Fast & Furious',
+        'furious 7' => 'Fast & Furious',
+        'fast x' => 'Fast & Furious',
+        'hobbs & shaw' => 'Fast & Furious',
+        'hobbs and shaw' => 'Fast & Furious',
+        'tokyo drift' => 'Fast & Furious',
+        'fast five' => 'Fast & Furious',
+        '2 fast 2 furious' => 'Fast & Furious',
+
+        'transformers' => 'Transformers',
+        'bumblebee' => 'Transformers',
+
+        'harry potter' => 'Harry Potter',
+        'fantastic beasts' => 'Harry Potter',
+
+        'the matrix' => 'The Matrix',
+        'matrix reloaded' => 'The Matrix',
+        'matrix revolutions' => 'The Matrix',
+        'matrix resurrections' => 'The Matrix',
+        'animatrix' => 'The Matrix',
+
+        'marvel cinematic universe' => 'Marvel Cinematic Universe',
+        'iron man' => 'Marvel Cinematic Universe',
+        'captain america' => 'Marvel Cinematic Universe',
+        'avengers' => 'Marvel Cinematic Universe',
+        'guardians of the galaxy' => 'Marvel Cinematic Universe',
+        'ant-man' => 'Marvel Cinematic Universe',
+        'black panther' => 'Marvel Cinematic Universe',
+        'doctor strange' => 'Marvel Cinematic Universe',
+        'shang-chi' => 'Marvel Cinematic Universe',
+        'thor' => 'Marvel Cinematic Universe',
+
+        'lord of the rings' => 'The Lord of the Rings',
+        'the hobbit' => 'The Lord of the Rings',
+        'fellowship of the ring' => 'The Lord of the Rings',
+        'two towers' => 'The Lord of the Rings',
+        'return of the king' => 'The Lord of the Rings',
+
+        'star wars' => 'Star Wars',
+
+        'john wick' => 'John Wick',
+        'mission: impossible' => 'Mission: Impossible',
+        'mission impossible' => 'Mission: Impossible',
+        'james bond' => 'James Bond 007',
+        '007' => 'James Bond 007',
+
+        'pirates of the caribbean' => 'Pirates of the Caribbean',
+        'jurassic park' => 'Jurassic Park',
+        'jurassic world' => 'Jurassic Park',
+        'indiana jones' => 'Indiana Jones',
+        'the dark knight' => 'The Dark Knight',
+        'alien' => 'Alien',
+        'predator' => 'Predator',
+        'die hard' => 'Die Hard',
+        'the terminator' => 'The Terminator',
+        'terminator' => 'The Terminator',
+        'the hunger games' => 'The Hunger Games',
+        'twilight' => 'The Twilight Saga',
+        'mad max' => 'Mad Max',
+        'planet of the apes' => 'Planet of the Apes',
+        'back to the future' => 'Back to the Future',
+        'men in black' => 'Men in Black',
+        'the hangover' => 'The Hangover',
+        'saw' => 'Saw',
+        'jigsaw' => 'Saw',
+        'the godfather' => 'The Godfather',
+        'bourne' => 'Bourne',
+        'rocky' => 'Rocky',
+        'creed' => 'Rocky',
+        'bad boys' => 'Bad Boys',
+
+        'shrek' => 'Shrek',
+        'puss in boots' => 'Shrek',
+        'toy story' => 'Toy Story',
+        'ice age' => 'Ice Age',
+        'despicable me' => 'Despicable Me',
+        'minions' => 'Despicable Me',
+        'kung fu panda' => 'Kung Fu Panda',
+        'how to train your dragon' => 'How to Train Your Dragon',
+        'cars' => 'Cars',
+    ];
+
+    /**
+     * Detect if a title or folder hierarchy belongs to a known movie franchise or collection.
+     */
+    public function detectFranchiseOrCollection(string $title, string $parentFolder = '', string $grandparentFolder = ''): ?string
+    {
+        $checkParent = trim($parentFolder);
+        $checkGrandparent = trim($grandparentFolder);
+
+        // 1. If parent is a number or year, unwrap to grandparent
+        if (preg_match('/^(\d{1,2}|19\d\d|20\d\d|cd\d+|disc\s*\d+|part\s*\d+)$/i', $checkParent)) {
+            $checkParent = $checkGrandparent;
+        }
+
+        // 2. Check explicit Collection/Trilogy/Saga in folder names
+        if (preg_match('/^(.*?)(?:\s+(?:Collection|Trilogy|Anthology|Saga|Boxset|Series|مجموعة|سلسلة))$/ui', $checkParent, $m)) {
+            return trim($m[1]);
+        }
+        if ($checkGrandparent && preg_match('/^(.*?)(?:\s+(?:Collection|Trilogy|Anthology|Saga|Boxset|Series|مجموعة|سلسلة))$/ui', $checkGrandparent, $gm)) {
+            return trim($gm[1]);
+        }
+
+        // 3. Match against canonical franchise database
+        $searchTerms = [
+            strtolower(trim($title)),
+            strtolower($checkParent),
+            strtolower($checkGrandparent),
+        ];
+
+        foreach ($this->canonicalFranchises as $keyword => $canonicalName) {
+            foreach ($searchTerms as $term) {
+                if (empty($term)) continue;
+                if ($term === $keyword || str_starts_with($term, $keyword) || str_contains($term, $keyword)) {
+                    return $canonicalName;
+                }
+            }
+        }
+
+        return null;
     }
 
     public function cleanTitleString(string $raw): string

@@ -30,6 +30,100 @@ const searchError = ref('');
 const successMessage = ref('');
 const copiedPath = ref(false);
 const autoRenameFile = ref(false);
+const isVerifying = ref(false);
+const isRelocating = ref(false);
+const verificationResult = ref<{
+    checked: boolean;
+    exists: boolean;
+    current_path?: string;
+    size_formatted?: string;
+    candidate_path?: string | null;
+    total_episodes?: number;
+    existing_episodes?: number;
+} | null>(null);
+const customRelocatePath = ref('');
+const showRelocateInput = ref(false);
+
+const verifyDiskFile = async () => {
+    if (!props.item?.id) return;
+    isVerifying.value = true;
+    searchError.value = '';
+    try {
+        const mediaType = isSeriesType.value ? 'series' : 'movie';
+        const res = await fetch(`/api/metadata/${mediaType}/${props.item.id}/verify-file`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+        });
+        const data = await res.json();
+        if (data.success) {
+            verificationResult.value = {
+                checked: true,
+                exists: data.exists,
+                current_path: data.current_path,
+                size_formatted: data.size_formatted,
+                candidate_path: data.candidate_path,
+                total_episodes: data.total_episodes,
+                existing_episodes: data.existing_episodes,
+            };
+            if (data.candidate_path) {
+                customRelocatePath.value = data.candidate_path;
+            }
+        }
+    } catch (e) {
+        console.error('Failed to verify disk file', e);
+    } finally {
+        isVerifying.value = false;
+    }
+};
+
+const relocateDiskFile = async (targetPath?: string) => {
+    const path = targetPath || customRelocatePath.value.trim();
+    if (!path || !props.item?.id) return;
+
+    isRelocating.value = true;
+    searchError.value = '';
+    successMessage.value = '';
+
+    try {
+        const mediaType = isSeriesType.value ? 'series' : 'movie';
+        const res = await fetch(`/api/metadata/${mediaType}/${props.item.id}/relocate-file`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+            body: JSON.stringify({ new_path: path }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            successMessage.value = data.message;
+            if (props.item) {
+                if (mediaType === 'movie' && data.item) {
+                    props.item.file_path = data.item.file_path;
+                    props.item.folder_path = data.item.folder_path;
+                } else if (data.series) {
+                    props.item.folder_path = data.series.folder_path;
+                }
+            }
+            verificationResult.value = {
+                checked: true,
+                exists: true,
+                size_formatted: data.item?.size ? (data.item.size / (1024*1024*1024)).toFixed(2) + ' GB' : undefined,
+            };
+            showRelocateInput.value = false;
+            emit('updated', data.item || data.series);
+        } else {
+            searchError.value = data.message || 'Failed to relocate file.';
+        }
+    } catch (e: any) {
+        searchError.value = e.message || 'Network error while relocating file.';
+    } finally {
+        isRelocating.value = false;
+    }
+};
 
 // Manual form state
 const form = ref({

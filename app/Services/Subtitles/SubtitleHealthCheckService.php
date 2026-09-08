@@ -6,6 +6,7 @@ use App\Models\AppSetting;
 use App\Models\Episode;
 use App\Models\MediaItem;
 use App\Models\Subtitle;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 
@@ -540,5 +541,520 @@ class SubtitleHealthCheckService
         }
 
         return $cleanSubBase;
+    }
+
+    const CACHE_KEY = 'subtitle_health_job_status';
+
+    /**
+     * Start background health check and normalization job.
+     */
+    public function startHealthJob(array $options = []): array
+    {
+        $targetPath = $options['target_path'] ?? null;
+        $directories = $this->resolveDirectories($targetPath);
+        $scannedFiles = $this->collectSubtitleFiles($directories);
+
+        $state = [
+            'status' => 'running',
+            'options' => $options,
+            'pending_queue' => $scannedFiles,
+            'total_files' => count($scannedFiles),
+            'processed_count' => 0,
+            'progress_percent' => 0,
+            'current_file' => null,
+            'current_action' => 'Initializing subtitle audit...',
+            'logs' => [
+                [
+                    'time' => now()->format('H:i:s'),
+                    'level' => 'info',
+                    'message' => 'Discovered ' . count($scannedFiles) . ' subtitle files across library folders.',
+                ],
+            ],
+            'summary' => [
+                'valid_count' => 0,
+                'invalid_count' => 0,
+                'deleted_count' => 0,
+                'renamed_count' => 0,
+                'already_standard_count' => 0,
+                'encoding_fixed_count' => 0,
+                'language_breakdown' => [],
+            ],
+            'items' => [],
+            'started_at' => now()->toDateTimeString(),
+            'updated_at' => now()->toDateTimeString(),
+        ];
+
+        if (empty($scannedFiles)) {
+            $state['status'] = 'completed';
+            $state['progress_percent'] = 100;
+            $state['current_action'] = 'No subtitle files found.';
+        }
+
+        Cache::put(self::CACHE_KEY, $state, now()->addHours(6));
+
+        return $state;
+    }
+
+    /**
+     * Process next batch of subtitle files.
+     */
+    public function processHealthBatch(int $batchSize = 25): array
+    {
+        $state = Cache::get(self::CACHE_KEY);
+
+        if (! $state) {
+            return [
+                'success' => true,
+                'has_more' => false,
+                'status' => $this->getHealthJobStatus(),
+            ];
+        }
+
+        // Check if paused
+        if (($state['status'] ?? '') === 'paused') {
+            return [
+                'success' => true,
+                'has_more' => true,
+                'status' => $state,
+            ];
+        }
+
+        // Check if cancelled
+        if (($state['status'] ?? '') === 'cancelled') {
+            return [
+                'success' => true,
+                'has_more' => false,
+                'status' => $state,
+            ];
+        }
+
+        if (($state['status'] ?? '') !== 'running' || empty($state['pending_queue'])) {
+            if (($state['status'] ?? '') === 'running') {
+                $state['status'] = 'completed';
+                $state['progress_percent'] = 100;
+                $state['current_action'] = 'Subtitle health audit and normalization complete!';
+                Cache::put(self::CACHE_KEY, $state, now()->addHours(6));
+            }
+
+            return [
+                'success' => true,
+                'has_more' => false,
+                'status' => $state,
+            ];
+        }
+
+        $queue = $state['pending_queue'];
+        $batch = array_splice($queue, 0, $batchSize);
+        $state['pending_queue'] = $queue;
+        $options = $state['options'] ?? [];
+
+        foreach ($batch as $filePath) {
+            $filename = basename($filePath);
+            $state['current_file'] = $filename;
+            $state['current_action'] = "Analyzing {$filename}...";
+
+            try {
+                $itemResult = $this->processSingleSubtitleFile($filePath, $options);
+                $state['processed_count']++;
+
+                if (! empty($itemResult['item'])) {
+                    $state['items'][] = $itemResult['item'];
+                }
+
+                // Merge summary
+                if (! empty($itemResult['summary_increment'])) {
+                    foreach ($itemResult['summary_increment'] as $k => $v) {
+                        if ($k === 'language_breakdown' && is_array($v)) {
+                            foreach ($v as $langCode => $langData) {
+                                if (! isset($state['summary']['language_breakdown'][$langCode])) {
+                                    $state['summary']['language_breakdown'][$langCode] = $langData;
+                                } else {
+                                    $state['summary']['language_breakdown'][$langCode]['count'] += ($langData['count'] ?? 1);
+                                }
+                            }
+                        } elseif (isset($state['summary'][$k])) {
+                            $state['summary'][$k] += $v;
+                        }
+                    }
+                }
+
+                if (! empty($itemResult['log'])) {
+                    $state['logs'][] = $itemResult['log'];
+                }
+            } catch (\Throwable $e) {
+                $state['processed_count']++;
+                $state['logs'][] = [
+                    'time' => now()->format('H:i:s'),
+                    'level' => 'error',
+                    'message' => "Error analyzing {$filename}: " . substr($e->getMessage(), 0, 80),
+                ];
+            }
+        }
+
+        $total = max(1, (int) $state['total_files']);
+        $processed = (int) $state['processed_count'];
+        $state['progress_percent'] = min(100, (int) round(($processed / $total) * 100));
+
+        if (count($state['logs']) > 150) {
+            $state['logs'] = array_slice($state['logs'], -150);
+        }
+
+        // Limit stored items in cache to last 500 to keep cache performant
+        if (count($state['items']) > 500) {
+            $state['items'] = array_slice($state['items'], -500);
+        }
+
+        $isDone = empty($state['pending_queue']) || $processed >= $total;
+        if ($isDone) {
+            $state['status'] = 'completed';
+            $state['progress_percent'] = 100;
+            $state['current_action'] = "Audit complete! Processed {$total} subtitles.";
+            $state['logs'][] = [
+                'time' => now()->format('H:i:s'),
+                'level' => 'success',
+                'message' => "Finished analyzing all {$total} subtitles successfully.",
+            ];
+        }
+
+        $state['updated_at'] = now()->toDateTimeString();
+
+        // Safeguard against in-flight race conditions
+        $latestInCache = Cache::get(self::CACHE_KEY);
+        if ($latestInCache && ($latestInCache['status'] === 'paused')) {
+            $state['status'] = 'paused';
+        } elseif ($latestInCache && ($latestInCache['status'] === 'cancelled')) {
+            $state['status'] = 'cancelled';
+            $state['pending_queue'] = [];
+            $isDone = true;
+        }
+
+        Cache::put(self::CACHE_KEY, $state, now()->addHours(6));
+
+        return [
+            'success' => true,
+            'has_more' => ! $isDone,
+            'status' => $state,
+        ];
+    }
+
+    /**
+     * Get current status of background health job.
+     */
+    public function getHealthJobStatus(): array
+    {
+        return Cache::get(self::CACHE_KEY, [
+            'status' => 'idle',
+            'progress_percent' => 0,
+            'total_files' => 0,
+            'processed_count' => 0,
+            'current_file' => null,
+            'current_action' => 'Idle',
+            'logs' => [],
+            'summary' => [
+                'valid_count' => 0,
+                'invalid_count' => 0,
+                'deleted_count' => 0,
+                'renamed_count' => 0,
+                'already_standard_count' => 0,
+                'encoding_fixed_count' => 0,
+                'language_breakdown' => [],
+            ],
+            'items' => [],
+            'started_at' => null,
+            'updated_at' => null,
+        ]);
+    }
+
+    /**
+     * Pause background health job.
+     */
+    public function pauseHealthJob(): array
+    {
+        $state = Cache::get(self::CACHE_KEY);
+        if ($state) {
+            $state['status'] = 'paused';
+            $state['current_action'] = 'Job paused by user.';
+            $state['logs'][] = [
+                'time' => now()->format('H:i:s'),
+                'level' => 'warning',
+                'message' => 'Subtitle audit paused by user.',
+            ];
+            Cache::put(self::CACHE_KEY, $state, now()->addHours(6));
+        }
+
+        return $this->getHealthJobStatus();
+    }
+
+    /**
+     * Resume background health job.
+     */
+    public function resumeHealthJob(): array
+    {
+        $state = Cache::get(self::CACHE_KEY);
+        if ($state) {
+            $state['status'] = 'running';
+            $state['current_action'] = 'Resuming subtitle audit...';
+            $state['logs'][] = [
+                'time' => now()->format('H:i:s'),
+                'level' => 'info',
+                'message' => 'Subtitle audit resumed.',
+            ];
+            Cache::put(self::CACHE_KEY, $state, now()->addHours(6));
+        }
+
+        return $this->getHealthJobStatus();
+    }
+
+    /**
+     * Cancel background health job.
+     */
+    public function cancelHealthJob(): array
+    {
+        $state = Cache::get(self::CACHE_KEY);
+        if ($state) {
+            $state['status'] = 'cancelled';
+            $state['pending_queue'] = [];
+            $state['current_action'] = 'Job cancelled by user.';
+            $state['logs'][] = [
+                'time' => now()->format('H:i:s'),
+                'level' => 'error',
+                'message' => 'Subtitle audit cancelled by user.',
+            ];
+            Cache::put(self::CACHE_KEY, $state, now()->addHours(6));
+        }
+
+        return $this->getHealthJobStatus();
+    }
+
+    /**
+     * Process a single subtitle file according to health rules.
+     */
+    public function processSingleSubtitleFile(string $filePath, array $options = []): array
+    {
+        $dryRun = (bool) ($options['dry_run'] ?? false);
+        $deleteInvalid = (bool) ($options['delete_invalid'] ?? true);
+        $autoRename = (bool) ($options['auto_rename'] ?? true);
+
+        $normalizedPath = str_replace('\\', '/', $filePath);
+        $fileName = basename($normalizedPath);
+        $dirName = dirname($normalizedPath);
+
+        $summaryInc = [];
+        $log = null;
+
+        // 1. Validate file integrity and check for stubs/corruption
+        $validation = $this->validator->validate($normalizedPath, $fileName);
+
+        if (! $validation['is_valid']) {
+            $summaryInc['invalid_count'] = 1;
+            $actionTaken = $dryRun ? 'flagged_for_deletion' : 'deleted_invalid';
+
+            if (! $dryRun && $deleteInvalid) {
+                try {
+                    if (File::exists($normalizedPath)) {
+                        File::delete($normalizedPath);
+                        $summaryInc['deleted_count'] = 1;
+                    }
+                    Subtitle::where('file_path', $normalizedPath)->delete();
+                    $actionTaken = 'deleted';
+                } catch (\Throwable $e) {
+                    $actionTaken = 'delete_failed';
+                }
+            }
+
+            $log = [
+                'time' => now()->format('H:i:s'),
+                'level' => 'error',
+                'message' => "Corrupt/Empty stub removed: {$fileName}",
+            ];
+
+            return [
+                'item' => [
+                    'original_path' => $normalizedPath,
+                    'file_name' => $fileName,
+                    'is_valid' => false,
+                    'cue_count' => $validation['cue_count'],
+                    'file_size' => $validation['file_size'],
+                    'issues' => $validation['issues'],
+                    'detected_language' => 'und',
+                    'language_name' => 'Invalid Stub',
+                    'flag' => '⚠️',
+                    'action' => $actionTaken,
+                    'target_filename' => null,
+                ],
+                'summary_increment' => $summaryInc,
+                'log' => $log,
+            ];
+        }
+
+        $summaryInc['valid_count'] = 1;
+
+        // 2. High-accuracy language detection from dialogue content
+        $langResult = $this->languageDetector->detectLanguage($normalizedPath, $fileName);
+        $langCode = $langResult['language'];
+
+        $summaryInc['language_breakdown'] = [
+            $langCode => [
+                'code' => $langCode,
+                'name_en' => $langResult['name_en'],
+                'name_ar' => $langResult['name_ar'],
+                'flag' => $langResult['flag'],
+                'count' => 1,
+            ],
+        ];
+
+        // 3. Match adjacent media item (movie or episode)
+        $mediaBaseName = $this->findAdjacentMediaBaseName($normalizedPath);
+
+        $isForced = (bool) preg_match('/\bforced\b/i', $fileName);
+        $isSDH = (bool) preg_match('/\bsdh\b/i', $fileName);
+
+        $modifier = '';
+        if ($isForced) {
+            $modifier = '.forced';
+        } elseif ($isSDH) {
+            $modifier = '.sdh';
+        }
+
+        $targetExt = 'srt';
+        $targetFileName = "{$mediaBaseName}.{$langCode}{$modifier}.{$targetExt}";
+        $targetPath = "{$dirName}/{$targetFileName}";
+
+        // Check and normalize encoding
+        $rawContent = @file_get_contents($normalizedPath);
+        $needsEncodingFix = ($rawContent !== false && ! mb_check_encoding($rawContent, 'UTF-8'));
+        if ($needsEncodingFix && ! $dryRun) {
+            try {
+                $cleanUtf8 = $this->languageDetector->sanitizeToUtf8($rawContent);
+                if (mb_check_encoding($cleanUtf8, 'UTF-8')) {
+                    File::put($normalizedPath, $cleanUtf8);
+                    $summaryInc['encoding_fixed_count'] = 1;
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        $issues = [];
+        if ($needsEncodingFix) {
+            $issues[] = $dryRun ? 'non_utf8_encoding' : 'converted_to_utf8';
+        }
+
+        $isAlreadyStandard = (strtolower($fileName) === strtolower($targetFileName));
+        $mediaModel = $this->findAdjacentMediaModel($normalizedPath, $mediaBaseName);
+
+        if ($isAlreadyStandard) {
+            $summaryInc['already_standard_count'] = 1;
+            if (! $dryRun) {
+                $updated = Subtitle::where('file_path', $normalizedPath)->update([
+                    'language' => $langCode,
+                    'language_name' => $langResult['name_en'],
+                ]);
+
+                if ($updated === 0 && $mediaModel) {
+                    Subtitle::updateOrCreate(
+                        ['file_path' => $normalizedPath],
+                        [
+                            'subtitlable_id' => $mediaModel->id,
+                            'subtitlable_type' => get_class($mediaModel),
+                            'language' => $langCode,
+                            'language_name' => $langResult['name_en'],
+                            'format' => strtolower(pathinfo($normalizedPath, PATHINFO_EXTENSION)),
+                            'is_embedded' => false,
+                            'is_default' => ($langCode === 'ar'),
+                        ]
+                    );
+                }
+            }
+
+            $log = [
+                'time' => now()->format('H:i:s'),
+                'level' => 'success',
+                'message' => "Standard: {$fileName} [{$langResult['name_en']}]",
+            ];
+
+            return [
+                'item' => [
+                    'original_path' => $normalizedPath,
+                    'file_name' => $fileName,
+                    'is_valid' => true,
+                    'cue_count' => $validation['cue_count'],
+                    'file_size' => $validation['file_size'],
+                    'issues' => $issues,
+                    'detected_language' => $langCode,
+                    'language_name' => $langResult['name_en'],
+                    'language_name_ar' => $langResult['name_ar'],
+                    'flag' => $langResult['flag'],
+                    'confidence' => $langResult['confidence'],
+                    'action' => $needsEncodingFix ? ($dryRun ? 'would_normalize_utf8' : 'normalized_utf8') : 'already_standard',
+                    'target_filename' => $targetFileName,
+                ],
+                'summary_increment' => $summaryInc,
+                'log' => $log,
+            ];
+        } else {
+            $actionTaken = $dryRun ? 'would_rename' : 'renamed';
+
+            if (! $dryRun && $autoRename) {
+                try {
+                    if ($normalizedPath !== $targetPath && File::exists($targetPath)) {
+                        $targetFileName = "{$mediaBaseName}.{$langCode}{$modifier}.2.{$targetExt}";
+                        $targetPath = "{$dirName}/{$targetFileName}";
+                    }
+
+                    if ($normalizedPath !== $targetPath) {
+                        File::move($normalizedPath, $targetPath);
+                        $summaryInc['renamed_count'] = 1;
+
+                        $updated = Subtitle::where('file_path', $normalizedPath)->update([
+                            'file_path' => $targetPath,
+                            'language' => $langCode,
+                            'language_name' => $langResult['name_en'],
+                        ]);
+
+                        if ($updated === 0 && $mediaModel) {
+                            Subtitle::updateOrCreate(
+                                ['file_path' => $targetPath],
+                                [
+                                    'subtitlable_id' => $mediaModel->id,
+                                    'subtitlable_type' => get_class($mediaModel),
+                                    'language' => $langCode,
+                                    'language_name' => $langResult['name_en'],
+                                    'format' => $targetExt,
+                                    'is_embedded' => false,
+                                    'is_default' => ($langCode === 'ar'),
+                                ]
+                            );
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    $actionTaken = 'rename_failed';
+                }
+            }
+
+            $log = [
+                'time' => now()->format('H:i:s'),
+                'level' => 'info',
+                'message' => "Standardized: {$fileName} -> {$targetFileName} [{$langResult['name_en']}]",
+            ];
+
+            return [
+                'item' => [
+                    'original_path' => $normalizedPath,
+                    'file_name' => $fileName,
+                    'is_valid' => true,
+                    'cue_count' => $validation['cue_count'],
+                    'file_size' => $validation['file_size'],
+                    'issues' => array_merge($issues, ['non_standard_naming']),
+                    'detected_language' => $langCode,
+                    'language_name' => $langResult['name_en'],
+                    'language_name_ar' => $langResult['name_ar'],
+                    'flag' => $langResult['flag'],
+                    'confidence' => $langResult['confidence'],
+                    'action' => $actionTaken,
+                    'target_filename' => $targetFileName,
+                ],
+                'summary_increment' => $summaryInc,
+                'log' => $log,
+            ];
+        }
     }
 }

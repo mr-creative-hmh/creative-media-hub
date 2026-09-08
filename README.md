@@ -162,6 +162,38 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 - **Pure Local-First Cinema (Zero Auth Overhead)**: Unnecessary user accounts, password authentication, and session barriers removed for a streamlined home theatre appliance experience.
 - **Production-Only Clean Seeder**: `MediaLibrarySeeder` seeds pure essential system defaults (15 official TMDb genres with Arabic/English names and core application settings) with zero mock movies, fake series, or dummy subtitle records.
 
+### 16. ⚡ Unified Universal Activity Center (`UnifiedJobCenterModal.vue`)
+- **Global Ambient Island**: Floating activity pill docked across `Navbar.vue`, `Sidebar.vue`, and `AppLayout.vue` with dynamic status counters and pulsing progress halos.
+- **Unified Batch & Background Task Orchestration**: Real-time control across all active jobs from a single modal:
+  - 📁 **Disk Organizer & Hardlink Engine**: Interactive plan inspection with Pause, Resume, and Cancel execution.
+  - 🔍 **Virtual Library Scanner**: Live path discovery, item counters, and non-blocking Pause/Resume/Cancel.
+  - 💬 **Subtitle Health Auditor**: Spoken dialogue scanner, encoding fixer, and cancellable execution.
+  - 👁️ **Persistent Downloads Watcher**: Background filesystem monitoring daemon with toggleable active state.
+- **Zero-Page-Reload Reactive Progress**: Elapsed timers, live active file indicators, and instant notification toasts.
+
+### 17. 🛡️ Database Backup, Disaster Recovery & Selective Restore
+- **1-Click Live JSON Export**: Direct stream download of your entire library database (`/api/database/backup/export` & `/api/library/backup`).
+- **Server Snapshots**: Instant snapshot creation (`.json` and `.sqlite` binary copies) stored securely in `storage/app/backups`.
+- **Granular Selective Restore**: Choose precisely which library sections to restore without touching the rest of your library:
+  - 🎬 **Movies & Collections** (`movies`): Restores movie titles, file paths, artwork links, and associated genres/cast.
+  - 📺 **TV Series, Seasons & Episodes** (`series`): Restores TV shows, seasons structure, and episode data.
+  - 💬 **Subtitles** (`subtitles`): Restores subtitle records, tracks, and language tags.
+  - ⚙️ **System Settings & API Keys** (`settings`): Restores API keys, provider priorities, and library configs.
+  - ⏱️ **Watch History & Progress** (`watch_history`): Restores playback positions, timestamps, and completed flags.
+- **Zero Data Loss Guarantee**: In Clean Overwrite mode, unselected sections remain 100% untouched and safe.
+- **Pre-Restore Rollback Snapshot**: An automatic safety snapshot is taken immediately before any restoration begins.
+- **Multi-Format Ingestion**: Supports `.json`, `.sqlite`, and `.db` backups with PDO table extraction for selective restoration.
+
+### 18. 👁️ Autonomous Downloads Watcher & Background Reorganizer
+- **Stateful Filesystem Daemon**: `OrganizerWatcherService` monitors incoming download directories for newly completed movies and TV episodes.
+- **Reboot-Resistant Persistence**: Active status and watched folder paths are persisted in `app_settings`.
+- **CLI & Scheduled Execution**: Available via `php artisan organizer:watch {--daemon}` and Laravel schedule worker.
+
+### 19. 🌐 Multi-Provider Metadata Waterfall & Live Health Verification
+- **Zero-Key Free Metadata Chain**: TVMaze Free API, AniList GraphQL, and Wikipedia/Wikidata API operate alongside TMDb and OMDb.
+- **Live Connectivity Testing**: Re-order provider priority and test API connectivity in real time directly from Settings.
+- **Fix Match Studio Enhancements**: Direct ID resolution (TMDb, IMDb, TVMaze), automatic Arabic title/synopsis fetch, multi-format poster detection (`.jpg`, `.png`, `.webp`), and season/episode artwork synchronization.
+
 
 ---
 

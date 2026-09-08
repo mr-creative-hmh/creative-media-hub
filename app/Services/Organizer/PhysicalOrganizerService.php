@@ -11,12 +11,14 @@ use App\Models\Subtitle;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use App\Services\Organizer\ZeroKeyGenreClassifierService;
 
 class PhysicalOrganizerService
 {
     protected SceneNameParserService $parser;
 
     protected const CACHE_KEY = 'organizer_execution_state';
+    protected const PLAN_CACHE_KEY = 'organizer_plan_state';
 
     public function __construct(SceneNameParserService $parser)
     {
@@ -25,164 +27,596 @@ class PhysicalOrganizerService
 
     public function generateDryRun(array $scannedFiles, string $targetRoot, ?string $moviePattern = null, ?string $seriesPattern = null): array
     {
-        $moviePattern = $moviePattern ?: AppSetting::get('movie_naming_template', '{Type}/{Title} ({Year})/{Title} ({Year}) [{Resolution}].{ext}');
-        $seriesPattern = $seriesPattern ?: AppSetting::get('series_naming_template', '{Type}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} - {EpisodeTitle} [{Resolution}].{ext}');
+        $moviePattern = $moviePattern ?: AppSetting::get('movie_naming_template', '{Type}/{Title} ({Year})/{Title} ({Year}) [{CleanResolution}].{ext}');
+        $seriesPattern = $seriesPattern ?: AppSetting::get('series_naming_template', '{Type}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} - {EpisodeTitle} [{CleanResolution}].{ext}');
 
         $targetRoot = rtrim(str_replace('\\', '/', $targetRoot), '/');
         $plan = [];
 
         foreach ($scannedFiles as $file) {
-            $filePath = $file['path'] ?? ($file['filename'] ?? '');
-            $parsed = $file['parsed'] ?? $this->parser->parse($filePath);
-            $isSeries = ($parsed['type'] ?? 'movie') === 'series';
-
-            $pattern = $isSeries ? $seriesPattern : $moviePattern;
-            $typeDir = $isSeries ? 'TV Shows' : 'Movies';
-
-            $cleanTitle = $this->sanitizePathSegment($parsed['clean_title'] ?? ($parsed['title'] ?? ($parsed['series_title'] ?? 'Unknown')));
-            $year = ! empty($parsed['year']) ? (string) $parsed['year'] : '';
-            $seasonNum = isset($parsed['season']) ? (int) $parsed['season'] : 1;
-            $episodeNum = isset($parsed['episode']) ? (int) $parsed['episode'] : 1;
-            $epTitle = ! empty($parsed['episode_title']) ? $this->sanitizePathSegment($parsed['episode_title']) : '';
-            if (preg_match('/^(episode|ep|part)\s*\d+$/i', $epTitle)) {
-                $epTitle = '';
-            }
-            $resTag = $parsed['resolution'] ?: '1080p FHD';
-
-            $firstChar = mb_strtoupper(mb_substr($cleanTitle, 0, 1));
-            $firstLetter = preg_match('/^[A-Z0-9]$/i', $firstChar) ? $firstChar : '#';
-
-            // Resolve genres for {Genre} and {Genres} tokens
-            $genresList = $file['genres'] ?? [];
-            if (empty($genresList)) {
-                if ($isSeries) {
-                    $dbSeries = Series::where('title', 'like', "%{$cleanTitle}%")->with('genres')->first();
-                    if ($dbSeries && $dbSeries->genres->isNotEmpty()) {
-                        $genresList = $dbSeries->genres->pluck('name_en')->toArray();
-                    }
-                } else {
-                    $dbMovie = MediaItem::where('title', 'like', "%{$cleanTitle}%")->with('genres')->first();
-                    if ($dbMovie && $dbMovie->genres->isNotEmpty()) {
-                        $genresList = $dbMovie->genres->pluck('name_en')->toArray();
-                    }
-                }
-            }
-
-            $primaryGenre = ! empty($genresList[0]) ? $this->sanitizePathSegment($genresList[0]) : 'General';
-            $joinedGenres = ! empty($genresList) ? $this->sanitizePathSegment(implode(' & ', array_slice($genresList, 0, 2))) : $primaryGenre;
-
-            $tokens = [
-                '{Type}' => $typeDir,
-                '{Title}' => $cleanTitle,
-                '{Year}' => $year,
-                '{Genre}' => $primaryGenre,
-                '{Genres}' => $joinedGenres,
-                '{Resolution}' => $this->sanitizePathSegment($resTag),
-                '{Codec}' => $this->sanitizePathSegment($parsed['codec'] ?: 'x264'),
-                '{Source}' => $this->sanitizePathSegment($parsed['source'] ?? ''),
-                '{Edition}' => $this->sanitizePathSegment($parsed['edition'] ?? ''),
-                '{Group}' => $this->sanitizePathSegment($parsed['group'] ?? 'MEDIA'),
-                '{FirstLetter}' => $firstLetter,
-                '{Season:02}' => sprintf('%02d', $seasonNum),
-                '{Episode:02}' => sprintf('%02d', $episodeNum),
-                '{EpisodeTitle}' => $epTitle,
-                '{ext}' => strtolower(pathinfo($filePath, PATHINFO_EXTENSION) ?: ($parsed['extension'] ?? 'mkv')),
-            ];
-
-            $relPath = $pattern;
-            if (empty($epTitle)) {
-                $relPath = str_replace(' - {EpisodeTitle}', '', $relPath);
-                $relPath = str_replace('{EpisodeTitle}', '', $relPath);
-            }
-            $relPath = str_replace(array_keys($tokens), array_values($tokens), $relPath);
-
-            // Clean double slashes, unknown years, or empty brackets/dangling delimiters
-            $relPath = preg_replace('#/+#', '/', $relPath);
-            $relPath = preg_replace('/\s+-\s*\[/', ' [', $relPath);
-            $relPath = preg_replace('/\s+-\s*\./', '.', $relPath);
-            $relPath = str_replace(['(Unknown Year)', '[Unknown Year]', 'Unknown Year', '()', '[]', '( )', '[ ]', ' - .', ' .'], ['', '', '', '', '', '', '', '.', '.'], $relPath);
-            $relPath = preg_replace('/\s+/', ' ', $relPath);
-            $relPath = trim($relPath, '/');
-
-            // Sanitize each directory level in relPath
-            $segments = explode('/', $relPath);
-            $cleanSegments = [];
-            foreach ($segments as $idx => $segment) {
-                if ($idx === count($segments) - 1) {
-                    // File name with extension
-                    $ext = pathinfo($segment, PATHINFO_EXTENSION);
-                    $base = pathinfo($segment, PATHINFO_FILENAME);
-                    $cleanSegments[] = $this->sanitizePathSegment($base).($ext ? ".{$ext}" : '');
-                } else {
-                    $cleanSegments[] = $this->sanitizePathSegment($segment);
-                }
-            }
-            $cleanRelPath = implode('/', $cleanSegments);
-
-            $destination = "{$targetRoot}/{$cleanRelPath}";
-            $source = str_replace('\\', '/', $filePath);
-
-            $exists = File::exists($destination);
-            $isIdentical = strtolower(trim($source)) === strtolower(trim($destination));
-
-            $status = 'ready';
-            if ($isIdentical) {
-                $status = 'identical';
-            } elseif ($exists) {
-                $status = 'collision_exists';
-            }
-
-            $item = [
-                'id' => uniqid('plan_'),
-                'source_path' => $source,
-                'destination_path' => $destination,
-                'filename' => $file['filename'] ?? basename($filePath),
-                'clean_title' => $cleanTitle,
-                'type' => $parsed['type'] ?? ($isSeries ? 'series' : 'movie'),
-                'year' => $parsed['year'] ?? null,
-                'season' => $isSeries ? $seasonNum : null,
-                'episode' => $isSeries ? $episodeNum : null,
-                'episode_title' => $epTitle,
-                'resolution' => $parsed['resolution'] ?? '1080p',
-                'size_bytes' => $file['size_bytes'] ?? 0,
-                'size_formatted' => $file['size_formatted'] ?? '',
-                'status' => $status,
-                'selected' => $status === 'ready',
-                'subtitles' => [],
-            ];
-
-            // Subtitle mapping with language preserving
-            if (! empty($file['subtitles'])) {
-                $destDir = pathinfo($destination, PATHINFO_DIRNAME);
-                $destBase = pathinfo($destination, PATHINFO_FILENAME);
-
-                foreach ($file['subtitles'] as $sub) {
-                    $subPath = $sub['path'] ?? '';
-                    $subExt = strtolower($sub['extension'] ?? (pathinfo($subPath, PATHINFO_EXTENSION) ?: 'srt'));
-                    $lang = $sub['language'] ?? 'und';
-                    $langSuffix = in_array($lang, ['ar', 'en', 'fr', 'es', 'de']) ? ".{$lang}" : '';
-
-                    $subDest = "{$destDir}/{$destBase}{$langSuffix}.{$subExt}";
-                    $subSource = str_replace('\\', '/', $subPath);
-
-                    $item['subtitles'][] = [
-                        'source' => $subSource,
-                        'destination' => $subDest,
-                        'language' => $lang,
-                        'exists' => File::exists($subDest),
-                    ];
-                }
-            }
-
-            $plan[] = $item;
+            $plan[] = $this->generatePlanItem($file, $targetRoot, $moviePattern, $seriesPattern);
         }
 
         return $plan;
     }
 
     /**
-     * Sanitize folder or file segment for Windows/Linux filesystems.
+     * Generate plan item for a single media file.
      */
+    public function generatePlanItem(array $file, string $targetRoot, ?string $moviePattern = null, ?string $seriesPattern = null): array
+    {
+        $moviePattern = $moviePattern ?: AppSetting::get('movie_naming_template', '{Type}/{Title} ({Year})/{Title} ({Year}) [{CleanResolution}].{ext}');
+        $seriesPattern = $seriesPattern ?: AppSetting::get('series_naming_template', '{Type}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} - {EpisodeTitle} [{CleanResolution}].{ext}');
+        $targetRoot = rtrim(str_replace('\\', '/', $targetRoot), '/');
+
+        $filePath = $file['path'] ?? ($file['filename'] ?? '');
+        $parsed = $file['parsed'] ?? $this->parser->parse($filePath);
+        $isSeries = ($parsed['type'] ?? 'movie') === 'series';
+
+        $pattern = $isSeries ? $seriesPattern : $moviePattern;
+        $typeDir = $isSeries ? 'TV Shows' : 'Movies';
+
+        $cleanTitle = $this->sanitizePathSegment($parsed['clean_title'] ?? ($parsed['title'] ?? ($parsed['series_title'] ?? 'Unknown')));
+        $year = ! empty($parsed['year']) ? (string) $parsed['year'] : '';
+        $seasonNum = isset($parsed['season']) ? (int) $parsed['season'] : 1;
+        $episodeNum = isset($parsed['episode']) ? (int) $parsed['episode'] : 1;
+        $epTitle = ! empty($parsed['episode_title']) ? $this->sanitizePathSegment($parsed['episode_title']) : '';
+        if (preg_match('/^(episode|ep|part)\s*\d+$/i', $epTitle)) {
+            $epTitle = '';
+        }
+
+        // If resolution is missing from parser but file exists on disk, probe via FFprobe
+        $resTag = $parsed['resolution'] ?? null;
+        if (empty($resTag) && file_exists($filePath)) {
+            $probed = app(FilesystemScannerService::class)->probeResolution($filePath);
+            if ($probed) {
+                $resTag = $probed;
+                $parsed['resolution'] = $probed;
+            }
+        }
+        $resTag = $resTag ?: '1080p FHD';
+
+        $firstChar = mb_strtoupper(mb_substr($cleanTitle, 0, 1));
+        $firstLetter = preg_match('/^[A-Z0-9]$/i', $firstChar) ? $firstChar : '#';
+
+        // Resolve genres for {Genre} and {Genres} tokens
+        $genresList = $file['genres'] ?? [];
+        if (empty($genresList)) {
+            if ($isSeries) {
+                $dbSeries = Series::where('title', 'like', "%{$cleanTitle}%")->with('genres')->first();
+                if ($dbSeries && $dbSeries->genres->isNotEmpty()) {
+                    $genresList = $dbSeries->genres->pluck('name_en')->toArray();
+                }
+            } else {
+                $dbMovie = MediaItem::where('title', 'like', "%{$cleanTitle}%")->with('genres')->first();
+                if ($dbMovie && $dbMovie->genres->isNotEmpty()) {
+                    $genresList = $dbMovie->genres->pluck('name_en')->toArray();
+                }
+            }
+        }
+
+        if (empty($genresList)) {
+            $classifier = app(ZeroKeyGenreClassifierService::class);
+            $coll = $parsed['collection_name'] ?? ($file['collection_name'] ?? null);
+            $resolved = $classifier->resolveGenres($cleanTitle, $coll);
+            $primaryGenre = $this->sanitizePathSegment($resolved['primary']);
+            $joinedGenres = $this->sanitizePathSegment($resolved['joined']);
+        } else {
+            $primaryGenre = ! empty($genresList[0]) ? $this->sanitizePathSegment($genresList[0]) : 'Action & Adventure';
+            $joinedGenres = ! empty($genresList) ? $this->sanitizePathSegment(implode(' & ', array_slice($genresList, 0, 2))) : $primaryGenre;
+        }
+
+        $collName = $parsed['collection_name'] ?? ($file['collection_name'] ?? '');
+        $cleanRes = $this->cleanResolutionTag($resTag);
+
+        $tokens = [
+            '{Type}' => $typeDir,
+            '{Title}' => $cleanTitle,
+            '{Year}' => $year,
+            '{Collection}' => $collName ? $this->sanitizePathSegment($collName) : '',
+            '{Genre}' => $primaryGenre,
+            '{Genres}' => $joinedGenres,
+            '{Resolution}' => $this->sanitizePathSegment($resTag),
+            '{CleanResolution}' => $cleanRes,
+            '{ResolutionClean}' => $cleanRes,
+            '{Codec}' => $this->sanitizePathSegment($parsed['codec'] ?: 'x264'),
+            '{Source}' => $this->sanitizePathSegment($parsed['source'] ?? ''),
+            '{Edition}' => $this->sanitizePathSegment($parsed['edition'] ?? ''),
+            '{Group}' => $this->sanitizePathSegment($parsed['group'] ?? 'MEDIA'),
+            '{FirstLetter}' => $firstLetter,
+            '{Season:02}' => sprintf('%02d', $seasonNum),
+            '{Episode:02}' => sprintf('%02d', $episodeNum),
+            '{EpisodeTitle}' => $epTitle,
+            '{ext}' => strtolower(pathinfo($filePath, PATHINFO_EXTENSION) ?: ($parsed['extension'] ?? 'mkv')),
+        ];
+
+        $relPath = $pattern;
+        if (empty($epTitle) || ! empty($file['omit_episode_title'])) {
+            $relPath = str_replace(' - {EpisodeTitle}', '', $relPath);
+            $relPath = str_replace('{EpisodeTitle}', '', $relPath);
+        }
+        // If movie has no collection, cleanly unwrap collection directory segment
+        if (empty($collName)) {
+            $relPath = str_replace(['/Collections/{Collection}', 'Collections/{Collection}/', 'Collections/{Collection}', '/{Collection}', '{Collection}/', '{Collection}'], '', $relPath);
+        }
+        $relPath = str_replace(array_keys($tokens), array_values($tokens), $relPath);
+
+        // Clean double slashes, unknown years, or empty brackets/dangling delimiters
+        $relPath = preg_replace('#/+#', '/', $relPath);
+        $relPath = preg_replace('/\s+-\s*\[/', ' [', $relPath);
+        $relPath = preg_replace('/\s+-\s*\./', '.', $relPath);
+        $relPath = str_replace(['(Unknown Year)', '[Unknown Year]', 'Unknown Year', '()', '[]', '( )', '[ ]', ' - .', ' .'], ['', '', '', '', '', '', '', '.', '.'], $relPath);
+        $relPath = preg_replace('/\s+/', ' ', $relPath);
+        $relPath = trim($relPath, '/');
+
+        // Sanitize each directory level in relPath
+        $segments = explode('/', $relPath);
+        $cleanSegments = [];
+        foreach ($segments as $idx => $segment) {
+            if ($idx === count($segments) - 1) {
+                $ext = pathinfo($segment, PATHINFO_EXTENSION);
+                $base = pathinfo($segment, PATHINFO_FILENAME);
+                $cleanSegments[] = $this->sanitizePathSegment($base).($ext ? ".{$ext}" : '');
+            } else {
+                $cleanSegments[] = $this->sanitizePathSegment($segment);
+            }
+        }
+        $cleanRelPath = implode('/', $cleanSegments);
+
+        $destination = "{$targetRoot}/{$cleanRelPath}";
+        $source = str_replace('\\', '/', $filePath);
+
+        $exists = File::exists($destination);
+        $isIdentical = strtolower(trim($source)) === strtolower(trim($destination));
+
+        $status = 'ready';
+        if ($isIdentical) {
+            $status = 'identical';
+        } elseif ($exists) {
+            $status = 'collision_exists';
+        }
+
+        $item = [
+            'id' => uniqid('plan_'),
+            'source_path' => $source,
+            'destination_path' => $destination,
+            'filename' => $file['filename'] ?? basename($filePath),
+            'clean_title' => $cleanTitle,
+            'type' => $parsed['type'] ?? ($isSeries ? 'series' : 'movie'),
+            'year' => $parsed['year'] ?? null,
+            'season' => $isSeries ? $seasonNum : null,
+            'episode' => $isSeries ? $episodeNum : null,
+            'episode_title' => $epTitle,
+            'resolution' => $parsed['resolution'] ?? '1080p',
+            'size_bytes' => $file['size_bytes'] ?? 0,
+            'size_formatted' => $file['size_formatted'] ?? '',
+            'status' => $status,
+            'selected' => $status === 'ready',
+            'subtitles' => [],
+        ];
+
+        // Subtitle mapping with language preserving and standardization (.ar.srt / .en.srt)
+        if (! empty($file['subtitles'])) {
+            $destDir = pathinfo($destination, PATHINFO_DIRNAME);
+            $destBase = pathinfo($destination, PATHINFO_FILENAME);
+
+            foreach ($file['subtitles'] as $sub) {
+                $subPath = $sub['path'] ?? '';
+                $subExt = strtolower($sub['extension'] ?? (pathinfo($subPath, PATHINFO_EXTENSION) ?: 'srt'));
+                $lang = $sub['language'] ?? 'und';
+
+                // Robust language detection from filename or tags
+                $subFilenameLower = strtolower(basename($subPath));
+                if ($lang === 'und' || empty($lang)) {
+                    if (preg_match('/(\.ar|\barabic\b|\bara\b|_ar\.)/i', $subFilenameLower)) {
+                        $lang = 'ar';
+                    } elseif (preg_match('/(\.en|\benglish\b|\beng\b|_en\.)/i', $subFilenameLower)) {
+                        $lang = 'en';
+                    }
+                }
+
+                $langSuffix = in_array($lang, ['ar', 'en', 'fr', 'es', 'de']) ? ".{$lang}" : '';
+
+                $subDest = "{$destDir}/{$destBase}{$langSuffix}.{$subExt}";
+                $subSource = str_replace('\\', '/', $subPath);
+
+                $item['subtitles'][] = [
+                    'source' => $subSource,
+                    'destination' => $subDest,
+                    'language' => $lang,
+                    'exists' => File::exists($subDest),
+                ];
+            }
+        }
+
+        return $item;
+    }
+
+    /**
+     * Initialize Stateful Batch Plan Generation (Zero 30s-timeout risk)
+     */
+        /**
+     * Get real-time status of the background plan generation job.
+     */
+    public function getPlanJobStatus(): array
+    {
+        return Cache::get(self::PLAN_CACHE_KEY, [
+            'status' => 'idle',
+            'progress_percent' => 0,
+            'total_files' => 0,
+            'processed_count' => 0,
+            'current_file' => null,
+            'current_action' => 'Idle',
+            'logs' => [],
+            'plan_items' => [],
+            'started_at' => null,
+            'updated_at' => null,
+        ]);
+    }
+
+    /**
+     * Start background plan generation job (Mirroring Virtual Library Scanner).
+     */
+    public function startPlanJob(
+        string $sourcePath,
+        string $targetRoot,
+        ?string $moviePattern = null,
+        ?string $seriesPattern = null,
+        string $sourceMode = 'folder',
+        bool $recursive = true,
+        array $options = []
+    ): array {
+        $files = $options['files'] ?? null;
+        if ($files === null) {
+            if ($sourceMode === 'virtual') {
+                $movies = MediaItem::with('subtitles')->get()->map(function ($m) {
+                    return [
+                        'path' => $m->file_path,
+                        'filename' => basename($m->file_path),
+                        'size_bytes' => $m->file_size_bytes,
+                        'size_formatted' => $m->file_size_bytes ? round($m->file_size_bytes / (1024 * 1024 * 1024), 2).' GB' : '1.4 GB',
+                        'parsed' => [
+                            'type' => 'movie',
+                            'title' => $m->title,
+                            'clean_title' => $m->title,
+                            'year' => $m->release_year,
+                            'resolution' => $m->resolution ?? '1080p',
+                            'codec' => $m->video_codec ?? 'HEVC',
+                        ],
+                        'subtitles' => $m->subtitles->map(fn ($s) => ['path' => $s->file_path, 'language' => $s->language])->toArray(),
+                    ];
+                });
+
+                $episodes = Episode::with(['season.series', 'subtitles'])->get()->map(function ($ep) {
+                    return [
+                        'path' => $ep->file_path,
+                        'filename' => basename($ep->file_path),
+                        'size_bytes' => $ep->file_size_bytes,
+                        'size_formatted' => $ep->file_size_bytes ? round($ep->file_size_bytes / (1024 * 1024), 1).' MB' : '450 MB',
+                        'parsed' => [
+                            'type' => 'series',
+                            'series_title' => $ep->season?->series?->title ?? 'TV Show',
+                            'season' => $ep->season?->season_number ?? 1,
+                            'episode' => $ep->episode_number,
+                            'resolution' => $ep->resolution ?? '1080p',
+                            'codec' => $ep->video_codec ?? 'HEVC',
+                        ],
+                        'subtitles' => $ep->subtitles->map(fn ($s) => ['path' => $s->file_path, 'language' => $s->language])->toArray(),
+                    ];
+                });
+
+                $files = $movies->concat($episodes)->values()->filter(fn ($f) => ! empty($f['path']) && file_exists($f['path']))->values()->toArray();
+            } else {
+                $scanner = app(FilesystemScannerService::class);
+                $files = $scanner->scanDirectory($sourcePath, $recursive);
+            }
+        }
+
+        $total = count($files);
+
+        if ($total === 0) {
+            $state = [
+                'status' => 'idle',
+                'progress_percent' => 0,
+                'total_files' => 0,
+                'processed_count' => 0,
+                'current_file' => null,
+                'current_action' => 'No media files found in specified source.',
+                'logs' => [
+                    [
+                        'time' => now()->format('H:i:s'),
+                        'level' => 'error',
+                        'message' => "No media files found in {$sourcePath}.",
+                    ],
+                ],
+                'plan_items' => [],
+                'started_at' => now()->toDateTimeString(),
+                'updated_at' => now()->toDateTimeString(),
+            ];
+            Cache::put(self::PLAN_CACHE_KEY, $state, now()->addHours(6));
+
+            return [
+                'success' => false,
+                'message' => 'No media files found in the specified source.',
+                'status' => $state,
+            ];
+        }
+
+        $sourceLabel = $sourceMode === 'virtual' ? 'Virtual Library' : basename($sourcePath);
+
+        $state = [
+            'status' => 'generating',
+            'progress_percent' => 0,
+            'total_files' => $total,
+            'processed_count' => 0,
+            'current_file' => null,
+            'current_action' => "Found {$total} media files. Starting organization analysis...",
+            'source_path' => $sourcePath,
+            'target_root' => $targetRoot,
+            'movie_pattern' => $moviePattern,
+            'series_pattern' => $seriesPattern,
+            'pending_queue' => $files,
+            'plan_items' => [],
+            'logs' => [
+                [
+                    'time' => now()->format('H:i:s'),
+                    'level' => 'info',
+                    'message' => "Discovered {$total} media files in [{$sourceLabel}]. Background organization job started.",
+                ],
+            ],
+            'started_at' => now()->toDateTimeString(),
+            'updated_at' => now()->toDateTimeString(),
+        ];
+
+        Cache::put(self::PLAN_CACHE_KEY, $state, now()->addHours(6));
+
+        return [
+            'success' => true,
+            'is_active' => true,
+            'status' => $state,
+            'total_files' => $total,
+        ];
+    }
+
+    /**
+     * Backward-compatibility alias for initPlanGeneration.
+     */
+    public function initPlanGeneration(string $sourcePath, string $targetRoot, ?string $moviePattern = null, ?string $seriesPattern = null, bool $recursive = true, array $options = []): array
+    {
+        $res = $this->startPlanJob($sourcePath, $targetRoot, $moviePattern, $seriesPattern, 'folder', $recursive, $options);
+        $res['is_active'] = ($res['status']['status'] ?? '') === 'generating';
+        $res['total_files'] = $res['total_files'] ?? ($res['status']['total_files'] ?? 0);
+        return $res;
+    }
+
+    /**
+     * Process next batch of the background plan job (Matches Virtual Scanner Worker).
+     */
+    public function processPlanJobBatch(int $batchSize = 15): array
+    {
+        $state = Cache::get(self::PLAN_CACHE_KEY);
+
+        if (! $state) {
+            return [
+                'success' => true,
+                'has_more' => false,
+                'status' => $this->getPlanJobStatus(),
+                'plan' => [],
+                'total_files' => 0,
+                'processed_count' => 0,
+                'progress_percent' => 0,
+                'is_completed' => false,
+            ];
+        }
+
+        if (($state['status'] ?? '') === 'paused') {
+            return [
+                'success' => true,
+                'has_more' => true,
+                'status' => $state,
+                'plan' => $state['plan_items'] ?? [],
+                'total_files' => (int) ($state['total_files'] ?? 0),
+                'processed_count' => (int) ($state['processed_count'] ?? 0),
+                'progress_percent' => $state['progress_percent'] ?? 0,
+                'is_completed' => false,
+            ];
+        }
+
+        if (($state['status'] ?? '') === 'cancelled') {
+            return [
+                'success' => true,
+                'has_more' => false,
+                'status' => $state,
+                'plan' => $state['plan_items'] ?? [],
+                'total_files' => (int) ($state['total_files'] ?? 0),
+                'processed_count' => (int) ($state['processed_count'] ?? 0),
+                'progress_percent' => $state['progress_percent'] ?? 0,
+                'is_completed' => false,
+            ];
+        }
+
+        if (($state['status'] ?? '') !== 'generating' || empty($state['pending_queue'])) {
+            if ($state && ($state['status'] ?? '') === 'generating') {
+                $state['status'] = 'completed';
+                $state['progress_percent'] = 100;
+                $state['current_action'] = 'Organization plan completed successfully.';
+                Cache::put(self::PLAN_CACHE_KEY, $state, now()->addHours(6));
+            }
+
+            return [
+                'success' => true,
+                'has_more' => false,
+                'status' => $state ?: $this->getPlanJobStatus(),
+            ];
+        }
+
+        $queue = $state['pending_queue'];
+        $batch = array_splice($queue, 0, $batchSize);
+        $state['pending_queue'] = $queue;
+
+        $targetRoot = $state['target_root'];
+        $moviePattern = $state['movie_pattern'];
+        $seriesPattern = $state['series_pattern'];
+
+        foreach ($batch as $file) {
+            $filename = $file['filename'] ?? basename($file['path'] ?? '');
+            $state['current_file'] = $filename;
+            $state['current_action'] = "Analyzing {$filename}...";
+
+            try {
+                $item = $this->generatePlanItem($file, $targetRoot, $moviePattern, $seriesPattern);
+                $state['plan_items'][] = $item;
+                $state['processed_count']++;
+
+                $destRel = basename(dirname($item['destination_path'])) . '/' . basename($item['destination_path']);
+                $state['logs'][] = [
+                    'time' => now()->format('H:i:s'),
+                    'level' => 'success',
+                    'message' => "Mapped: {$item['clean_title']} ({$item['year']}) [{$item['resolution']}] -> {$destRel}",
+                ];
+            } catch (\Throwable $e) {
+                $state['processed_count']++;
+                $state['logs'][] = [
+                    'time' => now()->format('H:i:s'),
+                    'level' => 'error',
+                    'message' => "Error analyzing {$filename}: " . $e->getMessage(),
+                ];
+            }
+        }
+
+        $total = max(1, (int) $state['total_files']);
+        $processed = (int) $state['processed_count'];
+        $state['progress_percent'] = min(100, (int) round(($processed / $total) * 100));
+
+        if (count($state['logs']) > 150) {
+            $state['logs'] = array_slice($state['logs'], -150);
+        }
+
+        $isDone = empty($state['pending_queue']) || $processed >= $total;
+        if ($isDone) {
+            $state['status'] = 'completed';
+            $state['progress_percent'] = 100;
+            $state['current_action'] = "Plan generated successfully for {$total} media files.";
+            $state['logs'][] = [
+                'time' => now()->format('H:i:s'),
+                'level' => 'info',
+                'message' => "Finished generating organization plan for all {$total} files.",
+            ];
+        }
+
+        $state['updated_at'] = now()->toDateTimeString();
+
+        $latestInCache = Cache::get(self::PLAN_CACHE_KEY);
+        if ($latestInCache && ($latestInCache['status'] === 'paused')) {
+            $state['status'] = 'paused';
+        } elseif ($latestInCache && ($latestInCache['status'] === 'cancelled')) {
+            $state['status'] = 'cancelled';
+            $state['pending_queue'] = [];
+            $isDone = true;
+        }
+
+        Cache::put(self::PLAN_CACHE_KEY, $state, now()->addHours(6));
+
+        return [
+            'success' => true,
+            'has_more' => ! $isDone,
+            'status' => $state,
+            'plan' => $state['plan_items'] ?? [],
+            'total_files' => $total,
+            'processed_count' => $processed,
+            'progress_percent' => $state['progress_percent'],
+            'is_completed' => $isDone,
+        ];
+    }
+
+    /**
+     * Backward-compatibility alias for processPlanBatch.
+     */
+    public function processPlanBatch(int $batchSize = 25): array
+    {
+        return $this->processPlanJobBatch($batchSize);
+    }
+
+    public function getPlanGenerationStatus(): array
+    {
+        return $this->getPlanJobStatus();
+    }
+
+    public function cancelPlanGeneration(): array
+    {
+        return $this->cancelPlanJob();
+    }
+
+    public function pausePlanJob(): array
+    {
+        $state = Cache::get(self::PLAN_CACHE_KEY);
+        if ($state) {
+            $state['status'] = 'paused';
+            $state['current_action'] = 'Job paused by user.';
+            $state['logs'][] = [
+                'time' => now()->format('H:i:s'),
+                'level' => 'info',
+                'message' => 'Organization analysis paused.',
+            ];
+            Cache::put(self::PLAN_CACHE_KEY, $state, now()->addHours(6));
+        }
+
+        return ['success' => true, 'status' => $state ?: $this->getPlanJobStatus()];
+    }
+
+    public function resumePlanJob(): array
+    {
+        $state = Cache::get(self::PLAN_CACHE_KEY);
+        if ($state) {
+            $state['status'] = 'generating';
+            $state['current_action'] = 'Resuming organization analysis...';
+            $state['logs'][] = [
+                'time' => now()->format('H:i:s'),
+                'level' => 'info',
+                'message' => 'Organization analysis resumed.',
+            ];
+            Cache::put(self::PLAN_CACHE_KEY, $state, now()->addHours(6));
+        }
+
+        return ['success' => true, 'status' => $state ?: $this->getPlanJobStatus()];
+    }
+
+    public function cancelPlanJob(): array
+    {
+        $state = Cache::get(self::PLAN_CACHE_KEY);
+        if ($state) {
+            $state['status'] = 'cancelled';
+            $state['current_action'] = 'Job cancelled by user.';
+            $state['logs'][] = [
+                'time' => now()->format('H:i:s'),
+                'level' => 'info',
+                'message' => 'Organization analysis cancelled.',
+            ];
+            Cache::put(self::PLAN_CACHE_KEY, $state, now()->addHours(6));
+        }
+
+        return ['success' => true, 'status' => $state ?: $this->getPlanJobStatus(), 'cancelled' => true];
+    }
+
+    public function cleanResolutionTag(?string $raw): string
+    {
+        if (empty($raw)) {
+            return '1080p';
+        }
+        $r = strtolower(trim($raw));
+        if (str_contains($r, '4k') || str_contains($r, '2160')) return '4K';
+        if (str_contains($r, '1440') || str_contains($r, '2k')) return '1440p';
+        if (str_contains($r, '1080')) return '1080p';
+        if (str_contains($r, '720')) return '720p';
+        if (str_contains($r, '576')) return '576p';
+        if (str_contains($r, '540')) return '540p';
+        if (str_contains($r, '480')) return '480p';
+        if (str_contains($r, '360')) return '360p';
+        if (str_contains($r, '240')) return '240p';
+
+        return $raw;
+    }
+
     public function sanitizePathSegment(string $name): string
     {
         // Replace colons with hyphen separator
@@ -254,18 +688,30 @@ class PhysicalOrganizerService
     {
         $state = Cache::get(self::CACHE_KEY);
 
-        if (! $state || empty($state['is_active']) || empty($state['queue'])) {
-            if ($state) {
-                $state['is_active'] = false;
-                $state['is_completed'] = true;
-                $state['progress_percent'] = 100;
-                $state['current_action'] = 'All operations completed!';
-                Cache::put(self::CACHE_KEY, $state, now()->addHours(2));
-            }
-
+        if (! $state || ! empty($state['is_cancelled'])) {
             return [
                 'has_more' => false,
                 'status' => $state ?: $this->getExecutionStatus(),
+            ];
+        }
+
+        if (! empty($state['is_paused'])) {
+            return [
+                'has_more' => true,
+                'status' => $state,
+            ];
+        }
+
+        if (empty($state['is_active']) || empty($state['queue'])) {
+            $state['is_active'] = false;
+            $state['is_completed'] = true;
+            $state['progress_percent'] = 100;
+            $state['current_action'] = 'All operations completed!';
+            Cache::put(self::CACHE_KEY, $state, now()->addHours(2));
+
+            return [
+                'has_more' => false,
+                'status' => $state,
             ];
         }
 
@@ -404,10 +850,21 @@ class PhysicalOrganizerService
             $state['logs'] = array_slice($state['logs'], -100);
         }
 
+        // Safeguard against in-flight pause or cancel
+        $latest = Cache::get(self::CACHE_KEY);
+        if ($latest && ! empty($latest['is_paused'])) {
+            $state['is_paused'] = true;
+        }
+        if ($latest && ! empty($latest['is_cancelled'])) {
+            $state['is_cancelled'] = true;
+            $state['is_active'] = false;
+            $state['queue'] = [];
+        }
+
         Cache::put(self::CACHE_KEY, $state, now()->addHours(2));
 
         return [
-            'has_more' => ! empty($queue),
+            'has_more' => ! empty($queue) && empty($state['is_cancelled']),
             'status' => $state,
         ];
     }
@@ -557,6 +1014,45 @@ class PhysicalOrganizerService
     /**
      * Cancel ongoing operation
      */
+        /**
+     * Pause ongoing execution
+     */
+    public function pauseExecution(): array
+    {
+        $state = Cache::get(self::CACHE_KEY);
+        if ($state) {
+            $state['is_paused'] = true;
+            $state['current_action'] = 'Execution paused by user.';
+            $state['logs'][] = [
+                'time' => date('H:i:s'),
+                'type' => 'warning',
+                'message' => 'Execution paused by user.',
+            ];
+            Cache::put(self::CACHE_KEY, $state, now()->addHours(2));
+        }
+
+        return $this->getExecutionStatus();
+    }
+
+    /**
+     * Resume ongoing execution
+     */
+    public function resumeExecution(): array
+    {
+        $state = Cache::get(self::CACHE_KEY);
+        if ($state) {
+            $state['is_paused'] = false;
+            $state['current_action'] = 'Resuming execution...';
+            $state['logs'][] = [
+                'time' => date('H:i:s'),
+                'type' => 'info',
+                'message' => 'Execution resumed.',
+            ];
+            Cache::put(self::CACHE_KEY, $state, now()->addHours(2));
+        }
+
+        return $this->getExecutionStatus();
+    }
     public function cancelExecution(): array
     {
         $state = Cache::get(self::CACHE_KEY);

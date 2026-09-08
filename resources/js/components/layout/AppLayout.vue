@@ -5,6 +5,8 @@ import Navbar from './Navbar.vue';
 import Sidebar from './Sidebar.vue';
 import CinemaPlayer from '@/components/player/CinemaPlayer.vue';
 import ScannerStatusModal from '@/components/scanner/ScannerStatusModal.vue';
+import OrganizerStatusModal from '@/components/organizer/OrganizerStatusModal.vue';
+import SubtitleStatusModal from '@/components/subtitles/SubtitleStatusModal.vue';
 import PageTransitionLoader from '@/components/common/PageTransitionLoader.vue';
 import { useScanner } from '@/composables/useScanner';
 import { useDownloader } from '@/composables/useDownloader';
@@ -84,6 +86,10 @@ const closePlayer = () => {
 
         <!-- Global Fast Background Scanner Status Modal -->
         <ScannerStatusModal />
+        <!-- Global Disk Organizer Plan Status Modal -->
+        <OrganizerStatusModal />
+        <!-- Global Subtitle Health & Normalizer Status Modal -->
+        <SubtitleStatusModal />
 
         <!-- Global Cinema Page Transition Island Loader -->
         <PageTransitionLoader />

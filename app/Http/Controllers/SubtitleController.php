@@ -451,4 +451,49 @@ class SubtitleController extends Controller
 
         return response()->json($results);
     }
+
+    public function startHealthJob(Request $request, SubtitleHealthCheckService $healthService): JsonResponse
+    {
+        $validated = $request->validate([
+            'dry_run' => 'nullable|boolean',
+            'delete_invalid' => 'nullable|boolean',
+            'auto_rename' => 'nullable|boolean',
+            'target_path' => 'nullable|string',
+        ]);
+
+        $state = $healthService->startHealthJob($validated);
+
+        return response()->json([
+            'success' => true,
+            'status' => $state,
+        ]);
+    }
+
+    public function processHealthBatch(Request $request, SubtitleHealthCheckService $healthService): JsonResponse
+    {
+        $batchSize = (int) $request->input('batch_size', 25);
+        $result = $healthService->processHealthBatch($batchSize);
+
+        return response()->json($result);
+    }
+
+    public function getHealthJobStatus(SubtitleHealthCheckService $healthService): JsonResponse
+    {
+        return response()->json($healthService->getHealthJobStatus());
+    }
+
+    public function pauseHealthJob(SubtitleHealthCheckService $healthService): JsonResponse
+    {
+        return response()->json($healthService->pauseHealthJob());
+    }
+
+    public function resumeHealthJob(SubtitleHealthCheckService $healthService): JsonResponse
+    {
+        return response()->json($healthService->resumeHealthJob());
+    }
+
+    public function cancelHealthJob(SubtitleHealthCheckService $healthService): JsonResponse
+    {
+        return response()->json($healthService->cancelHealthJob());
+    }
 }

@@ -156,3 +156,39 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
 | **Factory / Repository** | `SceneNameParserService` | Factory normalizing raw file/folder strings into structured domain entities. |
 | **Pipelined Execution** | `VirtualLibraryScannerService` | Chunks discoveries into non-blocking batches for responsive UI streaming. |
 | **Observer / Event** | `ContinueWatchingBar.vue` | Reactive real-time sync with video player progress pings. |
+
+---
+
+## 8. Database Disaster Recovery & Selective Restore Architecture
+
+Creative Media Hub includes an enterprise-grade disaster recovery and database backup subsystem designed for zero data loss and granular restore control.
+
+### 8.1. Architecture & Table Mapping
+The database consists of standalone catalog tables, hierarchical TV tables, polymorphic relationship pivots, and operational records:
+- **Movies (`movies` section)**: Maps to `media_items` table, `genreables` (filtered by `genreable_type` = `App\Models\MediaItem`), and `personables`.
+- **Series (`series` section)**: Maps to `series`, `seasons`, and `episodes` tables, plus corresponding `genreables` and `personables`.
+- **Subtitles (`subtitles` section)**: Maps to `subtitles` table.
+- **Settings (`settings` section)**: Maps to `app_settings` key-value table.
+- **Watch History (`watch_history` section)**: Maps to `watch_histories` table.
+- **Shared Entities (`genres`, `people`)**: Automatically synchronized using `updateOrInsert` whenever movies or series are restored.
+
+### 8.2. Selective Overwrite Guarantees
+When a user restores in **Clean Overwrite** mode with specific sections (e.g. `["movies"]`):
+1. Foreign key constraints are safely bypassed (`PRAGMA foreign_keys = OFF;` in SQLite or `SET FOREIGN_KEY_CHECKS = 0;` in MySQL).
+2. The entire restoration is wrapped in an atomic database transaction (`DB::transaction()`).
+3. Only target records matching the selected sections are purged.
+4. **All unselected sections remain 100% intact and untouched.**
+5. Foreign key checks are re-enabled in a `finally` block regardless of transaction success or failure.
+
+### 8.3. Dual-Format Support (JSON & SQLite)
+- **JSON Format**: Human-readable, structured dump containing metadata counts and table records. Restores across different database engines.
+- **SQLite Format**: Binary `.sqlite` / `.db` snapshots can be restored as full clones or selectively extracted table-by-table via PDO memory queries without overwriting the active database.
+
+---
+
+## 9. Universal Job Center & Unified Background Orchestration
+
+All asynchronous operations in Creative Media Hub report to a unified state coordination layer (`UnifiedJobCenterModal.vue` backed by `useActivityCenter.ts` and `useActivityCenterState.ts`):
+- **Universal Status Aggregation**: Tracks Scanner, Hardlink Organizer, Subtitle Auditor, and Folder Watcher states concurrently.
+- **Pause & Resume Protocol**: Jobs maintain non-blocking execution loops with sleep yields and check cancellation tokens at the start of each iteration.
+- **Replay Safety & Rollback**: Actions that alter disk state (such as file renames or hardlinks) maintain atomic execution logs with reverse-direction rollback capabilities.
