@@ -94,21 +94,23 @@ class FilesystemScannerService
                     continue;
                 }
 
+                $parsed = $this->parser->parse($filePath);
+                if (empty($parsed['collection_name'])) {
+                    $dirName = basename(dirname($filePath));
+                    if (preg_match('/^([a-zA-Z0-9\s\':\-\.]+?)\s+(?:Collection|Boxset|Trilogy|Quadrilogy|Anthology|Saga)\b/i', $dirName, $m)) {
+                        $parsed['collection_name'] = trim($m[1]) . ' Collection';
+                    } elseif (preg_match('/^([a-zA-Z0-9\s\':\-\.]+?)\s+Collection$/i', $dirName, $m)) {
+                        $parsed['collection_name'] = trim($m[1]) . ' Collection';
+                    }
+                }
                 $videoFiles[] = [
                     'path' => $filePath,
-
                     'filename' => $filename,
-
                     'size_bytes' => $size,
-
                     'size_formatted' => $this->formatBytes($size),
-
                     'modified_at' => $file->getMTime(),
-
                     'extension' => $ext,
-
-                    'parsed' => $this->parser->parse($filePath),
-
+                    'parsed' => $parsed,
                 ];
             } elseif (in_array($ext, $this->subtitleExtensions)) {
                 $subInfo = $this->parseSubtitleMetadata($filename);

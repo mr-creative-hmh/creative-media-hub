@@ -27,7 +27,7 @@ class PhysicalOrganizerService
 
     public function generateDryRun(array $scannedFiles, string $targetRoot, ?string $moviePattern = null, ?string $seriesPattern = null): array
     {
-        $moviePattern = $moviePattern ?: AppSetting::get('movie_naming_template', '{Type}/{Title} ({Year})/{Title} ({Year}) [{CleanResolution}].{ext}');
+        $moviePattern = $moviePattern ?: AppSetting::get('movie_naming_template', '{Type}/{Genre}/{Collection}/{Title} ({Year})/{Title} ({Year}) [{CleanResolution}].{ext}');
         $seriesPattern = $seriesPattern ?: AppSetting::get('series_naming_template', '{Type}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} - {EpisodeTitle} [{CleanResolution}].{ext}');
 
         $targetRoot = rtrim(str_replace('\\', '/', $targetRoot), '/');
@@ -43,9 +43,141 @@ class PhysicalOrganizerService
     /**
      * Generate plan item for a single media file.
      */
+    /**
+     * Multi-tier collection detection:
+     * Tier 1: Explicitly passed or pre-parsed collection_name
+     * Tier 2: Existing MediaItem in local database
+     * Tier 3: Parent/ancestor directory name containing Collection/Boxset/etc.
+     * Tier 4: Known franchise pattern dictionary
+     */
+    public function resolveCollectionName(string $filePath, array $parsed, ?string $explicitColl = null): ?string
+    {
+        if (! empty($explicitColl)) {
+            return $this->formatCollectionName($explicitColl);
+        }
+
+        if (! empty($parsed['collection_name'])) {
+            return $this->formatCollectionName($parsed['collection_name']);
+        }
+
+        $cleanTitle = $parsed['clean_title'] ?? ($parsed['title'] ?? '');
+        $isSeries = ($parsed['type'] ?? 'movie') === 'series';
+
+        // Tier 2: Local Database MediaItem check
+        if (! $isSeries && ! empty($cleanTitle)) {
+            try {
+                $normalizedSearch = preg_replace('/[^a-z0-9]/i', '', $cleanTitle);
+                $dbMovie = MediaItem::where('title', 'like', "%{$cleanTitle}%")
+                    ->orWhere('original_title', 'like', "%{$cleanTitle}%")
+                    ->first();
+
+                if ($dbMovie && ! empty($dbMovie->collection_name)) {
+                    return $this->formatCollectionName($dbMovie->collection_name);
+                }
+
+                // Fallback normalized search for titles with colons/hyphens (e.g. Deathly Hallows: Part 1)
+                if (strlen($normalizedSearch) >= 6) {
+                    $candidate = MediaItem::whereNotNull('collection_name')
+                        ->where('collection_name', '!=', '')
+                        ->get()
+                        ->first(function ($m) use ($normalizedSearch) {
+                            $mNorm = preg_replace('/[^a-z0-9]/i', '', $m->title);
+                            return str_contains($mNorm, $normalizedSearch) || str_contains($normalizedSearch, $mNorm);
+                        });
+                    if ($candidate && ! empty($candidate->collection_name)) {
+                        return $this->formatCollectionName($candidate->collection_name);
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Table might not exist or be unmigrated in isolated environments
+            }
+        }
+
+        // Tier 3: Directory / Path Analysis (parent folder or up to 3 parent levels)
+        $normalizedPath = str_replace(['\\', '/'], '/', $filePath);
+        $pathParts = explode('/', $normalizedPath);
+        $parentDirs = array_slice($pathParts, max(0, count($pathParts) - 4), -1);
+        foreach (array_reverse($parentDirs) as $dir) {
+            if (preg_match('/^([a-zA-Z0-9\s\':\-\.]+?)\s+(?:Collection|Boxset|Trilogy|Quadrilogy|Anthology|Saga|Franchise)\b/i', $dir, $m)) {
+                return $this->formatCollectionName(trim($m[1]) . ' Collection');
+            }
+            if (preg_match('/\b([a-zA-Z0-9\s\':\-\.]+?)\s+Collection\b/i', $dir, $m)) {
+                return $this->formatCollectionName(trim($m[1]) . ' Collection');
+            }
+        }
+
+        // Tier 4: Known Franchise Pattern Dictionary
+        $knownFranchises = [
+            'Harry Potter' => 'Harry Potter Collection',
+            'Lord of the Rings' => 'The Lord of the Rings Collection',
+            'The Hobbit' => 'The Hobbit Collection',
+            'Fantastic Beasts' => 'Fantastic Beasts Collection',
+            'Fast & Furious' => 'Fast & Furious Collection',
+            'Fast and Furious' => 'Fast & Furious Collection',
+            'The Dark Knight' => 'The Dark Knight Collection',
+            'Dark Knight' => 'The Dark Knight Collection',
+            'Batman' => 'Batman Collection',
+            'Star Wars' => 'Star Wars Collection',
+            'Transformers' => 'Transformers Collection',
+            'Pirates of the Caribbean' => 'Pirates of the Caribbean Collection',
+            'Mission: Impossible' => 'Mission: Impossible Collection',
+            'Mission Impossible' => 'Mission: Impossible Collection',
+            'John Wick' => 'John Wick Collection',
+            'Bad Boys' => 'Bad Boys Collection',
+            'The Godfather' => 'The Godfather Collection',
+            'Godfather' => 'The Godfather Collection',
+            'The Hunger Games' => 'The Hunger Games Collection',
+            'Hunger Games' => 'The Hunger Games Collection',
+            'The Twilight Saga' => 'The Twilight Saga Collection',
+            'Twilight' => 'The Twilight Saga Collection',
+            'The Matrix' => 'The Matrix Collection',
+            'Matrix' => 'The Matrix Collection',
+            'Spider-Man' => 'Spider-Man Collection',
+            'Spider Man' => 'Spider-Man Collection',
+            'Jurassic Park' => 'Jurassic Park Collection',
+            'Jurassic World' => 'Jurassic Park Collection',
+            'Toy Story' => 'Toy Story Collection',
+            'Shrek' => 'Shrek Collection',
+            'Ice Age' => 'Ice Age Collection',
+            'Despicable Me' => 'Despicable Me Collection',
+            'Kung Fu Panda' => 'Kung Fu Panda Collection',
+            'How to Train Your Dragon' => 'How to Train Your Dragon Collection',
+            'Mad Max' => 'Mad Max Collection',
+            'Bourne' => 'Bourne Collection',
+            'Indiana Jones' => 'Indiana Jones Collection',
+            'Die Hard' => 'Die Hard Collection',
+            'James Bond' => 'James Bond 007 Collection',
+            '007' => 'James Bond 007 Collection',
+            'Planet of the Apes' => 'Planet of the Apes Collection',
+            'Alien' => 'Alien Collection',
+            'Predator' => 'Predator Collection',
+            'Terminator' => 'The Terminator Collection',
+            'Saw' => 'Saw Collection',
+            'The Conjuring' => 'The Conjuring Universe Collection',
+            'Insidious' => 'Insidious Collection',
+        ];
+
+        foreach ($knownFranchises as $frag => $fullColl) {
+            if (stripos($cleanTitle, $frag) !== false || stripos($filePath, $frag) !== false) {
+                return $fullColl;
+            }
+        }
+
+        return null;
+    }
+
+    private function formatCollectionName(string $name): string
+    {
+        $name = trim($name);
+        if (! preg_match('/collection$/i', $name)) {
+            $name .= ' Collection';
+        }
+        return $name;
+    }
+
     public function generatePlanItem(array $file, string $targetRoot, ?string $moviePattern = null, ?string $seriesPattern = null): array
     {
-        $moviePattern = $moviePattern ?: AppSetting::get('movie_naming_template', '{Type}/{Title} ({Year})/{Title} ({Year}) [{CleanResolution}].{ext}');
+        $moviePattern = $moviePattern ?: AppSetting::get('movie_naming_template', '{Type}/{Genre}/{Collection}/{Title} ({Year})/{Title} ({Year}) [{CleanResolution}].{ext}');
         $seriesPattern = $seriesPattern ?: AppSetting::get('series_naming_template', '{Type}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} - {EpisodeTitle} [{CleanResolution}].{ext}');
         $targetRoot = rtrim(str_replace('\\', '/', $targetRoot), '/');
 
@@ -79,6 +211,12 @@ class PhysicalOrganizerService
         $firstChar = mb_strtoupper(mb_substr($cleanTitle, 0, 1));
         $firstLetter = preg_match('/^[A-Z0-9]$/i', $firstChar) ? $firstChar : '#';
 
+        // Multi-tier Collection Resolution
+        $collName = $this->resolveCollectionName($filePath, $parsed, $file['collection_name'] ?? null);
+        if ($collName) {
+            $parsed['collection_name'] = $collName;
+        }
+
         // Resolve genres for {Genre} and {Genres} tokens
         $genresList = $file['genres'] ?? [];
         if (empty($genresList)) {
@@ -95,18 +233,21 @@ class PhysicalOrganizerService
             }
         }
 
-        if (empty($genresList)) {
+        if (! empty($collName)) {
+            // Unify franchise collections under a single consistent primary genre
             $classifier = app(ZeroKeyGenreClassifierService::class);
-            $coll = $parsed['collection_name'] ?? ($file['collection_name'] ?? null);
-            $resolved = $classifier->resolveGenres($cleanTitle, $coll);
+            $resolved = $classifier->resolveGenres($cleanTitle, $collName);
+            $primaryGenre = $this->sanitizePathSegment($resolved['primary']);
+            $joinedGenres = $this->sanitizePathSegment($resolved['joined']);
+        } elseif (empty($genresList)) {
+            $classifier = app(ZeroKeyGenreClassifierService::class);
+            $resolved = $classifier->resolveGenres($cleanTitle, null);
             $primaryGenre = $this->sanitizePathSegment($resolved['primary']);
             $joinedGenres = $this->sanitizePathSegment($resolved['joined']);
         } else {
             $primaryGenre = ! empty($genresList[0]) ? $this->sanitizePathSegment($genresList[0]) : 'Action & Adventure';
             $joinedGenres = ! empty($genresList) ? $this->sanitizePathSegment(implode(' & ', array_slice($genresList, 0, 2))) : $primaryGenre;
         }
-
-        $collName = $parsed['collection_name'] ?? ($file['collection_name'] ?? '');
         $cleanRes = $this->cleanResolutionTag($resTag);
 
         $tokens = [
@@ -119,7 +260,7 @@ class PhysicalOrganizerService
             '{Resolution}' => $this->sanitizePathSegment($resTag),
             '{CleanResolution}' => $cleanRes,
             '{ResolutionClean}' => $cleanRes,
-            '{Codec}' => $this->sanitizePathSegment($parsed['codec'] ?: 'x264'),
+            '{Codec}' => $this->sanitizePathSegment(($parsed['codec'] ?? '') ?: 'x264'),
             '{Source}' => $this->sanitizePathSegment($parsed['source'] ?? ''),
             '{Edition}' => $this->sanitizePathSegment($parsed['edition'] ?? ''),
             '{Group}' => $this->sanitizePathSegment($parsed['group'] ?? 'MEDIA'),
@@ -182,6 +323,8 @@ class PhysicalOrganizerService
             'destination_path' => $destination,
             'filename' => $file['filename'] ?? basename($filePath),
             'clean_title' => $cleanTitle,
+            'collection_name' => $collName ?: null,
+            'genre' => $primaryGenre,
             'type' => $parsed['type'] ?? ($isSeries ? 'series' : 'movie'),
             'year' => $parsed['year'] ?? null,
             'season' => $isSeries ? $seasonNum : null,
@@ -275,6 +418,7 @@ class PhysicalOrganizerService
                         'filename' => basename($m->file_path),
                         'size_bytes' => $m->file_size_bytes,
                         'size_formatted' => $m->file_size_bytes ? round($m->file_size_bytes / (1024 * 1024 * 1024), 2).' GB' : '1.4 GB',
+                        'collection_name' => $m->collection_name,
                         'parsed' => [
                             'type' => 'movie',
                             'title' => $m->title,
@@ -282,6 +426,7 @@ class PhysicalOrganizerService
                             'year' => $m->release_year,
                             'resolution' => $m->resolution ?? '1080p',
                             'codec' => $m->video_codec ?? 'HEVC',
+                            'collection_name' => $m->collection_name,
                         ],
                         'subtitles' => $m->subtitles->map(fn ($s) => ['path' => $s->file_path, 'language' => $s->language])->toArray(),
                     ];
@@ -684,8 +829,12 @@ class PhysicalOrganizerService
     /**
      * Process next batch of items (Non-blocking SSE / Ajax loop)
      */
-    public function processNextBatch(int $batchSize = 2): array
+    public function processNextBatch(int $batchSize = 1): array
     {
+        @set_time_limit(0);
+        @ini_set('max_execution_time', '0');
+        ignore_user_abort(true);
+
         $state = Cache::get(self::CACHE_KEY);
 
         if (! $state || ! empty($state['is_cancelled'])) {
@@ -729,7 +878,25 @@ class PhysicalOrganizerService
             $state['current_action'] = ucfirst($mode)."ing {$filename}...";
 
             try {
+                // If source doesn't exist, check if it was already moved in a previous attempt
                 if (! File::exists($source)) {
+                    if (File::exists($dest) && File::size($dest) > 0) {
+                        $state['successful_count']++;
+                        $state['logs'][] = [
+                            'time' => date('H:i:s'),
+                            'type' => 'info',
+                            'message' => "[ALREADY ORGANIZED] {$filename} is already at destination.",
+                        ];
+                        $state['completed_items'][] = [
+                            'source' => $source,
+                            'destination' => $dest,
+                            'title' => $item['clean_title'] ?? $filename,
+                            'size_formatted' => $item['size_formatted'] ?? '',
+                        ];
+                        $state['processed_count']++;
+                        continue;
+                    }
+
                     $state['failed_count']++;
                     $errMsg = "Source not found: {$filename}";
                     $state['errors'][] = $errMsg;
@@ -739,7 +906,6 @@ class PhysicalOrganizerService
                         'message' => "[ERROR] {$errMsg}",
                     ];
                     $state['processed_count']++;
-
                     continue;
                 }
 
@@ -749,40 +915,40 @@ class PhysicalOrganizerService
                 }
 
                 $sourceDir = pathinfo($source, PATHINFO_DIRNAME);
-                if (! in_array($sourceDir, $state['source_dirs_to_clean'])) {
+                if (! $this->isProtectedDirectory($sourceDir) && ! in_array($sourceDir, $state['source_dirs_to_clean'])) {
                     $state['source_dirs_to_clean'][] = $sourceDir;
                 }
 
+                // Execute safe cross-drive move or copy with timeout immunity
+                $this->moveOrCopyFile($source, $dest, $mode);
                 if ($mode === 'move') {
-                    File::move($source, $dest);
                     $this->updateDatabasePath($source, $dest);
-                } else {
-                    File::copy($source, $dest);
                 }
 
-                // Handle Subtitles
+                // Handle Companion Subtitles
                 $subsCount = 0;
                 if (! empty($item['subtitles'])) {
                     foreach ($item['subtitles'] as $sub) {
-                        $subSource = $sub['source'];
-                        $subDest = $sub['destination'];
+                        $subSource = $sub['source'] ?? ($sub['source_path'] ?? '');
+                        $subDest = $sub['destination'] ?? ($sub['destination_path'] ?? '');
 
-                        if (File::exists($subSource)) {
+                        if (! empty($subSource) && ! empty($subDest) && File::exists($subSource)) {
                             $subDestDir = pathinfo($subDest, PATHINFO_DIRNAME);
                             if (! File::isDirectory($subDestDir)) {
                                 File::makeDirectory($subDestDir, 0755, true, true);
                             }
 
                             $subSourceDir = pathinfo($subSource, PATHINFO_DIRNAME);
-                            if (! in_array($subSourceDir, $state['source_dirs_to_clean'])) {
+                            if (! $this->isProtectedDirectory($subSourceDir) && ! in_array($subSourceDir, $state['source_dirs_to_clean'])) {
                                 $state['source_dirs_to_clean'][] = $subSourceDir;
                             }
 
+                            $this->moveOrCopyFile($subSource, $subDest, $mode);
                             if ($mode === 'move') {
-                                File::move($subSource, $subDest);
-                                Subtitle::where('file_path', $subSource)->update(['file_path' => $subDest]);
-                            } else {
-                                File::copy($subSource, $subDest);
+                                try {
+                                    Subtitle::where('file_path', $subSource)->update(['file_path' => $subDest]);
+                                } catch (\Throwable $te) {
+                                }
                             }
                             $subsCount++;
                         }
@@ -798,8 +964,8 @@ class PhysicalOrganizerService
                 $state['completed_items'][] = [
                     'source' => $source,
                     'destination' => $dest,
-                    'title' => $item['clean_title'],
-                    'size_formatted' => $item['size_formatted'],
+                    'title' => $item['clean_title'] ?? $filename,
+                    'size_formatted' => $item['size_formatted'] ?? '',
                 ];
             } catch (\Throwable $e) {
                 $state['failed_count']++;
@@ -837,155 +1003,257 @@ class PhysicalOrganizerService
             $state['is_active'] = false;
             $state['is_completed'] = true;
             $state['progress_percent'] = 100;
-            $state['current_action'] = "Execution complete! Processed {$state['processed_count']} files.";
+            $state['current_action'] = 'Organizing process complete!';
             $state['logs'][] = [
                 'time' => date('H:i:s'),
-                'type' => 'success',
-                'message' => "🎉 All files organized successfully ({$state['successful_count']} success, {$state['failed_count']} failed)",
+                'type' => 'info',
+                'message' => "Complete: {$state['successful_count']} succeeded, {$state['failed_count']} failed.",
             ];
-        }
-
-        // Keep at most 100 recent logs
-        if (count($state['logs']) > 100) {
-            $state['logs'] = array_slice($state['logs'], -100);
-        }
-
-        // Safeguard against in-flight pause or cancel
-        $latest = Cache::get(self::CACHE_KEY);
-        if ($latest && ! empty($latest['is_paused'])) {
-            $state['is_paused'] = true;
-        }
-        if ($latest && ! empty($latest['is_cancelled'])) {
-            $state['is_cancelled'] = true;
-            $state['is_active'] = false;
-            $state['queue'] = [];
         }
 
         Cache::put(self::CACHE_KEY, $state, now()->addHours(2));
 
         return [
-            'has_more' => ! empty($queue) && empty($state['is_cancelled']),
+            'has_more' => ! empty($queue),
             'status' => $state,
         ];
     }
 
     /**
-     * Clean up empty source folders left behind after moving media files.
-     * Recursively checks parent directories and removes them if empty or only containing junk.
+     * Safe cross-drive move or copy with timeout prevention and buffer streaming
      */
-    protected function cleanEmptyDirectories(array $sourceDirs, array &$logs): int
+    protected function moveOrCopyFile(string $source, string $dest, string $mode = 'move'): bool
     {
-        $videoExtensions = ['mp4', 'mkv', 'avi', 'mov', 'm4v', 'webm', 'ts', 'wmv', 'flv', 'iso'];
-        $disposableJunk = [
-            'thumbs.db', 'desktop.ini', '.ds_store', 'ehthumbs.db',
-            'www.yts.mx.txt', 'www.yts.lt.txt', 'www.yts.bz.txt', 'www.yify-torrents.com.txt',
-            'yify.txt', 'torrent-downloaded-from.txt',
-        ];
-        $disposableExtensions = ['txt', 'nfo', 'url', 'website', 'lnk', 'ini', 'db', 'torrent', 'sample', 'log'];
+        @set_time_limit(0);
+        @ini_set('max_execution_time', '0');
 
-        $cleanedCount = 0;
-        $allDirs = [];
+        $destDir = pathinfo($dest, PATHINFO_DIRNAME);
+        if (! File::isDirectory($destDir)) {
+            File::makeDirectory($destDir, 0755, true, true);
+        }
 
-        // 1. Gather all subdirectories recursively inside every source directory
-        foreach ($sourceDirs as $sourceDir) {
-            $sourceDir = rtrim(str_replace('\\', '/', $sourceDir), '/');
-            if (! File::isDirectory($sourceDir)) {
-                continue;
-            }
+        // If source and destination paths are identical, skip
+        if (realpath($source) === realpath($dest) && realpath($source) !== false) {
+            return true;
+        }
 
-            if (preg_match('#^[A-Za-z]:/?$#', $sourceDir) || in_array(strtolower($sourceDir), ['/var', '/usr', '/home', '/etc', 'c:/', 'd:/', 'c:', 'd:'])) {
-                continue;
-            }
-
+        if ($mode === 'move') {
+            // Attempt fast filesystem rename (instantaneous on same partition)
             try {
-                $iterator = new \RecursiveIteratorIterator(
-                    new \RecursiveDirectoryIterator($sourceDir, \RecursiveDirectoryIterator::SKIP_DOTS),
-                    \RecursiveIteratorIterator::CHILD_FIRST
-                );
-
-                foreach ($iterator as $item) {
-                    if ($item->isDir()) {
-                        $allDirs[] = str_replace('\\', '/', $item->getPathname());
-                    }
+                if (@rename($source, $dest)) {
+                    return true;
                 }
             } catch (\Throwable $e) {
+                // Cross-device link or locked file
             }
 
-            $allDirs[] = $sourceDir;
+            // Cross-drive copy with 8MB chunks, verification, and source unlink
+            $copied = $this->streamCopy($source, $dest);
+            if ($copied) {
+                @unlink($source);
+                return true;
+            }
+
+            throw new \RuntimeException("Failed to move file from [{$source}] to [{$dest}].");
+        } else {
+            $copied = $this->streamCopy($source, $dest);
+            if (! $copied) {
+                throw new \RuntimeException("Failed to copy file from [{$source}] to [{$dest}].");
+            }
+            return true;
         }
-
-        $allDirs = array_unique($allDirs);
-        // Sort by length descending so child subfolders are evaluated and deleted before parents
-        usort($allDirs, fn ($a, $b) => strlen($b) <=> strlen($a));
-
-        foreach ($allDirs as $dir) {
-            if (! File::isDirectory($dir)) {
-                continue;
-            }
-
-            if (preg_match('#^[A-Za-z]:/?$#', $dir) || in_array(strtolower($dir), ['/var', '/usr', '/home', '/etc', 'c:/', 'd:/', 'c:', 'd:'])) {
-                continue;
-            }
-
-            $items = @scandir($dir);
-            if ($items === false) {
-                continue;
-            }
-
-            $entries = array_diff($items, ['.', '..']);
-            $hasEssentialFiles = false;
-
-            foreach ($entries as $entry) {
-                $fullPath = "{$dir}/{$entry}";
-                if (File::isDirectory($fullPath)) {
-                    $hasEssentialFiles = true;
-                    break;
-                }
-
-                $ext = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
-                $nameLower = strtolower($entry);
-
-                if (in_array($ext, $videoExtensions) || in_array($ext, ['srt', 'vtt', 'ass', 'sub'])) {
-                    $hasEssentialFiles = true;
-                    break;
-                }
-
-                $isJunk = in_array($nameLower, $disposableJunk)
-                    || in_array($ext, $disposableExtensions)
-                    || (in_array($ext, ['jpg', 'jpeg', 'png', 'webp']) && (str_contains($nameLower, 'yts') || str_contains($nameLower, 'poster') || str_contains($nameLower, 'cover') || str_contains($nameLower, 'banner') || @filesize($fullPath) < 500000));
-
-                if (! $isJunk) {
-                    $hasEssentialFiles = true;
-                    break;
-                }
-            }
-
-            if (! $hasEssentialFiles) {
-                foreach ($entries as $entry) {
-                    $fullPath = "{$dir}/{$entry}";
-                    if (File::isFile($fullPath)) {
-                        @unlink($fullPath);
-                    }
-                }
-
-                if (@rmdir($dir) || ! File::isDirectory($dir)) {
-                    $cleanedCount++;
-                    $logs[] = [
-                        'time' => date('H:i:s'),
-                        'type' => 'info',
-                        'message' => '[CLEANUP] 🧹 Removed empty leftover folder: '.basename($dir),
-                    ];
-                }
-            }
-        }
-
-        return $cleanedCount;
     }
 
     /**
-     * Get Current Status
+     * Copy file using buffered streams with per-chunk timeout resets
      */
-    public function getExecutionStatus(): array
+    /**
+ * Determine if a directory is a protected root or system directory that should NEVER be cleaned or recursed.
+ */
+public function isProtectedDirectory(string $dir): bool
+{
+    $dir = rtrim(str_replace('\\', '/', $dir), '/');
+    $lower = strtolower($dir);
+
+    // Windows drive letters e.g. C:, D:, C:/, D:/
+    if (preg_match('#^[A-Za-z]:/?$#', $dir)) {
+        return true;
+    }
+
+    // Standard root / system / media directories directly off a drive
+    if (preg_match('#^[A-Za-z]:/(downloads|movies|series|entertainment|tv|anime|music|videos|users|program files|windows)$#i', $dir)) {
+        return true;
+    }
+
+    // Unix system directories
+    if (in_array($lower, ['/', '/var', '/usr', '/home', '/etc', '/bin', '/opt', '/tmp'])) {
+        return true;
+    }
+
+    // Direct user personal folders: C:/Users/{user}/(Downloads|Desktop|Documents|Videos)
+    if (preg_match('#^[A-Za-z]:/users/[^/]+/(downloads|desktop|documents|videos|music)$#i', $dir)) {
+        return true;
+    }
+
+    // Safety: path must have at least 2 directory segments after drive (e.g. D:/Downloads/ReleaseName is OK, but D:/Downloads is NOT)
+    $noDrive = preg_replace('#^[A-Za-z]:#', '', $dir);
+    $parts = array_filter(explode('/', trim($noDrive, '/')));
+    if (count($parts) < 2) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Copy file using buffered streams with per-chunk timeout resets
+ */
+protected function streamCopy(string $source, string $dest): bool
+{
+    @set_time_limit(0);
+    @ini_set('max_execution_time', '0');
+    ignore_user_abort(true);
+
+    $srcStream = @fopen($source, 'rb');
+    if (! $srcStream) {
+        return false;
+    }
+
+    $destStream = @fopen($dest, 'wb');
+    if (! $destStream) {
+        fclose($srcStream);
+        return false;
+    }
+
+    // Stream in 16MB chunks while keeping timeout refreshed
+    $bufferSize = 16 * 1024 * 1024;
+    while (! feof($srcStream)) {
+        @set_time_limit(180);
+        $chunk = fread($srcStream, $bufferSize);
+        if ($chunk === false) {
+            break;
+        }
+        fwrite($destStream, $chunk);
+    }
+
+    fflush($destStream);
+    fclose($srcStream);
+    fclose($destStream);
+
+    clearstatcache(true, $source);
+    clearstatcache(true, $dest);
+
+    return File::exists($dest) && File::size($dest) === File::size($source);
+}
+
+protected function cleanEmptyDirectories(array $sourceDirs, array &$logs): int
+{
+    @set_time_limit(0);
+    @ini_set('max_execution_time', '0');
+    ignore_user_abort(true);
+
+    $videoExtensions = ['mp4', 'mkv', 'avi', 'mov', 'm4v', 'webm', 'ts', 'wmv', 'flv', 'iso'];
+    $disposableJunk = [
+        'thumbs.db', 'desktop.ini', '.ds_store', 'ehthumbs.db',
+        'www.yts.mx.txt', 'www.yts.lt.txt', 'www.yts.bz.txt', 'www.yify-torrents.com.txt',
+        'yify.txt', 'torrent-downloaded-from.txt',
+    ];
+    $disposableExtensions = ['txt', 'nfo', 'url', 'website', 'lnk', 'ini', 'db', 'torrent', 'sample', 'log'];
+
+    $cleanedCount = 0;
+    $allDirs = [];
+
+    // 1. Gather all subdirectories recursively inside every source directory
+    foreach ($sourceDirs as $sourceDir) {
+        $sourceDir = rtrim(str_replace('\\', '/', $sourceDir), '/');
+        if ($this->isProtectedDirectory($sourceDir) || ! File::isDirectory($sourceDir)) {
+            continue;
+        }
+
+        try {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($sourceDir, \RecursiveDirectoryIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::CHILD_FIRST
+            );
+
+            foreach ($iterator as $item) {
+                if ($item->isDir()) {
+                    $sub = str_replace('\\', '/', $item->getPathname());
+                    if (! $this->isProtectedDirectory($sub)) {
+                        $allDirs[] = $sub;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        $allDirs[] = $sourceDir;
+    }
+
+    $allDirs = array_unique($allDirs);
+    // Sort by length descending so child subfolders are evaluated and deleted before parents
+    usort($allDirs, fn ($a, $b) => strlen($b) <=> strlen($a));
+
+    foreach ($allDirs as $dir) {
+        if ($this->isProtectedDirectory($dir) || ! File::isDirectory($dir)) {
+            continue;
+        }
+
+        $items = @scandir($dir);
+        if ($items === false) {
+            continue;
+        }
+
+        $entries = array_diff($items, ['.', '..']);
+        $hasEssentialFiles = false;
+
+        foreach ($entries as $entry) {
+            $fullPath = "{$dir}/{$entry}";
+            if (File::isDirectory($fullPath)) {
+                $hasEssentialFiles = true;
+                break;
+            }
+
+            $ext = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
+            $nameLower = strtolower($entry);
+
+            if (in_array($ext, $videoExtensions) || in_array($ext, ['srt', 'vtt', 'ass', 'sub'])) {
+                $hasEssentialFiles = true;
+                break;
+            }
+
+            $isJunk = in_array($nameLower, $disposableJunk)
+                || in_array($ext, $disposableExtensions)
+                || (in_array($ext, ['jpg', 'jpeg', 'png', 'webp']) && (str_contains($nameLower, 'yts') || str_contains($nameLower, 'poster') || str_contains($nameLower, 'cover') || str_contains($nameLower, 'banner') || @filesize($fullPath) < 500000));
+
+            if (! $isJunk) {
+                $hasEssentialFiles = true;
+                break;
+            }
+        }
+
+        if (! $hasEssentialFiles) {
+            foreach ($entries as $entry) {
+                $fullPath = "{$dir}/{$entry}";
+                if (File::isFile($fullPath)) {
+                    @unlink($fullPath);
+                }
+            }
+
+            if (@rmdir($dir) || ! File::isDirectory($dir)) {
+                $cleanedCount++;
+                $logs[] = [
+                    'time' => date('H:i:s'),
+                    'type' => 'info',
+                    'message' => '[CLEANUP] 🧹 Removed empty leftover folder: '.basename($dir),
+                ];
+            }
+        }
+    }
+
+    return $cleanedCount;
+}
+public function getExecutionStatus(): array
     {
         $state = Cache::get(self::CACHE_KEY);
 
@@ -1097,8 +1365,26 @@ class PhysicalOrganizerService
 
     protected function updateDatabasePath(string $oldPath, string $newPath): void
     {
-        MediaItem::where('file_path', $oldPath)->update(['file_path' => $newPath]);
-        Episode::where('file_path', $oldPath)->update(['file_path' => $newPath]);
+        try {
+            $normOld = str_replace('\\', '/', $oldPath);
+            $normNew = str_replace('\\', '/', $newPath);
+            $newFolder = pathinfo($normNew, PATHINFO_DIRNAME);
+
+            MediaItem::where('file_path', $oldPath)
+                ->orWhere('file_path', $normOld)
+                ->update([
+                    'file_path' => $normNew,
+                    'folder_path' => $newFolder,
+                ]);
+
+            Episode::where('file_path', $oldPath)
+                ->orWhere('file_path', $normOld)
+                ->update([
+                    'file_path' => $normNew,
+                ]);
+        } catch (\Throwable $e) {
+            Log::warning("Could not update DB paths for {$oldPath}: ".$e->getMessage());
+        }
     }
 
     protected function formatBytes(int $bytes): string

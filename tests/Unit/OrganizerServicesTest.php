@@ -57,7 +57,7 @@ class OrganizerServicesTest extends TestCase
 
         $this->assertCount(1, $plan);
         $this->assertEquals('C:/Downloads/Inception.2010.1080p.BluRay.x264.mkv', $plan[0]['source_path']);
-        $this->assertEquals('C:/Media/Movies/Inception (2010)/Inception (2010) [1080p].mkv', $plan[0]['destination_path']);
+        $this->assertEquals('C:/Media/Movies/Sci-Fi/Inception (2010)/Inception (2010) [1080p].mkv', $plan[0]['destination_path']);
     }
 
     public function test_physical_organizer_handles_movie_collections(): void
@@ -86,7 +86,7 @@ class OrganizerServicesTest extends TestCase
         $this->assertCount(2, $plan);
         // Collected movie should be inside Collections/Fast & Furious
         $this->assertEquals(
-            'H:/Entertainment/Movies/Collections/Fast & Furious/The Fast and the Furious (2001)/The Fast and the Furious (2001) [1080p].mkv',
+            'H:/Entertainment/Movies/Collections/Fast & Furious Collection/The Fast and the Furious (2001)/The Fast and the Furious (2001) [1080p].mkv',
             $plan[0]['destination_path']
         );
         // Non-collected movie should cleanly unwrap without Collections/

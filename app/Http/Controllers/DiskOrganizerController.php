@@ -39,9 +39,9 @@ class DiskOrganizerController extends Controller
         }
 
         return Inertia::render('Organizer/Index', [
-            'defaultMovieTemplate' => AppSetting::get('movie_naming_template', '{Type}/{Genre}/{Title} ({Year})/{Title} ({Year}).{ext}'),
-            'defaultSeriesTemplate' => AppSetting::get('series_naming_template', '{Type}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02}.{ext}'),
-            'defaultWorkingDir' => $defaultDir,
+            'defaultMovieTemplate' => AppSetting::get('movie_naming_template', '{Type}/{Genre}/{Collection}/{Title} ({Year})/{Title} ({Year}) [{CleanResolution}].{ext}'),
+            'defaultSeriesTemplate' => AppSetting::get('series_naming_template', '{Type}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} - {EpisodeTitle} [{CleanResolution}].{ext}'),
+            'defaultWorkingDir' => 'H:/Entertainment',
             'watcherStatus' => $this->watcher->getStatus(),
         ]);
     }
@@ -54,6 +54,7 @@ class DiskOrganizerController extends Controller
                 'filename' => basename($m->file_path),
                 'size_bytes' => $m->file_size_bytes,
                 'size_formatted' => $m->file_size_bytes ? round($m->file_size_bytes / (1024 * 1024 * 1024), 2).' GB' : '1.4 GB',
+                'collection_name' => $m->collection_name,
                 'parsed' => [
                     'type' => 'movie',
                     'title' => $m->title,
@@ -61,6 +62,7 @@ class DiskOrganizerController extends Controller
                     'year' => $m->release_year,
                     'resolution' => $m->resolution ?? '1080p',
                     'codec' => $m->video_codec ?? 'HEVC',
+                    'collection_name' => $m->collection_name,
                 ],
                 'subtitles' => $m->subtitles->map(fn ($s) => ['path' => $s->file_path, 'language' => $s->language])->toArray(),
             ];
@@ -152,7 +154,11 @@ class DiskOrganizerController extends Controller
 
     public function processBatch(Request $request): JsonResponse
     {
-        $batchSize = (int) $request->input('batch_size', 2);
+        @set_time_limit(0);
+        @ini_set('max_execution_time', '0');
+        ignore_user_abort(true);
+
+        $batchSize = (int) $request->input('batch_size', 1);
         $result = $this->organizer->processNextBatch($batchSize);
 
         return response()->json([
