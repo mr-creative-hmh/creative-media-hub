@@ -4,6 +4,8 @@ import { useSubtitleJob } from '@/composables/useSubtitleJob';
 import { Head } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import SubtitlePickerModal from '@/components/subtitles/SubtitlePickerModal.vue';
+import { useToast } from '@/composables/useToast';
 import {
     Subtitles, Download, Check, AlertCircle, Sparkles,
     Search, Cpu, CheckCircle2, Globe, ArrowDownToLine, RefreshCw,
@@ -17,6 +19,28 @@ const props = defineProps<{
 }>();
 
 const { t, isRTL } = useI18n();
+const toast = useToast();
+
+// Subtitle Picker Modal State
+const isPickerOpen = ref(false);
+const selectedMediaForPicker = ref<any | null>(null);
+const pickerLanguage = ref<'ar' | 'en'>('ar');
+
+const openPickerModal = (item: any, lang: 'ar' | 'en') => {
+    selectedMediaForPicker.value = item;
+    pickerLanguage.value = lang;
+    isPickerOpen.value = true;
+};
+
+const onSubtitleDownloaded = (sub: any) => {
+    if (selectedMediaForPicker.value) {
+        if (pickerLanguage.value === 'ar') {
+            selectedMediaForPicker.value.missing_ar = false;
+        } else {
+            selectedMediaForPicker.value.missing_en = false;
+        }
+    }
+};
 
 // Main Tab State
 const activeMainTab = ref<'checker' | 'missing' | 'cloud'>('checker');
@@ -99,14 +123,6 @@ const searchQuery = ref('Inception');
 const searchLang = ref('ar');
 const isSearching = ref(false);
 const searchResults = ref<any[] | null>(null);
-const toastMessage = ref('');
-
-const showToastNotice = (msg: string) => {
-    toastMessage.value = msg;
-    setTimeout(() => {
-        toastMessage.value = '';
-    }, 3500);
-};
 
 // Missing subtitles filter & pagination
 const filterText = ref('');
@@ -152,18 +168,7 @@ const performSearch = async () => {
     if (!searchQuery.value.trim()) return;
     isSearching.value = true;
     try {
-        const res = await fetch('/api/subtitles/verify-engine', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
-            },
-            body: JSON.stringify({
-                query: searchQuery.value.trim(),
-                language: searchLang.value,
-            }),
-        });
-
+        const res = await fetch(`/api/subtitles/search?query=${encodeURIComponent(searchQuery.value.trim())}&language=${encodeURIComponent(searchLang.value)}`);
         if (res.ok) {
             const data = await res.json();
             searchResults.value = data.results || [];
@@ -197,12 +202,12 @@ const downloadSub = async (item: any, lang: string) => {
             const data = await res.json();
             if (lang === 'ar') item.missing_ar = false;
             if (lang === 'en') item.missing_en = false;
-            showToastNotice(isRTL.value ? `تم تحميل وتفعيل ترجمة ${lang === 'ar' ? 'العربية' : 'الإنجليزية'} بنجاح!` : `Downloaded ${lang.toUpperCase()} subtitle!`);
+            toast.success(isRTL.value ? `تم تحميل وتفعيل ترجمة ${lang === 'ar' ? 'العربية' : 'الإنجليزية'} بنجاح!` : `Downloaded ${lang.toUpperCase()} subtitle!`, 'Subtitle Ready');
         } else {
-            showToastNotice(isRTL.value ? 'لم يتم العثور على ترجمة مناسبة لدى المزودات' : 'No online subtitle matched this media');
+            toast.error(isRTL.value ? 'لم يتم العثور على ترجمة مناسبة لدى المزودات' : 'No online subtitle matched this media', 'Subtitle Not Found');
         }
     } catch (e) {
-        showToastNotice('Failed to download subtitle');
+        toast.error('Failed to download subtitle', 'Download Error');
     } finally {
         downloadingId.value = null;
     }
@@ -233,16 +238,7 @@ onMounted(() => {
     <Head :title="isRTL ? 'إدارة ومطهر الترجمات الذكي' : 'Subtitle Studio & Health Normalizer'" />
 
     <AppLayout>
-        <!-- Toast Notice -->
-        <transition name="fade">
-            <div
-                v-if="toastMessage"
-                class="fixed top-6 right-6 z-50 px-5 py-3 rounded-2xl bg-cyan-600 text-white font-bold shadow-2xl backdrop-blur-xl flex items-center gap-2 border border-cyan-400/30"
-            >
-                <CheckCircle2 class="w-5 h-5" />
-                <span>{{ toastMessage }}</span>
-            </div>
-        </transition>
+
 
         <!-- Header -->
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -691,30 +687,28 @@ onMounted(() => {
                     <div class="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 dark:border-white/5">
                         <!-- Arabic Subtitle Action -->
                         <button
-                            @click="downloadSub(item, 'ar')"
-                            :disabled="!item.missing_ar || downloadingId === `${item.id}-ar`"
+                            @click="openPickerModal(item, 'ar')"
+                            :disabled="!item.missing_ar"
                             class="flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                             :class="!item.missing_ar
                                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-default'
                                 : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-md shadow-cyan-500/20'"
                         >
                             <Check v-if="!item.missing_ar" class="w-3.5 h-3.5" />
-                            <RefreshCw v-else-if="downloadingId === `${item.id}-ar`" class="w-3.5 h-3.5 animate-spin" />
                             <Download v-else class="w-3.5 h-3.5" />
                             <span>{{ !item.missing_ar ? (isRTL ? 'العربية متوفرة' : 'Arabic Ready') : (isRTL ? 'تحميل العربية' : 'Get Arabic') }}</span>
                         </button>
 
                         <!-- English Subtitle Action -->
                         <button
-                            @click="downloadSub(item, 'en')"
-                            :disabled="!item.missing_en || downloadingId === `${item.id}-en`"
+                            @click="openPickerModal(item, 'en')"
+                            :disabled="!item.missing_en"
                             class="flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                             :class="!item.missing_en
                                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-default'
                                 : 'bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-700 dark:text-white border border-slate-200 dark:border-white/10'"
                         >
                             <Check v-if="!item.missing_en" class="w-3.5 h-3.5" />
-                            <RefreshCw v-else-if="downloadingId === `${item.id}-en`" class="w-3.5 h-3.5 animate-spin" />
                             <Download v-else class="w-3.5 h-3.5" />
                             <span>{{ !item.missing_en ? (isRTL ? 'الإنجليزية متوفرة' : 'English Ready') : (isRTL ? 'تحميل الإنجليزية' : 'Get English') }}</span>
                         </button>
@@ -842,6 +836,14 @@ onMounted(() => {
                 </div>
             </div>
         </div>
+            <!-- Interactive Subtitle Search & Selection Modal -->
+        <SubtitlePickerModal
+            :is-open="isPickerOpen"
+            :media="selectedMediaForPicker"
+            :initial-language="pickerLanguage"
+            @close="isPickerOpen = false"
+            @downloaded="onSubtitleDownloaded"
+        />
     </AppLayout>
 </template>
 

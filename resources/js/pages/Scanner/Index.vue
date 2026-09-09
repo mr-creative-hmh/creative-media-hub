@@ -2,6 +2,7 @@
 import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
+import { useToast } from '@/composables/useToast';
 import { useScanner } from '@/composables/useScanner';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ConfirmModal from '@/components/common/ConfirmModal.vue';
@@ -52,7 +53,14 @@ const newDirType = ref('mixed');
 const isAddingDir = ref(false);
 const isBatchEnriching = ref(false);
 const isClearing = ref(false);
+const toast = useToast();
 const toastMessage = ref('');
+watch(toastMessage, (val: string) => {
+    if (val) {
+        toast.info(val);
+        toastMessage.value = '';
+    }
+});
 const terminalFilter = ref<'all' | 'success' | 'info' | 'error'>('all');
 
 const confirmModal = ref<{
@@ -328,16 +336,7 @@ onMounted(() => {
                 </div>
             </div>
 
-            <!-- Notification Toast -->
-            <div v-if="toastMessage" class="mt-4 p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-bold flex items-center justify-between animate-in fade-in">
-                <div class="flex items-center gap-2">
-                    <CheckCircle2 class="w-4 h-4 text-cyan-400" />
-                    <span>{{ toastMessage }}</span>
-                </div>
-                <button @click="toastMessage = ''" class="text-slate-400 hover:text-white cursor-pointer">
-                    <XCircle class="w-4 h-4" />
-                </button>
-            </div>
+
         </div>
 
         <!-- 1. Stats Bento Row (Live Reactive Stats + 5th Collections Card) -->

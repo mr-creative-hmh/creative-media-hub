@@ -68,45 +68,115 @@ class OpenSubtitlesService
     }
 
     /**
-     * Resolve title to IMDb ID via Cinemeta catalog.
+     * Get the configured API key (used by controllers for diagnostic info).
+     */
+    public function getApiKey(): ?string
+    {
+        return $this->apiKey;
+    }
+
+    /**
+     * Resolve IMDb ID from a movie/series title.
+     * Tries: 1) Cinemeta, 2) TMDB Search API fallback.
      */
     public function resolveImdbId(string $query, string $type = 'movie', ?int $year = null): ?string
     {
         $cleanQuery = trim($query);
-        // Remove season/episode codes like S01E04 or 1080p, etc.
-        $cleanQuery = preg_replace('/\s*[-_]?\s*S\d+E\d+.*$/i', '', $cleanQuery);
-        $cleanQuery = preg_replace('/\s*\(\d{4}\).*$/', '', $cleanQuery);
-        $cleanQuery = trim($cleanQuery);
-
         if (empty($cleanQuery)) {
             return null;
         }
 
-        $catalogType = ($type === 'series' || $type === 'tv' || $type === 'episode') ? 'series' : 'movie';
+        // 1. Try Cinemeta Stremio Catalog (fastest, public)
+        $imdbId = $this->resolveViaCinemeta($cleanQuery, $type, $year);
+        if ($imdbId) {
+            return $imdbId;
+        }
 
+        // 2. Fallback: TMDB Search API (handles non-English titles & precise year matching)
+        $imdbId = $this->resolveViaTmdb($cleanQuery, $type, $year);
+        if ($imdbId) {
+            return $imdbId;
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve IMDb ID via Stremio Cinemeta catalog.
+     */
+    protected function resolveViaCinemeta(string $query, string $type, ?int $year): ?string
+    {
         try {
-            $encoded = rawurlencode($cleanQuery);
-            $response = Http::timeout(6)->get("{$this->cinemetaUrl}/{$catalogType}/top/search={$encoded}.json");
+            $cinemetaType = ($type === 'series' || $type === 'tv' || $type === 'episode') ? 'series' : 'movie';
+            $url = "{$this->cinemetaUrl}/{$cinemetaType}/top/search=".urlencode($query).'.json';
 
+            $response = Http::timeout(5)->get($url);
             if ($response->successful()) {
                 $metas = $response->json('metas', []);
                 if (! empty($metas)) {
-                    // Try to match by release year if available
+                    // Try to match release year if provided
                     if ($year) {
                         foreach ($metas as $meta) {
-                            $metaYear = (int) substr($meta['year'] ?? '', 0, 4);
-                            if ($metaYear > 0 && abs($metaYear - $year) <= 1) {
-                                return $meta['imdb_id'] ?? $meta['id'] ?? null;
+                            $metaYear = (int) ($meta['year'] ?? 0);
+                            if (abs($metaYear - $year) <= 1 && ! empty($meta['imdb_id'])) {
+                                return $meta['imdb_id'];
                             }
                         }
                     }
 
-                    // Fallback to top ranked result
-                    return $metas[0]['imdb_id'] ?? $metas[0]['id'] ?? null;
+                    // Fallback to the top result
+                    $first = $metas[0];
+                    if (! empty($first['imdb_id'])) {
+                        return $first['imdb_id'];
+                    }
                 }
             }
         } catch (\Exception $e) {
-            Log::warning("Cinemeta IMDb resolution failed for '{$cleanQuery}': ".$e->getMessage());
+            Log::warning("Cinemeta IMDb resolution failed for '{$query}': ".$e->getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve IMDb ID via TMDB search API (fallback).
+     */
+    protected function resolveViaTmdb(string $query, string $type, ?int $year): ?string
+    {
+        $tmdbKey = AppSetting::get('tmdb_api_key', config('services.tmdb.key'));
+        if (empty($tmdbKey)) {
+            return null;
+        }
+
+        try {
+            $tmdbType = ($type === 'series' || $type === 'tv' || $type === 'episode') ? 'tv' : 'movie';
+            $params = [
+                'api_key' => $tmdbKey,
+                'query' => $query,
+            ];
+            if ($year) {
+                $params[$tmdbType === 'movie' ? 'year' : 'first_air_date_year'] = $year;
+            }
+
+            $searchRes = Http::timeout(5)->get("https://api.themoviedb.org/3/search/{$tmdbType}", $params);
+            if ($searchRes->successful()) {
+                $results = $searchRes->json('results', []);
+                if (! empty($results)) {
+                    $tmdbId = $results[0]['id'] ?? null;
+                    if ($tmdbId) {
+                        // Fetch external IDs to get IMDb ID
+                        $extRes = Http::timeout(5)->get("https://api.themoviedb.org/3/{$tmdbType}/{$tmdbId}/external_ids", [
+                            'api_key' => $tmdbKey,
+                        ]);
+                        $imdbId = $extRes->json('imdb_id');
+                        if (! empty($imdbId)) {
+                            return $imdbId;
+                        }
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning("TMDB IMDb resolution failed for '{$query}': ".$e->getMessage());
         }
 
         return null;
@@ -134,14 +204,26 @@ class OpenSubtitlesService
                 $subtitles = $response->json('subtitles', []);
                 $results = [];
 
+                // Parse target languages (support comma-separated like 'ar,en')
+                $targetLangs = null;
+                if ($lang) {
+                    $targetLangs = array_map('strtolower', array_map('trim', explode(',', $lang)));
+                }
+
                 foreach ($subtitles as $s) {
                     $langCode3 = strtolower($s['lang'] ?? 'eng');
                     $langCode2 = self::$langMap3to2[$langCode3] ?? substr($langCode3, 0, 2);
 
-                    // If language filter provided, match either 2-letter or 3-letter code
-                    if ($lang) {
-                        $targetLang = strtolower($lang);
-                        if ($langCode2 !== $targetLang && $langCode3 !== $targetLang) {
+                    // If language filter provided, match against all target languages
+                    if ($targetLangs) {
+                        $matchFound = false;
+                        foreach ($targetLangs as $target) {
+                            if ($langCode2 === $target || $langCode3 === $target) {
+                                $matchFound = true;
+                                break;
+                            }
+                        }
+                        if (! $matchFound) {
                             continue;
                         }
                     }
@@ -169,7 +251,110 @@ class OpenSubtitlesService
     }
 
     /**
+     * Search via the Official OpenSubtitles.com REST API (requires API key, best Arabic coverage).
+     */
+    public function searchOpenSubtitlesREST(string $imdbId, ?string $lang = null, ?int $season = null, ?int $episode = null, ?string $query = null): array
+    {
+        if (empty($this->apiKey)) {
+            return [];
+        }
+
+        try {
+            $headers = [
+                'User-Agent' => 'CreativeMediaCinema v1.0',
+                'Api-Key' => $this->apiKey,
+            ];
+
+            $queryParams = [
+                'languages' => $lang ?? 'ar,en',
+            ];
+
+            if (! empty($imdbId)) {
+                $queryParams['imdb_id'] = preg_replace('/[^0-9]/', '', $imdbId);
+            } elseif (! empty($query)) {
+                $queryParams['query'] = $query;
+            }
+
+            if ($season !== null && $season > 0) {
+                $queryParams['season_number'] = $season;
+            }
+            if ($episode !== null && $episode > 0) {
+                $queryParams['episode_number'] = $episode;
+            }
+
+            $response = Http::timeout(8)->withHeaders($headers)->get("{$this->baseUrl}/subtitles", $queryParams);
+
+            if ($response->successful()) {
+                $data = $response->json('data', []);
+
+                return array_map(function ($item) {
+                    $attr = $item['attributes'] ?? [];
+                    $file = $attr['files'][0] ?? [];
+
+                    return [
+                        'provider' => 'OpenSubtitles REST',
+                        'subtitle_id' => (string) ($file['file_id'] ?? $item['id']),
+                        'language' => $attr['language'] ?? 'en',
+                        'release' => $attr['release'] ?? '',
+                        'downloads' => $attr['download_count'] ?? 0,
+                        'rating' => $attr['ratings'] ?? 0,
+                        'file_name' => $file['file_name'] ?? 'subtitle.srt',
+                        'download_url' => isset($file['file_id']) ? "{$this->baseUrl}/download/{$file['file_id']}" : null,
+                    ];
+                }, $data);
+            }
+        } catch (\Exception $e) {
+            Log::warning('Official OpenSubtitles REST search failed: '.$e->getMessage());
+        }
+
+        return [];
+    }
+
+    /**
+     * Download subtitle content using the official OpenSubtitles.com REST API.
+     */
+    public function downloadSubtitle(string|int $fileId): ?string
+    {
+        if (empty($this->apiKey)) {
+            return null;
+        }
+
+        try {
+            $headers = [
+                'User-Agent' => 'CreativeMediaCinema v1.0',
+                'Api-Key' => $this->apiKey,
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+            ];
+
+            $response = Http::timeout(10)
+                ->withHeaders($headers)
+                ->post("{$this->baseUrl}/download", [
+                    'file_id' => (int) $fileId,
+                ]);
+
+            if ($response->successful()) {
+                $link = $response->json('link');
+                if ($link) {
+                    $dlRes = Http::timeout(15)
+                        ->withUserAgent('CreativeMediaCinema v1.0')
+                        ->get($link);
+
+                    if ($dlRes->successful()) {
+                        return $dlRes->body();
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning("OpenSubtitles REST download failed for file ID '{$fileId}': ".$e->getMessage());
+        }
+
+        return null;
+    }
+
+    /**
      * Unified search supporting IMDb ID, title queries, TV series, and language filtering.
+     * Search priority: 1) REST API (best Arabic coverage), 2) Stremio v3 (free, limited langs)
      */
     public function searchSubtitles(array $params): array
     {
@@ -179,9 +364,9 @@ class OpenSubtitlesService
         $episode = isset($params['episode_number']) ? (int) $params['episode_number'] : null;
         $lang = $params['language'] ?? ($params['languages'] ?? null);
 
-        // If languages is comma separated, pick primary or handle string
-        if ($lang && str_contains($lang, ',')) {
-            $lang = explode(',', $lang)[0];
+        // Normalize language: keep comma-separated for multi-language support
+        if ($lang) {
+            $lang = strtolower(trim($lang));
         }
 
         // 1. Resolve IMDb ID if not provided
@@ -190,66 +375,42 @@ class OpenSubtitlesService
             $imdbId = $this->resolveImdbId($params['query'], $type, $year);
         }
 
-        // 2. Query OpenSubtitles v3 with IMDb ID
-        if (! empty($imdbId)) {
-            $results = $this->searchOpenSubtitlesV3($imdbId, $season, $episode, $lang);
-            if (! empty($results)) {
-                return $results;
-            }
-        }
+        $allResults = [];
 
-        // 3. Fallback: Official OpenSubtitles REST API (if user has an API Key configured)
+        // 2. PRIMARY: Official OpenSubtitles REST API (best Arabic/multi-language coverage)
         if (! empty($this->apiKey)) {
-            try {
-                $headers = [
-                    'User-Agent' => 'CreativeMediaCinema v1.0',
-                    'Api-Key' => $this->apiKey,
-                ];
-
-                $queryParams = [
-                    'languages' => $lang ?? 'ar,en',
-                ];
-
-                if (! empty($imdbId)) {
-                    $queryParams['imdb_id'] = preg_replace('/[^0-9]/', '', $imdbId);
-                } elseif (! empty($params['query'])) {
-                    $queryParams['query'] = $params['query'];
-                }
-
-                if ($season !== null && $season > 0) {
-                    $queryParams['season_number'] = $season;
-                }
-                if ($episode !== null && $episode > 0) {
-                    $queryParams['episode_number'] = $episode;
-                }
-
-                $response = Http::timeout(6)->withHeaders($headers)->get("{$this->baseUrl}/subtitles", $queryParams);
-
-                if ($response->successful()) {
-                    $data = $response->json('data', []);
-
-                    return array_map(function ($item) {
-                        $attr = $item['attributes'] ?? [];
-                        $file = $attr['files'][0] ?? [];
-
-                        return [
-                            'provider' => 'OpenSubtitles REST',
-                            'subtitle_id' => (string) ($file['file_id'] ?? $item['id']),
-                            'language' => $attr['language'] ?? 'en',
-                            'release' => $attr['release'] ?? '',
-                            'downloads' => $attr['download_count'] ?? 0,
-                            'rating' => $attr['ratings'] ?? 0,
-                            'file_name' => $file['file_name'] ?? 'subtitle.srt',
-                            'download_url' => isset($file['file_id']) ? "{$this->baseUrl}/download/{$file['file_id']}" : null,
-                        ];
-                    }, $data);
-                }
-            } catch (\Exception $e) {
-                Log::warning('Official OpenSubtitles REST search failed: '.$e->getMessage());
+            $restResults = $this->searchOpenSubtitlesREST(
+                $imdbId ?? '',
+                $lang,
+                $season,
+                $episode,
+                $params['query'] ?? null
+            );
+            if (! empty($restResults)) {
+                $allResults = array_merge($allResults, $restResults);
             }
         }
 
-        return [];
+        // 3. SECONDARY: Stremio v3 free endpoint (supplements with direct download links)
+        if (! empty($imdbId)) {
+            $v3Results = $this->searchOpenSubtitlesV3($imdbId, $season, $episode, $lang);
+            if (! empty($v3Results)) {
+                $allResults = array_merge($allResults, $v3Results);
+            }
+        }
+
+        // Deduplicate results by subtitle_id
+        $seen = [];
+        $deduped = [];
+        foreach ($allResults as $result) {
+            $key = $result['subtitle_id'] ?? uniqid();
+            if (! isset($seen[$key])) {
+                $seen[$key] = true;
+                $deduped[] = $result;
+            }
+        }
+
+        return $deduped;
     }
 
     public function computeFileHash(string $filePath): ?string

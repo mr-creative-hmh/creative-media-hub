@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
+import { useToast } from '@/composables/useToast';
 import { useDownloader, DownloadItem, DownloaderInspection, TorrentFileItem } from '@/composables/useDownloader';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import {
@@ -29,6 +30,7 @@ const props = defineProps<{
 }>();
 
 const { t, isRTL } = useI18n();
+const toast = useToast();
 const {
     downloads,
     activeDownloads,
@@ -75,7 +77,7 @@ const settingsForm = ref({
     download_speed_limit_kb: props.settings?.download_speed_limit_kb || 0,
 });
 const isSavingSettings = ref(false);
-const settingsSavedToast = ref(false);
+// Toast managed by GlobalToaster
 
 onMounted(() => {
     if (props.initialDownloads && props.initialDownloads.length > 0 && downloads.value.length === 0) {
@@ -205,11 +207,8 @@ const handleSaveSettings = async () => {
     try {
         const ok = await saveSettings(settingsForm.value);
         if (ok) {
-            settingsSavedToast.value = true;
-            setTimeout(() => {
-                settingsSavedToast.value = false;
-                showSettingsModal.value = false;
-            }, 1200);
+            toast.success(isRTL.value ? 'تم حفظ إعدادات التنزيل بنجاح!' : 'Downloader settings saved successfully!', isRTL.value ? 'تم الحفظ' : 'Saved');
+            showSettingsModal.value = false;
         }
     } finally {
         isSavingSettings.value = false;
@@ -701,10 +700,7 @@ const handleQuickSeed = async (sampleTitle: string, type: 'movie' | 'series') =>
                             </div>
                         </div>
 
-                        <div v-if="settingsSavedToast" class="p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2">
-                            <Check class="w-4 h-4" />
-                            <span>{{ isRTL ? 'تم حفظ الإعدادات بنجاح!' : 'Settings updated successfully!' }}</span>
-                        </div>
+
                     </div>
 
                     <div class="flex items-center justify-end gap-3 pt-3 border-t border-white/10">

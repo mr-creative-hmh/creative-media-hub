@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
+import { useToast } from '@/composables/useToast';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import {
     Settings as SettingsIcon, Save, Key, Globe, Sparkles,
@@ -138,7 +139,7 @@ const moveDown = (index: number) => {
 };
 
 const isSaving = ref(false);
-const toastMessage = ref('');
+const toast = useToast();
 
 // Test status per provider
 const testingProviderId = ref<string | null>(null);
@@ -177,7 +178,6 @@ const testSingleProvider = async (providerId: string, customKey?: string) => {
 
 const saveSettings = async () => {
     isSaving.value = true;
-    toastMessage.value = '';
 
     try {
         const res = await fetch('/api/settings', {
@@ -194,7 +194,10 @@ const saveSettings = async () => {
 
         if (res.ok) {
             setLocale(form.value.default_language);
-            toastMessage.value = isRTL.value ? 'تم حفظ الإعدادات وترتيب المزودين بنجاح!' : 'Settings & provider priorities saved successfully!';
+            toast.success(
+                isRTL.value ? 'تم حفظ الإعدادات وترتيب المزودين بنجاح!' : 'Settings & provider priorities saved successfully!',
+                isRTL.value ? 'تم الحفظ' : 'Settings Saved'
+            );
         }
     } finally {
         isSaving.value = false;
@@ -616,14 +619,7 @@ const promptDeleteBackup = (backup: any) => {
             </div>
         </div>
 
-        <!-- Toast Notice -->
-        <div v-if="toastMessage" class="mb-6 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <CheckCircle2 class="w-4 h-4 shrink-0" />
-                <span>{{ toastMessage }}</span>
-            </div>
-            <button @click="toastMessage = ''" class="cursor-pointer text-emerald-400 hover:text-emerald-300">✕</button>
-        </div>
+
 
         <div class="space-y-8">
             <!-- 1. Metadata Providers Customization, Priority Ordering & Live Testing -->

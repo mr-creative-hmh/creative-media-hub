@@ -6,6 +6,7 @@ import Sidebar from './Sidebar.vue';
 import CinemaPlayer from '@/components/player/CinemaPlayer.vue';
 import UnifiedJobCenterModal from '@/components/activity/UnifiedJobCenterModal.vue';
 import PageTransitionLoader from '@/components/common/PageTransitionLoader.vue';
+import GlobalToaster from '@/components/common/GlobalToaster.vue';
 import { useScanner } from '@/composables/useScanner';
 import { useDownloader } from '@/composables/useDownloader';
 
@@ -87,5 +88,8 @@ const closePlayer = () => {
 
         <!-- Global Cinema Page Transition Island Loader -->
         <PageTransitionLoader />
+
+        <!-- Centralized High-Z-Index Global Bottom Toaster -->
+        <GlobalToaster />
     </div>
 </template>

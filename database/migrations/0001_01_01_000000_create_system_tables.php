@@ -13,6 +13,19 @@ return new class extends Migration
      */
     public function up(): void
     {
+                // 0. Users Table
+        if (! Schema::hasTable('users')) {
+            Schema::create('users', function (Blueprint $table) {
+                $table->id();
+                $table->string('name')->default('Admin');
+                $table->string('email')->nullable()->unique();
+                $table->timestamp('email_verified_at')->nullable();
+                $table->string('password')->nullable();
+                $table->rememberToken();
+                $table->timestamps();
+            });
+        }
+
         // 1. Sessions Table (for database session driver)
         if (! Schema::hasTable('sessions')) {
             Schema::create('sessions', function (Blueprint $table) {

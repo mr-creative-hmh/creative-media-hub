@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
+import { useToast } from '@/composables/useToast';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import FixMatchModal from '@/components/media/FixMatchModal.vue';
 import ConfirmModal from '@/components/common/ConfirmModal.vue';
@@ -42,8 +43,7 @@ const activeFilter = ref(props.filters?.filter || 'all');
 const searchQuery = ref(props.filters?.search || '');
 const isBatchEnriching = ref(false);
 const isOperating = ref(false);
-const toastMessage = ref('');
-const toastType = ref<'success' | 'info' | 'danger'>('success');
+const globalToast = useToast();
 const copiedItemId = ref<number | string | null>(null);
 
 // Fix Match Modal State
@@ -68,13 +68,13 @@ const confirmModal = ref<{
 });
 
 const showToast = (msg: string, type: 'success' | 'info' | 'danger' = 'success') => {
-    toastMessage.value = msg;
-    toastType.value = type;
-    setTimeout(() => {
-        if (toastMessage.value === msg) {
-            toastMessage.value = '';
-        }
-    }, 4500);
+    if (type === 'danger') {
+        globalToast.error(msg);
+    } else if (type === 'info') {
+        globalToast.info(msg);
+    } else {
+        globalToast.success(msg);
+    }
 };
 
 const applyFilter = (filterKey: string) => {
@@ -393,39 +393,7 @@ const triggerBatchEnrich = async () => {
         <Head :title="isRTL ? 'استوديو إصلاح وتصحيح البيانات' : 'Fix Match & Metadata Studio'" />
 
         <div class="space-y-8 max-w-7xl mx-auto pb-24">
-            <!-- Toast Notification at Bottom-Right (Clear of Navbar, Highly Visible & Accessible) -->
-            <transition
-                enter-active-class="transition duration-300 ease-out"
-                enter-from-class="transform translate-y-6 opacity-0"
-                enter-to-class="transform translate-y-0 opacity-100"
-                leave-active-class="transition duration-200 ease-in"
-                leave-from-class="transform translate-y-0 opacity-100"
-                leave-to-class="transform translate-y-6 opacity-0"
-            >
-                <div
-                    v-if="toastMessage"
-                    class="fixed bottom-8 z-[9999] max-w-md p-4 rounded-2xl shadow-2xl backdrop-blur-xl border flex items-center justify-between gap-3 text-sm font-bold animate-in"
-                    :class="[
-                        isRTL ? 'left-8' : 'right-8',
-                        toastType === 'success' ? 'bg-cyan-950/90 text-cyan-200 border-cyan-400 shadow-cyan-500/20' : '',
-                        toastType === 'info' ? 'bg-purple-950/90 text-purple-200 border-purple-400 shadow-purple-500/20' : '',
-                        toastType === 'danger' ? 'bg-rose-950/90 text-rose-200 border-rose-400 shadow-rose-500/20' : ''
-                    ]"
-                >
-                    <div class="flex items-center gap-3">
-                        <CheckCircle2 v-if="toastType === 'success'" class="w-5 h-5 text-cyan-400 shrink-0" />
-                        <Sparkles v-else-if="toastType === 'info'" class="w-5 h-5 text-purple-400 shrink-0" />
-                        <AlertCircle v-else class="w-5 h-5 text-rose-400 shrink-0" />
-                        <span class="leading-snug">{{ toastMessage }}</span>
-                    </div>
-                    <button
-                        @click="toastMessage = ''"
-                        class="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors shrink-0"
-                    >
-                        <X class="w-4 h-4" />
-                    </button>
-                </div>
-            </transition>
+
 
             <!-- Header Showcase Hero -->
             <div class="relative overflow-hidden rounded-3xl p-8 lg:p-10 border border-white/10 bg-gradient-to-br from-slate-900 via-[#0c1222] to-slate-950 shadow-2xl">

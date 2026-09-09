@@ -13,55 +13,88 @@ class SubtitleManagerService
 {
     protected OpenSubtitlesService $openSubtitles;
 
-    protected SubDlService $subDl;
+    protected SubSenseService $subSense;
 
-    public function __construct(OpenSubtitlesService $openSubtitles, SubDlService $subDl)
-    {
+    protected YtsSubsService $ytsSubs;
+
+    protected ?SubDlService $subDl = null;
+
+    public function __construct(
+        OpenSubtitlesService $openSubtitles,
+        SubSenseService $subSense,
+        YtsSubsService $ytsSubs
+    ) {
         $this->openSubtitles = $openSubtitles;
-        $this->subDl = $subDl;
+        $this->subSense = $subSense;
+        $this->ytsSubs = $ytsSubs;
+        try {
+            $this->subDl = app(SubDlService::class);
+        } catch (\Throwable $e) {
+            $this->subDl = null;
+        }
     }
 
+    /**
+     * Scan database for media items missing Arabic or English subtitles.
+     */
     public function findMissingSubtitles(): array
     {
         $missing = [];
 
-        // Check Movies
-        $movies = MediaItem::with('subtitles')->get();
+        // 1. Movies
+        $movies = MediaItem::all();
         foreach ($movies as $movie) {
-            $hasAr = $movie->subtitles->where('language', 'ar')->isNotEmpty();
-            $hasEn = $movie->subtitles->where('language', 'en')->isNotEmpty();
+            $hasAr = Subtitle::where('subtitlable_id', $movie->id)
+                ->where('subtitlable_type', MediaItem::class)
+                ->whereIn('language', ['ar', 'ara'])
+                ->exists();
+
+            $hasEn = Subtitle::where('subtitlable_id', $movie->id)
+                ->where('subtitlable_type', MediaItem::class)
+                ->whereIn('language', ['en', 'eng'])
+                ->exists();
 
             if (! $hasAr || ! $hasEn) {
                 $missing[] = [
                     'id' => $movie->id,
                     'type' => 'movie',
                     'title' => $movie->title,
-                    'title_ar' => $movie->title_ar,
-                    'release_year' => $movie->release_year,
+                    'title_ar' => $movie->title_ar ?? null,
+                    'year' => $movie->release_year,
                     'file_path' => $movie->file_path,
                     'missing_ar' => ! $hasAr,
                     'missing_en' => ! $hasEn,
+                    'imdb_id' => $movie->imdb_id,
                 ];
             }
         }
 
-        // Check Series Episodes
-        $episodes = Episode::with(['series', 'subtitles'])->get();
-        foreach ($episodes as $ep) {
-            $hasAr = $ep->subtitles->where('language', 'ar')->isNotEmpty();
-            $hasEn = $ep->subtitles->where('language', 'en')->isNotEmpty();
+        // 2. Episodes
+        $episodes = Episode::with('series')->get();
+        foreach ($episodes as $episode) {
+            $hasAr = Subtitle::where('subtitlable_id', $episode->id)
+                ->where('subtitlable_type', Episode::class)
+                ->whereIn('language', ['ar', 'ara'])
+                ->exists();
+
+            $hasEn = Subtitle::where('subtitlable_id', $episode->id)
+                ->where('subtitlable_type', Episode::class)
+                ->whereIn('language', ['en', 'eng'])
+                ->exists();
 
             if (! $hasAr || ! $hasEn) {
                 $missing[] = [
-                    'id' => $ep->id,
+                    'id' => $episode->id,
                     'type' => 'episode',
-                    'series_title' => $ep->series->title ?? 'Series',
-                    'season_number' => $ep->season_id,
-                    'episode_number' => $ep->episode_number,
-                    'title' => $ep->title,
-                    'file_path' => $ep->file_path,
+                    'title' => $episode->title,
+                    'series_title' => $episode->series?->title,
+                    'season_info' => "S{$episode->season_number}E{$episode->episode_number}",
+                    'season_number' => $episode->season_number,
+                    'episode_number' => $episode->episode_number,
+                    'file_path' => $episode->file_path,
                     'missing_ar' => ! $hasAr,
                     'missing_en' => ! $hasEn,
+                    'imdb_id' => $episode->series?->imdb_id,
                 ];
             }
         }
@@ -70,16 +103,79 @@ class SubtitleManagerService
     }
 
     /**
-     * Download and attach a real subtitle from remote provider URL or automatic search.
+     * Unified multi-engine online search across free and authenticated providers.
+     */
+    public function searchOnline(
+        string $title,
+        string|array $lang = 'ar',
+        ?string $imdbId = null,
+        string $type = 'movie',
+        ?int $season = null,
+        ?int $episode = null,
+        ?int $year = null
+    ): array {
+        $results = [];
+
+        // 1. SubSense Stremio Aggregator
+        if (! empty($imdbId)) {
+            $subSenseResults = $this->subSense->searchSubtitles(
+                $imdbId,
+                $type,
+                $season,
+                $episode,
+                $lang,
+                20
+            );
+            $results = array_merge($results, $subSenseResults);
+        }
+
+        // 2. YTS-Subs (Movies)
+        if ($type === 'movie' && ! empty($imdbId)) {
+            $ytsResults = $this->ytsSubs->searchSubtitles($imdbId, $lang);
+            $results = array_merge($results, $ytsResults);
+        }
+
+        // 3. OpenSubtitles
+        $openSubs = $this->openSubtitles->searchSubtitles([
+            'query' => $title,
+            'imdb_id' => $imdbId,
+            'language' => is_array($lang) ? implode(',', $lang) : $lang,
+            'type' => $type,
+            'season_number' => $season,
+            'episode_number' => $episode,
+            'year' => $year,
+        ]);
+        $results = array_merge($results, $openSubs);
+
+        // 4. SubDL
+        if ($this->subDl) {
+            $langArray = is_array($lang) ? $lang : explode(',', (string) $lang);
+            $subDlResults = $this->subDl->searchSubtitles(
+                $title,
+                $year ? (int) $year : null,
+                array_map('strtoupper', $langArray),
+                $type,
+                $season,
+                $episode
+            );
+            $results = array_merge($results, $subDlResults);
+        }
+
+        return $results;
+    }
+
+    /**
+     * Download and attach a real subtitle from remote provider URL or automatic multi-source search.
      */
     public function downloadAndAttachRealSubtitle(
         MediaItem|Episode $media,
         string $lang = 'ar',
         ?string $downloadUrl = null,
-        ?string $releaseName = null
+        ?string $releaseName = null,
+        ?string $source = null,
+        mixed $fileId = null
     ): ?Subtitle {
         $langCode = strtolower(trim($lang));
-        // Normalize 3-letter codes to 2-letter if needed
         if ($langCode === 'ara') {
             $langCode = 'ar';
         }
@@ -92,72 +188,107 @@ class SubtitleManagerService
 
         $content = null;
 
-        // 1. If a direct download URL was provided from a real search result
-        if (! empty($downloadUrl)) {
-            try {
-                $response = Http::timeout(15)
-                    ->withUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
-                    ->get($downloadUrl);
-
-                if ($response->successful()) {
-                    $rawBody = $response->body();
-                    $content = $this->extractSubtitleContent($rawBody);
-                }
-            } catch (\Exception $e) {
-                Log::warning("Failed to download subtitle from {$downloadUrl}: ".$e->getMessage());
+        // 1. If OpenSubtitles file ID without a direct URL
+        if (empty($downloadUrl) && ! empty($fileId) && ($source === 'opensubtitles' || is_numeric($fileId))) {
+            $rawBody = $this->openSubtitles->downloadSubtitle((string) $fileId);
+            if ($rawBody) {
+                $content = $this->extractSubtitleContent($rawBody);
             }
         }
 
-        // 2. If no direct URL or download failed, perform automatic online search
-        if (empty($content)) {
-            $searchParams = [
-                'language' => $langCode,
-            ];
+        // 2. If a direct download URL was provided from a user selection or search result
+        if (empty($content) && ! empty($downloadUrl)) {
+            $content = $this->fetchFromUrl($downloadUrl);
+        }
 
-            if ($media instanceof Episode) {
+        // 3. If no direct URL or download failed, perform automatic multi-source online search
+        if (empty($content)) {
+            $isEpisode = ($media instanceof Episode);
+            $mediaType = $isEpisode ? 'episode' : 'movie';
+
+            if ($isEpisode) {
                 $media->loadMissing('series');
-                $searchParams['query'] = $media->series?->title ?: 'Series';
-                $searchParams['imdb_id'] = $media->series?->imdb_id;
-                $searchParams['type'] = 'episode';
-                $searchParams['season_number'] = $media->season_number ?: 1;
-                $searchParams['episode_number'] = $media->episode_number ?: 1;
+                $title = $media->series?->title ?: 'Series';
+                $imdbId = $media->series?->imdb_id;
+                $season = $media->season_number ?: 1;
+                $episode = $media->episode_number ?: 1;
+                $year = $media->series?->release_year;
             } else {
-                $searchParams['query'] = $media->title;
-                $searchParams['imdb_id'] = $media->imdb_id;
-                $searchParams['type'] = 'movie';
-                $searchParams['year'] = $media->release_year;
+                $title = $media->title;
+                $imdbId = $media->imdb_id;
+                $season = null;
+                $episode = null;
+                $year = $media->release_year;
             }
 
-            $results = $this->openSubtitles->searchSubtitles($searchParams);
-            if (! empty($results)) {
-                $topResult = $results[0];
-                if (! empty($topResult['download_url'])) {
-                    try {
-                        $res = Http::timeout(15)
-                            ->withUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
-                            ->get($topResult['download_url']);
+            if (empty($imdbId) && ! empty($title)) {
+                $imdbId = $this->openSubtitles->resolveImdbId($title, $mediaType, $year);
+                if ($imdbId) {
+                    if ($isEpisode && $media->series) {
+                        $media->series->update(['imdb_id' => $imdbId]);
+                    } elseif (! $isEpisode) {
+                        $media->update(['imdb_id' => $imdbId]);
+                    }
+                }
+            }
 
-                        if ($res->successful()) {
-                            $content = $this->extractSubtitleContent($res->body());
-                            if (empty($releaseName)) {
-                                $releaseName = $topResult['release'] ?? $topResult['file_name'] ?? null;
-                            }
+            $candidates = [];
+
+            // Primary: SubSense multi-source aggregator (Free, No Key, Movies + TV)
+            if (! empty($imdbId)) {
+                $candidates = $this->subSense->searchSubtitles($imdbId, $mediaType, $season, $episode, [$langCode], 10);
+            }
+
+            // Secondary: YTS-Subs (Movies)
+            if (empty($candidates) && $mediaType === 'movie' && ! empty($imdbId)) {
+                $candidates = $this->ytsSubs->searchSubtitles($imdbId, [$langCode]);
+            }
+
+            // Tertiary: OpenSubtitles REST / v3
+            if (empty($candidates)) {
+                $candidates = $this->openSubtitles->searchSubtitles([
+                    'query' => $title,
+                    'imdb_id' => $imdbId,
+                    'type' => $mediaType,
+                    'season_number' => $season,
+                    'episode_number' => $episode,
+                    'year' => $year,
+                    'language' => $langCode,
+                ]);
+            }
+
+            // Attempt download from top candidates
+            foreach ($candidates as $cand) {
+                if (! empty($cand['download_url'])) {
+                    $content = $this->fetchFromUrl($cand['download_url']);
+                    if (! empty($content)) {
+                        if (empty($releaseName)) {
+                            $releaseName = $cand['release'] ?? $cand['file_name'] ?? null;
                         }
-                    } catch (\Exception $e) {
-                        Log::warning('Auto-download subtitle fallback failed: '.$e->getMessage());
+                        break;
+                    }
+                } elseif (! empty($cand['subtitle_id']) && str_starts_with((string) $cand['subtitle_id'], 'os_')) {
+                    $osFileId = substr((string) $cand['subtitle_id'], 3);
+                    $rawBody = $this->openSubtitles->downloadSubtitle($osFileId);
+                    if ($rawBody) {
+                        $extracted = $this->extractSubtitleContent($rawBody);
+                        if (! empty($extracted) && str_contains($extracted, '-->')) {
+                            $content = $extracted;
+                            break;
+                        }
                     }
                 }
             }
         }
 
-        // 3. If still no valid subtitle content found, return null (never create fake dummy files!)
+        // 4. If still no valid subtitle content found, return null (never create fake dummy files!)
         if (empty($content) || ! str_contains($content, '-->')) {
             Log::info("No real subtitle content retrieved for {$media->title} [{$langCode}]");
 
             return null;
         }
 
-        // 4. Determine safe destination path
+        // 5. Determine safe destination path
         $destDir = storage_path('app/subtitles');
         if ($media->file_path) {
             $candidateDir = pathinfo($media->file_path, PATHINFO_DIRNAME);
@@ -190,15 +321,48 @@ class SubtitleManagerService
             'language_name' => $langName,
             'format' => 'srt',
             'file_path' => $srtPath,
-            'is_default' => $langCode === 'en',
+            'is_default' => ($langCode === 'ar'),
             'is_embedded' => false,
         ]);
     }
 
     /**
+     * Fetch and extract subtitle content from any supported remote URL.
+     */
+    protected function fetchFromUrl(string $url): ?string
+    {
+        try {
+            // OpenSubtitles REST API download endpoint
+            if (preg_match('#api\.opensubtitles\.com/api/v1/download/(\d+)#i', $url, $m)) {
+                $rawBody = $this->openSubtitles->downloadSubtitle($m[1]);
+                if ($rawBody) {
+                    return $this->extractSubtitleContent($rawBody);
+                }
+            }
+
+            $headers = [
+                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            ];
+            if (str_contains($url, 'yts-subs.com')) {
+                $headers['Referer'] = 'https://yts-subs.com/';
+            }
+
+            $response = Http::timeout(15)->withHeaders($headers)->get($url);
+
+            if ($response->successful()) {
+                return $this->extractSubtitleContent($response->body());
+            }
+        } catch (\Throwable $e) {
+            Log::warning("Failed to fetch subtitle from {$url}: ".$e->getMessage());
+        }
+
+        return null;
+    }
+
+    /**
      * Extract, decompress, and UTF-8 sanitize subtitle body.
      */
-    protected function extractSubtitleContent(string $rawBody): string
+    public function extractSubtitleContent(string $rawBody): string
     {
         // Check for GZIP compression magic number (1f 8b)
         if (str_starts_with($rawBody, "\x1f\x8b")) {
@@ -208,8 +372,8 @@ class SubtitleManagerService
             }
         }
 
-        // Check for ZIP file magic number (PK\x03\x04)
-        if (str_starts_with($rawBody, "PK\x03\x04")) {
+        // Check for ZIP file magic number (PK\x03\x04 or PK\x05\x06)
+        if (str_starts_with($rawBody, "PK\x03\x04") || str_starts_with($rawBody, "PK\x05\x06")) {
             $tempZip = tempnam(sys_get_temp_dir(), 'sub_zip_');
             File::put($tempZip, $rawBody);
             $zip = new \ZipArchive;
@@ -236,7 +400,7 @@ class SubtitleManagerService
 
         // Detect Windows-1256 (Arabic) or ISO-8859-1 if non-UTF-8
         if (! mb_check_encoding($rawBody, 'UTF-8')) {
-            $converted = @mb_convert_encoding($rawBody, 'UTF-8', 'Windows-1256');
+            $converted = @iconv('Windows-1256', 'UTF-8//IGNORE', $rawBody);
             if ($converted && str_contains($converted, '-->')) {
                 $rawBody = $converted;
             } else {

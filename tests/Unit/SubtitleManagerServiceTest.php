@@ -4,8 +4,6 @@ namespace Tests\Unit;
 
 use App\Models\MediaItem;
 use App\Models\Subtitle;
-use App\Services\Subtitles\OpenSubtitlesService;
-use App\Services\Subtitles\SubDlService;
 use App\Services\Subtitles\SubtitleManagerService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -22,7 +20,7 @@ class SubtitleManagerServiceTest extends TestCase
             'file_path' => 'C:/Media/Movies/Dune 2/Dune2.mkv',
         ]);
 
-        $manager = new SubtitleManagerService(new OpenSubtitlesService, new SubDlService);
+        $manager = app(SubtitleManagerService::class);
         $missing = $manager->findMissingSubtitles();
 
         $this->assertNotEmpty($missing);
@@ -38,12 +36,14 @@ class SubtitleManagerServiceTest extends TestCase
             'file_path' => storage_path('framework/testing/Inception.mkv'),
         ]);
 
-        $manager = new SubtitleManagerService(new OpenSubtitlesService, new SubDlService);
+        $manager = app(SubtitleManagerService::class);
         $sub = $manager->downloadAndAttachMockSubtitle($movie, 'ar');
 
         $this->assertInstanceOf(Subtitle::class, $sub);
         $this->assertEquals('ar', $sub->language);
         $this->assertEquals('Arabic', $sub->language_name);
         $this->assertFileExists($sub->file_path);
+
+        @unlink($sub->file_path);
     }
 }

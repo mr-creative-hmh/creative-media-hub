@@ -8,8 +8,10 @@ use App\Models\Subtitle;
 use App\Services\Subtitles\EmbeddedSubtitleDetectorService;
 use App\Services\Subtitles\OpenSubtitlesService;
 use App\Services\Subtitles\SubDlService;
+use App\Services\Subtitles\SubSenseService;
 use App\Services\Subtitles\SubtitleHealthCheckService;
 use App\Services\Subtitles\SubtitleManagerService;
+use App\Services\Subtitles\YtsSubsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
@@ -24,17 +26,25 @@ class SubtitleController extends Controller
 
     protected SubDlService $subDl;
 
+    protected SubSenseService $subSense;
+
+    protected YtsSubsService $ytsSubs;
+
     protected EmbeddedSubtitleDetectorService $detector;
 
     public function __construct(
         SubtitleManagerService $manager,
         OpenSubtitlesService $openSubtitles,
         SubDlService $subDl,
+        SubSenseService $subSense,
+        YtsSubsService $ytsSubs,
         EmbeddedSubtitleDetectorService $detector
     ) {
         $this->manager = $manager;
         $this->openSubtitles = $openSubtitles;
         $this->subDl = $subDl;
+        $this->subSense = $subSense;
+        $this->ytsSubs = $ytsSubs;
         $this->detector = $detector;
     }
 
@@ -58,7 +68,7 @@ class SubtitleController extends Controller
         $episode = $request->input('episode_number');
         $year = $request->input('year');
 
-        // Resolve media context if media_id provided
+        // Resolve media context if media_id provided — always use DB's imdb_id
         if ($mediaId) {
             if ($mediaType === 'episode') {
                 $ep = Episode::with('series')->find($mediaId);
@@ -68,6 +78,13 @@ class SubtitleController extends Controller
                     $season = $season ?: $ep->season_number;
                     $episode = $episode ?: $ep->episode_number;
                     $year = $year ?: $ep->series?->release_year;
+
+                    if (empty($imdbId) && $ep->series) {
+                        $imdbId = $this->openSubtitles->resolveImdbId($ep->series->title, 'series', $year);
+                        if ($imdbId) {
+                            $ep->series->update(['imdb_id' => $imdbId]);
+                        }
+                    }
                 }
             } else {
                 $movie = MediaItem::find($mediaId);
@@ -75,10 +92,49 @@ class SubtitleController extends Controller
                     $query = $query ?: $movie->title;
                     $imdbId = $imdbId ?: $movie->imdb_id;
                     $year = $year ?: $movie->release_year;
+
+                    if (empty($imdbId)) {
+                        $imdbId = $this->openSubtitles->resolveImdbId($movie->title, 'movie', $year);
+                        if ($imdbId) {
+                            $movie->update(['imdb_id' => $imdbId]);
+                        }
+                    }
                 }
             }
         }
 
+        $allResults = [];
+        $enginesUsed = [];
+
+        // 1. SubSense Stremio Aggregator (Fast, Free, OpenSubtitles/YTS/SubDL direct links)
+        if ($imdbId) {
+            $subSenseResults = $this->subSense->searchSubtitles([
+                'imdb_id' => $imdbId,
+                'type' => $mediaType,
+                'season_number' => $season,
+                'episode_number' => $episode,
+                'language' => $lang,
+            ]);
+            if (! empty($subSenseResults)) {
+                $allResults = array_merge($allResults, $subSenseResults);
+                $enginesUsed[] = 'subsense';
+            }
+        }
+
+        // 2. YTS-Subs Direct Engine (Movies only, Free direct ZIPs, large Arabic/English database)
+        if ($mediaType === 'movie' && ($imdbId || $query)) {
+            $ytsResults = $this->ytsSubs->searchSubtitles([
+                'imdb_id' => $imdbId,
+                'query' => $query,
+                'language' => $lang,
+            ]);
+            if (! empty($ytsResults)) {
+                $allResults = array_merge($allResults, $ytsResults);
+                $enginesUsed[] = 'yts-subs';
+            }
+        }
+
+        // 3. OpenSubtitles REST / v3 fallback
         $openSubResults = $this->openSubtitles->searchSubtitles([
             'query' => $query,
             'imdb_id' => $imdbId,
@@ -88,18 +144,37 @@ class SubtitleController extends Controller
             'episode_number' => $episode,
             'year' => $year,
         ]);
+        if (! empty($openSubResults)) {
+            $allResults = array_merge($allResults, $openSubResults);
+            $enginesUsed[] = 'opensubtitles';
+        }
 
+        // 4. SubDL Engine
         $subDlResults = $this->subDl->searchSubtitles(
             $query,
             $year ? (int) $year : null,
-            explode(',', (string) $lang),
+            array_map('strtoupper', explode(',', (string) $lang)),
             $mediaType,
             $season ? (int) $season : null,
             $episode ? (int) $episode : null
         );
+        if (! empty($subDlResults)) {
+            $allResults = array_merge($allResults, $subDlResults);
+            $enginesUsed[] = 'subdl';
+        }
+
+        $hasApiKey = ! empty($this->openSubtitles->getApiKey());
 
         return response()->json([
-            'results' => array_merge($openSubResults, $subDlResults),
+            'results' => $allResults,
+            'meta' => [
+                'engine_used' => empty($enginesUsed) ? 'none' : implode(', ', array_unique($enginesUsed)),
+                'imdb_id' => $imdbId,
+                'api_key_configured' => $hasApiKey,
+                'query' => $query,
+                'language' => $lang,
+                'count' => count($allResults),
+            ],
         ]);
     }
 
@@ -112,21 +187,23 @@ class SubtitleController extends Controller
         $season = $request->input('season_number');
         $episode = $request->input('episode_number');
         $year = $request->input('year');
+        $imdbId = null;
 
         if ($mediaId) {
             if ($mediaType === 'episode') {
                 $ep = Episode::with('series')->find($mediaId);
                 if ($ep) {
                     $query = $query ?: ($ep->series?->title ?? '');
+                    $imdbId = $ep->series?->imdb_id;
                     $season = $season ?: $ep->season_number;
                     $episode = $episode ?: $ep->episode_number;
                     $year = $year ?: $ep->series?->release_year;
 
                     // If series doesn't have an IMDb ID yet, resolve and cache it
-                    if (empty($ep->series?->imdb_id) && $ep->series) {
-                        $resolvedImdb = $this->openSubtitles->resolveImdbId($ep->series->title, 'series', $year);
-                        if ($resolvedImdb) {
-                            $ep->series->update(['imdb_id' => $resolvedImdb]);
+                    if (empty($imdbId) && $ep->series) {
+                        $imdbId = $this->openSubtitles->resolveImdbId($ep->series->title, 'series', $year);
+                        if ($imdbId) {
+                            $ep->series->update(['imdb_id' => $imdbId]);
                         }
                     }
                 }
@@ -134,50 +211,85 @@ class SubtitleController extends Controller
                 $movie = MediaItem::find($mediaId);
                 if ($movie) {
                     $query = $query ?: $movie->title;
+                    $imdbId = $movie->imdb_id;
                     $year = $year ?: $movie->release_year;
 
                     // If movie doesn't have an IMDb ID yet, resolve and cache it
-                    if (empty($movie->imdb_id)) {
-                        $resolvedImdb = $this->openSubtitles->resolveImdbId($movie->title, 'movie', $year);
-                        if ($resolvedImdb) {
-                            $movie->update(['imdb_id' => $resolvedImdb]);
+                    if (empty($imdbId)) {
+                        $imdbId = $this->openSubtitles->resolveImdbId($movie->title, 'movie', $year);
+                        if ($imdbId) {
+                            $movie->update(['imdb_id' => $imdbId]);
                         }
                     }
                 }
             }
         }
 
+        $allResults = [];
+
+        // 1. SubSense
+        if ($imdbId) {
+            $subSenseResults = $this->subSense->searchSubtitles([
+                'imdb_id' => $imdbId,
+                'type' => $mediaType,
+                'season_number' => $season,
+                'episode_number' => $episode,
+                'language' => $lang,
+            ]);
+            $allResults = array_merge($allResults, $subSenseResults);
+        }
+
+        // 2. YTS
+        if ($mediaType === 'movie' && ($imdbId || $query)) {
+            $ytsResults = $this->ytsSubs->searchSubtitles([
+                'imdb_id' => $imdbId,
+                'query' => $query,
+                'language' => $lang,
+            ]);
+            $allResults = array_merge($allResults, $ytsResults);
+        }
+
+        // 3. OpenSubtitles
         $searchParams = [
             'query' => $query,
+            'imdb_id' => $imdbId,
             'language' => $lang,
             'type' => $mediaType,
             'season_number' => $season,
             'episode_number' => $episode,
             'year' => $year,
         ];
-
         $openSubs = $this->openSubtitles->searchSubtitles($searchParams);
+        $allResults = array_merge($allResults, $openSubs);
+
+        // 4. SubDL
         $subDl = $this->subDl->searchSubtitles(
             $query,
             $year ? (int) $year : null,
-            [strtoupper($lang)],
+            array_map('strtoupper', explode(',', $lang)),
             $mediaType,
             $season ? (int) $season : null,
             $episode ? (int) $episode : null
         );
+        $allResults = array_merge($allResults, $subDl);
 
-        $combined = array_merge($openSubs, $subDl);
+        $hasApiKey = ! empty($this->openSubtitles->getApiKey());
 
         return response()->json([
             'success' => true,
             'query' => $query,
             'language' => $lang,
+            'imdb_id' => $imdbId,
+            'api_key_configured' => $hasApiKey,
             'engine_status' => [
-                'opensubtitles' => 'Online (Stremio v3 / REST Live Engine)',
-                'subdl' => 'Online (SubDL API v1 Engine)',
+                'subsense' => 'Online (Stremio Multi-Provider Aggregator — Free, No Key)',
+                'yts_subs' => 'Online (YTS-Subs Direct Engine — Free, No Key)',
+                'opensubtitles_rest' => $hasApiKey ? 'Online (REST API — Full Arabic Coverage)' : 'Offline (No API Key — Optional)',
+                'opensubtitles_v3' => 'Online (Stremio v3 Legacy Fallback)',
+                'subdl' => ! empty($this->subDl) ? 'Online (SubDL API v1 Engine)' : 'Offline',
                 'hash_matcher' => 'Ready (64-bit Audio Sync Checksum)',
             ],
-            'results' => $combined,
+            'results' => $allResults,
         ]);
     }
 
@@ -190,6 +302,8 @@ class SubtitleController extends Controller
             'download_url' => 'nullable|string',
             'release' => 'nullable|string',
             'file_name' => 'nullable|string',
+            'source' => 'nullable|string',
+            'file_id' => 'nullable',
         ]);
 
         $model = $validated['media_type'] === 'movie'
@@ -200,7 +314,9 @@ class SubtitleController extends Controller
             $model,
             $validated['language'],
             $request->input('download_url'),
-            $request->input('release') ?? $request->input('file_name')
+            $request->input('release') ?? $request->input('file_name'),
+            $request->input('source'),
+            $request->input('file_id')
         );
 
         if (! $subtitle) {
@@ -243,50 +359,43 @@ class SubtitleController extends Controller
                         [
                             'subtitlable_id' => $model->id,
                             'subtitlable_type' => get_class($model),
-                            'file_path' => "embedded:{$track['index']}:{$model->file_path}",
+                            'stream_index' => $track['stream_index'],
                         ],
                         [
-                            'language' => $track['language'] ?? 'und',
-                            'language_name' => $track['title'] ?? 'Embedded',
-                            'format' => $track['format'] ?? 'srt',
+                            'language' => $track['language'],
+                            'language_name' => $track['language_name'],
+                            'format' => $track['format'],
+                            'title' => $track['title'],
                             'is_embedded' => true,
-                            'is_default' => (bool) ($track['is_default'] ?? false),
+                            'is_default' => $track['is_default'] ?? false,
                         ]
                     );
                 }
             }
-
-            $this->syncAdjacentExternalSubtitles($model);
         }
 
-        // Return all subtitles ordered with Arabic first, English second
-        $subs = Subtitle::where('subtitlable_id', $model->id)
-            ->where('subtitlable_type', get_class($model))
-            ->get()
-            ->sortBy(function ($sub) {
-                return match (strtolower($sub->language)) {
-                    'ar', 'ara' => 1,
-                    'en', 'eng' => 2,
-                    default => 3,
-                };
-            })
-            ->values();
+        // Auto-sync adjacent subtitles on disk
+        $this->syncDiskSubtitles($model);
 
-        return response()->json([
-            'subtitles' => $subs,
-        ]);
+        $subtitles = Subtitle::where('subtitlable_id', $model->id)
+            ->where('subtitlable_type', get_class($model))
+            ->orderBy('is_default', 'desc')
+            ->orderBy('is_embedded', 'asc')
+            ->get();
+
+        return response()->json(['subtitles' => $subtitles]);
     }
 
-    /**
-     * Self-heal broken paths and auto-discover adjacent external subtitle files on disk.
-     */
-    protected function syncAdjacentExternalSubtitles($model): void
+    protected function syncDiskSubtitles(MediaItem|Episode $model): void
     {
-        $videoPath = str_replace('\\', '/', $model->file_path);
-        $videoDir = dirname($videoPath);
-        $videoBase = pathinfo($videoPath, PATHINFO_FILENAME);
+        if (! $model->file_path) {
+            return;
+        }
 
-        // 1. Verify existing external subtitle records in DB
+        $videoDir = dirname($model->file_path);
+        $videoBase = pathinfo($model->file_path, PATHINFO_FILENAME);
+
+        // 1. Clean up or fix any DB records pointing to nonexistent files
         $existingExternal = Subtitle::where('subtitlable_id', $model->id)
             ->where('subtitlable_type', get_class($model))
             ->where('is_embedded', false)

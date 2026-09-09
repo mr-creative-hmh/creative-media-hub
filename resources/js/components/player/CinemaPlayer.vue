@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
+import { useToast } from '@/composables/useToast';
 import CinemaLoader from '@/components/player/CinemaLoader.vue';
 import {
     Play,
@@ -60,6 +61,7 @@ const emit = defineEmits<{
 }>();
 
 const { isRTL } = useI18n();
+const globalToast = useToast();
 
 // Active Item for smooth in-player playlist navigation (Series episodes, Collections movies)
 const activeItem = ref(props.item);
@@ -736,26 +738,24 @@ const performSubtitleSearch = async () => {
             ? (activeItem.value?.watchable_id || activeItem.value?.id)
             : activeItem.value?.id;
 
-        const payload: Record<string, any> = {
+        const queryParams = new URLSearchParams({
             query: subtitleSearchQuery.value.trim(),
             language: subtitleSearchLang.value,
-            media_id: mediaId,
+            media_id: String(mediaId),
             media_type: isEpisode.value ? 'episode' : 'movie',
-        };
+        });
 
+        if (activeItem.value?.imdb_id) {
+            queryParams.append('imdb_id', activeItem.value.imdb_id);
+        }
         if (isEpisode.value) {
-            payload.season_number = activeItem.value?.season_number || (activeItem.value?.season?.season_number ?? 1);
-            payload.episode_number = activeItem.value?.episode_number || 1;
+            const s = activeItem.value?.season_number || (activeItem.value?.season?.season_number ?? 1);
+            const ep = activeItem.value?.episode_number || 1;
+            queryParams.append('season_number', String(s));
+            queryParams.append('episode_number', String(ep));
         }
 
-        const res = await fetch('/api/subtitles/verify-engine', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
-            },
-            body: JSON.stringify(payload),
-        });
+        const res = await fetch(`/api/subtitles/search?${queryParams.toString()}`);
         if (res.ok) {
             const data = await res.json();
             subtitleSearchResults.value = data.results || [];
@@ -789,6 +789,8 @@ const downloadAndApplySubtitle = async (result: any) => {
                 download_url: result.download_url || result.url,
                 file_name: result.file_name,
                 release: result.release,
+                source: result.source,
+                file_id: result.subtitle_id,
             }),
         });
         if (res.ok) {
@@ -803,13 +805,19 @@ const downloadAndApplySubtitle = async (result: any) => {
                 }
                 showSubtitleSearchModal.value = false;
                 await selectSubtitle(newSub.id, false);
-                showToast(isRTL.value ? 'تم تنزيل وتفعيل الترجمة بنجاح!' : 'Subtitle downloaded & activated!');
+                const msg = isRTL.value ? 'تم تنزيل وتفعيل الترجمة بنجاح!' : 'Subtitle downloaded & activated!';
+                showToast(msg);
+                globalToast.success(msg, 'Subtitle Ready');
             }
         } else {
-            showToast(isRTL.value ? 'تعذر تنزيل الترجمة' : 'Failed to download subtitle');
+            const err = isRTL.value ? 'تعذر تنزيل الترجمة' : 'Failed to download subtitle';
+            showToast(err);
+            globalToast.error(err, 'Subtitle Download Failed');
         }
-    } catch (e) {
-        showToast(isRTL.value ? 'حدث خطأ أثناء التنزيل' : 'Error downloading subtitle');
+    } catch (e: any) {
+        const err = isRTL.value ? 'حدث خطأ أثناء التنزيل' : 'Error downloading subtitle';
+        showToast(err);
+        globalToast.error(e.message || err, 'Download Error');
     } finally {
         isDownloadingSubtitle.value = false;
     }

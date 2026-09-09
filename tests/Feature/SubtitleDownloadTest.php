@@ -16,7 +16,7 @@ class SubtitleDownloadTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_verify_engine_returns_real_subtitles_from_opensubtitles_v3(): void
+    public function test_verify_engine_returns_real_subtitles_from_providers(): void
     {
         Http::fake([
             'https://v3-cinemeta.strem.io/*' => Http::response([
@@ -24,16 +24,20 @@ class SubtitleDownloadTest extends TestCase
                     ['id' => 'tt0401079', 'imdb_id' => 'tt0401079', 'name' => 'Wicked Science', 'year' => '2004'],
                 ],
             ], 200),
-            'https://opensubtitles-v3.strem.io/subtitles/series/tt0401079:1:4.json' => Http::response([
+            'https://subsense.nepiraw.com/*' => Http::response([
                 'subtitles' => [
                     [
-                        'id' => '10295095',
-                        'url' => 'https://subs.test/file/10295095.srt',
+                        'id' => 'subsense-1',
+                        'url' => 'https://subs.test/file/subsense-1.srt',
                         'lang' => 'eng',
-                        'subtitleFileName' => 'Wicked Science S01E04 DVDRIP.srt',
-                        'movieReleaseName' => 'Wicked Science S01E04',
+                        'source' => 'opensubtitles',
+                        'fileName' => 'Wicked Science S01E04 DVDRIP.srt',
+                        'releaseName' => 'Wicked Science S01E04',
                     ],
                 ],
+            ], 200),
+            'https://opensubtitles-v3.strem.io/*' => Http::response([
+                'subtitles' => [],
             ], 200),
         ]);
 
@@ -65,9 +69,9 @@ class SubtitleDownloadTest extends TestCase
         $response->assertJsonPath('success', true);
         $results = $response->json('results');
         $this->assertNotEmpty($results);
-        $this->assertEquals('OpenSubtitles', $results[0]['provider']);
+        $this->assertStringContainsString('OpenSubtitles', $results[0]['provider']);
         $this->assertEquals('en', $results[0]['language']);
-        $this->assertEquals('https://subs.test/file/10295095.srt', $results[0]['download_url']);
+        $this->assertEquals('https://subs.test/file/subsense-1.srt', $results[0]['download_url']);
     }
 
     public function test_download_for_media_downloads_actual_remote_srt_content(): void
@@ -79,9 +83,9 @@ class SubtitleDownloadTest extends TestCase
         ]);
 
         $movie = MediaItem::create([
-            'title' => 'Inception',
+            'title' => 'Inception Test Isolated',
             'release_year' => 2010,
-            'file_path' => storage_path('framework/testing/Inception.mkv'),
+            'file_path' => storage_path('framework/testing/InceptionTestIsolated.mkv'),
         ]);
 
         $response = $this->postJson('/api/subtitles/download', [
@@ -89,7 +93,7 @@ class SubtitleDownloadTest extends TestCase
             'media_type' => 'movie',
             'language' => 'en',
             'download_url' => 'https://subs.test/download.srt',
-            'file_name' => 'Inception.en.srt',
+            'file_name' => 'InceptionTestIsolated.en.srt',
         ]);
 
         $response->assertStatus(200);
@@ -102,7 +106,41 @@ class SubtitleDownloadTest extends TestCase
         $this->assertFileExists($sub->file_path);
         $this->assertEquals($realSrtContent, trim(File::get($sub->file_path)));
 
-        // Clean up test file
+        @unlink($sub->file_path);
+    }
+
+    public function test_download_auto_converts_windows1256_arabic_to_utf8(): void
+    {
+        $arabicText = "مرحباً بكم في العالم السحري";
+        $windows1256Srt = "1\r\n00:00:01,000 --> 00:00:04,000\r\n" . iconv('UTF-8', 'Windows-1256//IGNORE', $arabicText);
+
+        Http::fake([
+            'https://subs.test/arabic_win1256.srt' => Http::response($windows1256Srt, 200),
+        ]);
+
+        $movie = MediaItem::create([
+            'title' => 'Test Isolated Magic World',
+            'release_year' => 2001,
+            'file_path' => storage_path('framework/testing/TestIsolatedMagicWorld.mkv'),
+        ]);
+
+        $response = $this->postJson('/api/subtitles/download', [
+            'media_id' => $movie->id,
+            'media_type' => 'movie',
+            'language' => 'ar',
+            'download_url' => 'https://subs.test/arabic_win1256.srt',
+            'file_name' => 'TestIsolatedMagicWorld.ar.srt',
+        ]);
+
+        $response->assertStatus(200);
+        $subId = $response->json('subtitle.id');
+        $this->assertNotNull($subId);
+        $sub = Subtitle::find($subId);
+
+        $savedContent = File::get($sub->file_path);
+        $this->assertTrue(mb_check_encoding($savedContent, 'UTF-8'));
+        $this->assertStringContainsString($arabicText, $savedContent);
+
         @unlink($sub->file_path);
     }
 }
