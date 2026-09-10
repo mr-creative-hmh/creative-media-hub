@@ -4,9 +4,30 @@ import { useI18n } from '@/i18n/useI18n';
 export interface TorrentFileItem {
     index: number;
     path: string;
+    folder?: string;
+    filename?: string;
     size: number;
     is_video: boolean;
+    is_subtitle?: boolean;
+    is_image?: boolean;
+    extension?: string;
     selected: boolean;
+}
+
+export interface TorrentTreeNode {
+    type: 'folder' | 'file';
+    name: string;
+    path: string;
+    folder?: string;
+    size: number;
+    file_count?: number;
+    video_count?: number;
+    file_indexes?: number[];
+    children?: TorrentTreeNode[];
+    index?: number;
+    is_video?: boolean;
+    is_subtitle?: boolean;
+    extension?: string;
 }
 
 export interface DownloadItem {
@@ -20,6 +41,7 @@ export interface DownloadItem {
     torrent_files?: TorrentFileItem[] | null;
     selected_files?: any[] | null;
     info_hash?: string | null;
+    aria2_gid?: string | null;
     total_bytes: number;
     downloaded_bytes: number;
     status: 'queued' | 'downloading' | 'paused' | 'completed' | 'failed';
@@ -36,6 +58,9 @@ export interface DownloaderInspection {
     total_bytes: number;
     info_hash?: string | null;
     files: TorrentFileItem[];
+    tree: TorrentTreeNode[];
+    folder_count?: number;
+    file_count?: number;
     default_folder: string;
     destinations: {
         movies: string;
@@ -71,7 +96,6 @@ export function useDownloader() {
     });
 
     const totalSpeedUpFormatted = computed(() => {
-        // Upload/Seeding simulation proportional to active downloads
         const active = activeDownloads.value.length;
         if (active === 0) return '0.0 MB/s';
         return `${(active * 0.85).toFixed(1)} MB/s`;
@@ -130,6 +154,27 @@ export function useDownloader() {
             }
         } catch (e) {
             console.error('Failed to inspect download url:', e);
+        }
+        return null;
+    };
+
+    const inspectTorrentFile = async (file: File): Promise<DownloaderInspection | null> => {
+        try {
+            const formData = new FormData();
+            formData.append('torrent_file', file);
+
+            const res = await fetch('/api/downloads/inspect', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                },
+                body: formData,
+            });
+            if (res.ok) {
+                return await res.json();
+            }
+        } catch (e) {
+            console.error('Failed to inspect uploaded torrent file:', e);
         }
         return null;
     };
@@ -300,6 +345,7 @@ export function useDownloader() {
         getETA,
         fetchDownloads,
         inspectUrl,
+        inspectTorrentFile,
         getSettings,
         saveSettings,
         startBackgroundWorker,

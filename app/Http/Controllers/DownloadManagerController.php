@@ -38,6 +38,15 @@ class DownloadManagerController extends Controller
 
     public function inspect(Request $request): JsonResponse
     {
+        // Support direct .torrent file upload
+        if ($request->hasFile('torrent_file')) {
+            $file = $request->file('torrent_file');
+            $rawContent = file_get_contents($file->getRealPath());
+            $inspection = $this->downloadService->inspectTorrentFileContent($rawContent, $file->getClientOriginalName());
+
+            return response()->json($inspection);
+        }
+
         $validated = $request->validate([
             'url' => 'required|string',
             'type' => 'nullable|string|in:direct,torrent',

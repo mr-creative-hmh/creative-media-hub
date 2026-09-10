@@ -11,104 +11,114 @@ use Illuminate\Support\Facades\Log;
 
 class DownloadManagerService
 {
+    protected BencodeParserService $bencodeParser;
+    protected VirtualLibraryScannerService $scannerService;
+    protected Aria2Service $aria2Service;
+
     public function __construct(
-        protected VirtualLibraryScannerService $scannerService,
-        protected BencodeParserService $bencodeParser
-    ) {}
-
-    /**
-     * Get default storage folders for downloads.
-     */
-    public function getDefaultDestinations(): array
-    {
-        $baseMediaDir = rtrim(str_replace('\\', '/', base_path('storage/app/media/Downloads')), '/');
-
-        $movies = AppSetting::get('download_folder_movies', "{$baseMediaDir}/Movies");
-        $series = AppSetting::get('download_folder_series', "{$baseMediaDir}/TV Shows");
-        $default = AppSetting::get('download_folder_default', "{$baseMediaDir}");
-
-        return [
-            'movies' => str_replace('\\', '/', $movies),
-            'series' => str_replace('\\', '/', $series),
-            'default' => str_replace('\\', '/', $default),
-        ];
+        BencodeParserService $bencodeParser,
+        VirtualLibraryScannerService $scannerService,
+        Aria2Service $aria2Service
+    ) {
+        $this->bencodeParser = $bencodeParser;
+        $this->scannerService = $scannerService;
+        $this->aria2Service = $aria2Service;
     }
 
     /**
-     * Get current download settings.
+     * Get default library destinations from settings or app defaults.
      */
+    public function getDefaultDestinations(): array
+    {
+        $defaultMovies = 'D:/Media/Movies';
+        $defaultSeries = 'D:/Media/Series';
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            if (! File::isDirectory('D:/Media') && ! File::isDirectory('D:/')) {
+                $userHome = getenv('USERPROFILE') ?: 'C:/Users/Default';
+                $userHome = str_replace('\\', '/', $userHome);
+                $defaultMovies = "{$userHome}/Videos/Movies";
+                $defaultSeries = "{$userHome}/Videos/Series";
+            }
+        } else {
+            $defaultMovies = '/var/media/movies';
+            $defaultSeries = '/var/media/series';
+        }
+
+        $savedMovies = AppSetting::get('movies_download_path');
+        $savedSeries = AppSetting::get('series_download_path');
+        $savedDefault = AppSetting::get('default_download_path');
+
+        return [
+            'movies' => $savedMovies ?: $defaultMovies,
+            'series' => $savedSeries ?: $defaultSeries,
+            'default' => $savedDefault ?: ($savedMovies ?: $defaultMovies),
+        ];
+    }
+
     public function getSettings(): array
     {
         $destinations = $this->getDefaultDestinations();
 
         return [
-            'folders' => $destinations,
-            'default_download_path' => $destinations['default'],
-            'movies_download_path' => $destinations['movies'],
-            'series_download_path' => $destinations['series'],
+            'default_download_path' => AppSetting::get('default_download_path', $destinations['default']),
+            'movies_download_path' => AppSetting::get('movies_download_path', $destinations['movies']),
+            'series_download_path' => AppSetting::get('series_download_path', $destinations['series']),
             'max_concurrent_downloads' => (int) AppSetting::get('download_max_concurrent', 3),
             'download_speed_limit_kb' => (int) AppSetting::get('download_speed_limit_kb', 0),
-            'auto_index_on_complete' => (bool) AppSetting::get('download_auto_index', true),
+            'aria2_available' => $this->aria2Service->isAvailable(),
         ];
     }
 
-    /**
-     * Save download configuration settings.
-     */
     public function saveSettings(array $settings): array
     {
-        if (! empty($settings['movies_download_path'])) {
-            AppSetting::set('download_folder_movies', rtrim(str_replace('\\', '/', $settings['movies_download_path']), '/'), 'string');
-        } elseif (! empty($settings['folders']['movies'])) {
-            AppSetting::set('download_folder_movies', rtrim(str_replace('\\', '/', $settings['folders']['movies']), '/'), 'string');
+        if (isset($settings['default_download_path'])) {
+            AppSetting::set('default_download_path', $settings['default_download_path']);
         }
-
-        if (! empty($settings['series_download_path'])) {
-            AppSetting::set('download_folder_series', rtrim(str_replace('\\', '/', $settings['series_download_path']), '/'), 'string');
-        } elseif (! empty($settings['folders']['series'])) {
-            AppSetting::set('download_folder_series', rtrim(str_replace('\\', '/', $settings['folders']['series']), '/'), 'string');
+        if (isset($settings['movies_download_path'])) {
+            AppSetting::set('movies_download_path', $settings['movies_download_path']);
         }
-
-        if (! empty($settings['default_download_path'])) {
-            AppSetting::set('download_folder_default', rtrim(str_replace('\\', '/', $settings['default_download_path']), '/'), 'string');
-        } elseif (! empty($settings['folders']['default'])) {
-            AppSetting::set('download_folder_default', rtrim(str_replace('\\', '/', $settings['folders']['default']), '/'), 'string');
+        if (isset($settings['series_download_path'])) {
+            AppSetting::set('series_download_path', $settings['series_download_path']);
         }
-
         if (isset($settings['max_concurrent_downloads'])) {
-            AppSetting::set('download_max_concurrent', (int) $settings['max_concurrent_downloads'], 'integer');
+            AppSetting::set('download_max_concurrent', $settings['max_concurrent_downloads']);
         }
-
         if (isset($settings['download_speed_limit_kb'])) {
-            AppSetting::set('download_speed_limit_kb', (int) $settings['download_speed_limit_kb'], 'integer');
+            AppSetting::set('download_speed_limit_kb', $settings['download_speed_limit_kb']);
         }
 
-        if (isset($settings['auto_index_on_complete'])) {
-            AppSetting::set('download_auto_index', (bool) $settings['auto_index_on_complete'], 'boolean');
+        if ($this->aria2Service->isAvailable()) {
+            $this->aria2Service->configureLimits(
+                (int) ($settings['max_concurrent_downloads'] ?? 3),
+                (int) ($settings['download_speed_limit_kb'] ?? 0)
+            );
         }
 
         return $this->getSettings();
     }
 
     /**
-     * Intelligent discovery of URL (Direct vs Torrent/Magnet, file contents, sizes, media type).
+     * Inspect a URL, magnet URI, or local torrent file path.
      */
-    public function inspectUrl(string $url, ?string $preferredType = null): array
+    public function inspectUrl(string $url, ?string $type = null): array
     {
         $trimmedUrl = trim($url);
         $isMagnet = str_starts_with($trimmedUrl, 'magnet:?');
-        $isTorrentUrl = (bool) preg_match('/\.torrent(\?.*)?$/i', $trimmedUrl);
+        $isTorrentUrl = str_ends_with(strtolower(parse_url($trimmedUrl, PHP_URL_PATH) ?? ''), '.torrent');
+        $isLocalFile = file_exists($trimmedUrl) && is_readable($trimmedUrl);
 
-        // Detect or apply type
-        $downloadType = ($isMagnet || $isTorrentUrl || $preferredType === 'torrent') ? 'torrent' : 'direct';
+        $downloadType = ($type === 'torrent' || $isMagnet || $isTorrentUrl || ($isLocalFile && str_ends_with(strtolower($trimmedUrl), '.torrent'))) ? 'torrent' : 'direct';
 
         $destinations = $this->getDefaultDestinations();
 
         if ($downloadType === 'torrent') {
-            if ($isMagnet) {
+            $parsed = null;
+            if ($isLocalFile) {
+                $parsed = $this->bencodeParser->parseTorrentFile($trimmedUrl);
+            } elseif ($isMagnet) {
                 $parsed = $this->bencodeParser->parseMagnet($trimmedUrl);
             } elseif ($isTorrentUrl) {
-                // Try to download .torrent metadata file
                 try {
                     $tmpPath = tempnam(sys_get_temp_dir(), 'torrent_');
                     $response = Http::timeout(10)->withOptions(['verify' => false])->get($trimmedUrl);
@@ -116,14 +126,10 @@ class DownloadManagerService
                         file_put_contents($tmpPath, $response->body());
                         $parsed = $this->bencodeParser->parseTorrentFile($tmpPath);
                         @unlink($tmpPath);
-                    } else {
-                        $parsed = null;
                     }
                 } catch (\Throwable $e) {
                     $parsed = null;
                 }
-            } else {
-                $parsed = null;
             }
 
             $torrentTitle = $parsed['name'] ?? pathinfo(parse_url($trimmedUrl, PHP_URL_PATH) ?? 'Torrent Item', PATHINFO_FILENAME);
@@ -133,21 +139,31 @@ class DownloadManagerService
 
             $files = $parsed['files'] ?? [
                 [
-                    'index' => 0,
+                    'index' => 1,
                     'path' => $torrentTitle.'.mkv',
-                    'size' => 2147483648,
+                    'folder' => '',
+                    'filename' => $torrentTitle.'.mkv',
+                    'size' => $parsed['total_size'] ?? 0,
                     'is_video' => true,
+                    'is_subtitle' => false,
+                    'is_image' => false,
+                    'extension' => 'mkv',
                     'selected' => true,
                 ],
             ];
+
+            $tree = $parsed['tree'] ?? $this->bencodeParser->buildFolderTree($files);
 
             return [
                 'download_type' => 'torrent',
                 'title' => $torrentTitle,
                 'media_type' => $mediaType,
-                'total_bytes' => $parsed['total_size'] ?? 2147483648,
+                'total_bytes' => $parsed['total_size'] ?? 0,
                 'info_hash' => $parsed['info_hash'] ?? null,
                 'files' => $files,
+                'tree' => $tree,
+                'folder_count' => $parsed['folder_count'] ?? 0,
+                'file_count' => count($files),
                 'default_folder' => $suggestedFolder,
                 'destinations' => $destinations,
             ];
@@ -177,21 +193,68 @@ class DownloadManagerService
         } catch (\Throwable $e) {
         }
 
+        $directFiles = [
+            [
+                'index' => 1,
+                'path' => $filename,
+                'folder' => '',
+                'filename' => $filename,
+                'size' => $estimatedSize,
+                'is_video' => true,
+                'is_subtitle' => false,
+                'is_image' => false,
+                'extension' => pathinfo($filename, PATHINFO_EXTENSION) ?: 'mp4',
+                'selected' => true,
+            ],
+        ];
+
         return [
             'download_type' => 'direct',
             'title' => $title,
             'media_type' => $mediaType,
             'total_bytes' => $estimatedSize,
             'info_hash' => null,
-            'files' => [
-                [
-                    'index' => 0,
-                    'path' => $filename,
-                    'size' => $estimatedSize,
-                    'is_video' => true,
-                    'selected' => true,
-                ],
-            ],
+            'files' => $directFiles,
+            'tree' => $this->bencodeParser->buildFolderTree($directFiles),
+            'folder_count' => 0,
+            'file_count' => 1,
+            'default_folder' => $suggestedFolder,
+            'destinations' => $destinations,
+        ];
+    }
+
+    /**
+     * Inspect an uploaded .torrent binary file.
+     */
+    public function inspectTorrentFileContent(string $rawContent, string $originalFilename = 'upload.torrent'): array
+    {
+        $parsed = $this->bencodeParser->parseTorrentString($rawContent);
+        $destinations = $this->getDefaultDestinations();
+
+        $torrentTitle = $parsed['name'] ?? pathinfo($originalFilename, PATHINFO_FILENAME);
+        $torrentTitle = str_replace(['.', '_'], ' ', $torrentTitle);
+        $mediaType = $this->detectMediaType($torrentTitle);
+        $suggestedFolder = $mediaType === 'series' ? $destinations['series'] : $destinations['movies'];
+
+        // Cache the uploaded torrent file in storage/app/torrents/{info_hash}.torrent
+        if (! empty($parsed['info_hash'])) {
+            $cacheDir = storage_path('app/torrents');
+            if (! File::isDirectory($cacheDir)) {
+                File::makeDirectory($cacheDir, 0755, true, true);
+            }
+            File::put("{$cacheDir}/{$parsed['info_hash']}.torrent", $rawContent);
+        }
+
+        return [
+            'download_type' => 'torrent',
+            'title' => $torrentTitle,
+            'media_type' => $mediaType,
+            'total_bytes' => $parsed['total_size'] ?? 0,
+            'info_hash' => $parsed['info_hash'] ?? null,
+            'files' => $parsed['files'] ?? [],
+            'tree' => $parsed['tree'] ?? [],
+            'folder_count' => $parsed['folder_count'] ?? 0,
+            'file_count' => $parsed['file_count'] ?? count($parsed['files'] ?? []),
             'default_folder' => $suggestedFolder,
             'destinations' => $destinations,
         ];
@@ -252,30 +315,15 @@ class DownloadManagerService
             $destinationPath = "{$targetFolder}/{$cleanTitle}.{$ext}";
         }
 
-        // Set default high-quality open-source movie test streams if user provided empty URL
-        if (empty($sourceUrl) || (str_starts_with($sourceUrl, 'magnet:') && $downloadType === 'direct')) {
-            $sampleStreams = [
-                'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-                'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-                'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-                'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
-            ];
-            $sourceUrl = $sourceUrl ?: $sampleStreams[array_rand($sampleStreams)];
-        }
-
-        // Calculate total bytes based on selected torrent files if provided
-        $totalBytes = 1450000000;
+        // Calculate total bytes based on selected files if provided
+        $totalBytes = 0;
         if (! empty($selectedFiles) && is_array($selectedFiles) && ! empty($torrentFiles) && is_array($torrentFiles)) {
-            $calcBytes = 0;
             foreach ($torrentFiles as $tf) {
                 $idx = $tf['index'] ?? null;
                 $path = $tf['path'] ?? null;
                 if (in_array($idx, $selectedFiles) || in_array($path, $selectedFiles)) {
-                    $calcBytes += (int) ($tf['size'] ?? 0);
+                    $totalBytes += (int) ($tf['size'] ?? 0);
                 }
-            }
-            if ($calcBytes > 0) {
-                $totalBytes = $calcBytes;
             }
         } elseif ($downloadType === 'direct' && $sourceUrl && $this->isRealHttpUrl($sourceUrl)) {
             try {
@@ -285,6 +333,28 @@ class DownloadManagerService
                     $totalBytes = (int) $contentLength;
                 }
             } catch (\Throwable $e) {
+            }
+        }
+
+        if ($totalBytes <= 0) {
+            $totalBytes = 1450000000; // fallback provisional
+        }
+
+        $aria2Gid = null;
+
+        // Try dispatching to aria2 if available
+        if ($this->aria2Service->isAvailable()) {
+            if ($downloadType === 'torrent') {
+                $cachedTorrent = $infoHash ? storage_path("app/torrents/{$infoHash}.torrent") : null;
+                if ($cachedTorrent && file_exists($cachedTorrent)) {
+                    $aria2Gid = $this->aria2Service->addTorrent($cachedTorrent, $targetFolder, $selectedFiles ?: []);
+                } elseif ($sourceUrl && str_starts_with($sourceUrl, 'magnet:')) {
+                    $aria2Gid = $this->aria2Service->addUri($sourceUrl, $targetFolder, $selectedFiles ?: []);
+                } elseif ($sourceUrl && file_exists($sourceUrl)) {
+                    $aria2Gid = $this->aria2Service->addTorrent($sourceUrl, $targetFolder, $selectedFiles ?: []);
+                }
+            } elseif ($sourceUrl && $this->isRealHttpUrl($sourceUrl)) {
+                $aria2Gid = $this->aria2Service->addUri($sourceUrl, $targetFolder);
             }
         }
 
@@ -298,10 +368,11 @@ class DownloadManagerService
             'torrent_files' => $torrentFiles,
             'selected_files' => $selectedFiles,
             'info_hash' => $infoHash,
+            'aria2_gid' => $aria2Gid,
             'total_bytes' => $totalBytes,
             'downloaded_bytes' => 0,
             'status' => 'downloading',
-            'speed_bytes_sec' => rand(15000000, 35000000),
+            'speed_bytes_sec' => 0,
         ]);
     }
 
@@ -319,12 +390,40 @@ class DownloadManagerService
                 $item->update(['status' => 'downloading']);
             }
 
-            // Torrent Mode vs Direct HTTP Mode
-            if ($item->download_type === 'torrent' || str_starts_with((string) $item->source_url, 'magnet:')) {
-                $this->processTorrentDownload($item);
-            } elseif ($item->source_url && $this->isRealHttpUrl($item->source_url)) {
+            // 1. If managed by aria2, poll genuine real-time progress
+            if ($item->aria2_gid && $this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
+                $status = $this->aria2Service->tellStatus($item->aria2_gid);
+                if ($status) {
+                    $item->downloaded_bytes = $status['downloaded_bytes'];
+                    if ($status['total_bytes'] > 0) {
+                        $item->total_bytes = $status['total_bytes'];
+                    }
+                    $item->speed_bytes_sec = $status['speed_bytes_sec'];
+
+                    if ($status['status'] === 'completed') {
+                        $item->status = 'completed';
+                        $item->speed_bytes_sec = 0;
+                        $item->save();
+                        $this->autoIndexMedia($item);
+                    } elseif ($status['status'] === 'failed') {
+                        $item->status = 'failed';
+                        $item->error_message = $status['error_message'] ?: 'Download failed in aria2';
+                        $item->speed_bytes_sec = 0;
+                        $item->save();
+                    } else {
+                        $item->status = $status['status'];
+                        $item->save();
+                    }
+                    $processed++;
+                    continue;
+                }
+            }
+
+            // 2. Direct HTTP chunked streamer (pure PHP)
+            if ($item->download_type === 'direct' && $item->source_url && $this->isRealHttpUrl($item->source_url)) {
                 $this->processRealDownload($item, $chunkBytes);
             } else {
+                // If neither aria2 nor real HTTP is connected (e.g. test or offline), gracefully simulate
                 $this->processSimulatedDownload($item);
             }
 
@@ -344,33 +443,6 @@ class DownloadManagerService
         $scheme = parse_url($url, PHP_URL_SCHEME);
 
         return in_array(strtolower($scheme ?? ''), ['http', 'https']);
-    }
-
-    /**
-     * Simulate realistic torrent swarm chunk downloading with peer speeds.
-     */
-    protected function processTorrentDownload(DownloadItem $item): void
-    {
-        $current = $item->downloaded_bytes;
-        $total = $item->total_bytes > 0 ? $item->total_bytes : 2147483648;
-
-        // Realistic P2P Swarm speed variation (18MB - 45MB/s)
-        $speed = rand(18000000, 45000000);
-        $newDownloaded = min($total, $current + $speed);
-
-        if ($newDownloaded >= $total) {
-            $item->downloaded_bytes = $total;
-            $item->status = 'completed';
-            $item->speed_bytes_sec = 0;
-            $item->save();
-
-            $this->finalizeTorrentFiles($item);
-            $this->autoIndexMedia($item);
-        } else {
-            $item->downloaded_bytes = $newDownloaded;
-            $item->speed_bytes_sec = $speed;
-            $item->save();
-        }
     }
 
     protected function processRealDownload(DownloadItem $item, int $chunkBytes): void
@@ -503,6 +575,9 @@ class DownloadManagerService
     {
         $item = DownloadItem::find($id);
         if ($item && $item->status === 'downloading') {
+            if ($item->aria2_gid && $this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
+                $this->aria2Service->pause($item->aria2_gid);
+            }
             $item->update(['status' => 'paused', 'speed_bytes_sec' => 0]);
 
             return true;
@@ -515,6 +590,9 @@ class DownloadManagerService
     {
         $item = DownloadItem::find($id);
         if ($item && in_array($item->status, ['paused', 'queued', 'failed'])) {
+            if ($item->aria2_gid && $this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
+                $this->aria2Service->unpause($item->aria2_gid);
+            }
             $item->update(['status' => 'downloading']);
 
             return true;
@@ -527,10 +605,13 @@ class DownloadManagerService
     {
         $item = DownloadItem::find($id);
         if ($item) {
+            if ($item->aria2_gid && $this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
+                $this->aria2Service->unpause($item->aria2_gid);
+            }
             $item->update([
                 'downloaded_bytes' => 0,
                 'status' => 'downloading',
-                'speed_bytes_sec' => rand(15000000, 30000000),
+                'speed_bytes_sec' => 0,
                 'error_message' => null,
             ]);
 
@@ -545,6 +626,10 @@ class DownloadManagerService
         $item = DownloadItem::find($id);
         if (! $item) {
             return false;
+        }
+
+        if ($item->aria2_gid && $this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
+            $this->aria2Service->remove($item->aria2_gid);
         }
 
         if ($deleteFile && $item->destination_path && File::exists($item->destination_path)) {
@@ -568,59 +653,12 @@ class DownloadManagerService
             File::makeDirectory($dir, 0755, true, true);
         }
 
-        if (! File::exists($dest)) {
-            File::put($dest, "Creative Media Hub Media Stream Container: {$item->title}");
-        }
-
         if (strtolower(pathinfo($dest, PATHINFO_EXTENSION)) === 'zip') {
             $zip = new \ZipArchive;
             if ($zip->open($dest) === true) {
                 $zip->extractTo($dir);
                 $zip->close();
             }
-        }
-    }
-
-    /**
-     * Finalize selected torrent files into destination folder.
-     */
-    protected function finalizeTorrentFiles(DownloadItem $item): void
-    {
-        $destFolder = $item->destination_folder ?: pathinfo((string) $item->destination_path, PATHINFO_DIRNAME);
-        if (! $destFolder) {
-            return;
-        }
-
-        if (! File::isDirectory($destFolder)) {
-            File::makeDirectory($destFolder, 0755, true, true);
-        }
-
-        $torrentFiles = $item->torrent_files ?? [];
-        $selectedFiles = $item->selected_files ?? [];
-
-        if (! empty($torrentFiles) && is_array($torrentFiles)) {
-            foreach ($torrentFiles as $file) {
-                $idx = $file['index'] ?? null;
-                $path = $file['path'] ?? null;
-                $isSelected = empty($selectedFiles) || in_array($idx, $selectedFiles) || in_array($path, $selectedFiles);
-
-                if ($isSelected && $path) {
-                    $fullFilePath = "{$destFolder}/{$path}";
-                    $fileDir = pathinfo($fullFilePath, PATHINFO_DIRNAME);
-                    if (! File::isDirectory($fileDir)) {
-                        File::makeDirectory($fileDir, 0755, true, true);
-                    }
-                    if (! File::exists($fullFilePath)) {
-                        File::put($fullFilePath, "Creative Media Hub BitTorrent Swarm: {$path}");
-                    }
-                }
-            }
-        }
-
-        // Also ensure main destination_path exists
-        $mainDest = $item->destination_path;
-        if ($mainDest && ! File::exists($mainDest)) {
-            File::put($mainDest, "Creative Media Hub BitTorrent Swarm Master: {$item->title}");
         }
     }
 

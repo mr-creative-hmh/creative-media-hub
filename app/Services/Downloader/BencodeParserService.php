@@ -15,7 +15,7 @@ class BencodeParserService
     }
 
     /**
-     * Parse a .torrent file and extract key metadata.
+     * Parse a .torrent file from filesystem.
      */
     public function parseTorrentFile(string $filePath): ?array
     {
@@ -44,56 +44,187 @@ class BencodeParserService
 
             $info = $decoded['info'];
             $name = $info['name.utf-8'] ?? $info['name'] ?? 'Unknown Torrent';
+            if (is_array($name)) {
+                $name = implode(' ', $name);
+            }
+            $name = trim((string) $name);
             $infoHash = sha1($this->encode($info));
 
             $files = [];
             $totalSize = 0;
+            $foldersSet = [];
 
             if (isset($info['files']) && is_array($info['files'])) {
                 // Multi-file torrent
-                foreach ($info['files'] as $index => $file) {
+                foreach ($info['files'] as $originalIdx => $file) {
                     $length = (int) ($file['length'] ?? 0);
                     $pathParts = $file['path.utf-8'] ?? $file['path'] ?? [$name];
-                    $relativePath = is_array($pathParts) ? implode('/', $pathParts) : (string) $pathParts;
-                    $ext = strtolower(pathinfo($relativePath, PATHINFO_EXTENSION));
-                    $isVideo = in_array($ext, ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'ts', 'm4v']);
+                    if (! is_array($pathParts)) {
+                        $pathParts = [$pathParts];
+                    }
+
+                    // Normalize path parts
+                    $cleanParts = [];
+                    foreach ($pathParts as $part) {
+                        $partStr = trim((string) $part, "/\\ ");
+                        if ($partStr !== '') {
+                            $cleanParts[] = $partStr;
+                        }
+                    }
+
+                    if (empty($cleanParts)) {
+                        continue;
+                    }
+
+                    $relativePath = implode('/', $cleanParts);
+                    $filename = end($cleanParts);
+                    $folder = count($cleanParts) > 1 ? implode('/', array_slice($cleanParts, 0, -1)) : '';
+                    $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+
+                    // Skip empty directory markers (length 0 and no extension or ends with slash)
+                    if ($length === 0 && ($ext === '' || str_ends_with($relativePath, '/'))) {
+                        continue;
+                    }
+
+                    // Skip internal piece-alignment padding files (BEP 47)
+                    if (str_contains($relativePath, '_____padding_file_') || str_contains($relativePath, '.pad/')) {
+                        continue;
+                    }
+
+                    $isVideo = in_array($ext, ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'ts', 'm4v', 'iso', 'vob']);
+                    $isSubtitle = in_array($ext, ['srt', 'vtt', 'sub', 'ass', 'ssa', 'idx']);
+                    $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'bmp']);
+
+                    // aria2c uses 1-based indexing matching the original position in info['files']
+                    $ariaIndex = $originalIdx + 1;
+
+                    if ($folder !== '') {
+                        $foldersSet[$folder] = true;
+                    }
 
                     $files[] = [
-                        'index' => $index,
+                        'index' => $ariaIndex,
                         'path' => $relativePath,
+                        'folder' => $folder,
+                        'filename' => $filename,
                         'size' => $length,
                         'is_video' => $isVideo,
-                        'selected' => $isVideo || $length > 50000000, // Select videos or large files by default
+                        'is_subtitle' => $isSubtitle,
+                        'is_image' => $isImage,
+                        'extension' => $ext,
+                        'selected' => $isVideo || $length > 20000000, // Select videos or files > 20MB by default
                     ];
+
                     $totalSize += $length;
                 }
             } else {
                 // Single-file torrent
                 $length = (int) ($info['length'] ?? 0);
                 $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-                $isVideo = in_array($ext, ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'ts', 'm4v']);
+                $isVideo = in_array($ext, ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'ts', 'm4v', 'iso', 'vob']);
+                $isSubtitle = in_array($ext, ['srt', 'vtt', 'sub', 'ass', 'ssa', 'idx']);
+                $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'bmp']);
 
                 $files[] = [
-                    'index' => 0,
+                    'index' => 1,
                     'path' => $name,
+                    'folder' => '',
+                    'filename' => $name,
                     'size' => $length,
                     'is_video' => $isVideo,
+                    'is_subtitle' => $isSubtitle,
+                    'is_image' => $isImage,
+                    'extension' => $ext,
                     'selected' => true,
                 ];
                 $totalSize = $length;
             }
+
+            $tree = $this->buildFolderTree($files);
 
             return [
                 'name' => $name,
                 'info_hash' => $infoHash,
                 'total_size' => $totalSize,
                 'files' => $files,
+                'tree' => $tree,
+                'folder_count' => count($foldersSet),
+                'file_count' => count($files),
                 'piece_length' => (int) ($info['piece length'] ?? 0),
                 'announce' => $decoded['announce'] ?? null,
             ];
         } catch (\Throwable $e) {
             return null;
         }
+    }
+
+    /**
+     * Build hierarchical tree containing folders and files.
+     */
+    public function buildFolderTree(array $files): array
+    {
+        $treeRoot = [];
+
+        foreach ($files as $file) {
+            $parts = explode('/', $file['path']);
+            $filename = array_pop($parts);
+            $current = &$treeRoot;
+            $currentPath = '';
+
+            foreach ($parts as $folder) {
+                $currentPath = $currentPath ? "{$currentPath}/{$folder}" : $folder;
+                if (! isset($current[$folder])) {
+                    $current[$folder] = [
+                        'type' => 'folder',
+                        'name' => $folder,
+                        'path' => $currentPath,
+                        'size' => 0,
+                        'file_count' => 0,
+                        'video_count' => 0,
+                        'file_indexes' => [],
+                        'children' => [],
+                    ];
+                }
+                $current[$folder]['size'] += $file['size'];
+                $current[$folder]['file_count']++;
+                if (! empty($file['is_video'])) {
+                    $current[$folder]['video_count']++;
+                }
+                $current[$folder]['file_indexes'][] = $file['index'];
+                $current = &$current[$folder]['children'];
+            }
+
+            $current[$filename] = [
+                'type' => 'file',
+                'name' => $filename,
+                'path' => $file['path'],
+                'folder' => $file['folder'] ?? '',
+                'size' => $file['size'],
+                'index' => $file['index'],
+                'is_video' => ! empty($file['is_video']),
+                'is_subtitle' => ! empty($file['is_subtitle']),
+                'extension' => $file['extension'] ?? pathinfo($filename, PATHINFO_EXTENSION),
+            ];
+        }
+
+        $convert = function ($nodes) use (&$convert) {
+            $folders = [];
+            $fileNodes = [];
+            foreach ($nodes as $node) {
+                if ($node['type'] === 'folder') {
+                    $node['children'] = $convert($node['children']);
+                    $folders[] = $node;
+                } else {
+                    $fileNodes[] = $node;
+                }
+            }
+            usort($folders, fn ($a, $b) => strnatcasecmp($a['name'], $b['name']));
+            usort($fileNodes, fn ($a, $b) => strnatcasecmp($a['name'], $b['name']));
+
+            return array_merge($folders, $fileNodes);
+        };
+
+        return $convert($treeRoot);
     }
 
     /**
@@ -117,37 +248,45 @@ class BencodeParserService
         $displayName = $params['dn'] ?? 'Torrent Download';
         $displayName = urldecode(str_replace('+', ' ', $displayName));
 
-        // Intelligent simulation of multi-file structure for magnet until metadata is fetched from DHT
+        // Check if we already cached the downloaded .torrent metadata for this hash
+        $cachedTorrent = storage_path("app/torrents/{$infoHash}.torrent");
+        if (file_exists($cachedTorrent)) {
+            $parsed = $this->parseTorrentFile($cachedTorrent);
+            if ($parsed) {
+                return $parsed;
+            }
+        }
+
+        // Clean magnet presentation without fake sample files
+        $ext = strtolower(pathinfo($displayName, PATHINFO_EXTENSION));
+        $isVideo = in_array($ext, ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'ts', 'm4v', 'iso']);
+        $provisionalPath = $displayName.(($ext === '' && ! str_contains($displayName, '.')) ? '.mkv' : '');
+
         $files = [
             [
-                'index' => 0,
-                'path' => $displayName.(str_contains($displayName, '.') ? '' : '.mkv'),
-                'size' => 2147483648, // 2.0 GB default
-                'is_video' => true,
-                'selected' => true,
-            ],
-            [
                 'index' => 1,
-                'path' => 'Sample/sample.mp4',
-                'size' => 45000000, // 45 MB
+                'path' => $provisionalPath,
+                'folder' => '',
+                'filename' => basename($provisionalPath),
+                'size' => 0, // Resolved upon swarm connection
                 'is_video' => true,
-                'selected' => false,
-            ],
-            [
-                'index' => 2,
-                'path' => 'info.nfo',
-                'size' => 2048,
-                'is_video' => false,
-                'selected' => false,
+                'is_subtitle' => false,
+                'is_image' => false,
+                'extension' => pathinfo($provisionalPath, PATHINFO_EXTENSION) ?: 'mkv',
+                'selected' => true,
             ],
         ];
 
         return [
             'name' => $displayName,
             'info_hash' => $infoHash,
-            'total_size' => 2147483648 + 45000000 + 2048,
+            'total_size' => 0,
             'files' => $files,
-            'piece_length' => 2097152,
+            'tree' => $this->buildFolderTree($files),
+            'folder_count' => 0,
+            'file_count' => 1,
+            'is_magnet' => true,
+            'piece_length' => 0,
             'announce' => $params['tr'] ?? null,
         ];
     }
@@ -237,7 +376,6 @@ class BencodeParserService
         if (is_array($data)) {
             $isAssoc = array_keys($data) !== range(0, count($data) - 1);
             if ($isAssoc) {
-                // Dictionary must have keys sorted in lexicographical byte order
                 ksort($data, SORT_STRING);
                 $encoded = 'd';
                 foreach ($data as $k => $v) {

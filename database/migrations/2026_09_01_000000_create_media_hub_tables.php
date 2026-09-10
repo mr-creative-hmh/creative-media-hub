@@ -246,6 +246,7 @@ return new class extends Migration
                 $table->text('torrent_files')->nullable();
                 $table->text('selected_files')->nullable();
                 $table->string('info_hash')->nullable()->index();
+                $table->string('aria2_gid')->nullable()->index();
                 $table->timestamps();
             });
         }
