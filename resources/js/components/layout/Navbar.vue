@@ -9,7 +9,7 @@ import { useSubtitleJob } from '@/composables/useSubtitleJob';
 import { useActivityCenter } from '@/composables/useActivityCenter';
 import AppLogo from '@/components/common/AppLogo.vue';
 import {
-    Search, Globe, LayoutDashboard, Film, Layers, Clapperboard, FolderSync,
+    Search, Globe, LayoutDashboard, History, Film, Layers, Clapperboard, FolderSync,
     Subtitles, BarChart3, DownloadCloud, Menu, X, Tv,
     Settings, ScanLine, Sparkles, Activity, RefreshCw, Pause, BookOpen
 } from 'lucide-vue-next';
@@ -39,6 +39,7 @@ const mobileNavItems = [
     { nameKey: 'nav.movies', href: '/movies', icon: Film },
     { nameKey: 'nav.collections', href: '/collections', icon: Layers },
     { nameKey: 'nav.series', href: '/series', icon: Tv },
+    { nameKey: 'nav.watch_history', href: '/watch-history', icon: History },
     { nameKey: 'nav.metadata', href: '/metadata', icon: Sparkles },
     { nameKey: 'nav.scanner', href: '/scanner', icon: ScanLine },
     { nameKey: 'nav.organizer', href: '/organizer', icon: FolderSync },

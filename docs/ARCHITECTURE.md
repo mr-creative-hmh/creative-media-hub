@@ -28,8 +28,8 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
 +-----------------------------------------------------------------------------------+
 |                            HTTP & CONTROLLERS LAYER                               |
 |   ├── DashboardController (Hero Spotlight & Top Rated Showcase)                   |
-|   ├── MediaController (Movies Catalog, Regional Cinema Filters, Continue Watching)|
-|   ├── SeriesController (TV Shows, Seasons, Episodic Scoped Continue Watching)     |
+|   ├── MediaController (Movies Catalog, Regional Cinema Filters, Watch History)|
+|   ├── SeriesController (TV Shows, Seasons, Episodic Scoped Watch History)     |
 |   ├── CollectionController (Movie Boxsets, Chronological Sagas, Franchise Resume) |
 |   ├── StreamController (HTTP 206 Byte-Range & Non-Blocking FFmpeg Remuxer)        |
 |   ├── MetadataManagementController (Fix Match Studio, Direct TMDb/IMDb Lookup)    |
@@ -155,7 +155,7 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
 | **Adapter Pattern** | `FfmpegLocatorService` | Abstracts platform differences between Windows, Linux, and macOS binary detection. |
 | **Factory / Repository** | `SceneNameParserService` | Factory normalizing raw file/folder strings into structured domain entities. |
 | **Pipelined Execution** | `VirtualLibraryScannerService` | Chunks discoveries into non-blocking batches for responsive UI streaming. |
-| **Observer / Event** | `ContinueWatchingBar.vue` | Reactive real-time sync with video player progress pings. |
+| **Observer / Event** | `WatchHistoryBar.vue` | Reactive real-time sync with video player progress pings. |
 
 ---
 

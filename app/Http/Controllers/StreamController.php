@@ -142,6 +142,20 @@ class StreamController extends Controller
         $modelClass = ($wType === 'episode') ? Episode::class : MediaItem::class;
         $isCompleted = ($prog / max(1, $dur)) >= 0.92;
 
+        // Clean up any stray duplicate rows if any exist
+        $duplicates = WatchHistory::where('watchable_type', $modelClass)
+            ->where('watchable_id', $wId)
+            ->orderByDesc('id')
+            ->get();
+
+        if ($duplicates->count() > 1) {
+            $keep = $duplicates->first();
+            WatchHistory::where('watchable_type', $modelClass)
+                ->where('watchable_id', $wId)
+                ->where('id', '!=', $keep->id)
+                ->delete();
+        }
+
         $watchHistory = WatchHistory::updateOrCreate(
             [
                 'watchable_type' => $modelClass,
@@ -161,49 +175,89 @@ class StreamController extends Controller
         ]);
     }
 
-    public function getContinueWatching(Request $request)
+    public function getWatchHistory(Request $request)
     {
-        $query = WatchHistory::query()
+        $type = $request->input('type', 'all');
+
+        // Fetch all in-progress watch history items
+        $rawHistory = WatchHistory::query()
             ->where('is_completed', false)
             ->where('progress_seconds', '>', 3)
             ->orderByDesc('last_watched_at')
-            ->with(['watchable']);
+            ->with(['watchable'])
+            ->get();
 
-        $type = $request->input('type');
-        if ($type === 'movie') {
-            $query->where('watchable_type', MediaItem::class);
-        } elseif ($type === 'series' || $type === 'episode') {
-            $query->where('watchable_type', Episode::class);
-        } elseif ($type === 'collection') {
-            $query->where('watchable_type', MediaItem::class)
-                ->whereHasMorph('watchable', [MediaItem::class], function ($q) {
-                    $q->whereNotNull('collection_name')->where('collection_name', '!=', '');
-                });
-        }
+        // 1. Deduplicate by watchable_type + watchable_id
+        $deduped = $rawHistory->unique(function ($h) {
+            return $h->watchable_type . '_' . $h->watchable_id;
+        });
 
-        $history = $query->limit(12)->get()->map(function ($h) {
+        // 2. Group episodes by series so only the latest watched episode of each series is shown
+        $seriesSeen = [];
+        $uniqueList = $deduped->filter(function ($h) use (&$seriesSeen) {
             $item = $h->watchable;
             if (! $item) {
-                return null;
+                return false;
             }
 
-            $percent = $h->duration_seconds > 0 ? min(100, round(($h->progress_seconds / $h->duration_seconds) * 100)) : 0;
-            $formatTime = function ($sec) {
-                $hrs = floor($sec / 3600);
-                $mins = floor(($sec % 3600) / 60);
-                $secs = $sec % 60;
+            if ($item instanceof Episode) {
+                $seriesId = $item->series_id ?? ($item->season?->series_id ?? 0);
+                if ($seriesId > 0) {
+                    if (isset($seriesSeen[$seriesId])) {
+                        return false; // Skip older episodes for this series
+                    }
+                    $seriesSeen[$seriesId] = true;
+                }
+            }
 
-                return $hrs > 0 ? sprintf('%d:%02d:%02d', $hrs, $mins, $secs) : sprintf('%02d:%02d', $mins, $secs);
-            };
+            return true;
+        });
+
+        // 3. Compute accurate counts for category tabs
+        $counts = [
+            'all' => $uniqueList->count(),
+            'movies' => $uniqueList->filter(fn ($h) => $h->watchable instanceof MediaItem)->count(),
+            'series' => $uniqueList->filter(fn ($h) => $h->watchable instanceof Episode)->count(),
+            'collections' => $uniqueList->filter(fn ($h) => $h->watchable instanceof MediaItem && !empty($h->watchable->collection_name))->count(),
+        ];
+
+        // 4. Filter by requested type if specified and not 'all'
+        $filtered = $uniqueList;
+        if ($type === 'movie' || $type === 'movies') {
+            $filtered = $filtered->filter(fn ($h) => $h->watchable instanceof MediaItem);
+        } elseif ($type === 'series' || $type === 'episode') {
+            $filtered = $filtered->filter(fn ($h) => $h->watchable instanceof Episode);
+        } elseif ($type === 'collection' || $type === 'collections') {
+            $filtered = $filtered->filter(fn ($h) => $h->watchable instanceof MediaItem && !empty($h->watchable->collection_name));
+        }
+
+        // 5. Transform into rich UI objects
+        $formatTime = function ($sec) {
+            $hrs = floor($sec / 3600);
+            $mins = floor(($sec % 3600) / 60);
+            $secs = $sec % 60;
+            return $hrs > 0 ? sprintf('%d:%02d:%02d', $hrs, $mins, $secs) : sprintf('%02d:%02d', $mins, $secs);
+        };
+
+        $items = $filtered->map(function ($h) use ($formatTime) {
+            $item = $h->watchable;
+            if (! $item) return null;
+
+            $percent = $h->duration_seconds > 0 ? min(100, round(($h->progress_seconds / $h->duration_seconds) * 100)) : 0;
+            $remaining = max(0, $h->duration_seconds - $h->progress_seconds);
 
             if ($item instanceof MediaItem) {
                 $item->loadMissing('subtitles');
                 $slug = $item->slug ?: "movie-{$item->id}";
+                $isCollection = !empty($item->collection_name);
 
                 return [
+                    'history_id' => $h->id,
                     'id' => $item->id,
                     'watchable_id' => $item->id,
                     'watchable_type' => 'movie',
+                    'category' => $isCollection ? 'collection' : 'movie',
+                    'collection_name' => $item->collection_name,
                     'title' => $item->title,
                     'title_ar' => $item->title_ar,
                     'type' => 'movie',
@@ -217,11 +271,13 @@ class StreamController extends Controller
                     'progress_percent' => $percent,
                     'percent' => $percent,
                     'current_time_formatted' => $formatTime($h->progress_seconds),
+                    'duration_formatted' => $formatTime($h->duration_seconds),
+                    'remaining_formatted' => $formatTime($remaining),
                     'subtitles' => $item->subtitles,
                     'resolution' => $item->resolution,
                     'video_codec' => $item->video_codec,
                     'audio_codec' => $item->audio_codec,
-                    'last_watched_at' => $h->last_watched_at,
+                    'last_watched_at' => $h->last_watched_at ? $h->last_watched_at->toIso8601String() : null,
                     'stream_url' => route('stream.movie', $item->id),
                 ];
             }
@@ -236,15 +292,18 @@ class StreamController extends Controller
                 $seriesSlug = $series ? ($series->slug ?: "series-{$series->id}") : "series-{$item->series_id}";
 
                 return [
+                    'history_id' => $h->id,
                     'id' => $item->id,
                     'watchable_id' => $item->id,
                     'watchable_type' => 'episode',
+                    'category' => 'series',
                     'series' => $series,
                     'series_id' => $series?->id ?? $item->series_id,
                     'series_title' => $sNameEn,
                     'series_title_ar' => $sNameAr,
                     'season_number' => $sNum,
                     'episode_number' => $eNum,
+                    'episode_title' => $item->title,
                     'title' => "{$sNameEn} - Season {$sNum} - Episode {$eNum}",
                     'title_ar' => "{$sNameAr} - الموسم {$sNum} - الحلقة {$eNum}",
                     'type' => 'episode',
@@ -259,11 +318,12 @@ class StreamController extends Controller
                     'percent' => $percent,
                     'current_time_formatted' => $formatTime($h->progress_seconds),
                     'duration_formatted' => $formatTime($h->duration_seconds),
+                    'remaining_formatted' => $formatTime($remaining),
                     'subtitles' => $item->subtitles,
                     'resolution' => $item->resolution,
                     'video_codec' => $item->video_codec,
                     'audio_codec' => $item->audio_codec,
-                    'last_watched_at' => $h->last_watched_at,
+                    'last_watched_at' => $h->last_watched_at ? $h->last_watched_at->toIso8601String() : null,
                     'stream_url' => route('stream.episode', $item->id),
                 ];
             }
@@ -273,8 +333,73 @@ class StreamController extends Controller
 
         return response()->json([
             'success' => true,
-            'items' => $history,
+            'counts' => $counts,
+            'items' => $items,
         ]);
+    }
+
+    public function getContinueWatching(Request $request)
+    {
+        return $this->getWatchHistory($request);
+    }
+
+    public function deleteWatchHistory(Request $request, $id)
+    {
+        $type = $request->input('type');
+
+        // Check if $id matches WatchHistory primary ID
+        $record = WatchHistory::find($id);
+        if ($record) {
+            $record->delete();
+            return response()->json([
+                'success' => true,
+                'message' => 'Item removed from watch history',
+            ]);
+        }
+
+        // Otherwise check if watchable_id and watchable_type match
+        $modelClass = ($type === 'series' || $type === 'episode') ? Episode::class : MediaItem::class;
+
+        WatchHistory::where('watchable_id', $id)
+            ->when($type, fn ($q) => $q->where('watchable_type', $modelClass))
+            ->delete();
+
+        // If removing an entire series by series_id
+        if ($type === 'series' || $request->boolean('is_series')) {
+            $epIds = Episode::where('series_id', $id)->pluck('id');
+            WatchHistory::where('watchable_type', Episode::class)->whereIn('watchable_id', $epIds)->delete();
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Item removed from watch history',
+        ]);
+    }
+
+    public function clearWatchHistory(Request $request)
+    {
+        $type = $request->input('type', 'all');
+
+        if ($type === 'movie' || $type === 'movies') {
+            WatchHistory::where('watchable_type', MediaItem::class)->delete();
+        } elseif ($type === 'series' || $type === 'episode') {
+            WatchHistory::where('watchable_type', Episode::class)->delete();
+        } elseif ($type === 'collection' || $type === 'collections') {
+            $colIds = MediaItem::whereNotNull('collection_name')->where('collection_name', '!=', '')->pluck('id');
+            WatchHistory::where('watchable_type', MediaItem::class)->whereIn('watchable_id', $colIds)->delete();
+        } else {
+            WatchHistory::query()->delete();
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Watch history cleared successfully',
+        ]);
+    }
+
+    public function watchHistoryPage(Request $request): \Inertia\Response
+    {
+        return \Inertia\Inertia::render('WatchHistory/Index');
     }
 
     public function getCacheStatus(Request $request)

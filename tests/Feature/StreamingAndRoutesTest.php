@@ -158,19 +158,19 @@ class StreamingAndRoutesTest extends TestCase
         ]);
 
         // Movie query should only return movies
-        $resMovies = $this->getJson('/api/continue-watching?type=movie');
+        $resMovies = $this->getJson('/api/watch-history?type=movie');
         $resMovies->assertStatus(200);
         $this->assertEquals(1, count($resMovies->json('items')));
         $this->assertEquals('movie', $resMovies->json('items.0.type'));
 
         // Series query should only return episodes
-        $resSeries = $this->getJson('/api/continue-watching?type=series');
+        $resSeries = $this->getJson('/api/watch-history?type=series');
         $resSeries->assertStatus(200);
         $this->assertEquals(1, count($resSeries->json('items')));
         $this->assertEquals('episode', $resSeries->json('items.0.type'));
 
         // Collection query should only return collection items
-        $resCol = $this->getJson('/api/continue-watching?type=collection');
+        $resCol = $this->getJson('/api/watch-history?type=collection');
         $resCol->assertStatus(200);
         $this->assertEquals(1, count($resCol->json('items')));
         $this->assertEquals('The Dark Knight', $resCol->json('items.0.title'));
@@ -196,7 +196,7 @@ class StreamingAndRoutesTest extends TestCase
             'last_watched_at' => now(),
         ]);
 
-        $res = $this->getJson('/api/continue-watching?type=movie');
+        $res = $this->getJson('/api/watch-history?type=movie');
         $res->assertStatus(200);
         $item = $res->json('items.0');
         $this->assertEquals('480p SD', $item['resolution']);
@@ -249,5 +249,59 @@ class StreamingAndRoutesTest extends TestCase
         if ($response->getStatusCode() === 200 || $response->getStatusCode() === 206) {
             $this->assertEquals('*', $response->headers->get('Access-Control-Allow-Origin'));
         }
+    }
+
+    public function test_delete_single_watch_history_item_removes_record(): void
+    {
+        $movie = MediaItem::create([
+            'title' => 'Delete Test Movie',
+            'release_year' => 2021,
+        ]);
+
+        $history = WatchHistory::create([
+            'watchable_id' => $movie->id,
+            'watchable_type' => MediaItem::class,
+            'progress_seconds' => 120,
+            'duration_seconds' => 3600,
+            'is_completed' => false,
+            'last_watched_at' => now(),
+        ]);
+
+        $this->assertDatabaseHas('watch_histories', ['id' => $history->id]);
+
+        $res = $this->deleteJson('/api/watch-history/' . $history->id);
+        $res->assertStatus(200);
+        $res->assertJson(['success' => true]);
+
+        $this->assertDatabaseMissing('watch_histories', ['id' => $history->id]);
+    }
+
+    public function test_clear_all_watch_history_removes_records(): void
+    {
+        $movie = MediaItem::create([
+            'title' => 'Clear Test Movie',
+            'release_year' => 2022,
+        ]);
+
+        WatchHistory::create([
+            'watchable_id' => $movie->id,
+            'watchable_type' => MediaItem::class,
+            'progress_seconds' => 500,
+            'duration_seconds' => 4000,
+            'is_completed' => false,
+            'last_watched_at' => now(),
+        ]);
+
+        $res = $this->deleteJson('/api/watch-history');
+        $res->assertStatus(200);
+        $res->assertJson(['success' => true]);
+
+        $this->assertEquals(0, WatchHistory::count());
+    }
+
+    public function test_watch_history_page_renders_successfully(): void
+    {
+        $response = $this->get('/watch-history');
+        $response->assertStatus(200);
     }
 }

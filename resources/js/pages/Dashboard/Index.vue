@@ -4,6 +4,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import HeroBanner from '@/components/media/HeroBanner.vue';
+import WatchHistoryBar from '@/components/layout/WatchHistoryBar.vue';
 import MediaCard from '@/components/media/MediaCard.vue';
 import MediaDetailModal from '@/components/media/MediaDetailModal.vue';
 import {
@@ -206,6 +207,9 @@ const handleHeroDetails = (item: any) => {
                 <div class="text-xl font-black text-slate-900 dark:text-white mt-2">{{ stats.storage_formatted }}</div>
             </Link>
         </div>
+
+        <!-- Watch History Bar (All Media In Progress) -->
+        <WatchHistoryBar type="all" @play="play" />
 
         <!-- 3. Curated AI Mood Vibes Interactive Matcher Studio -->
         <div class="mb-12 glass-panel rounded-3xl p-6 border border-slate-200 dark:border-white/10 space-y-6 relative overflow-hidden shadow-sm">

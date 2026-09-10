@@ -23,7 +23,7 @@ Creative Media Hub is powered by 9 interconnected pipelines designed for maximum
    5. Hybrid Stream & Remuxer       6. Subtitle Extraction & Sync
                   │                              │
                   ▼                              ▼
-   7. Continue Watching Engine      8. Fix Match & Error Studio
+   7. Watch History Hub & Engine      8. Fix Match & Error Studio
                   │
                   ▼
    9. Zero-Copy NTFS Hardlink Organizer
@@ -120,7 +120,11 @@ Creative Media Hub is powered by 9 interconnected pipelines designed for maximum
 
 ---
 
-### 2.9. Scoped Continue Watching & Watch History Engine
+### 2.9. Watch History Hub & Playback Progress Engine
+- **Dedicated Page**: `/watch-history` (`resources/js/pages/WatchHistory/Index.vue`)
+- **Components**: `WatchHistoryBar.vue` (inline scoped trays with remove button & View All link)
+- **Database**: Enforces unique `['watchable_type', 'watchable_id']` index on `watch_histories`.
+- **Deduplication**: Automatic deduplication and series episode grouping to latest watched episode.
 - **Location**: `App\Models\WatchHistory` & `ContinueWatchingBar.vue`
 - **Features**:
   - **Context-Segregated Trays**:

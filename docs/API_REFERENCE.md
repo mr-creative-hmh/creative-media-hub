@@ -106,15 +106,20 @@
 
 ---
 
-## 4. Scoped Continue Watching Endpoints
+## 4. Watch History & Playback Progress Endpoints
 
+- **`GET /api/watch-history?category={all|movies|series|collections}`**  
+  Returns categorized watch history items along with category breakdown counts `{ all, movies, series, collections }`.
+  - Automatically deduplicates and scopes items.
+  - For TV shows, aggregates episodes to the most recently watched episode per series with show poster/backdrop context.
 - **`GET /api/continue-watching?type={movie|series|collection}`**  
-  Returns deduplicated, in-progress items scoped strictly by media context:
-  - `type=movie`: In-progress standalone feature films.
-  - `type=series`: Most recently watched in-progress episode per TV series.
-  - `type=collection`: In-progress movies belonging to a franchise collection.
-- **`POST /api/watch-history`**  
-  Records current playback timestamp and marks media as completed once progress exceeds 92%.
+  Scoped watch history tray endpoint returning in-progress items for quick horizontal shelves.
+- **`POST /api/watch-history` or `POST /api/watch-history/progress`**  
+  Records current playback position, duration, and progress percentage. Automatically marks items completed when progress exceeds 92%. Backed by a unique `[watchable_type, watchable_id]` database constraint to guarantee zero duplicate records.
+- **`DELETE /api/watch-history/{id}`**  
+  Deletes a specific watch history record by ID.
+- **`DELETE /api/watch-history`**  
+  Clears the entire watch history or clears records within an optional `category` parameter.
 
 ---
 

@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
-import ContinueWatchingBar from '@/components/layout/ContinueWatchingBar.vue';
+import WatchHistoryBar from '@/components/layout/WatchHistoryBar.vue';
 import { useI18n } from '@/i18n/useI18n';
 import { 
     Layers, Search, Film, Star, Calendar, Play, 
@@ -119,7 +119,7 @@ const clearSearch = () => {
             </section>
 
             <!-- In-Progress Continue Watching Bar (Collections Only) -->
-            <ContinueWatchingBar type="collection" @play="play" />
+            <WatchHistoryBar type="collection" @play="play" />
 
             <!-- Collections Grid -->
             <div v-if="collections.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

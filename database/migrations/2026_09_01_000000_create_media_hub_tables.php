@@ -223,6 +223,8 @@ return new class extends Migration
                 $table->boolean('is_completed')->default(false)->index();
                 $table->timestamp('last_watched_at')->useCurrent();
                 $table->timestamps();
+
+                $table->unique(['watchable_type', 'watchable_id'], 'watch_histories_watchable_unique');
             });
         }
 

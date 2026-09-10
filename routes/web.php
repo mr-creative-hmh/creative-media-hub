@@ -121,7 +121,12 @@ Route::get('/stream/episode/{episode}', [StreamController::class, 'streamEpisode
 Route::get('/stream/subtitles/{subtitle}', [StreamController::class, 'streamSubtitle'])->name('stream.subtitle');
 Route::post('/api/playback/progress', [StreamController::class, 'saveProgress'])->name('api.playback.progress');
 Route::post('/api/watch-history/progress', [StreamController::class, 'saveProgress']);
-Route::get('/api/continue-watching', [StreamController::class, 'getContinueWatching'])->name('api.continue-watching');
+// Watch History Hub & Playback APIs
+Route::get('/watch-history', [StreamController::class, 'watchHistoryPage'])->name('watch-history.index');
+Route::get('/api/watch-history', [StreamController::class, 'getWatchHistory'])->name('api.watch-history.index');
+Route::delete('/api/watch-history/{id}', [StreamController::class, 'deleteWatchHistory'])->name('api.watch-history.delete');
+Route::delete('/api/watch-history', [StreamController::class, 'clearWatchHistory'])->name('api.watch-history.clear');
+Route::post('/api/watch-history/clear-all', [StreamController::class, 'clearWatchHistory']);
 Route::get('/api/media/duration', [StreamController::class, 'getMediaDuration'])->name('api.media.duration');
 Route::post('/api/stream/stop', [StreamController::class, 'stopStream'])->name('api.stream.stop');
 Route::get('/api/stream/cache-status', [StreamController::class, 'getCacheStatus'])->name('api.stream.cache-status');

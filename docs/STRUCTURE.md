@@ -132,7 +132,7 @@ creative-media-hub/
 - `HeroBanner.vue`: Dynamic hero carousel with autoplay, rating badges, background backdrop cross-fading, and type-safe "Play Now" / "More Details" dispatchers.
 - `MediaCard.vue`: Responsive media card with hover zoom, quick action triggers, rating badges, and resolution tags.
 - `MediaDetailModal.vue`: Rich modal overlay displaying synopses, cast credits, technical codecs, audio channels, and direct playback triggers.
-- `ContinueWatchingBar.vue`: Context-segregated horizontal progress bar with instant resume buttons.
+- `WatchHistoryBar.vue`: Context-segregated horizontal progress bar with instant resume buttons.
 
 ### 4.3. Subtitles & Health (`components/subtitles/`)
 - `SubtitleSearchModal.vue`: In-player and standalone modal for searching and downloading real cloud subtitles from SubDL and OpenSubtitles v3.

@@ -4,7 +4,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import HeroBanner from '@/components/media/HeroBanner.vue';
-import ContinueWatchingBar from '@/components/layout/ContinueWatchingBar.vue';
+import WatchHistoryBar from '@/components/layout/WatchHistoryBar.vue';
 import FilterBar from '@/components/media/FilterBar.vue';
 import MediaCard from '@/components/media/MediaCard.vue';
 import MediaDetailModal from '@/components/media/MediaDetailModal.vue';
@@ -67,7 +67,7 @@ const handleToggleFavorite = async (item: any) => {
         />
 
         <!-- In-Progress Continue Watching Bar (Movies Only) -->
-        <ContinueWatchingBar type="movie" @play="play" />
+        <WatchHistoryBar type="movie" @play="play" />
 
         <!-- Filter & Search Studio (Zero Dropdowns) -->
         <FilterBar :genres="genres" :filters="filters" :show-vibes="true" />

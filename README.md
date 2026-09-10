@@ -113,12 +113,21 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
   - **Hollywood & Western**: US, UK, Australia, Canada.
   - **European Cinema**: France, Germany, Italy, Spain, Scandinavia.
 
-### 7. ⏱️ Scoped Continue Watching Bars
-- Context-segregated continue watching trays:
-  - **Movies Page**: Displays only in-progress feature films.
-  - **Series Page**: Displays only in-progress TV show episodes.
-  - **Collections Page**: Displays only in-progress franchise movies.
-  - **Dashboard**: Clean cinematic spotlight without redundant clutter.
+### 7. 🕒 Watch History Hub & Scoped Progress Bars (سجل المشاهدة)
+- **Dedicated Watch History Hub (`/watch-history`)**:
+  - **Categorized Views**: Filterable sections for **All**, **Movies (الأفلام)**, **Series (المسلسلات)**, and **Collections (السلاسل)** with live counter badges.
+  - **Smart Series Aggregation**: Groups TV episodes to display the latest watched episode per series with next-episode context and show banner.
+  - **Instant Playback Resume**: One-click resumption directly into the Cinema Player at the exact saved second with progress bar indicators.
+  - **Live Search**: Instant client-side search filtering across titles, episode names, and franchise collections.
+  - **Individual Removal & Clean Slate**: Hover "Remove" button per card with instant toast notification, plus a "Clear All" modal dialog with destructive confirmation.
+- **Context-Segregated Progress Bars (`WatchHistoryBar`)**:
+  - **Movies Page**: In-progress feature films with individual remove buttons and a "View All" link to the Hub.
+  - **Series Page**: Latest in-progress TV show episodes.
+  - **Collections Page**: Latest in-progress franchise movies.
+  - **Dashboard**: Focused spotlight tray with direct navigation to the full history.
+- **Robust Persistence & API**:
+  - Deduplicated `watch_histories` records backed by unique `[watchable_type, watchable_id]` database constraints.
+  - Full RESTful endpoints (`GET /api/watch-history`, `DELETE /api/watch-history/{id}`, `DELETE /api/watch-history`, `POST /api/watch-history/progress`).
 
 ### 8. 🧠 Intelligent Scene Name Parser (Arabic & Multilingual Engine)
 - Normalizes Eastern Arabic numerals (`١, ٢, ٣ → 1, 2, 3`).
