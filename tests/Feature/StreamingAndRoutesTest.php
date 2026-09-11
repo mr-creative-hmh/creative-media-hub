@@ -304,4 +304,139 @@ class StreamingAndRoutesTest extends TestCase
         $response = $this->get('/watch-history');
         $response->assertStatus(200);
     }
+    public function test_continue_watching_attaches_playlist_for_episodes_and_collections(): void
+    {
+        $series = Series::create([
+            'title' => 'Stranger Things',
+            'release_year' => 2016,
+        ]);
+
+        $season = Season::create([
+            'series_id' => $series->id,
+            'season_number' => 1,
+        ]);
+
+        $ep1 = Episode::create([
+            'series_id' => $series->id,
+            'season_id' => $season->id,
+            'episode_number' => 1,
+            'title' => 'Chapter One',
+            'runtime_minutes' => 48,
+        ]);
+
+        $ep2 = Episode::create([
+            'series_id' => $series->id,
+            'season_id' => $season->id,
+            'episode_number' => 2,
+            'title' => 'Chapter Two',
+            'runtime_minutes' => 50,
+        ]);
+
+        $ep3 = Episode::create([
+            'series_id' => $series->id,
+            'season_id' => $season->id,
+            'episode_number' => 3,
+            'title' => 'Chapter Three',
+            'runtime_minutes' => 52,
+        ]);
+
+        WatchHistory::create([
+            'watchable_id' => $ep2->id,
+            'watchable_type' => Episode::class,
+            'progress_seconds' => 600,
+            'duration_seconds' => 3000,
+            'is_completed' => false,
+            'last_watched_at' => now(),
+        ]);
+
+        $resSeries = $this->getJson('/api/watch-history?type=series');
+        $resSeries->assertStatus(200);
+        $item = $resSeries->json('items.0');
+        $this->assertEquals($ep2->id, $item['id']);
+        $this->assertEquals('Stranger Things - Season 1 - Episode 2 - Chapter Two', $item['title']);
+        $this->assertEquals('Chapter Two', $item['episode_title']);
+        $this->assertArrayHasKey('playlist', $item);
+        $this->assertCount(3, $item['playlist']);
+        $this->assertEquals(1, $item['playlist'][0]['episode_number']);
+        $this->assertEquals('Stranger Things - Season 1 - Episode 1 - Chapter One', $item['playlist'][0]['title']);
+        $this->assertEquals(2, $item['playlist'][1]['episode_number']);
+        $this->assertEquals(3, $item['playlist'][2]['episode_number']);
+
+        // Collection continuity
+        $m1 = MediaItem::create([
+            'title' => 'John Wick 1',
+            'release_year' => 2014,
+            'collection_name' => 'John Wick Collection',
+        ]);
+
+        $m2 = MediaItem::create([
+            'title' => 'John Wick 2',
+            'release_year' => 2017,
+            'collection_name' => 'John Wick Collection',
+        ]);
+
+        WatchHistory::create([
+            'watchable_id' => $m1->id,
+            'watchable_type' => MediaItem::class,
+            'progress_seconds' => 900,
+            'duration_seconds' => 6000,
+            'is_completed' => false,
+            'last_watched_at' => now(),
+        ]);
+
+        $resCol = $this->getJson('/api/watch-history?type=collection');
+        $resCol->assertStatus(200);
+        $colItem = $resCol->json('items.0');
+        $this->assertArrayHasKey('playlist', $colItem);
+        $this->assertCount(2, $colItem['playlist']);
+    }
+
+    public function test_get_playlist_endpoint_returns_season_episodes_and_collection_movies(): void
+    {
+        $series = Series::create([
+            'title' => 'Fargo',
+            'release_year' => 2014,
+        ]);
+
+        $season = Season::create([
+            'series_id' => $series->id,
+            'season_number' => 1,
+        ]);
+
+        $ep1 = Episode::create([
+            'series_id' => $series->id,
+            'season_id' => $season->id,
+            'episode_number' => 1,
+            'title' => 'The Crocodile\'s Dilemma',
+        ]);
+
+        $ep2 = Episode::create([
+            'series_id' => $series->id,
+            'season_id' => $season->id,
+            'episode_number' => 2,
+            'title' => 'The Rooster Prince',
+        ]);
+
+        $resEp = $this->getJson(route('api.stream.playlist', ['type' => 'episode', 'id' => $ep1->id]));
+        $resEp->assertStatus(200);
+        $this->assertCount(2, $resEp->json('playlist'));
+        $this->assertEquals('Fargo', $resEp->json('series.title'));
+
+        $m1 = MediaItem::create([
+            'title' => 'Alien',
+            'release_year' => 1979,
+            'collection_name' => 'Alien Collection',
+        ]);
+
+        $m2 = MediaItem::create([
+            'title' => 'Aliens',
+            'release_year' => 1986,
+            'collection_name' => 'Alien Collection',
+        ]);
+
+        $resMovie = $this->getJson(route('api.stream.playlist', ['type' => 'movie', 'id' => $m1->id]));
+        $resMovie->assertStatus(200);
+        $this->assertCount(2, $resMovie->json('playlist'));
+        $this->assertEquals('Alien Collection', $resMovie->json('collection_name'));
+    }
 }

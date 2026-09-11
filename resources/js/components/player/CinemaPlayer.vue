@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
 import CinemaLoader from '@/components/player/CinemaLoader.vue';
+import { formatEpisodeTitle } from '@/lib/mediaTitle';
 import {
     Play,
     Pause,
@@ -98,15 +99,40 @@ const showSubtitleSearchModal = ref(false);
 const playbackRate = ref(1.0);
 
 // Playlist Management (Series & Collections)
+const internalPlaylist = ref<any[]>([]);
+
 const currentPlaylist = computed<any[]>(() => {
     if (props.playlist && Array.isArray(props.playlist) && props.playlist.length > 0) {
         return props.playlist;
     }
-    if (activeItem.value?.playlist && Array.isArray(activeItem.value.playlist)) {
+    if (activeItem.value?.playlist && Array.isArray(activeItem.value.playlist) && activeItem.value.playlist.length > 0) {
         return activeItem.value.playlist;
+    }
+    if (internalPlaylist.value && internalPlaylist.value.length > 0) {
+        return internalPlaylist.value;
     }
     return [];
 });
+
+const autoFetchPlaylist = async (item: any) => {
+    if (!item?.id) return;
+    const isEp = Boolean(item.season_id || item.episode_number || item.type === 'episode');
+    const type = isEp ? 'episode' : 'movie';
+    try {
+        const res = await fetch(`/api/stream/playlist?type=${type}&id=${item.id}`);
+        if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data.playlist) && data.playlist.length > 0) {
+                internalPlaylist.value = data.playlist;
+                if (!item.playlist) {
+                    item.playlist = data.playlist;
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('Could not auto-fetch playlist:', e);
+    }
+};
 
 const currentIndex = computed(() => {
     if (!currentPlaylist.value || currentPlaylist.value.length === 0) return -1;
@@ -329,6 +355,11 @@ const changeActiveItem = (newItem: any) => {
     savePlaybackProgress();
     stopServerStreamingCache();
     activeItem.value = newItem;
+    if ((!props.playlist || props.playlist.length === 0) && (!newItem.playlist || newItem.playlist.length === 0)) {
+        if (!internalPlaylist.value.some((p: any) => String(p.id) === String(newItem.id))) {
+            autoFetchPlaylist(newItem);
+        }
+    }
     liveResolution.value = '';
     hasAppliedInitialSeek.value = false;
     currentTime.value = 0;
@@ -482,53 +513,13 @@ const displayYear = computed(() => {
     return activeItem.value?.release_year || activeItem.value?.year || (activeItem.value?.series?.release_year ?? '');
 });
 
-// Extract Series Name, Season Number, and Episode Number robustly
+// Extract Series Name, Season Number, and Episode Number with real episode title
 const playerHeaderTitle = computed(() => {
     if (isEpisode.value) {
-        let sName = '';
-        if (isRTL.value) {
-            sName = activeItem.value?.series?.title_ar || activeItem.value?.series_title_ar || activeItem.value?.series_name_ar || activeItem.value?.series?.title || activeItem.value?.series_title || '';
-        } else {
-            sName = activeItem.value?.series?.title || activeItem.value?.series_title || activeItem.value?.series_name || '';
-        }
-
-        // If sName is still empty, parse from item.title or fallback
-        if (!sName && activeItem.value?.title) {
-            const parts = activeItem.value.title.split(/\s*-\s*(?:Season|الموسم|S\d+)/i);
-            if (parts[0] && !parts[0].toLowerCase().startsWith('episode') && !parts[0].toLowerCase().startsWith('الحلقة')) {
-                sName = parts[0].trim();
-            }
-        }
-
-        // Clean out raw season/episode codes or suffixes
-        sName = sName.replace(/\s*-\s*S\d+E\d+.*$/gi, '')
-                     .replace(/\s*-\s*(?:Season|الموسم)\s*\d+.*$/gi, '')
-                     .replace(/^(?:Episode|الحلقة)\s*\d+\s*-\s*/gi, '')
-                     .trim();
-
-        if (!sName) {
-            sName = isRTL.value ? 'مسلسل' : 'Series';
-        }
-
-        // Determine Season Number
-        let s = activeItem.value?.season_number;
-        if (!s && activeItem.value?.season?.season_number) s = activeItem.value.season.season_number;
-        if (!s) {
-            const m = (activeItem.value?.file_path || activeItem.value?.title || '').match(/S(\d+)E\d+/i);
-            s = m ? parseInt(m[1], 10) : 1;
-        }
-
-        // Determine Episode Number
-        let e = activeItem.value?.episode_number;
-        if (!e) {
-            const m = (activeItem.value?.file_path || activeItem.value?.title || '').match(/S\d+E(\d+)/i);
-            e = m ? parseInt(m[1], 10) : 1;
-        }
-
-        const seasonLabel = isRTL.value ? `الموسم ${s}` : `Season ${s}`;
-        const episodeLabel = isRTL.value ? `الحلقة ${e}` : `Episode ${e}`;
-
-        return `${sName} - ${seasonLabel} - ${episodeLabel}`;
+        return formatEpisodeTitle(activeItem.value, {
+            isRTL: isRTL.value,
+            includeSeriesName: true,
+        });
     }
 
     if (isRTL.value && activeItem.value?.title_ar) {
@@ -701,7 +692,7 @@ const fetchMediaDuration = async () => {
 const fetchSubtitles = async () => {
     try {
         const type = isEpisode.value ? 'episode' : 'movie';
-        const res = await fetch(`/api/subtitles/for-media?type=${type}&id=${activeItem.value.id}`);
+        const res = await fetch(`/api/subtitles/for-media?type=${type}&id=${activeItem.value?.watchable_id || activeItem.value?.id}`);
         const data = await res.json();
         if (data.subtitles) {
             availableSubtitles.value = data.subtitles;
@@ -717,12 +708,15 @@ const fetchSubtitles = async () => {
 const openSubtitleSearchModal = () => {
     showSubtitlesMenu.value = false;
     showSubtitleSearchModal.value = true;
-    let query = activeItem.value?.title || '';
+    let query = '';
     if (isEpisode.value) {
-        let sName = activeItem.value?.series?.title || activeItem.value?.series_title || '';
-        if (sName) {
-            query = sName;
+        query = activeItem.value?.series?.title || activeItem.value?.series_title || '';
+        if (!query && activeItem.value?.title) {
+            query = activeItem.value.title.replace(/\s*-\s*(?:Season|الموسم|Episode|الحلقة|S\d+).*$/iu, '').trim();
         }
+    } else {
+        query = activeItem.value?.title || '';
+        query = query.replace(/\s*\(\d{4}\).*$/, '').trim();
     }
     subtitleSearchQuery.value = query;
     performSubtitleSearch();
@@ -734,9 +728,7 @@ const performSubtitleSearch = async () => {
     subtitleSearchError.value = null;
     subtitleSearchResults.value = [];
     try {
-        const mediaId = isEpisode.value
-            ? (activeItem.value?.watchable_id || activeItem.value?.id)
-            : activeItem.value?.id;
+        const mediaId = activeItem.value?.watchable_id || activeItem.value?.id;
 
         const queryParams = new URLSearchParams({
             query: subtitleSearchQuery.value.trim(),
@@ -772,9 +764,7 @@ const performSubtitleSearch = async () => {
 const downloadAndApplySubtitle = async (result: any) => {
     isDownloadingSubtitle.value = true;
     try {
-        const mediaId = isEpisode.value
-            ? (activeItem.value?.watchable_id || activeItem.value?.id)
-            : activeItem.value?.id;
+        const mediaId = activeItem.value?.watchable_id || activeItem.value?.id;
 
         const res = await fetch('/api/subtitles/download', {
             method: 'POST',
@@ -989,9 +979,9 @@ const toggleFullscreen = () => {
     }
 };
 
-const selectSubtitle = (subId: number | string, notify = true) => {
+const selectSubtitle = async (subId: number | string, notify = true) => {
     selectedSubtitleId.value = subId;
-    loadSubtitleTrack(subId);
+    await loadSubtitleTrack(subId);
     showSubtitlesMenu.value = false;
     if (notify) {
         const found = availableSubtitles.value.find(s => s.id === subId);
@@ -1237,6 +1227,9 @@ onMounted(() => {
     audioDelayMs.value = getSavedAudioDelay();
     fetchSubtitles();
     fetchMediaDuration();
+    if (!currentPlaylist.value || currentPlaylist.value.length === 0) {
+        autoFetchPlaylist(activeItem.value);
+    }
 
     progressSaveInterval = setInterval(() => {
         if (isPlaying.value) {
@@ -1658,13 +1651,13 @@ onBeforeUnmount(() => {
                                             :key="sub.id"
                                             @click="selectSubtitle(sub.id)"
                                             class="px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-all cursor-pointer"
-                                            :class="selectedSubtitleId === sub.id ? 'bg-purple-500 text-white' : 'text-slate-300 hover:bg-white/10'"
+                                            :class="String(selectedSubtitleId) === String(sub.id) ? 'bg-purple-500 text-white' : 'text-slate-300 hover:bg-white/10'"
                                         >
                                             <div class="flex items-center gap-1.5 truncate">
                                                 <span class="uppercase text-[10px] px-1 py-0.5 rounded bg-black/40">{{ sub.language || 'CC' }}</span>
                                                 <span class="truncate">{{ sub.language_name || 'Subtitle' }}</span>
                                             </div>
-                                            <Check v-if="selectedSubtitleId === sub.id" class="w-3.5 h-3.5 shrink-0" />
+                                            <Check v-if="String(selectedSubtitleId) === String(sub.id)" class="w-3.5 h-3.5 shrink-0" />
                                         </button>
                                     </div>
 

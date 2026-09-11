@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
+import { formatEpisodeTitle, formatSeasonEpisodeTitle } from '@/lib/mediaTitle';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import {
     History, Clock, Play, Trash2, X, Film, Tv, Layers,
-    Search, AlertTriangle, CheckCircle2, ChevronRight, ChevronLeft, Sparkles
+    Search, AlertTriangle, CheckCircle2, ChevronRight, ChevronLeft, Sparkles, Gamepad2
 } from 'lucide-vue-next';
 
 const { t, isRTL } = useI18n();
@@ -175,6 +176,17 @@ const updateCountsLocally = () => {
     const s = allItems.value.filter((i) => i.watchable_type === 'episode' || i.type === 'episode').length;
     const c = allItems.value.filter((i) => i.category === 'collection' || !!i.collection_name).length;
     counts.value = { all: total, movies: m, series: s, collections: c };
+};
+
+const isBandersnatchItem = (item: any) => {
+    return item?.id === 5764 ||
+        item?.watchable_id === 5764 ||
+        (item?.title && /bandersnatch/i.test(item.title));
+};
+
+const playBandersnatch = (item: any, e: MouseEvent) => {
+    e.stopPropagation();
+    window.dispatchEvent(new CustomEvent('play-bandersnatch', { detail: item }));
 };
 
 onMounted(() => {
@@ -366,7 +378,7 @@ onMounted(() => {
                         <div
                             v-for="item in moviesList"
                             :key="`${item.watchable_type}_${item.watchable_id}`"
-                            @click="play(item)"
+                            @click="play(item, item.playlist)"
                             class="glass-panel group relative rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 hover:border-cyan-500/40 hover:shadow-xl hover:shadow-cyan-500/10 transition-all flex flex-col bg-white dark:bg-[#07090E]"
                         >
                             <!-- Thumbnail -->
@@ -454,7 +466,7 @@ onMounted(() => {
                         <div
                             v-for="item in collectionsList"
                             :key="`${item.watchable_type}_${item.watchable_id}`"
-                            @click="play(item)"
+                            @click="play(item, item.playlist)"
                             class="glass-panel group relative rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 hover:border-amber-500/40 hover:shadow-xl hover:shadow-amber-500/10 transition-all flex flex-col bg-white dark:bg-[#07090E]"
                         >
                             <!-- Thumbnail -->
@@ -543,7 +555,7 @@ onMounted(() => {
                         <div
                             v-for="item in seriesList"
                             :key="`${item.watchable_type}_${item.watchable_id}`"
-                            @click="play(item)"
+                            @click="play(item, item.playlist)"
                             class="glass-panel group relative rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 hover:border-indigo-500/40 hover:shadow-xl hover:shadow-indigo-500/10 transition-all flex flex-col bg-white dark:bg-[#07090E]"
                         >
                             <!-- Thumbnail -->
@@ -592,7 +604,7 @@ onMounted(() => {
                                         {{ isRTL && item.series_title_ar ? item.series_title_ar : item.series_title }}
                                     </h4>
                                     <p class="text-xs text-slate-400 truncate mt-0.5">
-                                        {{ item.episode_title || `Episode ${item.episode_number}` }}
+                                        {{ formatSeasonEpisodeTitle(item, { isRTL }) }}
                                     </p>
                                     <div class="flex items-center gap-2 mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                                         <span class="font-mono text-indigo-400 font-semibold">{{ item.current_time_formatted }}</span>
@@ -629,7 +641,7 @@ onMounted(() => {
                     <div
                         v-for="item in filteredItems"
                         :key="`${item.watchable_type}_${item.watchable_id}`"
-                        @click="play(item)"
+                        @click="play(item, item.playlist)"
                         class="glass-panel group relative rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 hover:border-cyan-500/40 hover:shadow-xl hover:shadow-cyan-500/10 transition-all flex flex-col bg-white dark:bg-[#07090E]"
                     >
                         <!-- Thumbnail -->
@@ -685,7 +697,7 @@ onMounted(() => {
                         <div class="p-4 flex flex-col justify-between flex-1">
                             <div>
                                 <h4 class="font-bold text-sm text-slate-900 dark:text-white truncate group-hover:text-cyan-400 transition-colors">
-                                    {{ isRTL && item.title_ar ? item.title_ar : item.title }}
+                                    {{ displayItemTitle(item) }}
                                 </h4>
                                 <div class="flex items-center gap-2 mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                                     <span class="font-mono text-cyan-400 font-semibold">{{ item.current_time_formatted }}</span>

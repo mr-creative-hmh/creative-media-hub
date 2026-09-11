@@ -13,7 +13,7 @@ const emit = defineEmits(['play', 'item-removed']);
     <WatchHistoryBar
         :type="type"
         :title="title"
-        @play="(item) => emit('play', item)"
+        @play="(item, playlist) => emit('play', item, playlist)"
         @item-removed="(item) => emit('item-removed', item)"
     />
 </template>

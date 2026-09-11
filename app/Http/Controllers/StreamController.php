@@ -251,6 +251,29 @@ class StreamController extends Controller
                 $slug = $item->slug ?: "movie-{$item->id}";
                 $isCollection = !empty($item->collection_name);
 
+                $playlist = [];
+                if ($isCollection) {
+                    $playlist = MediaItem::query()
+                        ->where('collection_name', $item->collection_name)
+                        ->orderBy('release_year', 'asc')
+                        ->orderBy('title', 'asc')
+                        ->with('subtitles')
+                        ->get()
+                        ->map(function ($m) {
+                            return [
+                                'id' => $m->id,
+                                'title' => $m->title,
+                                'title_ar' => $m->title_ar,
+                                'stream_url' => route('stream.movie', $m->id),
+                                'poster_path' => $m->poster_path,
+                                'backdrop_path' => $m->backdrop_path,
+                                'duration_seconds' => $m->duration_seconds,
+                                'subtitles' => $m->subtitles ?? [],
+                                'type' => 'movie',
+                            ];
+                        })->values()->all();
+                }
+
                 return [
                     'history_id' => $h->id,
                     'id' => $item->id,
@@ -279,6 +302,7 @@ class StreamController extends Controller
                     'audio_codec' => $item->audio_codec,
                     'last_watched_at' => $h->last_watched_at ? $h->last_watched_at->toIso8601String() : null,
                     'stream_url' => route('stream.movie', $item->id),
+                    'playlist' => $playlist,
                 ];
             }
 
@@ -290,6 +314,65 @@ class StreamController extends Controller
                 $sNum = $item->season_number ?? ($item->season->season_number ?? 1);
                 $eNum = $item->episode_number ?? 1;
                 $seriesSlug = $series ? ($series->slug ?: "series-{$series->id}") : "series-{$item->series_id}";
+
+                $cleanEpTitle = function (?string $rawTitle, ?string $sName): string {
+                    $t = trim($rawTitle ?? '');
+                    if ($t === '') return '';
+                    if ($sName && str_starts_with(mb_strtolower($t), mb_strtolower($sName))) {
+                        $t = trim(preg_replace('/^' . preg_quote($sName, '/') . '[\s\-:]*/ui', '', $t));
+                    }
+                    $t = trim(preg_replace('/^S\d+\s*E\d+[\s\-:]*/i', '', $t));
+                    $t = trim(preg_replace('/^(?:Season|الموسم)\s*\d+.*?[-:]*(?:Episode|الحلقة)\s*\d+[\s\-:]*/ui', '', $t));
+                    $t = trim(preg_replace('/^[\s\-:]+/', '', $t));
+                    $t = trim(preg_replace('/[\s\-:]+$/', '', $t));
+                    if (preg_match('/^(?:Episode|الحلقة|Ep|Part)\s*\d+$/ui', $t) || preg_match('/^S\d+\s*E\d+$/i', $t)) {
+                        return '';
+                    }
+                    return $t;
+                };
+
+                $epTitleEn = $cleanEpTitle($item->title, $sNameEn);
+                $epTitleAr = $cleanEpTitle($item->title_ar, $sNameAr);
+                if (empty($epTitleAr) && !empty($epTitleEn)) {
+                    $epTitleAr = $epTitleEn;
+                }
+
+                $fullTitleEn = "{$sNameEn} - Season {$sNum} - Episode {$eNum}" . ($epTitleEn ? " - {$epTitleEn}" : '');
+                $fullTitleAr = "{$sNameAr} - الموسم {$sNum} - الحلقة {$eNum}" . ($epTitleAr ? " - {$epTitleAr}" : '');
+
+                $seasonId = $item->season_id;
+                $seasonEpisodes = Episode::query()
+                    ->when($seasonId, fn($q) => $q->where('season_id', $seasonId))
+                    ->when(! $seasonId, fn($q) => $q->where('series_id', $item->series_id)->where('season_number', $sNum))
+                    ->orderBy('episode_number', 'asc')
+                    ->with('subtitles')
+                    ->get();
+
+                $epPlaylist = $seasonEpisodes->map(function ($ep) use ($sNameEn, $sNameAr, $sNum, $series, $cleanEpTitle) {
+                    $epTitleClean = $cleanEpTitle($ep->title, $sNameEn);
+                    $epTitleArClean = $cleanEpTitle($ep->title_ar, $sNameAr);
+                    if (empty($epTitleArClean) && !empty($epTitleClean)) {
+                        $epTitleArClean = $epTitleClean;
+                    }
+                    $pTitleEn = "{$sNameEn} - Season {$sNum} - Episode {$ep->episode_number}" . ($epTitleClean ? " - {$epTitleClean}" : '');
+                    $pTitleAr = "{$sNameAr} - الموسم {$sNum} - الحلقة {$ep->episode_number}" . ($epTitleArClean ? " - {$epTitleArClean}" : '');
+
+                    return [
+                        'id' => $ep->id,
+                        'title' => $pTitleEn,
+                        'title_ar' => $pTitleAr,
+                        'episode_title' => $epTitleClean,
+                        'episode_title_ar' => $epTitleArClean,
+                        'stream_url' => route('stream.episode', $ep->id),
+                        'still_path' => $ep->still_path ?: ($series ? $series->poster_path : null),
+                        'poster_path' => $ep->still_path ?: ($series ? $series->poster_path : null),
+                        'duration_seconds' => $ep->duration_seconds,
+                        'season_number' => $sNum,
+                        'episode_number' => $ep->episode_number,
+                        'subtitles' => $ep->subtitles ?? [],
+                        'type' => 'episode',
+                    ];
+                })->values()->all();
 
                 return [
                     'history_id' => $h->id,
@@ -303,9 +386,10 @@ class StreamController extends Controller
                     'series_title_ar' => $sNameAr,
                     'season_number' => $sNum,
                     'episode_number' => $eNum,
-                    'episode_title' => $item->title,
-                    'title' => "{$sNameEn} - Season {$sNum} - Episode {$eNum}",
-                    'title_ar' => "{$sNameAr} - الموسم {$sNum} - الحلقة {$eNum}",
+                    'episode_title' => $epTitleEn,
+                    'episode_title_ar' => $epTitleAr,
+                    'title' => $fullTitleEn,
+                    'title_ar' => $fullTitleAr,
                     'type' => 'episode',
                     'series_slug' => $seriesSlug,
                     'slug_url' => route('series.episode.show', [$seriesSlug, $sNum, $eNum]),
@@ -325,6 +409,7 @@ class StreamController extends Controller
                     'audio_codec' => $item->audio_codec,
                     'last_watched_at' => $h->last_watched_at ? $h->last_watched_at->toIso8601String() : null,
                     'stream_url' => route('stream.episode', $item->id),
+                    'playlist' => $epPlaylist,
                 ];
             }
 
@@ -338,6 +423,115 @@ class StreamController extends Controller
         ]);
     }
 
+
+    /**
+     * Get dynamic playlist for a given episode or collection movie.
+     */
+    public function getPlaylist(Request $request)
+    {
+        $type = $request->input('type', 'episode');
+        $id = (int) $request->input('id');
+
+        if ($id <= 0) {
+            return response()->json(['playlist' => []]);
+        }
+
+        if ($type === 'episode') {
+            $ep = Episode::with(['season.episodes.subtitles', 'series'])->find($id);
+            if (! $ep) {
+                return response()->json(['playlist' => []]);
+            }
+
+            $series = $ep->series ?? $ep->season?->series;
+            $sNameEn = $series ? $series->title : 'Series';
+            $sNameAr = $series ? ($series->title_ar ?: $series->title) : '';
+            $sNum = $ep->season_number ?? ($ep->season?->season_number ?? 1);
+            $episodes = $ep->season?->episodes ?? Episode::where('season_id', $ep->season_id)->orderBy('episode_number')->with('subtitles')->get();
+
+            $cleanEpTitle = function (?string $rawTitle, ?string $sName): string {
+                $t = trim($rawTitle ?? '');
+                if ($t === '') return '';
+                if ($sName && str_starts_with(mb_strtolower($t), mb_strtolower($sName))) {
+                    $t = trim(preg_replace('/^' . preg_quote($sName, '/') . '[\s\-:]*/ui', '', $t));
+                }
+                $t = trim(preg_replace('/^S\d+\s*E\d+[\s\-:]*/i', '', $t));
+                $t = trim(preg_replace('/^(?:Season|الموسم)\s*\d+.*?[-:]*(?:Episode|الحلقة)\s*\d+[\s\-:]*/ui', '', $t));
+                $t = trim(preg_replace('/^[\s\-:]+/', '', $t));
+                $t = trim(preg_replace('/[\s\-:]+$/', '', $t));
+                if (preg_match('/^(?:Episode|الحلقة|Ep|Part)\s*\d+$/ui', $t) || preg_match('/^S\d+\s*E\d+$/i', $t)) {
+                    return '';
+                }
+                return $t;
+            };
+
+            $playlist = $episodes->map(function ($e) use ($series, $sNameEn, $sNameAr, $sNum, $cleanEpTitle) {
+                $epTitleClean = $cleanEpTitle($e->title, $sNameEn);
+                $epTitleArClean = $cleanEpTitle($e->title_ar, $sNameAr);
+                if (empty($epTitleArClean) && !empty($epTitleClean)) {
+                    $epTitleArClean = $epTitleClean;
+                }
+                $pTitleEn = "{$sNameEn} - Season {$sNum} - Episode {$e->episode_number}" . ($epTitleClean ? " - {$epTitleClean}" : '');
+                $pTitleAr = "{$sNameAr} - الموسم {$sNum} - الحلقة {$e->episode_number}" . ($epTitleArClean ? " - {$epTitleArClean}" : '');
+
+                return [
+                    'id' => $e->id,
+                    'title' => $pTitleEn,
+                    'title_ar' => $pTitleAr,
+                    'episode_title' => $epTitleClean,
+                    'episode_title_ar' => $epTitleArClean,
+                    'stream_url' => route('stream.episode', $e->id),
+                    'still_path' => $e->still_path ?: ($series ? $series->poster_path : null),
+                    'poster_path' => $e->still_path ?: ($series ? $series->poster_path : null),
+                    'duration_seconds' => $e->duration_seconds,
+                    'season_number' => $sNum,
+                    'episode_number' => $e->episode_number,
+                    'subtitles' => $e->subtitles ?? [],
+                    'type' => 'episode',
+                ];
+            })->values()->all();
+
+            return response()->json([
+                'playlist' => $playlist,
+                'series' => $series ? [
+                    'id' => $series->id,
+                    'title' => $series->title,
+                    'title_ar' => $series->title_ar,
+                ] : null,
+            ]);
+        }
+
+        if ($type === 'movie') {
+            $movie = MediaItem::find($id);
+            if ($movie && !empty($movie->collection_name)) {
+                $movies = MediaItem::where('collection_name', $movie->collection_name)
+                    ->orderBy('release_year', 'asc')
+                    ->orderBy('title', 'asc')
+                    ->with('subtitles')
+                    ->get();
+
+                $playlist = $movies->map(function ($m) {
+                    return [
+                        'id' => $m->id,
+                        'title' => $m->title,
+                        'title_ar' => $m->title_ar,
+                        'stream_url' => route('stream.movie', $m->id),
+                        'poster_path' => $m->poster_path,
+                        'backdrop_path' => $m->backdrop_path,
+                        'duration_seconds' => $m->duration_seconds,
+                        'subtitles' => $m->subtitles ?? [],
+                        'type' => 'movie',
+                    ];
+                })->values()->all();
+
+                return response()->json([
+                    'playlist' => $playlist,
+                    'collection_name' => $movie->collection_name,
+                ]);
+            }
+        }
+
+        return response()->json(['playlist' => []]);
+    }
     public function getContinueWatching(Request $request)
     {
         return $this->getWatchHistory($request);

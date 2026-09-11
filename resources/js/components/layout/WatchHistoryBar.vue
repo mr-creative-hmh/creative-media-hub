@@ -2,7 +2,8 @@
 import { ref, computed, onMounted } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import { Link } from '@inertiajs/vue3';
-import { Play, Clock, X, ChevronRight, ChevronLeft, Layers, Tv, Film } from 'lucide-vue-next';
+import { Play, Clock, X, ChevronRight, ChevronLeft, Layers, Tv, Film, Gamepad2 } from 'lucide-vue-next';
+import { formatEpisodeTitle } from '@/lib/mediaTitle';
 
 const props = withDefaults(defineProps<{
     type?: 'all' | 'movie' | 'series' | 'episode' | 'collection';
@@ -27,6 +28,16 @@ const uniqueItems = computed(() => {
         return true;
     });
 });
+
+const displayItemTitle = (item: any): string => {
+    if (item.type === 'episode' || item.category === 'series' || item.watchable_type === 'episode') {
+        return formatEpisodeTitle(item, {
+            isRTL: isRTL.value,
+            includeSeriesName: true,
+        });
+    }
+    return isRTL.value && item.title_ar ? item.title_ar : item.title;
+};
 
 const loadItems = async () => {
     try {
@@ -76,6 +87,17 @@ const removeItem = async (item: any, e: MouseEvent) => {
     }
 };
 
+const isBandersnatchItem = (item: any) => {
+    return item?.id === 5764 ||
+        item?.watchable_id === 5764 ||
+        (item?.title && /bandersnatch/i.test(item.title));
+};
+
+const playBandersnatch = (item: any, e: MouseEvent) => {
+    e.stopPropagation();
+    window.dispatchEvent(new CustomEvent('play-bandersnatch', { detail: item }));
+};
+
 onMounted(() => {
     loadItems();
 });
@@ -87,7 +109,7 @@ onMounted(() => {
             <div class="flex items-center gap-2">
                 <Clock class="w-5 h-5 text-cyan-400" />
                 <h3 class="font-black text-base text-slate-900 dark:text-white uppercase tracking-wider font-sans">
-                    {{ title || t('watch_history.title') }}
+                    {{ title || t('watch_history.continue_watching') }}
                 </h3>
                 <span class="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                     {{ uniqueItems.length }}
@@ -108,20 +130,27 @@ onMounted(() => {
             <div
                 v-for="item in uniqueItems"
                 :key="`${item.watchable_type || item.type}_${item.watchable_id || item.id}`"
-                @click="emit('play', item)"
+                @click="emit('play', item, item.playlist)"
                 class="glass-panel group relative rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 hover:border-cyan-500/40 hover:shadow-xl hover:shadow-cyan-500/10 transition-all flex flex-col bg-white dark:bg-[#07090E]"
             >
                 <!-- Thumbnail Backdrop -->
                 <div class="relative aspect-video w-full overflow-hidden bg-slate-900">
                     <img
                         :src="item.backdrop_path || item.poster_path"
-                        :alt="item.title"
+                        :alt="displayItemTitle(item)"
                         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-85 group-hover:opacity-100"
                     />
                     <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent"></div>
 
                     <!-- Category / Collection Badge -->
                     <div class="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
+                        <span
+                            v-if="isBandersnatchItem(item)"
+                            class="px-2 py-0.5 rounded-md bg-gradient-to-r from-red-600 to-rose-500 backdrop-blur-md text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-lg shadow-rose-600/30 animate-pulse"
+                        >
+                            <Gamepad2 class="w-3 h-3" />
+                            <span>{{ isRTL ? 'تفاعلي' : 'Interactive' }}</span>
+                        </span>
                         <span
                             v-if="item.category === 'collection' || item.collection_name"
                             class="px-2 py-0.5 rounded-md bg-amber-500/80 backdrop-blur-md text-slate-950 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm"
@@ -148,7 +177,24 @@ onMounted(() => {
                     </button>
 
                     <!-- Play overlay button -->
-                    <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-xs">
+                    <div v-if="isBandersnatchItem(item)" class="absolute inset-0 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-xs">
+                        <button
+                            @click.stop="emit('play', item, item.playlist)"
+                            class="w-10 h-10 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center shadow-xl shadow-cyan-500/50 hover:scale-110 active:scale-95 transition-transform cursor-pointer"
+                            :title="isRTL ? 'مشاهدة عادية' : 'Normal Playback'"
+                        >
+                            <Play class="w-4 h-4 fill-current ml-0.5" />
+                        </button>
+                        <button
+                            @click="(e) => playBandersnatch(item, e)"
+                            class="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400 text-white flex items-center gap-1.5 shadow-xl shadow-rose-600/50 hover:scale-105 active:scale-95 transition-transform text-xs font-bold cursor-pointer"
+                            :title="isRTL ? 'بدء التجربة التفاعلية' : 'Launch Interactive Experience'"
+                        >
+                            <Gamepad2 class="w-3.5 h-3.5" />
+                            <span>{{ isRTL ? 'تفاعلي' : 'Interactive' }}</span>
+                        </button>
+                    </div>
+                    <div v-else class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-xs">
                         <div class="w-12 h-12 rounded-full bg-cyan-500 text-slate-950 flex items-center justify-center shadow-xl shadow-cyan-500/50 group-hover:scale-110 active:scale-95 transition-transform">
                             <Play class="w-5 h-5 fill-current ml-0.5" />
                         </div>
@@ -167,7 +213,7 @@ onMounted(() => {
                 <div class="p-3.5 flex items-center justify-between">
                     <div class="truncate flex-1">
                         <h4 class="font-bold text-sm text-slate-900 dark:text-white truncate group-hover:text-cyan-400 transition-colors">
-                            {{ isRTL && item.title_ar ? item.title_ar : item.title }}
+                            {{ displayItemTitle(item) }}
                         </h4>
                         <div class="flex items-center gap-2 mt-1">
                             <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
