@@ -212,6 +212,7 @@
         "last_watched": "Last watched",
         "remaining": "remaining",
         "watched": "watched",
-        "season_episode": "S{season} E{episode}"
+        "season_episode": "S{season} E{episode}",
+        "continue_watching": "Continue Watching"
     }
 }

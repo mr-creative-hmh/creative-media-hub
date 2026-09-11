@@ -163,25 +163,7 @@ class SubtitleHealthCheckService
                 $results['already_standard_count']++;
                 // Ensure database record has correct language and media linkage set
                 if (! $dryRun) {
-                    $updated = Subtitle::where('file_path', $normalizedPath)->update([
-                        'language' => $langCode,
-                        'language_name' => $langResult['name_en'],
-                    ]);
-
-                    if ($updated === 0 && $mediaModel) {
-                        Subtitle::updateOrCreate(
-                            ['file_path' => $normalizedPath],
-                            [
-                                'subtitlable_id' => $mediaModel->id,
-                                'subtitlable_type' => get_class($mediaModel),
-                                'language' => $langCode,
-                                'language_name' => $langResult['name_en'],
-                                'format' => strtolower(pathinfo($normalizedPath, PATHINFO_EXTENSION)),
-                                'is_embedded' => false,
-                                'is_default' => ($langCode === 'ar'),
-                            ]
-                        );
-                    }
+                    $this->syncSubtitleRecord($mediaModel, $normalizedPath, $langCode, $langResult['name_en']);
                 }
 
                 $results['items'][] = [
@@ -214,28 +196,7 @@ class SubtitleHealthCheckService
                         if ($normalizedPath !== $targetPath) {
                             File::move($normalizedPath, $targetPath);
                             $results['renamed_count']++;
-
-                            // Update database record with new path and language, preserving model ID
-                            $updated = Subtitle::where('file_path', $normalizedPath)->update([
-                                'file_path' => $targetPath,
-                                'language' => $langCode,
-                                'language_name' => $langResult['name_en'],
-                            ]);
-
-                            if ($updated === 0 && $mediaModel) {
-                                Subtitle::updateOrCreate(
-                                    ['file_path' => $targetPath],
-                                    [
-                                        'subtitlable_id' => $mediaModel->id,
-                                        'subtitlable_type' => get_class($mediaModel),
-                                        'language' => $langCode,
-                                        'language_name' => $langResult['name_en'],
-                                        'format' => strtolower(pathinfo($targetPath, PATHINFO_EXTENSION)),
-                                        'is_embedded' => false,
-                                        'is_default' => ($langCode === 'ar'),
-                                    ]
-                                );
-                            }
+                            $this->syncSubtitleRecord($mediaModel, $targetPath, $langCode, $langResult['name_en'], $normalizedPath);
                         }
                     } catch (\Throwable $e) {
                         Log::error("Failed to rename subtitle: {$normalizedPath} to {$targetPath}", ['error' => $e->getMessage()]);
@@ -944,25 +905,7 @@ class SubtitleHealthCheckService
         if ($isAlreadyStandard) {
             $summaryInc['already_standard_count'] = 1;
             if (! $dryRun) {
-                $updated = Subtitle::where('file_path', $normalizedPath)->update([
-                    'language' => $langCode,
-                    'language_name' => $langResult['name_en'],
-                ]);
-
-                if ($updated === 0 && $mediaModel) {
-                    Subtitle::updateOrCreate(
-                        ['file_path' => $normalizedPath],
-                        [
-                            'subtitlable_id' => $mediaModel->id,
-                            'subtitlable_type' => get_class($mediaModel),
-                            'language' => $langCode,
-                            'language_name' => $langResult['name_en'],
-                            'format' => strtolower(pathinfo($normalizedPath, PATHINFO_EXTENSION)),
-                            'is_embedded' => false,
-                            'is_default' => ($langCode === 'ar'),
-                        ]
-                    );
-                }
+                $this->syncSubtitleRecord($mediaModel, $normalizedPath, $langCode, $langResult['name_en']);
             }
 
             $log = [
@@ -1057,4 +1000,57 @@ class SubtitleHealthCheckService
             ];
         }
     }
+    /**
+     * Safely link or update subtitle record ensuring zero duplicates.
+     */
+    public function syncSubtitleRecord(?object $mediaModel, string $filePath, string $langCode, string $langName, ?string $oldPath = null): void
+    {
+        $normNew = str_replace('\\', '/', $filePath);
+        $altNew = str_replace('/', '\\', $normNew);
+
+        if ($oldPath) {
+            $normOld = str_replace('\\', '/', $oldPath);
+            $altOld = str_replace('/', '\\', $normOld);
+            Subtitle::whereIn('file_path', [$normOld, $altOld])->update([
+                'file_path' => $normNew,
+                'language' => $langCode,
+                'language_name' => $langName,
+            ]);
+        }
+
+        // Deduplicate any multiple rows for this exact new path
+        $existing = Subtitle::whereIn('file_path', [$normNew, $altNew])->get();
+        if ($existing->count() > 1) {
+            $keep = $existing->first();
+            foreach ($existing->slice(1) as $dupe) {
+                $dupe->delete();
+            }
+            $existing = collect([$keep]);
+        }
+
+        if ($existing->isNotEmpty()) {
+            $existing->first()->update([
+                'file_path' => $normNew,
+                'language' => $langCode,
+                'language_name' => $langName,
+                'is_default' => ($langCode === 'ar'),
+            ]);
+        } elseif ($mediaModel) {
+            Subtitle::updateOrCreate(
+                [
+                    'subtitlable_type' => get_class($mediaModel),
+                    'subtitlable_id' => $mediaModel->id,
+                    'file_path' => $normNew,
+                ],
+                [
+                    'language' => $langCode,
+                    'language_name' => $langName,
+                    'format' => strtolower(pathinfo($normNew, PATHINFO_EXTENSION)),
+                    'is_embedded' => false,
+                    'is_default' => ($langCode === 'ar'),
+                ]
+            );
+        }
+    }
+
 }

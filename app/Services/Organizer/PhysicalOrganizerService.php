@@ -15,6 +15,8 @@ use App\Services\Organizer\ZeroKeyGenreClassifierService;
 
 class PhysicalOrganizerService
 {
+    protected array $claimedDestinations = [];
+
     protected SceneNameParserService $parser;
 
     protected static ?array $seriesCache = null;
@@ -317,7 +319,21 @@ class PhysicalOrganizerService
         $cleanTitle = $this->sanitizePathSegment($parsed['clean_title'] ?? ($parsed['title'] ?? ($parsed['series_title'] ?? 'Unknown')));
         $year = ! empty($parsed['year']) ? (string) $parsed['year'] : '';
         $seasonNum = isset($parsed['season']) ? (int) $parsed['season'] : 1;
-        $episodeNum = isset($parsed['episode']) ? (int) $parsed['episode'] : 1;
+        $episodeNum = isset($parsed['episode']) ? (int) $parsed['episode'] : null;
+
+        if ($isSeries && $episodeNum === null) {
+            $fn = pathinfo($filePath, PATHINFO_FILENAME);
+            if (preg_match('/[sS]\d{1,2}[eE](\d{1,3})/i', $fn, $epM) ||
+                preg_match('/\b\d{1,2}x(\d{1,3})\b/i', $fn, $epM) ||
+                preg_match('/\b(?:ep|episode|حلقة|ح)\s*(\d{1,3})\b/ui', $fn, $epM) ||
+                preg_match('/[._\-\s](\d{1,3})[._\-\s]/', $fn, $epM)) {
+                $episodeNum = (int) $epM[1];
+            } else {
+                $episodeNum = 1;
+            }
+        } elseif ($episodeNum === null) {
+            $episodeNum = 1;
+        }
         $epTitle = ! empty($parsed['episode_title']) ? $this->sanitizePathSegment($parsed['episode_title']) : '';
         if (preg_match('/^(episode|ep|part)\s*\d+$/i', $epTitle)) {
             $epTitle = '';
@@ -478,6 +494,23 @@ class PhysicalOrganizerService
 
         $destination = "{$targetRoot}/{$cleanRelPath}";
         $source = str_replace('\\', '/', $filePath);
+
+        // Collision avoidance: ensure no two files in the same plan share identical destination
+        $normDest = strtolower(str_replace('\\', '/', $destination));
+        if (isset($this->claimedDestinations[$normDest])) {
+            $destDir = pathinfo($destination, PATHINFO_DIRNAME);
+            $destBase = pathinfo($destination, PATHINFO_FILENAME);
+            $destExt = pathinfo($destination, PATHINFO_EXTENSION);
+            $counter = 2;
+            do {
+                $candidate = "{$destDir}/{$destBase} ({$counter})" . ($destExt ? ".{$destExt}" : '');
+                $normCand = strtolower(str_replace('\\', '/', $candidate));
+                $counter++;
+            } while (isset($this->claimedDestinations[$normCand]));
+            $destination = $candidate;
+            $normDest = $normCand;
+        }
+        $this->claimedDestinations[$normDest] = true;
 
         $exists = File::exists($destination);
         $isIdentical = strtolower(trim($source)) === strtolower(trim($destination));
@@ -1209,6 +1242,18 @@ class PhysicalOrganizerService
             return true;
         }
 
+        // CRITICAL DATA PROTECTION: Never silently overwrite an existing destination file!
+        if (file_exists($dest)) {
+            $destDir = pathinfo($dest, PATHINFO_DIRNAME);
+            $destBase = pathinfo($dest, PATHINFO_FILENAME);
+            $destExt = pathinfo($dest, PATHINFO_EXTENSION);
+            $counter = 1;
+            do {
+                $dest = "{$destDir}/{$destBase} ({$counter})" . ($destExt ? ".{$destExt}" : '');
+                $counter++;
+            } while (file_exists($dest));
+        }
+
         if ($mode === 'move') {
             // Attempt fast filesystem rename (instantaneous on same partition)
             try {
@@ -1554,6 +1599,18 @@ public function getExecutionStatus(): array
                 ->update([
                     'file_path' => $normNew,
                 ]);
+
+            // Synchronize any embedded subtitles attached to this video file to its new location
+            $embeddedSubs = Subtitle::where('file_path', 'LIKE', "embedded:%:{$normOld}")
+                ->orWhere('file_path', 'LIKE', "embedded:%:{$oldPath}")
+                ->get();
+
+            foreach ($embeddedSubs as $es) {
+                if (preg_match('/^embedded:(\d+):/i', $es->file_path, $m)) {
+                    $streamIdx = $m[1];
+                    $es->update(['file_path' => "embedded:{$streamIdx}:{$normNew}"]);
+                }
+            }
         } catch (\Throwable $e) {
             Log::warning("Could not update DB paths for {$oldPath}: ".$e->getMessage());
         }

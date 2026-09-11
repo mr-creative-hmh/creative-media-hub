@@ -95,7 +95,9 @@ class FilesystemScannerService
                 }
 
                 $parsed = $this->parser->parse($filePath);
-                if (empty($parsed['collection_name'])) {
+                if (($parsed['type'] ?? '') === 'series') {
+                    $parsed['collection_name'] = null;
+                } elseif (empty($parsed['collection_name'])) {
                     $dirName = basename(dirname($filePath));
                     if (preg_match('/^([a-zA-Z0-9\s\':\-\.]+?)\s+(?:Collection|Boxset|Trilogy|Quadrilogy|Anthology|Saga)\b/i', $dirName, $m)) {
                         $parsed['collection_name'] = trim($m[1]) . ' Collection';

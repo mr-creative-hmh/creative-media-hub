@@ -246,7 +246,7 @@ class VirtualLibraryScannerService
                     'title' => $title,
                     'type' => $mediaType,
                     'file' => $file['filename'],
-                    'resolution' => $file['parsed']['resolution'] ?? ($probeData['resolution'] ?? null),
+                    'resolution' => $indexed->resolution ?? ($file['parsed']['resolution'] ?? null),
                     'subtitles_count' => count($file['subtitles'] ?? []),
                 ];
 
@@ -379,9 +379,15 @@ class VirtualLibraryScannerService
 
         // Use probed data > parsed filename data > fallback to Unknown
         // Note: probeData now returns array with null/0 defaults, not null
-        $resolution = $probeData['resolution'] ?? $parsed['resolution'] ?? 'Unknown';
-        $videoCodec = $probeData['video_codec'] ?? $parsed['codec'] ?? 'Unknown';
-        $audioCodec = $probeData['audio_codec'] ?? $parsed['audio'] ?? 'Unknown';
+        $resolution = (!empty($probeData['resolution']) && $probeData['resolution'] !== 'Unknown')
+            ? $probeData['resolution']
+            : ($parsed['resolution'] ?? 'Unknown');
+        $videoCodec = (!empty($probeData['video_codec']) && $probeData['video_codec'] !== 'Unknown')
+            ? $probeData['video_codec']
+            : ($parsed['codec'] ?? 'Unknown');
+        $audioCodec = (!empty($probeData['audio_codec']) && $probeData['audio_codec'] !== 'Unknown')
+            ? $probeData['audio_codec']
+            : ($parsed['audio'] ?? 'Unknown');
         $runtimeMinutes = ($probeData['duration'] ?? 0) > 0 ? (int) round($probeData['duration'] / 60) : 110;
 
         $posterUrl = $file['local_poster'] ?? null;
@@ -475,6 +481,7 @@ class VirtualLibraryScannerService
         $epNum = (int) ($parsed['episode'] ?? 1);
         $epTitle = $parsed['episode_title'] ?? "Episode {$epNum}";
         $year = $parsed['year'] ?? null;
+        $endYear = $parsed['end_year'] ?? null;
 
         $series = Series::where('title', 'like', $showTitle)
             ->orWhere('original_title', 'like', $showTitle)
@@ -486,15 +493,16 @@ class VirtualLibraryScannerService
         $seriesFolder = preg_match('/^(season\s*\d+|s\d+|specials?)$/i', $epDirBase) ? dirname($epDir) : $epDir;
 
         if (! $series) {
-            $series = retry(4, function () use ($showTitle, $year, $seriesFolder) {
+            $series = retry(4, function () use ($showTitle, $year, $endYear, $seriesFolder) {
                 return Series::create([
                     'title' => $showTitle,
                     'original_title' => $showTitle,
                     'release_year' => $year,
+                    'end_year' => $endYear,
                     'folder_path' => $seriesFolder,
                     'overview' => "Experience the complete series of {$showTitle}.",
                     'rating' => 8.0,
-                    'status' => 'Continuing',
+                    'status' => $endYear ? 'Ended' : 'Continuing',
                 ]);
             }, 150);
 
@@ -503,8 +511,10 @@ class VirtualLibraryScannerService
                 $posterUrl = $meta['poster_path'] ?? ($file['local_poster'] ?? null);
                 $backdropUrl = $meta['backdrop_path'] ?? ($file['local_backdrop'] ?? null);
                 $seriesYear = $meta['release_year'] ?? ($meta['year'] ?? $year);
+                $seriesEndYear = $meta['end_year'] ?? $endYear;
+                $seriesStatus = !empty($meta['status']) ? $meta['status'] : ($seriesEndYear ? 'Ended' : $series->status);
 
-                retry(3, function () use ($series, $meta, $posterUrl, $backdropUrl, $seriesYear) {
+                retry(3, function () use ($series, $meta, $posterUrl, $backdropUrl, $seriesYear, $seriesEndYear, $seriesStatus) {
                     $series->update([
                         'title_ar' => $meta['title_ar'] ?? null,
                         'overview' => $meta['overview'] ?? $series->overview,
@@ -514,6 +524,8 @@ class VirtualLibraryScannerService
                         'poster_path' => $posterUrl,
                         'backdrop_path' => $backdropUrl,
                         'release_year' => $seriesYear,
+                        'end_year' => $seriesEndYear,
+                        'status' => $seriesStatus,
                         'rating' => $meta['rating'] ?? 8.0,
                     ]);
 
@@ -530,6 +542,21 @@ class VirtualLibraryScannerService
                     }
                 }, 100);
             } catch (\Throwable $e) {
+            }
+        } else {
+            // Series already exists: update missing year, end_year, or folder_path if newly discovered
+            $updates = [];
+            if (empty($series->release_year) && $year) {
+                $updates['release_year'] = $year;
+            }
+            if (empty($series->end_year) && $endYear) {
+                $updates['end_year'] = $endYear;
+            }
+            if (empty($series->folder_path) && $seriesFolder) {
+                $updates['folder_path'] = $seriesFolder;
+            }
+            if (! empty($updates)) {
+                $series->update($updates);
             }
         }
 
@@ -550,9 +577,15 @@ class VirtualLibraryScannerService
 
         // Use probed data > parsed filename data > fallback to Unknown
         // Note: probeData now returns array with null/0 defaults, not null
-        $resolution = $probeData['resolution'] ?? $parsed['resolution'] ?? 'Unknown';
-        $videoCodec = $probeData['video_codec'] ?? $parsed['codec'] ?? 'Unknown';
-        $audioCodec = $probeData['audio_codec'] ?? $parsed['audio'] ?? 'Unknown';
+        $resolution = (!empty($probeData['resolution']) && $probeData['resolution'] !== 'Unknown')
+            ? $probeData['resolution']
+            : ($parsed['resolution'] ?? 'Unknown');
+        $videoCodec = (!empty($probeData['video_codec']) && $probeData['video_codec'] !== 'Unknown')
+            ? $probeData['video_codec']
+            : ($parsed['codec'] ?? 'Unknown');
+        $audioCodec = (!empty($probeData['audio_codec']) && $probeData['audio_codec'] !== 'Unknown')
+            ? $probeData['audio_codec']
+            : ($parsed['audio'] ?? 'Unknown');
         $runtimeMinutes = ($probeData['duration'] ?? 0) > 0 ? (int) round($probeData['duration'] / 60) : 45;
 
         // Resolve bilingual episode metadata from TMDb if series has tmdb_id
@@ -654,14 +687,33 @@ class VirtualLibraryScannerService
 
     protected function attachAllSubtitles(mixed $model, array $file): void
     {
-        $existingSubPaths = $model->subtitles()->pluck('file_path')->toArray();
-        $isFirst = count($existingSubPaths) === 0;
+        $normalizedVideoPath = str_replace('\\', '/', $file['path'] ?? '');
+
+        // Clean up obsolete embedded tracks for this model that point to non-existent or obsolete video paths
+        \App\Models\Subtitle::where('subtitlable_type', get_class($model))
+            ->where('subtitlable_id', $model->id)
+            ->where('is_embedded', true)
+            ->where('file_path', 'NOT LIKE', "%:{$normalizedVideoPath}")
+            ->delete();
+
+        // Get existing normalized subtitle paths
+        $existingSubs = \App\Models\Subtitle::where('subtitlable_type', get_class($model))
+            ->where('subtitlable_id', $model->id)
+            ->get();
+
+        $existingPathsMap = [];
+        foreach ($existingSubs as $es) {
+            $existingPathsMap[str_replace('\\', '/', $es->file_path)] = $es;
+        }
+
+        $hasDefault = $existingSubs->contains('is_default', true);
+        $hasArabic = $existingSubs->contains('language', 'ar');
 
         // 1. External Subtitle Files matching video
         if (! empty($file['subtitles'])) {
             foreach ($file['subtitles'] as $sub) {
-                $subPath = $sub['path'] ?? '';
-                if (in_array($subPath, $existingSubPaths, true)) {
+                $subPath = str_replace('\\', '/', $sub['path'] ?? '');
+                if (empty($subPath)) {
                     continue;
                 }
 
@@ -676,40 +728,66 @@ class VirtualLibraryScannerService
                     }
                 }
 
-                $model->subtitles()->create([
-                    'language' => $lang,
-                    'language_name' => $langName,
-                    'format' => $sub['format'] ?? 'srt',
-                    'file_path' => $subPath,
-                    'is_embedded' => false,
-                    'is_default' => $isFirst,
-                ]);
+                $isDefault = false;
+                if (! $hasDefault && ! $hasArabic && $lang === 'ar') {
+                    $isDefault = true;
+                    $hasDefault = true;
+                    $hasArabic = true;
+                } elseif (! $hasDefault && empty($existingPathsMap)) {
+                    $isDefault = true;
+                    $hasDefault = true;
+                }
 
-                $existingSubPaths[] = $subPath;
-                $isFirst = false;
+                \App\Models\Subtitle::updateOrCreate(
+                    [
+                        'subtitlable_type' => get_class($model),
+                        'subtitlable_id' => $model->id,
+                        'file_path' => $subPath,
+                    ],
+                    [
+                        'language' => $lang,
+                        'language_name' => $langName,
+                        'format' => $sub['format'] ?? pathinfo($subPath, PATHINFO_EXTENSION),
+                        'is_embedded' => false,
+                        'is_default' => $isDefault,
+                    ]
+                );
+
+                $existingPathsMap[$subPath] = true;
             }
         }
 
         // 2. Embedded subtitle tracks from container header
         try {
-            $embedded = $this->embeddedSubDetector->detectEmbeddedSubtitles($file['path']);
+            $embedded = $this->embeddedSubDetector->detectEmbeddedSubtitles($normalizedVideoPath);
             foreach ($embedded as $sub) {
-                $subKey = "embedded:{$sub['stream_index']}:{$file['path']}";
-                if (in_array($subKey, $existingSubPaths, true)) {
-                    continue;
+                $subKey = "embedded:{$sub['stream_index']}:{$normalizedVideoPath}";
+                $lang = $sub['language'] ?? 'und';
+                $langName = $sub['language_name'] ?? 'Embedded Track';
+
+                $isDefault = false;
+                if (! $hasDefault && ! $hasArabic && $lang === 'ar') {
+                    $isDefault = true;
+                    $hasDefault = true;
+                    $hasArabic = true;
                 }
 
-                $model->subtitles()->create([
-                    'language' => $sub['language'] ?? 'und',
-                    'language_name' => $sub['language_name'] ?? 'Embedded Track',
-                    'format' => $sub['codec'] ?? 'subrip',
-                    'file_path' => $subKey,
-                    'is_embedded' => true,
-                    'is_default' => $isFirst,
-                ]);
+                \App\Models\Subtitle::updateOrCreate(
+                    [
+                        'subtitlable_type' => get_class($model),
+                        'subtitlable_id' => $model->id,
+                        'file_path' => $subKey,
+                    ],
+                    [
+                        'language' => $lang,
+                        'language_name' => $langName,
+                        'format' => $sub['codec'] ?? 'subrip',
+                        'is_embedded' => true,
+                        'is_default' => $isDefault,
+                    ]
+                );
 
-                $existingSubPaths[] = $subKey;
-                $isFirst = false;
+                $existingPathsMap[$subKey] = true;
             }
         } catch (\Throwable $e) {
         }
@@ -789,6 +867,9 @@ class VirtualLibraryScannerService
                         'poster_path' => $poster ?? $series->poster_path,
                         'backdrop_path' => $meta['backdrop_path'] ?? $series->backdrop_path,
                         'rating' => $meta['rating'] ?? $series->rating,
+                        'release_year' => $series->release_year ?? ($meta['release_year'] ?? $meta['year'] ?? null),
+                        'end_year' => $series->end_year ?? ($meta['end_year'] ?? null),
+                        'status' => (!empty($meta['status']) && $series->status === 'Continuing') ? $meta['status'] : $series->status,
                     ]);
 
                     if (! empty($meta['genres'])) {

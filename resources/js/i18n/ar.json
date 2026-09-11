@@ -212,6 +212,7 @@
         "last_watched": "آخر مشاهدة",
         "remaining": "متبقي",
         "watched": "تمت مشاهدته",
-        "season_episode": "م{season} ح{episode}"
+        "season_episode": "م{season} ح{episode}",
+        "continue_watching": "متابعة المشاهدة"
     }
 }

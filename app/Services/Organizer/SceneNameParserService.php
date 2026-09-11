@@ -76,6 +76,7 @@ class SceneNameParserService
         $episodeTitle = null;
         $seriesTitle = null;
         $year = null;
+        $endYear = null;
         $edition = null;
         $part = null;
         $is3D = false;
@@ -94,6 +95,8 @@ class SceneNameParserService
         $filename = preg_replace('/^(?:Future Cinema & TV Productions|المستقبل للإنتاج|قناة .*? الرسمية)[\s\-–¦|]+(?:مسلسل\s+)?/ui', '', $filename);
 
         $working = $baseName;
+        $working = preg_replace('/\b(nine)-(nine)\b/i', 'Nine###Nine', $working);
+        $working = preg_replace('/\b(brooklyn)-(nine)\b/i', 'Brooklyn###Nine', $working);
 
         // Check if path indicates series or movies library ancestor
         $isInsideSeriesTree = false;
@@ -209,7 +212,10 @@ class SceneNameParserService
         }
 
         // 5. Extract Year
-        if (preg_match('/^(19\d\d|20\d\d)\s*[-_.]?\s*(.*)$/', $working, $yMatches)) {
+        if (preg_match('/[\[\(]?\b(19\d\d|20\d\d)\s*[-–—]\s*(19\d\d|20\d\d)\b[\]\)]?/', $working, $yrMatches)) {
+            $year = (int) $yrMatches[1];
+            $endYear = (int) $yrMatches[2];
+        } elseif (preg_match('/^(19\d\d|20\d\d)\s*[-_.]?\s*(.*)$/', $working, $yMatches)) {
             $year = (int) $yMatches[1];
             $working = $yMatches[2];
         } elseif (preg_match_all('/[\[\(]?\b(19\d\d|20\d\d)\b[\]\)]?/', $working, $yMatchesAll)) {
@@ -220,7 +226,8 @@ class SceneNameParserService
         // 6. Extract Release Group at end
         if (preg_match('/-(?:\[)?([a-zA-Z0-9\.]+)(?:\])?$/i', $working, $gMatches)) {
             $groupCandidate = $gMatches[1];
-            if (! preg_match('/^(?:x264|x265|h264|h265|hevc|1080p|720p|576p|540p|480p|360p|240p|2160p|4k|aac|ddp|mp4|mkv|\d+)$/i', $groupCandidate)) {
+            $isSeasonEp = preg_match('/[sS]\d{1,2}[eE]\d{1,3}|\b(?:ep|episode|part)\s*\d+|\b\d{1,2}x\d{1,3}\b/i', $groupCandidate);
+            if (! $isSeasonEp && ! preg_match('/^(?:x264|x265|h264|h265|hevc|1080p|720p|576p|540p|480p|360p|240p|2160p|4k|aac|ddp|mp4|mkv|\d+)$/i', $groupCandidate)) {
                 $group = $groupCandidate;
                 $working = substr($working, 0, -strlen($gMatches[0]));
             }
@@ -370,15 +377,26 @@ class SceneNameParserService
                 }
             }
 
-            // Check parent/grandparent directory for series year if missing
-            if (! $year) {
-                $dirToCheck = $isParentSeasonFolder ? $grandparentFolder : $parentFolder;
-                if ($dirToCheck && preg_match('/\b(19\d\d|20\d\d)\b/', $dirToCheck, $dirYMatch)) {
+            // Check parent/grandparent directory for series year and end_year
+            $dirToCheck = $isParentSeasonFolder ? $grandparentFolder : $parentFolder;
+            if ($dirToCheck && preg_match('/\b(19\d\d|20\d\d)(?:\s*[-–—]\s*(19\d\d|20\d\d))?\b/', $dirToCheck, $dirYMatch)) {
+                if (! $year) {
                     $year = (int) $dirYMatch[1];
+                }
+                if (! empty($dirYMatch[2])) {
+                    $endYear = (int) $dirYMatch[2];
+                }
+            } elseif ($grandparentFolder && preg_match('/\b(19\d\d|20\d\d)(?:\s*[-–—]\s*(19\d\d|20\d\d))?\b/', $grandparentFolder, $gpYMatch)) {
+                if (! $year) {
+                    $year = (int) $gpYMatch[1];
+                }
+                if (! empty($gpYMatch[2])) {
+                    $endYear = (int) $gpYMatch[2];
                 }
             }
 
             $cleanTitle = $seriesTitle ?: 'Unknown Series';
+            $cleanTitle = str_replace(['Nine###Nine', 'Brooklyn###Nine'], ['Nine-Nine', 'Brooklyn Nine-Nine'], $cleanTitle);
         } else {
             // Movie Title Extraction
             $isGenericMovieFile = in_array(strtolower(trim($baseName)), ['movie', 'film', 'video', 'main', 'cd1', 'cd2', 'فيلم', 'فلم', 'فيديو']);
@@ -479,13 +497,14 @@ class SceneNameParserService
             'title' => $cleanTitle,
             'clean_title' => $cleanTitle,
             'series_title' => $type === 'series' ? $cleanTitle : null,
-            'collection_name' => $collectionName ?? $detectedCollectionName ?? null,
+            'collection_name' => $type === 'series' ? null : ($collectionName ?? $detectedCollectionName ?? null),
             'type' => $type,
             'season' => $season ?? ($type === 'series' ? 1 : null),
             'episode' => $episode ?? ($type === 'series' ? 1 : null),
             'episode_end' => $episodeEnd,
             'episode_title' => $episodeTitle,
             'year' => $year,
+            'end_year' => $endYear,
             'edition' => $edition,
             'part' => $part,
             'is_3d' => $is3D,
@@ -661,8 +680,14 @@ class SceneNameParserService
      */
     public function detectFranchiseOrCollection(string $title, string $parentFolder = '', string $grandparentFolder = ''): ?string
     {
+        $titleLower = strtolower(trim($title));
         $checkParent = trim($parentFolder);
         $checkGrandparent = trim($grandparentFolder);
+
+        // Explicitly exclude TV Series known to clash with movie collections (e.g. The Lord of the Rings: The Rings of Power)
+        if (str_contains($titleLower, 'rings of power') || str_contains(strtolower($checkParent), 'rings of power') || str_contains(strtolower($checkGrandparent), 'rings of power')) {
+            return null;
+        }
 
         // 1. If parent is a number or year, unwrap to grandparent
         if (preg_match('/^(\d{1,2}|19\d\d|20\d\d|cd\d+|disc\s*\d+|part\s*\d+)$/i', $checkParent)) {
@@ -724,6 +749,7 @@ class SceneNameParserService
         $s = preg_replace('/\b(x)-(men)\b/i', 'X###Men', $s);
         $s = preg_replace('/\b(ant)-(man)\b/i', 'Ant###Man', $s);
         $s = preg_replace('/\b(iron)-(man)\b/i', 'Iron###Man', $s);
+        $s = preg_replace('/\b(nine)-(nine)\b/i', 'Nine###Nine', $s);
 
         // Convert dots, underscores, plus signs, and hyphens to spaces
         $s = preg_replace('/[._+\-]/u', ' ', $s);
@@ -777,8 +803,25 @@ class SceneNameParserService
 
     public function isSampleOrExtra(string $filename, string $parentFolder): bool
     {
-        $combined = strtolower($filename.' '.$parentFolder);
+        $parentLower = strtolower(trim($parentFolder));
+        if (in_array($parentLower, ['sample', 'samples', 'trailer', 'trailers', 'extra', 'extras', 'featurette', 'featurettes', 'behind the scenes', 'deleted scenes', 'bonus', 'shorts'])) {
+            return true;
+        }
 
-        return (bool) preg_match('/\b(sample|trailer|trailers|featurette|featurettes|behindthescenes|deleted|deletedscenes|extra|extras|preview|bonus|interview|short)\b/i', $combined);
+        $base = strtolower(pathinfo($filename, PATHINFO_FILENAME));
+
+        if (in_array($base, ['sample', 'trailer', 'teaser', 'extra', 'featurette', 'preview', 'short'])) {
+            return true;
+        }
+
+        if (preg_match('/[\s.\-_\[\(](trailer|teaser|sample|featurette|behindthescenes|deleted[-_.\s]*scene|preview|bonus|short)[\s.\-_\]\)]*$/i', $base)) {
+            return true;
+        }
+
+        if (preg_match('/^(sample|trailer|teaser)[\s.\-_]/i', $base)) {
+            return true;
+        }
+
+        return false;
     }
 }

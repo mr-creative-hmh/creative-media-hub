@@ -12,6 +12,10 @@ class TmdbProvider implements MetadataProviderInterface
     public static function inferCollectionFromTitle(string $title): ?string
     {
         $titleLower = strtolower($title);
+        if (str_contains($titleLower, 'rings of power')) {
+            return null;
+        }
+
         $knownCollections = [
             'harry potter' => 'Harry Potter Collection',
             'lord of the rings' => 'The Lord of the Rings Collection',
@@ -365,6 +369,7 @@ class TmdbProvider implements MetadataProviderInterface
                     'overview' => $data['overview'] ?? '',
                     'overview_ar' => $overviewAr,
                     'release_year' => isset($data['first_air_date']) ? (int) substr($data['first_air_date'], 0, 4) : null,
+                    'end_year' => (! empty($data['last_air_date']) && in_array($data['status'] ?? '', ['Ended', 'Canceled'])) ? (int) substr($data['last_air_date'], 0, 4) : null,
                     'rating' => round($data['vote_average'] ?? 0, 1),
                     'status' => $data['status'] ?? 'Returning Series',
                     'network' => $data['networks'][0]['name'] ?? null,

@@ -106,6 +106,7 @@ class TvMazeProvider implements MetadataProviderInterface
                     'title' => $show['name'] ?? '',
                     'overview' => strip_tags($show['summary'] ?? ''),
                     'release_year' => $premieredYear,
+                    'end_year' => ! empty($show['ended']) ? (int) substr($show['ended'], 0, 4) : null,
                     'rating' => isset($show['rating']['average']) ? (float) $show['rating']['average'] : null,
                     'status' => $show['status'] ?? 'Running',
                     'network' => $show['network']['name'] ?? ($show['webChannel']['name'] ?? null),

@@ -42,6 +42,26 @@ class EmbeddedSubtitleDetectorService
         'vi' => ['name' => 'Vietnamese', 'ar' => 'الفيتنامية', 'flag' => '🇻🇳'],
         'ur' => ['name' => 'Urdu', 'ar' => 'الأردية', 'flag' => '🇵🇰'],
         'bn' => ['name' => 'Bengali', 'ar' => 'البنغالية', 'flag' => '🇧🇩'],
+        'bg' => ['name' => 'Bulgarian', 'ar' => 'البلغارية', 'flag' => '🇧🇬'],
+        'ca' => ['name' => 'Catalan', 'ar' => 'الكتالونية', 'flag' => '🇪🇸'],
+        'et' => ['name' => 'Estonian', 'ar' => 'الإستونية', 'flag' => '🇪🇪'],
+        'is' => ['name' => 'Icelandic', 'ar' => 'الأيسلندية', 'flag' => '🇮🇸'],
+        'lt' => ['name' => 'Lithuanian', 'ar' => 'الليتوانية', 'flag' => '🇱🇹'],
+        'lv' => ['name' => 'Latvian', 'ar' => 'اللاتفية', 'flag' => '🇱🇻'],
+        'mk' => ['name' => 'Macedonian', 'ar' => 'المقدونية', 'flag' => '🇲🇰'],
+        'sk' => ['name' => 'Slovak', 'ar' => 'السلوفاكية', 'flag' => '🇸🇰'],
+        'sl' => ['name' => 'Slovenian', 'ar' => 'السلوفينية', 'flag' => '🇸🇮'],
+        'sr' => ['name' => 'Serbian', 'ar' => 'الصربية', 'flag' => '🇷🇸'],
+        'az' => ['name' => 'Azerbaijani', 'ar' => 'الأذربيجانية', 'flag' => '🇦🇿'],
+        'sq' => ['name' => 'Albanian', 'ar' => 'الألبانية', 'flag' => '🇦🇱'],
+        'bs' => ['name' => 'Bosnian', 'ar' => 'البوسنية', 'flag' => '🇧🇦'],
+        'eu' => ['name' => 'Basque', 'ar' => 'الباسكية', 'flag' => '🇪🇸'],
+        'gl' => ['name' => 'Galician', 'ar' => 'الجاليكية', 'flag' => '🇪🇸'],
+        'ka' => ['name' => 'Georgian', 'ar' => 'الجورجية', 'flag' => '🇬🇪'],
+        'mn' => ['name' => 'Mongolian', 'ar' => 'المنغولية', 'flag' => '🇲🇳'],
+        'kk' => ['name' => 'Kazakh', 'ar' => 'الكازاخستانية', 'flag' => '🇰🇿'],
+        'uz' => ['name' => 'Uzbek', 'ar' => 'الأوزبكية', 'flag' => '🇺🇿'],
+        'und' => ['name' => 'Undetermined', 'ar' => 'غير محدد', 'flag' => '🌐'],
     ];
 
     public static array $langDefinitions = [
@@ -77,6 +97,25 @@ class EmbeddedSubtitleDetectorService
         'vi' => ['vi', 'vie', 'vietnamese', 'tiếng việt', 'tieng viet'],
         'he' => ['he', 'heb', 'hebrew', 'עבריت'],
         'en' => ['en', 'eng', 'english'],
+        'bg' => ['bg', 'bul', 'bulgarian', 'български'],
+        'ca' => ['ca', 'cat', 'catalan', 'català'],
+        'et' => ['et', 'est', 'estonian', 'eesti', 'ekk'],
+        'is' => ['is', 'ice', 'isl', 'icelandic', 'íslenska'],
+        'lt' => ['lt', 'lit', 'lithuanian', 'lietuvių', 'lietuviu'],
+        'lv' => ['lv', 'lav', 'latvian', 'latviešu', 'lvs'],
+        'mk' => ['mk', 'mac', 'mkd', 'macedonian', 'македонски'],
+        'sk' => ['sk', 'slo', 'slk', 'slovak', 'slovenčina', 'slovencina'],
+        'sl' => ['sl', 'slv', 'slovenian', 'slovenščina', 'slovenscina'],
+        'sr' => ['sr', 'srp', 'scc', 'serbian', 'srpski'],
+        'az' => ['az', 'aze', 'azerbaijani', 'azəri', 'azeri'],
+        'sq' => ['sq', 'sqi', 'alb', 'albanian', 'shqip'],
+        'bs' => ['bs', 'bos', 'bosnian', 'bosanski'],
+        'eu' => ['eu', 'eus', 'baq', 'basque', 'euskara'],
+        'gl' => ['gl', 'glg', 'galician', 'galego'],
+        'ka' => ['ka', 'kat', 'geo', 'georgian', 'ქართული'],
+        'mn' => ['mn', 'mon', 'khk', 'mongolian'],
+        'kk' => ['kk', 'kaz', 'kazakh'],
+        'uz' => ['uz', 'uzb', 'uzbek'],
     ];
 
     public function detectEmbeddedSubtitles(string $videoPath): array
@@ -406,11 +445,14 @@ class EmbeddedSubtitleDetectorService
             }
         }
 
-        // 3. Inspect file contents on disk if available
+        // 3. Inspect file contents on disk if available (ONLY for subtitle text files, NEVER video files)
         if (! empty($filePath) && file_exists($filePath)) {
-            $contentLang = $this->detectLanguageFromFileContent($filePath);
-            if ($contentLang !== 'und') {
-                return $contentLang;
+            $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+            if (in_array($ext, ['srt', 'vtt', 'ass', 'ssa', 'sub'], true)) {
+                $contentLang = $this->detectLanguageFromFileContent($filePath);
+                if ($contentLang !== 'und') {
+                    return $contentLang;
+                }
             }
         }
 
