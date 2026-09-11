@@ -31,6 +31,8 @@ class VirtualLibraryScannerService
 
     protected MediaProbeService $mediaProbe;
 
+    protected array $tmdbSeasonCache = [];
+
     public function __construct(
         FilesystemScannerService $fsScanner,
         SceneNameParserService $nameParser,
@@ -553,13 +555,46 @@ class VirtualLibraryScannerService
         $audioCodec = $probeData['audio_codec'] ?? $parsed['audio'] ?? 'Unknown';
         $runtimeMinutes = ($probeData['duration'] ?? 0) > 0 ? (int) round($probeData['duration'] / 60) : 45;
 
-        $episode = retry(4, function () use ($series, $season, $epNum, $epTitle, $file, $resolution, $videoCodec, $audioCodec, $runtimeMinutes, $probeData) {
+        // Resolve bilingual episode metadata from TMDb if series has tmdb_id
+        $epTitleAr = null;
+        $epOverview = "Episode {$epNum}";
+        $epOverviewAr = null;
+        $epStillPath = null;
+        $epRating = 0;
+        $epAirDate = null;
+
+        if ($series->tmdb_id) {
+            $cacheKey = "{$series->tmdb_id}_s{$seasonNum}";
+            if (! isset($this->tmdbSeasonCache[$cacheKey])) {
+                $this->tmdbSeasonCache[$cacheKey] = $this->metadata->getSeasonEpisodesBilingual($series->tmdb_id, $seasonNum);
+            }
+            $tmdbEp = $this->tmdbSeasonCache[$cacheKey][$epNum] ?? null;
+            if ($tmdbEp) {
+                $epTitle = $tmdbEp['title'];
+                $epTitleAr = $tmdbEp['title_ar'] ?? null;
+                $epOverview = $tmdbEp['overview'] ?: $epOverview;
+                $epOverviewAr = $tmdbEp['overview_ar'] ?? null;
+                $epStillPath = $tmdbEp['still_path'] ?? null;
+                $epRating = $tmdbEp['rating'] ?? 0;
+                $epAirDate = $tmdbEp['air_date'] ?? null;
+                if (! empty($tmdbEp['runtime_minutes']) && $runtimeMinutes === 45) {
+                    $runtimeMinutes = $tmdbEp['runtime_minutes'];
+                }
+            }
+        }
+
+        $episode = retry(4, function () use ($series, $season, $epNum, $epTitle, $epTitleAr, $epOverview, $epOverviewAr, $epStillPath, $epRating, $epAirDate, $file, $resolution, $videoCodec, $audioCodec, $runtimeMinutes, $probeData) {
             $ep = Episode::create([
                 'series_id' => $series->id,
                 'season_id' => $season->id,
                 'episode_number' => $epNum,
                 'title' => $epTitle,
-                'overview' => "Episode {$epNum}",
+                'title_ar' => $epTitleAr,
+                'overview' => $epOverview,
+                'overview_ar' => $epOverviewAr,
+                'still_path' => $epStillPath,
+                'rating' => $epRating,
+                'air_date' => $epAirDate,
                 'runtime_minutes' => $runtimeMinutes,
                 'duration_seconds' => ! empty($probeData['duration']) && $probeData['duration'] > 0 ? (int) round($probeData['duration']) : ($runtimeMinutes * 60),
                 'file_path' => $file['path'],

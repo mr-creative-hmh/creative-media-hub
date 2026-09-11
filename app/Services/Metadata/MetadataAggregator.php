@@ -307,6 +307,22 @@ class MetadataAggregator
         return $data;
     }
 
+        public function getSeasonEpisodesBilingual(string|int $seriesId, int $seasonNumber, string $providerKey = 'tmdb'): array
+    {
+        if ($providerKey === 'tmdb' && isset($this->providers['tmdb']) && method_exists($this->providers['tmdb'], 'getSeasonEpisodesBilingual')) {
+            return $this->providers['tmdb']->getSeasonEpisodesBilingual($seriesId, $seasonNumber);
+        }
+
+        // Fallback to regular season episodes if bilingual not available
+        $eps = $this->getSeasonEpisodes($seriesId, $seasonNumber, $providerKey);
+        $result = [];
+        foreach ($eps as $ep) {
+            $num = (int) ($ep['episode_number'] ?? 1);
+            $result[$num] = $ep;
+        }
+        return $result;
+    }
+
     public function getSeasonEpisodes(string|int $seriesId, int $seasonNumber, string $providerKey = 'tmdb', string $lang = 'en'): array
     {
         $providerKey = strtolower($providerKey);

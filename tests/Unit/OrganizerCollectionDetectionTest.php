@@ -153,4 +153,112 @@ class OrganizerCollectionDetectionTest extends TestCase
         $this->assertStringEndsWith('.ar.srt', $sub1Dest);
         $this->assertStringContainsString('Movies/Sci-Fi/Interstellar (2014)', $sub1Dest);
     }
+
+    public function test_tv_show_year_formats_correctly_with_range_or_single_year_or_omitted(): void
+    {
+        $series1 = \App\Models\Series::create([
+            'title' => 'Test Show A',
+            'release_year' => 2004,
+            'end_year' => 2006,
+        ]);
+        $season1 = \App\Models\Season::create([
+            'series_id' => $series1->id,
+            'season_number' => 1,
+        ]);
+        \App\Models\Episode::create([
+            'series_id' => $series1->id,
+            'season_id' => $season1->id,
+            'episode_number' => 1,
+            'title' => 'Pilot',
+            'resolution' => '360p',
+            'file_path' => 'D:/Media/Test Show A/Season 01/Test.Show.A.S01E01.avi',
+        ]);
+
+        $series2 = \App\Models\Series::create([
+            'title' => 'Test Show B',
+            'release_year' => 2022,
+        ]);
+        $season2 = \App\Models\Season::create([
+            'series_id' => $series2->id,
+            'season_number' => 1,
+        ]);
+        \App\Models\Episode::create([
+            'series_id' => $series2->id,
+            'season_id' => $season2->id,
+            'episode_number' => 1,
+            'title' => 'First Episode',
+            'resolution' => '720p',
+            'file_path' => 'D:/Media/Test Show B/Season 01/Test.Show.B.S01E01.mkv',
+        ]);
+
+        // 1. Show A with year range 2004 - 2006
+        $fileA = [
+            'path' => 'D:/Media/Test Show A/Season 01/Test.Show.A.S01E01.avi',
+            'filename' => 'Test.Show.A.S01E01.avi',
+            'parsed' => [
+                'type' => 'series',
+                'clean_title' => 'Test Show A',
+                'season' => 1,
+                'episode' => 1,
+            ],
+        ];
+        $planA = $this->organizerService->generatePlanItem($fileA, 'H:/Organized');
+        $this->assertEquals('2004 - 2006', $planA['year']);
+        $this->assertEquals('360p', $planA['resolution']);
+        $this->assertStringContainsString('TV Shows/Test Show A (2004 - 2006)/Season 01/Test Show A - S01E01 - Pilot [360p].avi', str_replace('\\', '/', $planA['destination_path']));
+
+        // 2. Show B with single year 2022
+        $fileB = [
+            'path' => 'D:/Media/Test Show B/Season 01/Test.Show.B.S01E01.mkv',
+            'filename' => 'Test.Show.B.S01E01.mkv',
+            'parsed' => [
+                'type' => 'series',
+                'clean_title' => 'Test Show B',
+                'season' => 1,
+                'episode' => 1,
+            ],
+        ];
+        $planB = $this->organizerService->generatePlanItem($fileB, 'H:/Organized');
+        $this->assertEquals('2022', $planB['year']);
+        $this->assertEquals('720p', $planB['resolution']);
+        $this->assertStringContainsString('TV Shows/Test Show B (2022)/Season 01/Test Show B - S01E01 - First Episode [720p].mkv', str_replace('\\', '/', $planB['destination_path']));
+
+        // 3. Unknown show without year: MUST NOT have empty parens () or trailing space
+        $fileC = [
+            'path' => 'D:/Media/Unknown Mystery Show/Season 01/Unknown.Mystery.Show.S01E01.mkv',
+            'filename' => 'Unknown.Mystery.Show.S01E01.mkv',
+            'parsed' => [
+                'type' => 'series',
+                'clean_title' => 'Unknown Mystery Show',
+                'season' => 1,
+                'episode' => 1,
+            ],
+        ];
+        $planC = $this->organizerService->generatePlanItem($fileC, 'H:/Organized');
+        $destC = str_replace('\\', '/', $planC['destination_path']);
+        $this->assertStringContainsString('TV Shows/Unknown Mystery Show/Season 01/', $destC);
+        $this->assertStringNotContainsString('Unknown Mystery Show /', $destC);
+        $this->assertStringNotContainsString('()', $destC);
+    }
+
+    public function test_rings_of_power_tv_series_is_not_matched_to_movie_collection(): void
+    {
+        $file = [
+            'path' => 'H:/Entertainment/TV Shows/The Lord of the Rings The Rings of Power/Season 01/The.Lord.of.the.Rings.The.Rings.of.Power.S01E01.1080p.mkv',
+            'filename' => 'The.Lord.of.the.Rings.The.Rings.of.Power.S01E01.1080p.mkv',
+            'parsed' => [
+                'type' => 'series',
+                'clean_title' => 'The Lord of the Rings the Rings of Power',
+                'season' => 1,
+                'episode' => 1,
+                'resolution' => '1080p',
+            ],
+        ];
+
+        $plan = $this->organizerService->generatePlanItem($file, 'H:/Organized');
+
+        $this->assertNull($plan['collection_name']);
+        $this->assertStringNotContainsString('Collection', $plan['destination_path']);
+        $this->assertStringNotContainsString('The Lord of the Rings Collection', $plan['destination_path']);
+    }
 }

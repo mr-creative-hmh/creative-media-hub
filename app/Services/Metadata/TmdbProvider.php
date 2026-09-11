@@ -392,7 +392,7 @@ class TmdbProvider implements MetadataProviderInterface
         return null;
     }
 
-    public function getSeasonEpisodes(string|int $seriesId, int $seasonNumber, string $lang = 'en'): array
+        public function getSeasonEpisodes(string|int $seriesId, int $seasonNumber, string $lang = 'en'): array
     {
         $key = $this->getApiKey();
         if (! $key) {
@@ -400,16 +400,17 @@ class TmdbProvider implements MetadataProviderInterface
         }
 
         try {
-            $response = Http::timeout(8)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
+            $response = Http::timeout(10)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
                 'api_key' => $key,
+                'language' => $lang === 'ar' ? 'ar-SA' : 'en-US',
             ]);
 
             if ($response->successful()) {
                 return array_map(fn ($ep) => [
-                    'episode_number' => $ep['episode_number'],
-                    'title' => $ep['name'] ?? "Episode {$ep['episode_number']}",
+                    'episode_number' => (int) $ep['episode_number'],
+                    'title' => ! empty($ep['name']) ? trim($ep['name']) : "Episode {$ep['episode_number']}",
                     'overview' => $ep['overview'] ?? '',
-                    'still_path' => isset($ep['still_path']) ? "https://image.tmdb.org/t/p/w500{$ep['still_path']}" : null,
+                    'still_path' => isset($ep['still_path']) && $ep['still_path'] ? "https://image.tmdb.org/t/p/w500{$ep['still_path']}" : null,
                     'air_date' => $ep['air_date'] ?? null,
                     'rating' => round($ep['vote_average'] ?? 0, 1),
                     'runtime_minutes' => $ep['runtime'] ?? null,
@@ -417,6 +418,79 @@ class TmdbProvider implements MetadataProviderInterface
             }
         } catch (\Exception $e) {
             Log::warning('TMDb getSeasonEpisodes failed: '.$e->getMessage());
+        }
+
+        return [];
+    }
+
+    /**
+     * Fetch season episodes with bilingual English + Arabic metadata and artwork.
+     */
+    public function getSeasonEpisodesBilingual(string|int $seriesId, int $seasonNumber): array
+    {
+        $key = $this->getApiKey();
+        if (! $key) {
+            return [];
+        }
+
+        try {
+            // 1. Fetch English details
+            $resEn = Http::timeout(10)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
+                'api_key' => $key,
+                'language' => 'en-US',
+            ]);
+
+            if (! $resEn->successful()) {
+                return [];
+            }
+
+            // 2. Fetch Arabic details
+            $resAr = Http::timeout(10)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
+                'api_key' => $key,
+                'language' => 'ar-SA',
+            ]);
+
+            $arEps = [];
+            if ($resAr->successful()) {
+                foreach ($resAr->json('episodes', []) as $ep) {
+                    $arEps[(int) $ep['episode_number']] = $ep;
+                }
+            }
+
+            $results = [];
+            foreach ($resEn->json('episodes', []) as $ep) {
+                $epNum = (int) $ep['episode_number'];
+                $arEp = $arEps[$epNum] ?? null;
+
+                $titleEn = trim($ep['name'] ?? '');
+                $titleAr = trim($arEp['name'] ?? '');
+
+                if (empty($titleAr) || $titleAr === $titleEn || preg_match('/^(?:Episode|الحلقة)\s*\d+$/i', $titleAr)) {
+                    $titleAr = null;
+                }
+
+                $overviewEn = trim($ep['overview'] ?? '');
+                $overviewAr = trim($arEp['overview'] ?? '');
+                if (empty($overviewAr) || $overviewAr === $overviewEn) {
+                    $overviewAr = null;
+                }
+
+                $results[$epNum] = [
+                    'episode_number' => $epNum,
+                    'title' => ! empty($titleEn) ? $titleEn : "Episode {$epNum}",
+                    'title_ar' => $titleAr,
+                    'overview' => ! empty($overviewEn) ? $overviewEn : null,
+                    'overview_ar' => $overviewAr,
+                    'still_path' => ! empty($ep['still_path']) ? "https://image.tmdb.org/t/p/w500{$ep['still_path']}" : null,
+                    'rating' => round($ep['vote_average'] ?? 0, 1),
+                    'air_date' => $ep['air_date'] ?? null,
+                    'runtime_minutes' => $ep['runtime'] ?? null,
+                ];
+            }
+
+            return $results;
+        } catch (\Exception $e) {
+            Log::warning("TMDb getSeasonEpisodesBilingual failed for {$seriesId} S{$seasonNumber}: ".$e->getMessage());
         }
 
         return [];

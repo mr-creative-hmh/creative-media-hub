@@ -228,6 +228,17 @@ class SeriesController extends Controller
             'rating' => $validated['rating'] ?? $series->rating,
         ]);
 
+        if ($tmdbId) {
+            try {
+                \Illuminate\Support\Facades\Artisan::call('media:enrich-episodes', [
+                    '--series' => $series->id,
+                    '--force' => true,
+                ]);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("Enrichment after fixMatch failed for series {$series->id}: " . $e->getMessage());
+            }
+        }
+
         $series->load(['genres', 'seasons.episodes.subtitles']);
 
         return response()->json([

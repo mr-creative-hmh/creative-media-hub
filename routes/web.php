@@ -118,6 +118,7 @@ Route::post('/api/subtitles/health-check/cancel', [SubtitleController::class, 'c
 // Cinema Video & Subtitle Streaming Engine (HTTP 206 Partial Content + Audio Transcoding)
 Route::get('/stream/movie/{mediaItem}', [StreamController::class, 'streamMovie'])->name('stream.movie');
 Route::get('/stream/episode/{episode}', [StreamController::class, 'streamEpisode'])->name('stream.episode');
+Route::get('/api/stream/episode/{episode}', [StreamController::class, 'streamEpisode'])->name('api.stream.episode');
 Route::get('/stream/subtitles/{subtitle}', [StreamController::class, 'streamSubtitle'])->name('stream.subtitle');
 Route::post('/api/playback/progress', [StreamController::class, 'saveProgress'])->name('api.playback.progress');
 Route::post('/api/watch-history/progress', [StreamController::class, 'saveProgress']);
@@ -130,6 +131,7 @@ Route::post('/api/watch-history/clear-all', [StreamController::class, 'clearWatc
 Route::get('/api/media/duration', [StreamController::class, 'getMediaDuration'])->name('api.media.duration');
 Route::post('/api/stream/stop', [StreamController::class, 'stopStream'])->name('api.stream.stop');
 Route::get('/api/stream/cache-status', [StreamController::class, 'getCacheStatus'])->name('api.stream.cache-status');
+Route::get('/api/stream/playlist', [StreamController::class, 'getPlaylist'])->name('api.stream.playlist');
 
 // Server-Side Remux Streaming Routes (Instant on-the-fly AAC remuxing for unsupported formats)
 Route::get('/stream/remux/movie/{mediaItem}', [StreamController::class, 'streamRemuxMovie'])->name('stream.remux.movie');

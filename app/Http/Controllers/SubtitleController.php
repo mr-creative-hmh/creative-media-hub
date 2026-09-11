@@ -73,7 +73,12 @@ class SubtitleController extends Controller
             if ($mediaType === 'episode') {
                 $ep = Episode::with('series')->find($mediaId);
                 if ($ep) {
-                    $query = $query ?: ($ep->series?->title ?? '');
+                    $cleanSeriesTitle = $ep->series?->title;
+                    if ($cleanSeriesTitle) {
+                        $query = $cleanSeriesTitle;
+                    } else {
+                        $query = preg_replace('/\s*-\s*(?:Season|الموسم|Episode|الحلقة|S\d+).*$/iu', '', $query);
+                    }
                     $imdbId = $imdbId ?: $ep->series?->imdb_id;
                     $season = $season ?: $ep->season_number;
                     $episode = $episode ?: $ep->episode_number;
@@ -193,7 +198,12 @@ class SubtitleController extends Controller
             if ($mediaType === 'episode') {
                 $ep = Episode::with('series')->find($mediaId);
                 if ($ep) {
-                    $query = $query ?: ($ep->series?->title ?? '');
+                    $cleanSeriesTitle = $ep->series?->title;
+                    if ($cleanSeriesTitle) {
+                        $query = $cleanSeriesTitle;
+                    } else {
+                        $query = preg_replace('/\s*-\s*(?:Season|الموسم|Episode|الحلقة|S\d+).*$/iu', '', $query);
+                    }
                     $imdbId = $ep->series?->imdb_id;
                     $season = $season ?: $ep->season_number;
                     $episode = $episode ?: $ep->episode_number;

@@ -17,6 +17,11 @@ class PhysicalOrganizerService
 {
     protected SceneNameParserService $parser;
 
+    protected static ?array $seriesCache = null;
+    protected static array $seriesYearCache = [];
+    protected static array $episodesBySeries = [];
+    protected static array $movieCache = [];
+
     protected const CACHE_KEY = 'organizer_execution_state';
     protected const PLAN_CACHE_KEY = 'organizer_plan_state';
 
@@ -40,9 +45,121 @@ class PhysicalOrganizerService
         return $plan;
     }
 
-    /**
-     * Generate plan item for a single media file.
-     */
+    public function resolveCachedSeries(string $cleanTitle, string $filePath): ?Series
+    {
+        if (self::$seriesCache === null) {
+            $seriesList = Series::with('genres')->get();
+            $map = [];
+            foreach ($seriesList as $s) {
+                $norm = strtolower(preg_replace('/[^a-z0-9]/i', '', $s->title));
+                $map[$norm] = $s;
+                if ($s->folder_path) {
+                    $normFolder = strtolower(rtrim(str_replace('\\', '/', $s->folder_path), '/'));
+                    $map[$normFolder] = $s;
+                    $folderBase = strtolower(basename($normFolder));
+                    $folderBaseClean = strtolower(preg_replace('/[^a-z0-9]/i', '', $folderBase));
+                    $map[$folderBaseClean] = $s;
+                }
+            }
+            self::$seriesCache = $map;
+        }
+
+        $normTitle = strtolower(preg_replace('/[^a-z0-9]/i', '', $cleanTitle));
+        if (isset(self::$seriesCache[$normTitle])) {
+            return self::$seriesCache[$normTitle];
+        }
+
+        $normPath = strtolower(str_replace('\\', '/', $filePath));
+        foreach (self::$seriesCache as $key => $s) {
+            if (str_contains($normPath, "/{$key}/") || str_contains($normPath, "/{$key} (") || str_contains($normPath, "/{$key}.")) {
+                return $s;
+            }
+        }
+
+        return Series::where('title', 'like', "%{$cleanTitle}%")->with('genres')->first();
+    }
+
+    public function resolveSeriesYearString(Series $series): string
+    {
+        if (isset(self::$seriesYearCache[$series->id])) {
+            return self::$seriesYearCache[$series->id];
+        }
+
+        $minY = $series->release_year;
+        $maxY = $series->end_year;
+
+        if (! $maxY) {
+            $maxAir = Episode::where('series_id', $series->id)->whereNotNull('air_date')->max('air_date');
+            if ($maxAir) {
+                $mYear = (int) substr($maxAir, 0, 4);
+                if ($mYear > $minY) {
+                    $maxY = $mYear;
+                }
+            }
+        }
+
+        if ($minY && $maxY && $maxY > $minY) {
+            $yearStr = "{$minY} - {$maxY}";
+        } elseif ($minY) {
+            $yearStr = (string) $minY;
+        } else {
+            $yearStr = '';
+        }
+
+        return self::$seriesYearCache[$series->id] = $yearStr;
+    }
+
+    public function resolveCachedEpisode(?int $seriesId, int $seasonNum, int $episodeNum, string $filePath): ?Episode
+    {
+        if (! $seriesId) {
+            return null;
+        }
+
+        if (! isset(self::$episodesBySeries[$seriesId])) {
+            $eps = Episode::where('series_id', $seriesId)
+                ->select('id', 'series_id', 'season_id', 'episode_number', 'title', 'clean_episode_title', 'resolution', 'file_path')
+                ->with('season:id,season_number')
+                ->get();
+
+            $map = [];
+            foreach ($eps as $ep) {
+                $sNum = $ep->season ? (int) $ep->season->season_number : 1;
+                $map["{$sNum}_{$ep->episode_number}"] = $ep;
+                if ($ep->file_path) {
+                    $map[strtolower(str_replace('\\', '/', $ep->file_path))] = $ep;
+                }
+            }
+            self::$episodesBySeries[$seriesId] = $map;
+        }
+
+        $key = "{$seasonNum}_{$episodeNum}";
+        if (isset(self::$episodesBySeries[$seriesId][$key])) {
+            return self::$episodesBySeries[$seriesId][$key];
+        }
+
+        $normPath = strtolower(str_replace('\\', '/', $filePath));
+        if (isset(self::$episodesBySeries[$seriesId][$normPath])) {
+            return self::$episodesBySeries[$seriesId][$normPath];
+        }
+
+        return null;
+    }
+
+    public function resolveCachedMovie(string $cleanTitle, string $filePath): ?MediaItem
+    {
+        $norm = strtolower(preg_replace('/[^a-z0-9]/i', '', $cleanTitle));
+        if (isset(self::$movieCache[$norm])) {
+            return self::$movieCache[$norm];
+        }
+
+        $movie = MediaItem::where('title', 'like', "%{$cleanTitle}%")
+            ->orWhere('original_title', 'like', "%{$cleanTitle}%")
+            ->with('genres')
+            ->first();
+
+        return self::$movieCache[$norm] = $movie;
+    }
+
     /**
      * Multi-tier collection detection:
      * Tier 1: Explicitly passed or pre-parsed collection_name
@@ -52,6 +169,18 @@ class PhysicalOrganizerService
      */
     public function resolveCollectionName(string $filePath, array $parsed, ?string $explicitColl = null): ?string
     {
+        $isSeries = ($parsed['type'] ?? 'movie') === 'series';
+        if ($isSeries) {
+            return null;
+        }
+
+        $cleanTitle = $parsed['clean_title'] ?? ($parsed['title'] ?? '');
+
+        // The Lord of the Rings: The Rings of Power is a TV series, never match movie collections
+        if (stripos($cleanTitle, 'Rings of Power') !== false || stripos($filePath, 'Rings of Power') !== false) {
+            return null;
+        }
+
         if (! empty($explicitColl)) {
             return $this->formatCollectionName($explicitColl);
         }
@@ -59,9 +188,6 @@ class PhysicalOrganizerService
         if (! empty($parsed['collection_name'])) {
             return $this->formatCollectionName($parsed['collection_name']);
         }
-
-        $cleanTitle = $parsed['clean_title'] ?? ($parsed['title'] ?? '');
-        $isSeries = ($parsed['type'] ?? 'movie') === 'series';
 
         // Tier 2: Local Database MediaItem check
         if (! $isSeries && ! empty($cleanTitle)) {
@@ -197,22 +323,64 @@ class PhysicalOrganizerService
             $epTitle = '';
         }
 
-        // If resolution is missing from parser but file exists on disk, probe via FFprobe
-        $resTag = $parsed['resolution'] ?? null;
-        if (empty($resTag) && file_exists($filePath)) {
-            $probed = app(FilesystemScannerService::class)->probeResolution($filePath);
-            if ($probed) {
-                $resTag = $probed;
-                $parsed['resolution'] = $probed;
+        $dbSeries = null;
+        $dbEp = null;
+        $dbMovie = null;
+
+        if ($isSeries) {
+            $dbSeries = $this->resolveCachedSeries($cleanTitle, $filePath);
+            if ($dbSeries) {
+                // Resolve Year for TV Series: "Title (2009 - 2011)" or "Title (2009)"
+                $seriesYear = $this->resolveSeriesYearString($dbSeries);
+                if (! empty($seriesYear)) {
+                    $year = $seriesYear;
+                }
+
+                $dbEp = $this->resolveCachedEpisode($dbSeries->id, $seasonNum, $episodeNum, $filePath);
+                if ($dbEp && empty($epTitle) && $dbEp->clean_episode_title) {
+                    $epTitle = $this->sanitizePathSegment($dbEp->clean_episode_title);
+                }
+            }
+        } else {
+            $dbMovie = $this->resolveCachedMovie($cleanTitle, $filePath);
+            if ($dbMovie && empty($year) && $dbMovie->release_year) {
+                $year = (string) $dbMovie->release_year;
             }
         }
-        $resTag = $resTag ?: '1080p FHD';
+
+        // Fast resolution detection:
+        // 1. Filename parser
+        // 2. Database episode/movie resolution (instant <0.1ms)
+        // 3. Probing fallback if file exists on disk
+        $resTag = $parsed['resolution'] ?? null;
+        if (empty($resTag)) {
+            if ($isSeries && $dbEp && ! empty($dbEp->resolution)) {
+                $resTag = $dbEp->resolution;
+                $parsed['resolution'] = $dbEp->resolution;
+            } elseif (! $isSeries && $dbMovie && ! empty($dbMovie->resolution)) {
+                $resTag = $dbMovie->resolution;
+                $parsed['resolution'] = $dbMovie->resolution;
+            } elseif (file_exists($filePath)) {
+                $probed = Cache::remember('organizer_probe_res_'.md5($filePath), 86400, function () use ($filePath) {
+                    return app(FilesystemScannerService::class)->probeResolution($filePath);
+                });
+                if ($probed) {
+                    $resTag = $probed;
+                    $parsed['resolution'] = $probed;
+                }
+            }
+        }
+
+        // For movies without resolution anywhere, preserve 1080p fallback. For series, leave empty if unknown.
+        if (! $isSeries && empty($resTag)) {
+            $resTag = '1080p FHD';
+        }
 
         $firstChar = mb_strtoupper(mb_substr($cleanTitle, 0, 1));
         $firstLetter = preg_match('/^[A-Z0-9]$/i', $firstChar) ? $firstChar : '#';
 
-        // Multi-tier Collection Resolution
-        $collName = $this->resolveCollectionName($filePath, $parsed, $file['collection_name'] ?? null);
+        // Multi-tier Collection Resolution (Movies only)
+        $collName = ! $isSeries ? $this->resolveCollectionName($filePath, $parsed, $file['collection_name'] ?? null) : null;
         if ($collName) {
             $parsed['collection_name'] = $collName;
         }
@@ -220,16 +388,10 @@ class PhysicalOrganizerService
         // Resolve genres for {Genre} and {Genres} tokens
         $genresList = $file['genres'] ?? [];
         if (empty($genresList)) {
-            if ($isSeries) {
-                $dbSeries = Series::where('title', 'like', "%{$cleanTitle}%")->with('genres')->first();
-                if ($dbSeries && $dbSeries->genres->isNotEmpty()) {
-                    $genresList = $dbSeries->genres->pluck('name_en')->toArray();
-                }
-            } else {
-                $dbMovie = MediaItem::where('title', 'like', "%{$cleanTitle}%")->with('genres')->first();
-                if ($dbMovie && $dbMovie->genres->isNotEmpty()) {
-                    $genresList = $dbMovie->genres->pluck('name_en')->toArray();
-                }
+            if ($isSeries && $dbSeries && $dbSeries->genres->isNotEmpty()) {
+                $genresList = $dbSeries->genres->pluck('name_en')->toArray();
+            } elseif (! $isSeries && $dbMovie && $dbMovie->genres->isNotEmpty()) {
+                $genresList = $dbMovie->genres->pluck('name_en')->toArray();
             }
         }
 
@@ -257,7 +419,7 @@ class PhysicalOrganizerService
             '{Collection}' => $collName ? $this->sanitizePathSegment($collName) : '',
             '{Genre}' => $primaryGenre,
             '{Genres}' => $joinedGenres,
-            '{Resolution}' => $this->sanitizePathSegment($resTag),
+            '{Resolution}' => $resTag ? $this->sanitizePathSegment($resTag) : '',
             '{CleanResolution}' => $cleanRes,
             '{ResolutionClean}' => $cleanRes,
             '{Codec}' => $this->sanitizePathSegment(($parsed['codec'] ?? '') ?: 'x264'),
@@ -265,6 +427,8 @@ class PhysicalOrganizerService
             '{Edition}' => $this->sanitizePathSegment($parsed['edition'] ?? ''),
             '{Group}' => $this->sanitizePathSegment($parsed['group'] ?? 'MEDIA'),
             '{FirstLetter}' => $firstLetter,
+            '{Season}' => (string) $seasonNum,
+            '{Episode}' => (string) $episodeNum,
             '{Season:02}' => sprintf('%02d', $seasonNum),
             '{Episode:02}' => sprintf('%02d', $episodeNum),
             '{EpisodeTitle}' => $epTitle,
@@ -273,12 +437,19 @@ class PhysicalOrganizerService
 
         $relPath = $pattern;
         if (empty($epTitle) || ! empty($file['omit_episode_title'])) {
-            $relPath = str_replace(' - {EpisodeTitle}', '', $relPath);
-            $relPath = str_replace('{EpisodeTitle}', '', $relPath);
+            $relPath = str_replace([' - {EpisodeTitle}', ' - {EpisodeTitle} ', '{EpisodeTitle}'], '', $relPath);
         }
         // If movie has no collection, cleanly unwrap collection directory segment
         if (empty($collName)) {
             $relPath = str_replace(['/Collections/{Collection}', 'Collections/{Collection}/', 'Collections/{Collection}', '/{Collection}', '{Collection}/', '{Collection}'], '', $relPath);
+        }
+        // If year is empty, cleanly unwrap year segments to prevent empty () or trailing spaces
+        if (empty($year)) {
+            $relPath = str_replace([' ({Year})', '({Year})', ' [{Year}]', '[{Year}]', '{Year}'], '', $relPath);
+        }
+        // If clean resolution is empty, cleanly unwrap resolution segments to prevent empty []
+        if (empty($cleanRes)) {
+            $relPath = str_replace([' [{CleanResolution}]', '[{CleanResolution}]', ' [{ResolutionClean}]', '[{ResolutionClean}]', ' [{Resolution}]', '[{Resolution}]'], '', $relPath);
         }
         $relPath = str_replace(array_keys($tokens), array_values($tokens), $relPath);
 
@@ -287,6 +458,7 @@ class PhysicalOrganizerService
         $relPath = preg_replace('/\s+-\s*\[/', ' [', $relPath);
         $relPath = preg_replace('/\s+-\s*\./', '.', $relPath);
         $relPath = str_replace(['(Unknown Year)', '[Unknown Year]', 'Unknown Year', '()', '[]', '( )', '[ ]', ' - .', ' .'], ['', '', '', '', '', '', '', '.', '.'], $relPath);
+        $relPath = preg_replace('/\s+\//', '/', $relPath);
         $relPath = preg_replace('/\s+/', ' ', $relPath);
         $relPath = trim($relPath, '/');
 
@@ -326,11 +498,11 @@ class PhysicalOrganizerService
             'collection_name' => $collName ?: null,
             'genre' => $primaryGenre,
             'type' => $parsed['type'] ?? ($isSeries ? 'series' : 'movie'),
-            'year' => $parsed['year'] ?? null,
+            'year' => $year ?: ($parsed['year'] ?? null),
             'season' => $isSeries ? $seasonNum : null,
             'episode' => $isSeries ? $episodeNum : null,
             'episode_title' => $epTitle,
-            'resolution' => $parsed['resolution'] ?? '1080p',
+            'resolution' => $cleanRes ?: ($parsed['resolution'] ?? null),
             'size_bytes' => $file['size_bytes'] ?? 0,
             'size_formatted' => $file['size_formatted'] ?? '',
             'status' => $status,
@@ -746,20 +918,20 @@ class PhysicalOrganizerService
     public function cleanResolutionTag(?string $raw): string
     {
         if (empty($raw)) {
-            return '1080p';
+            return '';
         }
         $r = strtolower(trim($raw));
-        if (str_contains($r, '4k') || str_contains($r, '2160')) return '4K';
+        if (str_contains($r, '4k') || str_contains($r, '2160') || str_contains($r, 'uhd')) return '4K';
         if (str_contains($r, '1440') || str_contains($r, '2k')) return '1440p';
-        if (str_contains($r, '1080')) return '1080p';
-        if (str_contains($r, '720')) return '720p';
+        if (str_contains($r, '1080') || str_contains($r, 'fhd')) return '1080p';
+        if (str_contains($r, '720') || str_contains($r, 'hd')) return '720p';
         if (str_contains($r, '576')) return '576p';
         if (str_contains($r, '540')) return '540p';
-        if (str_contains($r, '480')) return '480p';
+        if (str_contains($r, '480') || str_contains($r, 'sd')) return '480p';
         if (str_contains($r, '360')) return '360p';
         if (str_contains($r, '240')) return '240p';
 
-        return $raw;
+        return $raw === '1080p FHD' ? '1080p' : $raw;
     }
 
     public function sanitizePathSegment(string $name): string

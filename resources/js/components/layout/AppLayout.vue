@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import Navbar from './Navbar.vue';
 import Sidebar from './Sidebar.vue';
 import CinemaPlayer from '@/components/player/CinemaPlayer.vue';
+import BandersnatchPlayer from '@/components/player/BandersnatchPlayer.vue';
 import UnifiedJobCenterModal from '@/components/activity/UnifiedJobCenterModal.vue';
 import PageTransitionLoader from '@/components/common/PageTransitionLoader.vue';
 import GlobalToaster from '@/components/common/GlobalToaster.vue';
@@ -15,18 +16,7 @@ const { fetchStatus } = useScanner();
 const { startBackgroundWorker } = useDownloader();
 
 const activePlayerItem = ref<any | null>(null);
-
-onMounted(() => {
-    // Lock application permanently to Pure Cinema Dark Mode
-    document.documentElement.classList.add('dark');
-    document.documentElement.classList.remove('light');
-
-    // Initialize global background scanner worker
-    fetchStatus();
-
-    // Initialize global background downloader worker
-    startBackgroundWorker();
-});
+const activeBandersnatchEpisode = ref<any | null>(null);
 
 const handlePlay = (item: any, playlist?: any[]) => {
     if (playlist && Array.isArray(playlist)) {
@@ -38,6 +28,39 @@ const handlePlay = (item: any, playlist?: any[]) => {
 const closePlayer = () => {
     activePlayerItem.value = null;
 };
+
+const handlePlayBandersnatch = (ep: any) => {
+    activeBandersnatchEpisode.value = ep;
+};
+
+const closeBandersnatch = () => {
+    activeBandersnatchEpisode.value = null;
+};
+
+const onPlayBandersnatchEvent = (event: any) => {
+    if (event.detail) {
+        handlePlayBandersnatch(event.detail);
+    }
+};
+
+onMounted(() => {
+    // Lock application permanently to Pure Cinema Dark Mode
+    document.documentElement.classList.add('dark');
+    document.documentElement.classList.remove('light');
+
+    // Listen for global custom event to trigger Bandersnatch Interactive Experience
+    window.addEventListener('play-bandersnatch', onPlayBandersnatchEvent);
+
+    // Initialize global background scanner worker
+    fetchStatus();
+
+    // Initialize global background downloader worker
+    startBackgroundWorker();
+});
+
+onUnmounted(() => {
+    window.removeEventListener('play-bandersnatch', onPlayBandersnatchEvent);
+});
 </script>
 
 <template>
@@ -52,11 +75,11 @@ const closePlayer = () => {
         <!-- Sticky Header Navbar -->
         <Navbar />
 
-        <!-- Main Body Wrapper -->
+                <!-- Main Body Wrapper -->
         <div class="flex-1 flex w-full">
             <Sidebar />
             <main class="flex-1 p-4 lg:p-8 max-w-7xl mx-auto w-full overflow-x-hidden relative z-10">
-                <slot :play="handlePlay" />
+                <slot :play="handlePlay" :play-bandersnatch="handlePlayBandersnatch" />
             </main>
         </div>
 
@@ -74,13 +97,20 @@ const closePlayer = () => {
             </div>
         </footer>
 
-        <!-- Global Cinema Video Player Modal -->
+                <!-- Global Cinema Video Player Modal -->
         <CinemaPlayer
             v-if="activePlayerItem"
             :item="activePlayerItem"
             :playlist="activePlayerItem.playlist || []"
             :initial-progress="activePlayerItem.progress_seconds || activePlayerItem.initial_progress || 0"
             @close="closePlayer"
+        />
+
+        <!-- Black Mirror: Bandersnatch Interactive Experience Player -->
+        <BandersnatchPlayer
+            v-if="activeBandersnatchEpisode"
+            :episode="activeBandersnatchEpisode"
+            @close="closeBandersnatch"
         />
 
         <!-- Global Unified Universal Activity Center Modal -->

@@ -47,8 +47,76 @@ class Episode extends Model
         return $this->morphMany(WatchHistory::class, 'watchable');
     }
 
-    public function getSeasonNumberAttribute(): int
+        public function getSeasonNumberAttribute(): int
     {
         return $this->season?->season_number ?? 1;
+    }
+
+    /**
+     * Get clean episode title without generic placeholder names like "Episode 1".
+     */
+    public function getCleanEpisodeTitleAttribute(): ?string
+    {
+        $raw = trim($this->title ?? '');
+        if (empty($raw) || preg_match('/^(?:Episode|Ep|Part|الحلقة)\s*\d+$/i', $raw) || preg_match('/^S\d+E\d+$/i', $raw)) {
+            return null;
+        }
+        return $raw;
+    }
+
+    /**
+     * Get clean Arabic episode title without generic placeholder names.
+     */
+    public function getCleanEpisodeTitleArAttribute(): ?string
+    {
+        $raw = trim($this->title_ar ?? '');
+        if (empty($raw) || preg_match('/^(?:Episode|Ep|Part|الحلقة)\s*\d+$/i', $raw) || preg_match('/^S\d+E\d+$/i', $raw)) {
+            return null;
+        }
+        return $raw;
+    }
+
+    /**
+     * Standardized formatted title:
+     * "TV show [name] - Season [Number] - Episode [Number] - [Episode title if available]"
+     */
+    public function getFormattedTitleAttribute(): string
+    {
+        $seriesTitle = $this->series?->title ?? 'Series';
+        $seasonNum = $this->season_number;
+        $epNum = $this->episode_number;
+        $cleanTitle = $this->clean_episode_title;
+
+        $base = "{$seriesTitle} - Season {$seasonNum} - Episode {$epNum}";
+        return $cleanTitle ? "{$base} - {$cleanTitle}" : $base;
+    }
+
+    /**
+     * Standardized formatted title in Arabic:
+     * "[اسم المسلسل] - الموسم [الرقم] - الحلقة [الرقم] - [عنوان الحلقة إذا توفر]"
+     */
+    public function getFormattedTitleArAttribute(): string
+    {
+        $seriesTitle = $this->series?->title_ar ?: ($this->series?->title ?? 'مسلسل');
+        $seasonNum = $this->season_number;
+        $epNum = $this->episode_number;
+        $cleanTitle = $this->clean_episode_title_ar ?: $this->clean_episode_title;
+
+        $base = "{$seriesTitle} - الموسم {$seasonNum} - الحلقة {$epNum}";
+        return $cleanTitle ? "{$base} - {$cleanTitle}" : $base;
+    }
+
+    /**
+     * Standardized season & episode title:
+     * "Season [Number] - Episode [Number] - [Episode title if available]"
+     */
+    public function getFormattedSeasonEpisodeTitleAttribute(): string
+    {
+        $seasonNum = $this->season_number;
+        $epNum = $this->episode_number;
+        $cleanTitle = $this->clean_episode_title;
+
+        $base = "Season {$seasonNum} - Episode {$epNum}";
+        return $cleanTitle ? "{$base} - {$cleanTitle}" : $base;
     }
 }

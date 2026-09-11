@@ -3,8 +3,9 @@ import { ref } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import FixMatchModal from '@/components/media/FixMatchModal.vue';
+import { formatEpisodeTitle, getCleanEpisodeTitle } from '@/lib/mediaTitle';
 import { useI18n } from '@/i18n/useI18n';
-import { Play, Star, ArrowLeft, ArrowRight, Layers, Users, Subtitles, Film, Sparkles, SlidersHorizontal, Clock } from 'lucide-vue-next';
+import { Play, Star, ArrowLeft, ArrowRight, Layers, Users, Subtitles, Film, Sparkles, SlidersHorizontal, Clock, Gamepad2 } from 'lucide-vue-next';
 
 const props = defineProps<{
     series: {
@@ -54,6 +55,23 @@ const selectedSeason = () => {
 
 const handleMetadataUpdated = (updatedItem: any) => {
     Object.assign(props.series, updatedItem);
+};
+
+const isBandersnatch = (ep: any) => {
+    return ep?.id === 5764 ||
+        (ep?.title && /bandersnatch/i.test(ep.title)) ||
+        (ep?.episode_number === 1 && selectedSeason()?.season_number === 0 && /black mirror/i.test(props.series?.title || ''));
+};
+
+const launchInteractiveBandersnatch = (ep: any, e?: Event) => {
+    if (e) e.stopPropagation();
+    window.dispatchEvent(new CustomEvent('play-bandersnatch', {
+        detail: {
+            ...ep,
+            series: props.series,
+            subtitles: ep.subtitles || []
+        }
+    }));
 };
 
 const playEpisode = (ep: any, playFn: (item: any, playlist?: any[]) => void) => {
@@ -209,14 +227,37 @@ const playEpisode = (ep: any, playFn: (item: any, playlist?: any[]) => void) => 
                     <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80"></div>
 
                     <!-- Play Hover Overlay -->
-                    <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
+                    <div v-if="isBandersnatch(ep)" class="absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/65 backdrop-blur-xs p-3 text-center">
+                        <button
+                            @click.stop="launchInteractiveBandersnatch(ep, $event)"
+                            class="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-xl shadow-rose-600/50 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                        >
+                            <Gamepad2 class="w-4 h-4" />
+                            <span>{{ isRTL ? 'بدء العرض التفاعلي' : 'Play Interactive Story' }}</span>
+                        </button>
+                        <button
+                            @click.stop="playEpisode(ep, play)"
+                            class="py-1 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white text-[10px] font-medium flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                        >
+                            <Play class="w-3 h-3 fill-current" />
+                            <span>{{ isRTL ? 'مشاهدة عادية' : 'Normal Playback' }}</span>
+                        </button>
+                    </div>
+                    <div v-else class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
                         <div class="w-12 h-12 rounded-full bg-cyan-500 text-slate-950 flex items-center justify-center shadow-xl shadow-cyan-500/40 group-hover:scale-110 transition-transform">
                             <Play class="w-5 h-5 fill-current ml-0.5" />
                         </div>
                     </div>
 
-                    <!-- Episode Number Badge -->
-                    <span class="absolute top-2.5 left-2.5 cinema-badge bg-black/80 text-cyan-300 border border-cyan-500/40 text-[10px] font-bold">
+                    <!-- Episode Number / Interactive Badge -->
+                    <span
+                        v-if="isBandersnatch(ep)"
+                        class="absolute top-2.5 left-2.5 cinema-badge bg-gradient-to-r from-red-600 to-rose-600 text-white border border-red-400 text-[10px] font-black tracking-wider flex items-center gap-1 shadow-lg shadow-red-500/40 animate-pulse"
+                    >
+                        <Gamepad2 class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'فيلم تفاعلي' : 'INTERACTIVE' }}</span>
+                    </span>
+                    <span v-else class="absolute top-2.5 left-2.5 cinema-badge bg-black/80 text-cyan-300 border border-cyan-500/40 text-[10px] font-bold">
                         EP {{ ep.episode_number }}
                     </span>
 
@@ -249,6 +290,15 @@ const playEpisode = (ep: any, playFn: (item: any, playlist?: any[]) => void) => 
                         </span>
                         <span class="font-mono text-[10px]">{{ ep.video_codec || 'HEVC' }}</span>
                     </div>
+
+                    <button
+                        v-if="isBandersnatch(ep)"
+                        @click.stop="launchInteractiveBandersnatch(ep, $event)"
+                        class="mt-2.5 w-full py-1.5 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer hover:border-rose-500/60 shadow-sm"
+                    >
+                        <Gamepad2 class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'تجربة تفاعلية (اختر مسارك)' : 'Interactive Experience (Choose Your Path)' }}</span>
+                    </button>
                 </div>
             </div>
         </div>
