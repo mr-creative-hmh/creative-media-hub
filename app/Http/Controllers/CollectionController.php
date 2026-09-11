@@ -56,7 +56,7 @@ class CollectionController extends Controller
                     'avg_rating' => $avgRating,
                     'poster_path' => $poster,
                     'backdrop_path' => $backdrop,
-                    'movies' => $movies->map(fn ($m) => [
+                    'movies' => $movies->unique(fn ($m) => $m->tmdb_id ?: strtolower(trim($m->title)))->map(fn ($m) => [
                         'id' => $m->id,
                         'title' => $m->title,
                         'title_ar' => $m->title_ar,
@@ -102,6 +102,8 @@ class CollectionController extends Controller
             ->with(['genres', 'subtitles', 'people', 'directors', 'actors', 'watchHistories'])
             ->orderBy('release_year')
             ->get()
+            ->unique(fn ($m) => $m->tmdb_id ?: strtolower(trim($m->title)))
+            ->values()
             ->map(function ($m) {
                 $slug = $m->slug ?: "movie-{$m->id}";
 

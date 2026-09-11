@@ -675,7 +675,7 @@ onUnmounted(() => {
                             </span>
                         </h1>
                         <p class="text-sm text-slate-400 mt-0.5">
-                            {{ isRTL ? 'ط¥ط¹ط§ط¯ط© طھط³ظ…ظٹط© ظˆطھظ†ط¸ظٹظ… ظ…ظ„ظپط§طھ ط§ظ„ظˆط³ط§ط¦ط· ط§ظ„ظپط¹ظ„ظٹط© ظˆظپظ‚ ط§ظ„ظ…ط¹ط§ظٹظٹط± ط§ظ„ط³ظٹظ†ظ…ط§ط¦ظٹط© ط§ظ„ط¹ط§ظ„ظ…ظٹط©' : 'Standardize, rename, and physically restructure media on disk with zero data loss' }}
+                            {{ isRTL ? 'إعادة تسمية وتنظيم ملفات الوسائط الفعلية وفق المعايير السينمائية العالمية بدون أي فقدان للبيانات' : 'Standardize, rename, and physically restructure media on disk with zero data loss' }}
                         </p>
                     </div>
                 </div>
@@ -702,7 +702,7 @@ onUnmounted(() => {
                     :class="step === 1 ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20' : 'text-slate-400 hover:text-white'"
                 >
                     <span class="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center text-[10px]">1</span>
-                    <span>{{ isRTL ? 'ط§ظ„ط¥ط¹ط¯ط§ط¯ ظˆط§ظ„ظ…ط³ط­' : 'Configure' }}</span>
+                    <span>{{ isRTL ? 'الإعداد والمسح' : 'Configure' }}</span>
                 </button>
 
                 <ArrowRight class="w-3.5 h-3.5 text-slate-600" :class="isRTL ? 'rotate-180' : ''" />
@@ -714,7 +714,7 @@ onUnmounted(() => {
                     :class="step === 2 ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20' : 'text-slate-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed'"
                 >
                     <span class="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center text-[10px]">2</span>
-                    <span>{{ isRTL ? 'ط§ظ„ظ…ط¹ط§ظٹظ†ط© ظˆط§ظ„طھط­ظ‚ظ‚' : 'Dry-Run Preview' }}</span>
+                    <span>{{ isRTL ? 'المعاينة والتحقق' : 'Dry-Run Preview' }}</span>
                 </button>
 
                 <ArrowRight class="w-3.5 h-3.5 text-slate-600" :class="isRTL ? 'rotate-180' : ''" />
@@ -725,7 +725,7 @@ onUnmounted(() => {
                     :class="step === 3 ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20' : 'text-slate-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed'"
                 >
                     <span class="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center text-[10px]">3</span>
-                    <span>{{ isRTL ? 'ط§ظ„طھظ†ظپظٹط° ط§ظ„ط­ظٹ' : 'Live Execution' }}</span>
+                    <span>{{ isRTL ? 'التنفيذ الحي' : 'Live Execution' }}</span>
                 </button>
             </div>
             </div>
@@ -750,10 +750,10 @@ onUnmounted(() => {
                             </div>
                             <div>
                                 <h3 class="font-extrabold text-lg text-white">
-                                    {{ isRTL ? 'ط§ظ„ظ…ظƒطھط¨ط© ط§ظ„ط§ظپطھط±ط§ط¶ظٹط© ط§ظ„ظ…ظپظ‡ط±ط³ط©' : 'Current Virtual Library' }}
+                                    {{ isRTL ? 'المكتبة الافتراضية المفهرسة' : 'Current Virtual Library' }}
                                 </h3>
                                 <p class="text-xs text-slate-400 mt-1">
-                                    {{ isRTL ? 'طھظ†ط¸ظٹظ… ط¬ظ…ظٹط¹ ط§ظ„ط£ظپظ„ط§ظ… ظˆط§ظ„ظ…ط³ظ„ط³ظ„ط§طھ ط§ظ„ظ…ظˆط¬ظˆط¯ط© ط­ط§ظ„ظٹط§ظ‹ ط¯ط§ط®ظ„ ظ‚ط§ط¹ط¯ط© ط§ظ„ط¨ظٹط§ظ†ط§طھ' : 'Organize all movies & series already scanned into your local database' }}
+                                    {{ isRTL ? 'تنظيم جميع الأفلام والمسلسلات الموجودة حالياً داخل قاعدة البيانات' : 'Organize all movies & series already scanned into your local database' }}
                                 </p>
                             </div>
                         </div>
@@ -889,10 +889,10 @@ onUnmounted(() => {
                         </div>
                         <div>
                             <h3 class="font-black text-lg text-white">
-                                {{ isRTL ? 'ط§ط³طھط±ط§طھظٹط¬ظٹط§طھ ظˆظ‚ظˆط§ظ„ط¨ ط§ظ„طھط³ظ…ظٹط© ط§ظ„ظ‚ظٹط§ط³ظٹط©' : 'Naming & Structure Presets' }}
+                                {{ isRTL ? 'استراتيجيات وقوالب التسمية القياسية' : 'Naming & Structure Presets' }}
                             </h3>
                             <p class="text-xs text-slate-400">
-                                {{ isRTL ? 'ط§ط®طھط± ظ‡ظٹظƒظ„ ط§ظ„ظ…ط¬ظ„ط¯ط§طھ ط§ظ„ظ…ظپط¶ظ„ ظ„ط¯ظٹظƒ. ط§ظ„ط£ظ†ظ…ط§ط· ط§ظ„ظƒط§ظ…ظ„ط© ظ…ظˆط¶ط­ط© ظ„ظƒظ„ ظ…ظ† ط§ظ„ط£ظپظ„ط§ظ… ظˆط§ظ„ظ…ط³ظ„ط³ظ„ط§طھ:' : 'Choose your desired library structure. Full movie & series patterns are displayed below:' }}
+                                {{ isRTL ? 'اختر هيكل المجلدات المفضل لديك. الأنماط الكاملة موضحة لكل من الأفلام والمسلسلات:' : 'Choose your desired library structure. Full movie & series patterns are displayed below:' }}
                             </p>
                         </div>
                     </div>
@@ -975,7 +975,7 @@ onUnmounted(() => {
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold text-slate-300 mb-1">
-                                {{ isRTL ? 'ظ‚ط§ظ„ط¨ طھط³ظ…ظٹط© ط§ظ„ط£ظپظ„ط§ظ…' : 'Movie Naming Pattern' }}
+                                {{ isRTL ? 'قالب تسمية الأفلام' : 'Movie Naming Pattern' }}
                             </label>
                             <input
                                 v-model="movieTemplate"
@@ -985,7 +985,7 @@ onUnmounted(() => {
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-slate-300 mb-1">
-                                {{ isRTL ? 'ظ‚ط§ظ„ط¨ طھط³ظ…ظٹط© ط§ظ„ظ…ط³ظ„ط³ظ„ط§طھ' : 'Series Naming Pattern' }}
+                                {{ isRTL ? 'قالب تسمية المسلسلات' : 'Series Naming Pattern' }}
                             </label>
                             <input
                                 v-model="seriesTemplate"
@@ -998,7 +998,7 @@ onUnmounted(() => {
                     <!-- Available Dynamic Tokens -->
                     <div>
                         <span class="text-[11px] font-bold text-slate-400 block mb-2">
-                            {{ isRTL ? 'ط§ظ†ظ‚ط± ظ„ط¥ط¶ط§ظپط© ط§ظ„ط±ظ…ظˆط² ط§ظ„ط¯ظٹظ†ط§ظ…ظٹظƒظٹط©:' : 'Click to append dynamic token:' }}
+                            {{ isRTL ? 'انقر لإضافة الرموز الديناميكية:' : 'Click to append dynamic token:' }}
                         </span>
                         <div class="flex flex-wrap gap-1.5">
                             <button
@@ -1161,7 +1161,7 @@ onUnmounted(() => {
                 >
                     <RefreshCw v-if="isScanning" class="w-5 h-5 animate-spin" />
                     <Sparkles v-else class="w-5 h-5" />
-                    <span>{{ isScanning ? (isRTL ? 'ط¬ط§ط±ظٹ ط§ظ„ظ…ط³ط­ ظˆط¥ظ†ط´ط§ط، ط®ط·ط© ط§ظ„طھظ†ط¸ظٹظ…...' : 'Scanning & Generating Dry-Run...') : (isRTL ? 'ط¨ط¯ط، ظپط­طµ ظˆطھط¬ظ‡ظٹط² ط§ظ„ط®ط·ط© (Dry-Run)' : 'Generate Organization Plan') }}</span>
+                    <span>{{ isScanning ? (isRTL ? 'جاري المسح وإنشاء خطة التنظيم التجريبية...' : 'Scanning & Generating Dry-Run...') : (isRTL ? 'بدء فحص وتجهيز الخطة (Dry-Run)' : 'Generate Organization Plan') }}</span>
                     <ArrowRight class="w-5 h-5" :class="isRTL ? 'rotate-180' : ''" />
                 </button>
             </div>
@@ -1175,13 +1175,13 @@ onUnmounted(() => {
             <div class="p-6 rounded-3xl bg-slate-900/60 border border-white/10 backdrop-blur-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h2 class="text-xl font-black text-white flex items-center gap-2">
-                        <span>{{ isRTL ? 'ط®ط·ط© ط§ظ„طھظ†ط¸ظٹظ… ط§ظ„ظ…ظ‚طھط±ط­ط©' : 'Organization Plan Preview' }}</span>
+                        <span>{{ isRTL ? 'خطة التنظيم المقترحة' : 'Organization Plan Preview' }}</span>
                         <span class="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-xs font-mono font-bold">
                             {{ plan.length }} Files ({{ readyItemsCount }} Ready)
                         </span>
                     </h2>
                     <p class="text-xs text-slate-400 mt-1">
-                        {{ isRTL ? 'ط±ط§ط¬ط¹ ظ…ط³ط§ط±ط§طھ ط§ظ„ظˆط¬ظ‡ط© ط§ظ„ظ…ظƒطھظ…ظ„ط©طŒ ظˆظ‚ظ… ط¨طھط­ط¯ظٹط¯ ط£ظˆ ط§ط³طھط«ظ†ط§ط، ط§ظ„ظ…ظ„ظپط§طھ ظ‚ط¨ظ„ ط§ظ„طھظ†ظپظٹط° ط§ظ„ظ†ظ‡ط§ط¦ظٹ' : 'Review target standardized paths. Select or deselect items before executing.' }}
+                        {{ isRTL ? 'راجع مسارات الوجهة المكتملة، وقم بتحديد أو استثناء الملفات قبل التنفيذ النهائي' : 'Review target standardized paths. Select or deselect items before executing.' }}
                     </p>
                 </div>
 
@@ -1191,7 +1191,7 @@ onUnmounted(() => {
                         class="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition-colors"
                     >
                         <ArrowLeft class="w-4 h-4" :class="isRTL ? 'rotate-180' : ''" />
-                        <span>{{ isRTL ? 'طھط¹ط¯ظٹظ„ ط§ظ„ط¥ط¹ط¯ط§ط¯ط§طھ' : 'Back to Settings' }}</span>
+                        <span>{{ isRTL ? 'تعديل الإعدادات' : 'Back to Settings' }}</span>
                     </button>
 
                     <button
@@ -1200,7 +1200,7 @@ onUnmounted(() => {
                         class="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs shadow-lg shadow-cyan-500/20 flex items-center gap-2 cursor-pointer transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <Play class="w-4 h-4 fill-current" />
-                        <span>{{ isRTL ? `طھظ†ظپظٹط° ط§ظ„ط®ط·ط© (${selectedItemsCount} ظ…ظ„ظپ)` : `Execute Plan (${selectedItemsCount} Files)` }}</span>
+                        <span>{{ isRTL ? `تنفيذ الخطة (${selectedItemsCount} ملف)` : `Execute Plan (${selectedItemsCount} Files)` }}</span>
                     </button>
                 </div>
             </div>
@@ -1212,7 +1212,7 @@ onUnmounted(() => {
                     <input
                         v-model="searchQuery"
                         type="text"
-                        :placeholder="isRTL ? 'ط¨ط­ط« ط¨ط§ظ„ط§ط³ظ… ط£ظˆ ط§ظ„ظ…ط³ط§ط±...' : 'Filter files or paths...'"
+                        :placeholder="isRTL ? 'بحث بالاسم أو المسار...' : 'Filter files or paths...'"
                         class="w-full bg-slate-950 border border-white/15 rounded-xl ps-9 pe-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
                     />
                 </div>
@@ -1292,11 +1292,11 @@ onUnmounted(() => {
                                 <th class="p-4 w-12 text-center">
                                     <span class="sr-only">Select</span>
                                 </th>
-                                <th class="p-4">{{ isRTL ? 'ط§ظ„ط§ط³ظ… ط§ظ„ظ…طµظ†ظپ' : 'Title & Type' }}</th>
-                                <th class="p-4">{{ isRTL ? 'ط§ظ„ظ…ط³ط§ط± ط§ظ„ط­ط§ظ„ظٹ' : 'Original Source' }}</th>
-                                <th class="p-4 text-cyan-400">{{ isRTL ? 'ط§ظ„ظ…ط³ط§ط± ط§ظ„ظ…ظ†ط¸ظ… ط§ظ„ط¬ط¯ظٹط¯' : 'Standardized Destination' }}</th>
-                                <th class="p-4 text-center">{{ isRTL ? 'ط§ظ„ط­ط¬ظ…' : 'Size' }}</th>
-                                <th class="p-4 text-center">{{ isRTL ? 'ط§ظ„ط­ط§ظ„ط©' : 'Status' }}</th>
+                                <th class="p-4">{{ isRTL ? 'الاسم والمصنف' : 'Title & Type' }}</th>
+                                <th class="p-4">{{ isRTL ? 'المسار الأصلي الحالي' : 'Original Source' }}</th>
+                                <th class="p-4 text-cyan-400">{{ isRTL ? 'المسار المنظم الجديد' : 'Standardized Destination' }}</th>
+                                <th class="p-4 text-center">{{ isRTL ? 'الحجم' : 'Size' }}</th>
+                                <th class="p-4 text-center">{{ isRTL ? 'الحالة' : 'Status' }}</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-white/5 font-mono">
@@ -1445,8 +1445,8 @@ onUnmounted(() => {
                         <div>
                             <h2 class="text-2xl font-black text-white">
                                 {{ executionStatus.is_completed
-                                    ? (isRTL ? 'ط§ظƒطھظ…ظ„طھ ط¹ظ…ظ„ظٹط© طھظ†ط¸ظٹظ… ط§ظ„ظ…ظƒطھط¨ط© ط¨ظ†ط¬ط§ط­!' : 'Physical Organization Completed!')
-                                    : (isRTL ? 'ط¬ط§ط±ظٹ ظ†ظ‚ظ„ ظˆط¥ط¹ط§ط¯ط© ظ‡ظٹظƒظ„ط© ط§ظ„ظ…ظ„ظپط§طھ ط¹ظ„ظ‰ ط§ظ„ظ‚ط±طµ...' : 'Reorganizing Media Files on Disk...') }}
+                                    ? (isRTL ? 'اكتملت عملية تنظيم المكتبة بنجاح!' : 'Physical Organization Completed!')
+                                    : (isRTL ? 'جاري نقل وإعادة هيكلة الملفات على القرص...' : 'Reorganizing Media Files on Disk...') }}
                             </h2>
                             <p class="text-xs text-slate-400 font-mono mt-1 truncate max-w-xl">
                                 {{ executionStatus.current_action }}
@@ -1604,11 +1604,11 @@ onUnmounted(() => {
         <!-- Execute Confirmation Modal -->
         <ConfirmModal
             :show="showExecuteConfirm"
-            :title="isRTL ? 'طھط£ظƒظٹط¯ طھظ†ظپظٹط° ط®ط·ط© ط§ظ„طھظ†ط¸ظٹظ… ط§ظ„ظپط¹ظ„ظٹط© ط¹ظ„ظ‰ ط§ظ„ظ‚ط±طµ' : 'Confirm Physical Disk Execution'"
+            :title="isRTL ? 'تأكيد تنفيذ خطة التنظيم الفعلية على القرص' : 'Confirm Physical Disk Execution'"
             :message="isRTL
-                ? `ط³ظٹطھظ… ${executeMode === 'move' ? 'ظ†ظ‚ظ„ ظˆطھط­ط¯ظٹط« ظ…ط³ط§ط±ط§طھ' : 'ظ†ط³ط®'} ${selectedItemsCount} ظ…ظ„ظپ ظˆط³ط§ط¦ط· ط¥ظ„ظ‰ ظ…ط³ط§ط± ط§ظ„ظˆط¬ظ‡ط© ط§ظ„ظ…ط¹ظٹط§ط±ظٹ. ظ‡ظ„ طھط±ظٹط¯ ط§ظ„ظ…طھط§ط¨ط¹ط©طں`
+                ? `سيتم ${executeMode === 'move' ? 'نقل وتحديث مسارات' : 'نسخ'} ${selectedItemsCount} ملف وسائط إلى مسار الوجهة المعياري. هل تريد المتابعة؟`
                 : `Are you sure you want to ${executeMode} and reorganize ${selectedItemsCount} media files on physical disk?`"
-            :confirm-text="isRTL ? 'ط¨ط¯ط، ط§ظ„طھظ†ظپظٹط° ط§ظ„ظپظˆط±ظٹ' : 'Start Physical Organization'"
+            :confirm-text="isRTL ? 'بدء التنفيذ الفوري' : 'Start Physical Organization'"
             :cancel-text="isRTL ? 'ط¥ظ„ط؛ط§ط،' : 'Cancel'"
             @confirm="executePlan"
             @close="showExecuteConfirm = false"
@@ -1616,7 +1616,7 @@ onUnmounted(() => {
             <template #extra>
                 <div class="mt-4 p-4 rounded-2xl bg-slate-950 border border-white/10 space-y-3 text-xs">
                     <label class="block font-bold text-slate-300">
-                        {{ isRTL ? 'ط·ط±ظٹظ‚ط© ظ…ط¹ط§ظ„ط¬ط© ط§ظ„ظ…ظ„ظپط§طھ:' : 'File Execution Mode:' }}
+                        {{ isRTL ? 'طريقة معالجة الملفات:' : 'File Execution Mode:' }}
                     </label>
                     <div class="grid grid-cols-2 gap-3">
                         <button
@@ -1651,8 +1651,8 @@ onUnmounted(() => {
                         <div class="flex items-center gap-2.5">
                             <Trash2 class="w-4 h-4 text-amber-400 shrink-0" />
                             <div>
-                                <div class="font-bold text-white text-xs">{{ isRTL ? 'طھظ†ط¸ظٹظپ ط§ظ„ظ…ط¬ظ„ط¯ط§طھ ط§ظ„ظپط§ط±ط؛ط© ط¨ط¹ط¯ ط§ظ„ظ†ظ‚ظ„' : 'Auto-clean empty leftover folders' }}</div>
-                                <div class="text-[10px] text-slate-400">{{ isRTL ? 'ط­ط°ظپ ظ…ط¬ظ„ط¯ط§طھ ط§ظ„طھظˆط±ظ†طھ ط§ظ„ظپط§ط±ط؛ط© ظˆط§ظ„ظ…ظ„ظپط§طھ ط§ظ„ط²ط§ط¦ط¯ط©' : 'Deletes empty source directories & leftover junk files' }}</div>
+                                <div class="font-bold text-white text-xs">{{ isRTL ? 'تنظيف المجلدات الفارغة بعد النقل' : 'Auto-clean empty leftover folders' }}</div>
+                                <div class="text-[10px] text-slate-400">{{ isRTL ? 'حذف مجلدات التورنت الفارغة والملفات الزائدة' : 'Deletes empty source directories & leftover junk files' }}</div>
                             </div>
                         </div>
                         <input

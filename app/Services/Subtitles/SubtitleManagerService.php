@@ -317,12 +317,12 @@ class SubtitleManagerService
             'subtitlable_id' => $media->id,
             'subtitlable_type' => get_class($media),
             'language' => $langCode,
+            'is_embedded' => false,
         ], [
             'language_name' => $langName,
             'format' => 'srt',
             'file_path' => $srtPath,
             'is_default' => ($langCode === 'ar'),
-            'is_embedded' => false,
         ]);
     }
 
@@ -346,8 +346,14 @@ class SubtitleManagerService
             if (str_contains($url, 'yts-subs.com')) {
                 $headers['Referer'] = 'https://yts-subs.com/';
             }
+            if (str_contains($url, 'subdl.com')) {
+                $headers['Referer'] = 'https://subdl.com/';
+            }
+            if (str_contains($url, 'opensubtitles.org') || str_contains($url, 'opensubtitles.com')) {
+                $headers['Referer'] = 'https://www.opensubtitles.org/';
+            }
 
-            $response = Http::timeout(15)->withHeaders($headers)->get($url);
+            $response = Http::timeout(15)->withoutVerifying()->withHeaders($headers)->get($url);
 
             if ($response->successful()) {
                 return $this->extractSubtitleContent($response->body());
@@ -380,7 +386,7 @@ class SubtitleManagerService
             if ($zip->open($tempZip) === true) {
                 for ($i = 0; $i < $zip->numFiles; $i++) {
                     $entry = $zip->getNameIndex($i);
-                    if (preg_match('/\.(srt|vtt|sub|ass)$/i', $entry)) {
+                    if (preg_match('/\.(srt|vtt|sub|ass|ssa)$/i', $entry)) {
                         $extracted = $zip->getFromIndex($i);
                         if (! empty($extracted)) {
                             $rawBody = $extracted;
@@ -399,12 +405,14 @@ class SubtitleManagerService
         }
 
         // Detect Windows-1256 (Arabic) or ISO-8859-1 if non-UTF-8
-        if (! mb_check_encoding($rawBody, 'UTF-8')) {
-            $converted = @iconv('Windows-1256', 'UTF-8//IGNORE', $rawBody);
-            if ($converted && str_contains($converted, '-->')) {
+        $detector = app(\App\Services\Subtitles\SubtitleLanguageDetectorService::class);
+        $rawBody = $detector->sanitizeToUtf8($rawBody);
+
+        // If SSA / ASS format, seamlessly convert to clean standard SRT
+        if (stripos($rawBody, '[Script Info]') !== false || stripos($rawBody, 'Dialogue:') !== false) {
+            $converted = $this->convertAssOrSsaToSrt($rawBody);
+            if (! empty($converted)) {
                 $rawBody = $converted;
-            } else {
-                $rawBody = @mb_convert_encoding($rawBody, 'UTF-8', 'ISO-8859-1');
             }
         }
 
@@ -446,5 +454,116 @@ class SubtitleManagerService
             'is_default' => $langCode === 'en',
             'is_embedded' => false,
         ]);
+    }
+    /**
+     * Convert SubStation Alpha (SSA) and Advanced SubStation Alpha (ASS) subtitles into clean standard SRT.
+     */
+    public function convertAssOrSsaToSrt(string $raw): string
+    {
+        $lines = explode("\n", $raw);
+        $cues = [];
+        $formatFields = null;
+
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+            if (stripos($trimmed, 'Format:') === 0) {
+                $parts = explode(':', $trimmed, 2);
+                $fields = array_map('trim', explode(',', $parts[1] ?? ''));
+                $formatFields = array_map('strtolower', $fields);
+                continue;
+            }
+
+            if (stripos($trimmed, 'Dialogue:') === 0) {
+                $colonPos = strpos($trimmed, ':');
+                $rest = substr($trimmed, $colonPos + 1);
+
+                $fieldCount = $formatFields ? count($formatFields) : 10;
+                $parts = explode(',', $rest, $fieldCount);
+
+                if (count($parts) < 3) {
+                    continue;
+                }
+
+                $startIndex = 1;
+                $endIndex = 2;
+                $textIndex = count($parts) - 1;
+
+                if ($formatFields) {
+                    $sIdx = array_search('start', $formatFields);
+                    $eIdx = array_search('end', $formatFields);
+                    $tIdx = array_search('text', $formatFields);
+                    if ($sIdx !== false) $startIndex = $sIdx;
+                    if ($eIdx !== false) $endIndex = $eIdx;
+                    if ($tIdx !== false) $textIndex = $tIdx;
+                }
+
+                $start = trim($parts[$startIndex] ?? '');
+                $end = trim($parts[$endIndex] ?? '');
+                $text = trim($parts[$textIndex] ?? '');
+
+                // Drop drawing commands (e.g. {\p1} ... {\p0})
+                if (str_contains($text, '{\p1}') || str_contains($text, '{\p2}')) {
+                    continue;
+                }
+
+                // Remove ASS style/position tags e.g. {\an8}, {\b1}, {\c&H...&}
+                $text = preg_replace('/\{[^}]*\}/u', '', $text);
+                // Convert \N or \n into real newlines, \h into space
+                $text = str_replace(['\\N', '\\n', '\\h'], ["\n", "\n", ' '], $text);
+                $text = trim($text);
+
+                if (empty($text)) {
+                    continue;
+                }
+
+                $srtStart = $this->formatAssTimeToSrt($start);
+                $srtEnd = $this->formatAssTimeToSrt($end);
+
+                if ($srtStart && $srtEnd) {
+                    $cues[] = [
+                        'start' => $srtStart,
+                        'end' => $srtEnd,
+                        'text' => $text,
+                    ];
+                }
+            }
+        }
+
+        if (empty($cues)) {
+            return '';
+        }
+
+        $srt = '';
+        $idx = 1;
+        foreach ($cues as $cue) {
+            $srt .= "{$idx}\n{$cue['start']} --> {$cue['end']}\n{$cue['text']}\n\n";
+            $idx++;
+        }
+
+        return trim($srt) . "\n";
+    }
+
+    /**
+     * Format SSA/ASS timestamp (H:MM:SS.CC) into standard SRT timestamp (HH:MM:SS,mmm).
+     */
+    protected function formatAssTimeToSrt(string $time): ?string
+    {
+        if (! preg_match('/^(\d+):(\d{2}):(\d{2})[,\.](\d{1,3})$/', trim($time), $m)) {
+            return null;
+        }
+
+        $h = str_pad($m[1], 2, '0', STR_PAD_LEFT);
+        $min = $m[2];
+        $s = $m[3];
+        $ms = $m[4];
+        if (strlen($ms) === 2) {
+            $ms = $ms . '0';
+        } elseif (strlen($ms) === 1) {
+            $ms = $ms . '00';
+        } elseif (strlen($ms) > 3) {
+            $ms = substr($ms, 0, 3);
+        }
+
+        return "{$h}:{$min}:{$s},{$ms}";
     }
 }

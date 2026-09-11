@@ -157,16 +157,20 @@ class SubSenseService
                 $rel = $s['releaseName'] ?? $s['label'] ?? $s['fileName'] ?? '';
                 $cleanRel = preg_replace('/^(OpenSubtitles|SubDL|SubSource|Yts-subs)\s*·\s*\[[A-Z]+\]\s*·\s*/i', '', $rel);
 
+                $isAss = str_contains(strtolower($s['url'] ?? ''), '.ass') || str_contains(strtolower($s['url'] ?? ''), '.ssa');
+                $isVtt = str_contains(strtolower($s['id'] ?? ''), 'vtt') || str_contains(strtolower($s['url'] ?? ''), '.vtt');
+
                 $results[] = [
                     'provider' => "SubSense ({$displaySource})",
                     'subtitle_id' => (string) ($s['id'] ?? uniqid('subsense_')),
                     'language' => $code2,
                     'language_raw' => $rawLang,
+                    'title' => $cleanRel ?: ($s['fileName'] ?? 'Subtitle Release'),
                     'release' => $cleanRel ?: ($s['fileName'] ?? 'Subtitle Release'),
                     'file_name' => $s['fileName'] ?? ($cleanRel ? "{$cleanRel}.srt" : 'subtitle.srt'),
                     'download_url' => $s['url'] ?? null,
                     'source' => $sourceName,
-                    'format' => str_contains(strtolower($s['id'] ?? ''), 'vtt') ? 'vtt' : 'srt',
+                    'format' => $isVtt ? 'vtt' : ($isAss ? 'ass' : 'srt'),
                     'downloads' => (int) ($s['downloads'] ?? 850),
                     'rating' => 9.5,
                 ];
