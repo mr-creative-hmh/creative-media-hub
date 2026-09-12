@@ -29,16 +29,6 @@ const uniqueItems = computed(() => {
     });
 });
 
-const displayItemTitle = (item: any): string => {
-    if (item.type === 'episode' || item.category === 'series' || item.watchable_type === 'episode') {
-        return formatEpisodeTitle(item, {
-            isRTL: isRTL.value,
-            includeSeriesName: true,
-        });
-    }
-    return isRTL.value && item.title_ar ? item.title_ar : item.title;
-};
-
 const loadItems = async () => {
     try {
         const url = props.type && props.type !== 'all'

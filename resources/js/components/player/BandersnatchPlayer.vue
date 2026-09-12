@@ -543,16 +543,19 @@ const playHash = (hash: string) => {
     }
 };
 
-const handleChoice = (index: number) => {
+const handleChoice = (index: number | string) => {
     if (!currentChoiceMoment.value || !currentChoiceMoment.value.choices) return;
     if (isChoiceSelected.value) return;
 
-    highlightedChoiceIndex.value = index;
+    const numIndex = Number(index);
+    if (isNaN(numIndex)) return;
+
+    highlightedChoiceIndex.value = numIndex;
     isChoiceSelected.value = true;
-    nextChoice = index;
+    nextChoice = numIndex;
 
     const m = currentChoiceMoment.value;
-    const x = m.choices[index];
+    const x = m.choices[numIndex];
     if (!x) return;
 
     // Resolve target segment for this choice
@@ -1350,11 +1353,11 @@ onBeforeUnmount(() => {
                         <button
                             v-for="(c, idx) in currentChoiceMoment.choices"
                             :key="c.id || idx"
-                            @click.stop="handleChoice(idx)"
+                            @click.stop="handleChoice(Number(idx))"
                             :disabled="isChoiceSelected"
                             class="flex-1 py-3.5 sm:py-5 px-6 sm:px-8 rounded-2xl font-extrabold text-sm sm:text-lg tracking-wider uppercase transition-all duration-200 shadow-2xl backdrop-blur-md flex items-center justify-center text-center cursor-pointer active:scale-95"
                             :class="[
-                                highlightedChoiceIndex === idx
+                                highlightedChoiceIndex === Number(idx)
                                     ? 'ring-4 ring-red-500 bg-red-600 text-white border-2 border-white scale-105 shadow-red-600/60'
                                     : (isChoiceSelected
                                         ? 'bg-black/40 text-slate-500 border border-white/10 opacity-50 cursor-not-allowed'
@@ -1362,7 +1365,7 @@ onBeforeUnmount(() => {
                             ]"
                         >
                             <span class="flex items-center gap-2">
-                                <span v-if="highlightedChoiceIndex === idx" class="w-2.5 h-2.5 rounded-full bg-white animate-ping"></span>
+                                <span v-if="highlightedChoiceIndex === Number(idx)" class="w-2.5 h-2.5 rounded-full bg-white animate-ping"></span>
                                 {{ c.text || c.id }}
                             </span>
                         </button>
