@@ -7,7 +7,7 @@ import { useI18n } from '@/i18n/useI18n';
 import {
     Layers, Search, Film, Star, Calendar, Play,
     Sparkles, ArrowRight, ShieldCheck, Video, SlidersHorizontal,
-    CheckCircle2, Clock, Check
+    CheckCircle2, Clock, Check, RefreshCw
 } from 'lucide-vue-next';
 
 interface MovieItem {
@@ -58,6 +58,20 @@ const handleSearch = () => {
 const clearSearch = () => {
     searchQuery.value = '';
     handleSearch();
+};
+
+const isRefreshing = ref(false);
+
+const refreshCollections = () => {
+    if (isRefreshing.value) return;
+    isRefreshing.value = true;
+    router.get('/collections', { refresh: true, search: searchQuery.value || undefined }, {
+        preserveState: false,
+        preserveScroll: true,
+        onFinish: () => {
+            isRefreshing.value = false;
+        },
+    });
 };
 
 const completeCount = computed(() => props.collections.filter(c => c.is_complete).length);
@@ -140,42 +154,55 @@ const filteredCollections = computed(() => {
             <!-- In-Progress Continue Watching Bar (Collections Only) -->
             <WatchHistoryBar type="collection" @play="play" />
 
-            <!-- Filter Tabs -->
-            <div class="flex items-center gap-3 border-b border-white/10 pb-4">
-                <button
-                    @click="activeTab = 'all'"
-                    class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
-                    :class="activeTab === 'all' ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20' : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'"
-                >
-                    <Layers class="w-3.5 h-3.5" />
-                    <span>{{ isRTL ? 'جميع السلاسل' : 'All Sagas' }}</span>
-                    <span class="px-1.5 py-0.2 rounded-md text-[10px]" :class="activeTab === 'all' ? 'bg-slate-950/30 text-slate-950' : 'bg-white/10 text-slate-300'">
-                        {{ collections.length }}
-                    </span>
-                </button>
+            <!-- Filter Tabs & Refresh Button -->
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+                <div class="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+                    <button
+                        @click="activeTab = 'all'"
+                        class="px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
+                        :class="activeTab === 'all' ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20' : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'"
+                    >
+                        <Layers class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'جميع السلاسل' : 'All Sagas' }}</span>
+                        <span class="px-1.5 py-0.2 rounded-md text-[10px]" :class="activeTab === 'all' ? 'bg-slate-950/30 text-slate-950' : 'bg-white/10 text-slate-300'">
+                            {{ collections.length }}
+                        </span>
+                    </button>
 
-                <button
-                    @click="activeTab = 'complete'"
-                    class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
-                    :class="activeTab === 'complete' ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'"
-                >
-                    <CheckCircle2 class="w-3.5 h-3.5" />
-                    <span>{{ isRTL ? 'سلاسل مكتملة' : 'Complete' }}</span>
-                    <span class="px-1.5 py-0.2 rounded-md text-[10px]" :class="activeTab === 'complete' ? 'bg-slate-950/30 text-slate-950' : 'bg-white/10 text-slate-300'">
-                        {{ completeCount }}
-                    </span>
-                </button>
+                    <button
+                        @click="activeTab = 'complete'"
+                        class="px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
+                        :class="activeTab === 'complete' ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'"
+                    >
+                        <CheckCircle2 class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'سلاسل مكتملة' : 'Complete' }}</span>
+                        <span class="px-1.5 py-0.2 rounded-md text-[10px]" :class="activeTab === 'complete' ? 'bg-slate-950/30 text-slate-950' : 'bg-white/10 text-slate-300'">
+                            {{ completeCount }}
+                        </span>
+                    </button>
 
+                    <button
+                        @click="activeTab = 'in_progress'"
+                        class="px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
+                        :class="activeTab === 'in_progress' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20' : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'"
+                    >
+                        <Clock class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'قيد الاكتمال' : 'In Progress' }}</span>
+                        <span class="px-1.5 py-0.2 rounded-md text-[10px]" :class="activeTab === 'in_progress' ? 'bg-slate-950/30 text-slate-950' : 'bg-white/10 text-slate-300'">
+                            {{ inProgressCount }}
+                        </span>
+                    </button>
+                </div>
+
+                <!-- Resync / Refresh Cache Button -->
                 <button
-                    @click="activeTab = 'in_progress'"
-                    class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
-                    :class="activeTab === 'in_progress' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20' : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'"
+                    @click="refreshCollections"
+                    :disabled="isRefreshing"
+                    class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-white/5 hover:bg-cyan-500/10 hover:text-cyan-400 text-slate-400 border border-white/10 hover:border-cyan-500/30 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                    :title="isRTL ? 'تحديث وتدقيق بيانات السلاسل والمفقودات' : 'Resync collections status and gaps'"
                 >
-                    <Clock class="w-3.5 h-3.5" />
-                    <span>{{ isRTL ? 'قيد الاكتمال' : 'In Progress' }}</span>
-                    <span class="px-1.5 py-0.2 rounded-md text-[10px]" :class="activeTab === 'in_progress' ? 'bg-slate-950/30 text-slate-950' : 'bg-white/10 text-slate-300'">
-                        {{ inProgressCount }}
-                    </span>
+                    <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin text-cyan-400': isRefreshing }" />
+                    <span>{{ isRefreshing ? (isRTL ? 'جارٍ التحديث...' : 'Syncing...') : (isRTL ? 'مزامنة وتحديث' : 'Refresh Gaps') }}</span>
                 </button>
             </div>
 

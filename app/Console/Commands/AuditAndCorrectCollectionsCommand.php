@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Http\Controllers\CollectionController;
 use App\Models\MediaItem;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -34,6 +35,10 @@ class AuditAndCorrectCollectionsCommand extends Command
             $this->alignPhysicalCollections(! $dryRun);
         } else {
             $this->previewPhysicalAlignments();
+        }
+
+        if (($fix || $alignPhysical) && ! $dryRun) {
+            CollectionController::clearCache();
         }
 
         $this->info("\n=== Collections Audit Complete ===");

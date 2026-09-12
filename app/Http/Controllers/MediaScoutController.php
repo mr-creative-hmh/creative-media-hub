@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\AppSetting;
-use App\Models\DownloadItem;
 use App\Services\Downloader\DownloadManagerService;
 use App\Services\Scout\LibraryAcquisitionService;
 use App\Services\Scout\LibraryGapService;
@@ -73,29 +71,32 @@ class MediaScoutController extends Controller
         if (! empty($query)) {
             $items = array_values(array_filter($items, function ($item) use ($query) {
                 $searchable = strtolower(
-                    ($item['series_title'] ?? '') . ' ' .
-                    ($item['series_title_ar'] ?? '') . ' ' .
-                    ($item['episode_title'] ?? '') . ' ' .
-                    ($item['episode_code'] ?? '') . ' ' .
-                    ($item['collection_name'] ?? '') . ' ' .
+                    ($item['series_title'] ?? '').' '.
+                    ($item['series_title_ar'] ?? '').' '.
+                    ($item['episode_title'] ?? '').' '.
+                    ($item['episode_code'] ?? '').' '.
+                    ($item['collection_name'] ?? '').' '.
                     ($item['movie_title'] ?? '')
                 );
+
                 return str_contains($searchable, $query);
             }));
 
             $seriesGaps = array_values(array_filter($seriesGaps, function ($s) use ($query) {
-                $searchable = strtolower(($s['series_title'] ?? '') . ' ' . ($s['series_title_ar'] ?? ''));
+                $searchable = strtolower(($s['series_title'] ?? '').' '.($s['series_title_ar'] ?? ''));
                 foreach ($s['missing_episodes'] as $ep) {
-                    $searchable .= ' ' . strtolower(($ep['episode_title'] ?? '') . ' ' . ($ep['episode_code'] ?? ''));
+                    $searchable .= ' '.strtolower(($ep['episode_title'] ?? '').' '.($ep['episode_code'] ?? ''));
                 }
+
                 return str_contains($searchable, $query);
             }));
 
             $collectionGaps = array_values(array_filter($collectionGaps, function ($c) use ($query) {
                 $searchable = strtolower($c['collection_name'] ?? '');
                 foreach ($c['parts'] as $part) {
-                    $searchable .= ' ' . strtolower($part['movie_title'] ?? '');
+                    $searchable .= ' '.strtolower($part['movie_title'] ?? '');
                 }
+
                 return str_contains($searchable, $query);
             }));
         }
@@ -125,6 +126,7 @@ class MediaScoutController extends Controller
     public function refresh(): JsonResponse
     {
         $this->gapService->clearCache();
+        CollectionController::clearCache();
         $metrics = $this->gapService->getMetrics(true);
         $seriesGaps = $this->gapService->getGroupedSeriesGaps(true);
         $collectionGaps = $this->gapService->getGroupedCollectionGaps(true);
@@ -226,6 +228,7 @@ class MediaScoutController extends Controller
 
         if (! empty($filePath)) {
             $res = $this->acquisitionService->organizeAndScanFile($filePath, $mediaType, $metadata);
+
             return response()->json($res);
         }
 

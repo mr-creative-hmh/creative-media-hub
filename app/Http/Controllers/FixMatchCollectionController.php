@@ -103,6 +103,8 @@ class FixMatchCollectionController extends Controller
             $media->collection_id_source = null;
             $media->save();
 
+            CollectionController::clearCache();
+
             return response()->json([
                 'success' => true,
                 'collection_name' => null,
@@ -172,6 +174,8 @@ class FixMatchCollectionController extends Controller
         }
 
         $media->save();
+
+        CollectionController::clearCache();
 
         return response()->json([
             'success' => true,
