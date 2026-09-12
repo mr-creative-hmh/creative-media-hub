@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Cache;
 
 class SeriesController extends Controller
 {
@@ -92,22 +93,25 @@ class SeriesController extends Controller
         $seriesList = $query->paginate(24)->withQueryString();
         $genres = Genre::orderBy('name_en')->get();
 
-        $heroSeriesList = Series::with(['genres', 'actors', 'seasons.episodes.subtitles'])
-            ->where(function ($q) {
-                $q->whereNotNull('backdrop_path')->orWhereNotNull('poster_path');
-            })
-            ->orderByDesc('created_at')
-            ->limit(6)
-            ->get();
-
-        if ($heroSeriesList->isEmpty()) {
-            $heroSeriesList = Series::with(['genres', 'actors', 'seasons.episodes.subtitles'])
-                ->orderByDesc('rating')
+        $heroSeriesList = Cache::remember('series.hero_items.v3', 1800, function () {
+            $list = Series::with(['genres', 'actors'])
+                ->where(function ($q) {
+                    $q->whereNotNull('backdrop_path')->orWhereNotNull('poster_path');
+                })
+                ->orderByDesc('created_at')
                 ->limit(6)
                 ->get();
-        }
 
-        $heroSeries = $heroSeriesList->first();
+            if ($list->isEmpty()) {
+                $list = Series::with(['genres', 'actors'])
+                    ->orderByDesc('rating')
+                    ->limit(6)
+                    ->get();
+            }
+            return $list->toArray();
+        });
+
+        $heroSeries = $heroSeriesList[0] ?? null;
 
         return Inertia::render('Series/Index', [
             'seriesList' => $seriesList,

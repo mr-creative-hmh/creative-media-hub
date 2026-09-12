@@ -7,7 +7,7 @@ import { useDownloader } from '@/composables/useDownloader';
 import { useActivityCenter } from '@/composables/useActivityCenter';
 import {
     LayoutDashboard, Film, History, Layers, Tv, ScanLine, FolderSync,
-    Subtitles, BarChart3, DownloadCloud, Settings, Sparkles,
+    Subtitles, BarChart3, DownloadCloud, Settings, Sparkles, Compass,
     RefreshCw, Pause, Play, HardDrive, BookOpen, Activity
 } from 'lucide-vue-next';
 
@@ -27,6 +27,7 @@ const navItems = [
     { nameKey: 'nav.metadata', href: '/metadata', icon: Sparkles, pattern: '^/metadata' },
     { nameKey: 'nav.scanner', href: '/scanner', icon: ScanLine, pattern: '^/scanner' },
     { nameKey: 'nav.organizer', href: '/organizer', icon: FolderSync, pattern: '^/organizer' },
+    { nameKey: 'nav.scout', href: '/scout', icon: Compass, pattern: '^/scout' },
     { nameKey: 'nav.subtitles', href: '/subtitles', icon: Subtitles, pattern: '^/subtitles' },
     { nameKey: 'nav.analytics', href: '/analytics', icon: BarChart3, pattern: '^/analytics' },
     { nameKey: 'nav.downloads', href: '/downloads', icon: DownloadCloud, pattern: '^/downloads' },

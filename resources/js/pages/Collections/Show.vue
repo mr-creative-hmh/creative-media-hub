@@ -4,10 +4,10 @@ import { Head, Link } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import MediaDetailModal from '@/components/media/MediaDetailModal.vue';
 import { useI18n } from '@/i18n/useI18n';
-import { 
-    Layers, Film, Star, Calendar, Clock, Play, 
+import {
+    Layers, Film, Star, Calendar, Clock, Play,
     ArrowLeft, ArrowRight, ShieldCheck, Sparkles, Tv, CheckCircle2,
-    Info, Check
+    Info, Check, Search
 } from 'lucide-vue-next';
 
 interface MovieDetail {
@@ -47,6 +47,10 @@ interface CollectionDetail {
     name: string;
     slug: string;
     movies_count: number;
+    total_parts?: number;
+    is_complete?: boolean;
+    completion_percentage?: number;
+    missing_parts?: any[];
     year_span?: string;
     poster_path?: string;
     backdrop_path?: string;
@@ -134,159 +138,225 @@ const handleToggleFavorite = async (item: any) => {
                                 :alt="collection.name"
                                 class="w-full h-full object-cover"
                             />
-                            <div v-else class="w-full h-full flex items-center justify-center text-slate-700">
-                                <Layers class="w-10 h-10 text-cyan-400/60" />
+                            <div v-else class="w-full h-full flex items-center justify-center text-slate-700 bg-slate-900">
+                                <Film class="w-10 h-10" />
                             </div>
                         </div>
 
                         <div class="space-y-3">
-                            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-semibold uppercase tracking-wider">
-                                <Sparkles class="w-3.5 h-3.5" />
-                                <span>{{ isRTL ? 'سلسلة أفلام سينمائية' : 'Movie Franchise Boxset' }}</span>
+                            <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                                <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-bold">
+                                    <Layers class="w-3.5 h-3.5" />
+                                    <span>{{ isRTL ? 'سلسلة أفلام مجمعة' : 'Franchise Boxset' }}</span>
+                                </div>
+                                <div v-if="collection.is_complete" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold">
+                                    <CheckCircle2 class="w-3.5 h-3.5" />
+                                    <span>{{ isRTL ? 'السلسلة مكتملة 100%' : '100% Complete Franchise' }}</span>
+                                </div>
+                                <div v-else class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-bold">
+                                    <Clock class="w-3.5 h-3.5" />
+                                    <span>{{ isRTL ? `مكتمل ${collection.completion_percentage}%` : `${collection.completion_percentage}% Owned` }}</span>
+                                </div>
                             </div>
 
-                            <h1 class="text-3xl lg:text-4xl font-black text-white tracking-tight">
+                            <h1 class="text-2xl sm:text-4xl font-black text-white tracking-tight">
                                 {{ collection.name }}
                             </h1>
 
-                            <div class="flex flex-wrap items-center justify-center sm:justify-start gap-4 text-xs font-medium text-slate-300">
-                                <span class="flex items-center gap-1.5 text-cyan-300 font-bold bg-cyan-500/10 px-2.5 py-1 rounded-lg border border-cyan-500/20">
-                                    <Film class="w-4 h-4" />
-                                    <span>{{ collection.movies_count }} {{ isRTL ? 'أفلام متوفرة' : 'Films' }}</span>
-                                </span>
+                            <div class="flex flex-wrap items-center justify-center sm:justify-start gap-4 text-xs font-semibold text-slate-300">
+                                <div class="flex items-center gap-1.5">
+                                    <Film class="w-3.5 h-3.5 text-cyan-400" />
+                                    <span>{{ collection.movies_count }} {{ isRTL ? (collection.movies_count > 10 ? 'فيلماً مملوكاً' : 'أفلام مملوكة') : 'Movies Owned' }}</span>
+                                    <span v-if="collection.total_parts && collection.total_parts > collection.movies_count" class="text-slate-400">
+                                        ({{ isRTL ? `من أصل ${collection.total_parts}` : `of ${collection.total_parts}` }})
+                                    </span>
+                                </div>
 
-                                <span v-if="collection.year_span" class="flex items-center gap-1.5 bg-white/[0.05] px-2.5 py-1 rounded-lg border border-white/5 text-slate-300">
-                                    <Calendar class="w-3.5 h-3.5 text-slate-400" />
+                                <div v-if="collection.year_span" class="flex items-center gap-1.5">
+                                    <Calendar class="w-3.5 h-3.5 text-cyan-400" />
                                     <span>{{ collection.year_span }}</span>
-                                </span>
+                                </div>
 
-                                <span v-if="collection.avg_rating" class="flex items-center gap-1.5 text-amber-400 font-bold bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                                <div v-if="collection.avg_rating" class="flex items-center gap-1.5 text-amber-400 font-bold">
                                     <Star class="w-3.5 h-3.5 fill-amber-400" />
                                     <span>{{ collection.avg_rating }} / 10</span>
-                                </span>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Hero Quick Action -->
-                    <div v-if="collection.movies.length > 0" class="shrink-0">
+                    <!-- Quick Play First Movie CTA -->
+                    <div class="shrink-0 flex items-center gap-3">
                         <button
+                            v-if="collection.movies.length > 0"
                             @click="playCollectionMovie(collection.movies[0], play)"
-                            class="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-sm shadow-xl shadow-cyan-500/20 active:scale-95 transition-all flex items-center gap-2.5 cursor-pointer"
+                            class="px-6 py-3.5 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs sm:text-sm flex items-center gap-2.5 shadow-xl shadow-cyan-500/25 transition-all cursor-pointer transform hover:scale-105"
                         >
-                            <Play class="w-4 h-4 fill-current" />
-                            <span>{{ isRTL ? 'بدء مشاهدة السلسلة' : 'Start Franchise' }}</span>
+                            <Play class="w-4 h-4 fill-slate-950" />
+                            <span>{{ isRTL ? 'بدء تشغيل السلسلة من الجزء الأول' : 'Play Franchise From Part 1' }}</span>
                         </button>
                     </div>
                 </div>
             </div>
 
-            <!-- Chronological Movie List (Saga Progression) -->
-            <div class="space-y-4">
+            <!-- Movies in this Collection (Chronological) -->
+            <section class="space-y-4">
                 <div class="flex items-center justify-between">
-                    <h2 class="text-xl font-bold text-white tracking-wide flex items-center gap-2">
-                        <Layers class="w-5 h-5 text-cyan-400" />
-                        <span>{{ isRTL ? 'تسلسل أفلام السلسلة' : 'Chronological Franchise Sagas' }}</span>
-                    </h2>
-                    <span class="text-xs text-slate-400 font-medium">
-                        {{ collection.movies_count }} {{ isRTL ? 'أفلام مرتبة زمنياً' : 'films in order' }}
-                    </span>
+                    <div class="space-y-1">
+                        <h2 class="text-xl lg:text-2xl font-black text-white tracking-tight">
+                            {{ isRTL ? 'أفلام السلسلة المتوفرة بمكتبتك' : 'Owned Movies in this Saga' }}
+                        </h2>
+                        <p class="text-xs text-slate-400">
+                            {{ isRTL ? 'مرتبة بالتسلسل الزمني للإنتاج' : 'Organized chronologically by release year' }}
+                        </p>
+                    </div>
                 </div>
 
-                <div class="space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
                     <div
-                        v-for="(movie, index) in collection.movies"
+                        v-for="(movie, idx) in collection.movies"
                         :key="movie.id"
-                        class="p-4 rounded-3xl bg-slate-900/60 hover:bg-slate-900/90 border border-white/10 hover:border-cyan-500/40 transition-all flex flex-col md:flex-row items-center justify-between gap-4 group"
+                        class="group relative rounded-2xl overflow-hidden glass-panel border border-white/10 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-2xl hover:shadow-cyan-500/10 flex flex-col bg-slate-900/60 cursor-pointer"
+                        @click="openMovieDetails(movie)"
                     >
-                        <!-- Left: Index + Poster + Info -->
-                        <div class="flex items-center gap-4 w-full md:w-auto flex-1 min-w-0">
-                            <!-- Number Indicator -->
-                            <div class="w-8 h-8 rounded-xl bg-white/[0.05] border border-white/10 text-slate-400 group-hover:text-cyan-400 group-hover:border-cyan-500/30 flex items-center justify-center font-black text-xs shrink-0 transition-colors">
-                                #{{ index + 1 }}
+                        <!-- Poster Thumbnail -->
+                        <div class="relative aspect-[2/3] w-full overflow-hidden bg-slate-950">
+                            <img
+                                v-if="movie.poster_path"
+                                :src="movie.poster_path"
+                                :alt="movie.title"
+                                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                loading="lazy"
+                            />
+                            <div v-else class="w-full h-full flex items-center justify-center text-slate-700 bg-slate-950">
+                                <Film class="w-10 h-10" />
                             </div>
 
-                            <!-- Poster Thumbnail -->
-                            <div
-                                @click="openMovieDetails(movie)"
-                                class="w-14 aspect-[2/3] rounded-xl overflow-hidden bg-slate-950 shrink-0 border border-white/10 relative shadow-md cursor-pointer group-hover:scale-105 transition-transform"
-                            >
-                                <img
-                                    v-if="movie.poster_path"
-                                    :src="movie.poster_path"
-                                    :alt="movie.title"
-                                    class="w-full h-full object-cover"
-                                    loading="lazy"
-                                />
-                                <div v-else class="w-full h-full flex items-center justify-center text-slate-700 bg-slate-900">
-                                    <Film class="w-5 h-5" />
-                                </div>
+                            <!-- Chronological Index Badge -->
+                            <div class="absolute top-2 left-2 w-7 h-7 rounded-xl bg-cyan-500/90 text-slate-950 font-black text-xs flex items-center justify-center shadow-lg">
+                                #{{ idx + 1 }}
                             </div>
 
-                            <!-- Title & Specs -->
-                            <div class="space-y-1 min-w-0 flex-1">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <h3
-                                        @click="openMovieDetails(movie)"
-                                        class="text-base lg:text-lg font-bold text-white group-hover:text-cyan-400 transition-colors truncate cursor-pointer"
-                                    >
-                                        {{ isRTL && movie.title_ar ? movie.title_ar : movie.title }}
-                                    </h3>
-                                    <span v-if="movie.release_year" class="text-xs font-semibold px-2 py-0.5 rounded-md bg-white/[0.06] border border-white/10 text-slate-300">
-                                        {{ movie.release_year }}
-                                    </span>
-                                </div>
+                            <!-- Resolution Badge -->
+                            <div v-if="movie.resolution" class="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md border border-white/20 text-[10px] font-black text-cyan-300">
+                                {{ movie.resolution }}
+                            </div>
 
-                                <p v-if="movie.overview || movie.overview_ar" class="text-xs text-slate-400 line-clamp-2 leading-relaxed">
-                                    {{ isRTL && movie.overview_ar ? movie.overview_ar : movie.overview }}
-                                </p>
-
-                                <div class="flex flex-wrap items-center gap-3 pt-1 text-[11px] text-slate-400">
-                                    <span v-if="movie.rating" class="flex items-center gap-1 text-amber-400 font-bold">
-                                        <Star class="w-3 h-3 fill-amber-400" />
-                                        <span>{{ movie.rating }}</span>
-                                    </span>
-                                    <span v-if="movie.runtime_minutes" class="flex items-center gap-1">
-                                        <Clock class="w-3 h-3 text-cyan-400" />
-                                        <span>{{ movie.runtime_minutes }} {{ isRTL ? 'د' : 'min' }}</span>
-                                    </span>
-                                    <span v-if="movie.resolution" class="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 font-bold text-[10px] border border-cyan-500/20">
-                                        {{ movie.resolution }}
-                                    </span>
-                                </div>
+                            <!-- Hover Quick Play Overlay -->
+                            <div class="absolute inset-0 bg-black/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                                <button
+                                    @click.stop="playCollectionMovie(movie, play)"
+                                    class="w-12 h-12 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center shadow-xl shadow-cyan-500/30 transform hover:scale-110 transition-all cursor-pointer"
+                                    :title="isRTL ? 'تشغيل' : 'Play Now'"
+                                >
+                                    <Play class="w-5 h-5 fill-slate-950 ml-0.5" />
+                                </button>
+                                <button
+                                    @click.stop="openMovieDetails(movie)"
+                                    class="w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center border border-white/20 transform hover:scale-110 transition-all cursor-pointer"
+                                    :title="isRTL ? 'تفاصيل' : 'Details'"
+                                >
+                                    <Info class="w-4 h-4" />
+                                </button>
                             </div>
                         </div>
 
-                        <!-- Right: Actions (Details Modal & Play) -->
-                        <div class="flex items-center gap-2.5 w-full md:w-auto shrink-0 justify-end pt-2 md:pt-0 border-t md:border-t-0 border-white/5">
-                            <button
-                                @click="openMovieDetails(movie)"
-                                class="px-4 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 hover:border-cyan-500/30 text-xs font-bold text-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
-                            >
-                                <Info class="w-3.5 h-3.5 text-cyan-400" />
-                                <span>{{ isRTL ? 'التفاصيل' : 'Details' }}</span>
-                            </button>
+                        <!-- Card Body -->
+                        <div class="p-4 flex-1 flex flex-col justify-between space-y-2">
+                            <div>
+                                <h3 class="text-sm font-bold text-white group-hover:text-cyan-400 transition-colors line-clamp-1" :title="movie.title">
+                                    {{ isRTL && movie.title_ar ? movie.title_ar : movie.title }}
+                                </h3>
+                                <p v-if="isRTL && movie.title_ar" class="text-[11px] text-slate-400 line-clamp-1">
+                                    {{ movie.title }}
+                                </p>
+                            </div>
 
-                            <button
-                                @click="playCollectionMovie(movie, play)"
-                                class="px-5 py-2.5 rounded-xl bg-cyan-500 text-slate-950 font-black text-xs hover:bg-cyan-400 flex items-center gap-2 shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
-                            >
-                                <Play class="w-4 h-4 fill-current" />
-                                <span>{{ isRTL ? 'مشاهدة الآن' : 'Play Now' }}</span>
-                            </button>
+                            <div class="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-white/5">
+                                <span class="font-semibold">{{ movie.release_year }}</span>
+                                <div v-if="movie.rating" class="flex items-center gap-1 font-bold text-amber-400">
+                                    <Star class="w-3 h-3 fill-amber-400" />
+                                    <span>{{ movie.rating }}</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
+            </section>
 
-        <!-- Movie Details Modal -->
-        <MediaDetailModal
-            :show="!!selectedDetailMovie"
-            :item="selectedDetailMovie"
-            @close="selectedDetailMovie = null"
-            @play="playCollectionMovie(selectedDetailMovie, play)"
-            @toggle-favorite="handleToggleFavorite"
-        />
+            <!-- Missing Franchise Titles (Media Scout Integration) -->
+            <section v-if="collection.missing_parts && collection.missing_parts.length > 0" class="space-y-4 pt-6 border-t border-white/10">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div class="space-y-1">
+                        <div class="inline-flex items-center gap-2 text-xs font-bold text-amber-400 uppercase tracking-wider">
+                            <Sparkles class="w-3.5 h-3.5" />
+                            <span>{{ isRTL ? 'استكشاف الأجزاء المتبقية عبر ميديا سكاوت' : 'Franchise Expansion via Media Scout' }}</span>
+                        </div>
+                        <h2 class="text-xl lg:text-2xl font-black text-white tracking-tight">
+                            {{ isRTL ? 'أجزاء غير متوفرة في مكتبتك' : 'Missing From Your Library' }}
+                        </h2>
+                    </div>
+                    <Link
+                        :href="`/scout?query=${encodeURIComponent(collection.name.replace(' Collection', ''))}`"
+                        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-xs hover:bg-amber-500/30 transition-all cursor-pointer"
+                    >
+                        <Search class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'بحث عن السلسلة في سكاوت' : 'Scout Entire Franchise' }}</span>
+                    </Link>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                    <div
+                        v-for="part in collection.missing_parts"
+                        :key="part.tmdb_id || part.title"
+                        class="relative rounded-2xl overflow-hidden glass-panel border border-amber-500/20 bg-slate-900/60 flex flex-col group p-2.5 space-y-3"
+                    >
+                        <div class="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-950 border border-white/5">
+                            <img
+                                v-if="part.poster_path"
+                                :src="part.poster_path"
+                                :alt="part.title"
+                                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 filter grayscale-[25%] group-hover:grayscale-0"
+                                loading="lazy"
+                            />
+                            <div v-else class="w-full h-full flex items-center justify-center text-slate-700 bg-slate-950">
+                                <Film class="w-8 h-8" />
+                            </div>
+                            <div class="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-black/80 border border-amber-500/30 text-[10px] font-black text-amber-300">
+                                {{ part.release_year || 'TBA' }}
+                            </div>
+                        </div>
+
+                        <div class="space-y-1.5 flex-1 flex flex-col justify-between">
+                            <div>
+                                <h4 class="text-xs font-bold text-white line-clamp-1 group-hover:text-amber-400 transition-colors" :title="part.title">
+                                    {{ isRTL && part.title_ar ? part.title_ar : part.title }}
+                                </h4>
+                                <p v-if="isRTL && part.title_ar" class="text-[10px] text-slate-400 line-clamp-1">
+                                    {{ part.title }}
+                                </p>
+                            </div>
+
+                            <Link
+                                :href="`/scout?query=${encodeURIComponent(part.title)}`"
+                                class="w-full py-1.5 px-2 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-black hover:bg-amber-400 transition-all flex items-center justify-center gap-1 cursor-pointer mt-2"
+                            >
+                                <Search class="w-3 h-3" />
+                                <span>{{ isRTL ? 'بحث وتحميل' : 'Scout Torrent' }}</span>
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Media Detail Modal for Collection Movies -->
+            <MediaDetailModal
+                v-if="selectedDetailMovie"
+                :item="selectedDetailMovie"
+                @close="selectedDetailMovie = null"
+                @play="(m: any) => playCollectionMovie(m, play)"
+                @toggle-favorite="handleToggleFavorite"
+            />
+        </div>
     </AppLayout>
 </template>

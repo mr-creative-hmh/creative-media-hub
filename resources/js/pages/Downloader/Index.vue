@@ -6,6 +6,7 @@ import { useToast } from '@/composables/useToast';
 import { useDownloader, DownloadItem, DownloaderInspection, TorrentFileItem, TorrentTreeNode } from '@/composables/useDownloader';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import TorrentTreeItem from '@/components/downloader/TorrentTreeItem.vue';
+import FastOrganizeModal from '@/components/scout/FastOrganizeModal.vue';
 import {
     DownloadCloud, Plus, CheckCircle2, ArrowDown, ArrowUp,
     Play, Pause, Trash2, FolderSync, Sparkles, HelpCircle,
@@ -58,6 +59,7 @@ const activeFilter = ref<'all' | 'downloading' | 'paused' | 'completed'>('all');
 const showAddModal = ref(false);
 const showExplainModal = ref(false);
 const showSettingsModal = ref(false);
+const showFastOrganize = ref(false);
 
 // New Download Form State
 const downloadMode = ref<'direct' | 'torrent'>('torrent');
@@ -302,6 +304,15 @@ const handleSaveSettings = async () => {
             </div>
 
             <div class="flex items-center gap-3">
+                <button
+                    @click="showFastOrganize = true"
+                    class="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 font-bold text-xs transition-all cursor-pointer shadow-sm"
+                    :title="t('scout.organize_and_scan_help')"
+                >
+                    <FolderSync class="w-4 h-4 text-emerald-400" />
+                    <span class="hidden sm:inline">{{ t('scout.organize_and_scan') }}</span>
+                </button>
+
                 <button
                     @click="showSettingsModal = true"
                     class="flex items-center gap-2 px-3.5 py-2.5 rounded-xl glass-panel border border-white/10 hover:border-cyan-500/40 text-slate-300 hover:text-white font-bold text-xs transition-all cursor-pointer shadow-sm"
@@ -961,5 +972,10 @@ const handleSaveSettings = async () => {
                 </div>
             </div>
         </transition>
+        <FastOrganizeModal
+            :is-open="showFastOrganize"
+            @close="showFastOrganize = false"
+            @organized="fetchDownloads"
+        />
     </AppLayout>
 </template>

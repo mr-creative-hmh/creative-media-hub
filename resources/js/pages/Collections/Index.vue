@@ -4,9 +4,10 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import WatchHistoryBar from '@/components/layout/WatchHistoryBar.vue';
 import { useI18n } from '@/i18n/useI18n';
-import { 
-    Layers, Search, Film, Star, Calendar, Play, 
-    Sparkles, ArrowRight, ShieldCheck, Video, SlidersHorizontal
+import {
+    Layers, Search, Film, Star, Calendar, Play,
+    Sparkles, ArrowRight, ShieldCheck, Video, SlidersHorizontal,
+    CheckCircle2, Clock, Check
 } from 'lucide-vue-next';
 
 interface MovieItem {
@@ -26,6 +27,10 @@ interface MovieCollection {
     name: string;
     slug: string;
     movies_count: number;
+    total_parts?: number;
+    is_complete?: boolean;
+    completion_percentage?: number;
+    missing_parts?: any[];
     year_span?: string;
     avg_rating?: number;
     poster_path?: string;
@@ -44,6 +49,7 @@ const props = defineProps<{
 
 const { t, isRTL } = useI18n();
 const searchQuery = ref(props.filters.search || '');
+const activeTab = ref<'all' | 'complete' | 'in_progress'>('all');
 
 const handleSearch = () => {
     router.get('/collections', { search: searchQuery.value }, { preserveState: true, replace: true });
@@ -53,6 +59,19 @@ const clearSearch = () => {
     searchQuery.value = '';
     handleSearch();
 };
+
+const completeCount = computed(() => props.collections.filter(c => c.is_complete).length);
+const inProgressCount = computed(() => props.collections.filter(c => !c.is_complete).length);
+
+const filteredCollections = computed(() => {
+    if (activeTab.value === 'complete') {
+        return props.collections.filter(c => c.is_complete);
+    }
+    if (activeTab.value === 'in_progress') {
+        return props.collections.filter(c => !c.is_complete);
+    }
+    return props.collections;
+});
 </script>
 
 <template>
@@ -75,9 +94,9 @@ const clearSearch = () => {
                             {{ isRTL ? 'سلاسل ومجموعات الأفلام العالمية' : 'Movie Collections & Sagas' }}
                         </h1>
                         <p class="text-sm lg:text-base text-slate-300 leading-relaxed">
-                            {{ isRTL 
-                                ? 'استكشف سلاسل الأفلام الكاملة مرتبة بالتسلسل الزمني للإنتاج (مثل هاري بوتر، سيد الخواتم، مارفل، فاست آند فيوريوس، وجون ويك).' 
-                                : 'Browse entire movie franchises and boxsets chronologically organized (Harry Potter, Lord of the Rings, MCU, Fast & Furious, John Wick, Star Wars).' 
+                            {{ isRTL
+                                ? 'استكشف سلاسل الأفلام الكاملة مرتبة بالتسلسل الزمني للإنتاج مع تتبع الأجزاء المملوكة والمفقودة بدقة متناهية.'
+                                : 'Browse entire movie franchises chronologically organized with precise tracking of owned and missing saga parts.'
                             }}
                         </p>
                     </div>
@@ -121,10 +140,49 @@ const clearSearch = () => {
             <!-- In-Progress Continue Watching Bar (Collections Only) -->
             <WatchHistoryBar type="collection" @play="play" />
 
+            <!-- Filter Tabs -->
+            <div class="flex items-center gap-3 border-b border-white/10 pb-4">
+                <button
+                    @click="activeTab = 'all'"
+                    class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
+                    :class="activeTab === 'all' ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20' : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'"
+                >
+                    <Layers class="w-3.5 h-3.5" />
+                    <span>{{ isRTL ? 'جميع السلاسل' : 'All Sagas' }}</span>
+                    <span class="px-1.5 py-0.2 rounded-md text-[10px]" :class="activeTab === 'all' ? 'bg-slate-950/30 text-slate-950' : 'bg-white/10 text-slate-300'">
+                        {{ collections.length }}
+                    </span>
+                </button>
+
+                <button
+                    @click="activeTab = 'complete'"
+                    class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
+                    :class="activeTab === 'complete' ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'"
+                >
+                    <CheckCircle2 class="w-3.5 h-3.5" />
+                    <span>{{ isRTL ? 'سلاسل مكتملة' : 'Complete' }}</span>
+                    <span class="px-1.5 py-0.2 rounded-md text-[10px]" :class="activeTab === 'complete' ? 'bg-slate-950/30 text-slate-950' : 'bg-white/10 text-slate-300'">
+                        {{ completeCount }}
+                    </span>
+                </button>
+
+                <button
+                    @click="activeTab = 'in_progress'"
+                    class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
+                    :class="activeTab === 'in_progress' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20' : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'"
+                >
+                    <Clock class="w-3.5 h-3.5" />
+                    <span>{{ isRTL ? 'قيد الاكتمال' : 'In Progress' }}</span>
+                    <span class="px-1.5 py-0.2 rounded-md text-[10px]" :class="activeTab === 'in_progress' ? 'bg-slate-950/30 text-slate-950' : 'bg-white/10 text-slate-300'">
+                        {{ inProgressCount }}
+                    </span>
+                </button>
+            </div>
+
             <!-- Collections Grid -->
-            <div v-if="collections.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div v-if="filteredCollections.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 <Link
-                    v-for="col in collections"
+                    v-for="col in filteredCollections"
                     :key="col.slug"
                     :href="`/collections/${col.slug}`"
                     class="group relative rounded-3xl overflow-hidden glass-panel border border-white/10 hover:border-cyan-500/40 transition-all duration-300 hover:shadow-2xl hover:shadow-cyan-500/10 flex flex-col cursor-pointer bg-slate-900/40"
@@ -143,10 +201,22 @@ const clearSearch = () => {
                         </div>
                         <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-transparent"></div>
 
-                        <!-- Pill Badge for movie count -->
-                        <div class="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/20 text-xs font-black text-cyan-300 shadow-lg">
-                            <Film class="w-3.5 h-3.5" />
-                            <span>{{ col.movies_count }} {{ isRTL ? (col.movies_count > 10 ? 'فيلماً' : 'أفلام') : (col.movies_count === 1 ? 'Movie' : 'Movies') }}</span>
+                        <!-- Pill Badge for movie count & completion status -->
+                        <div class="absolute top-3 right-3 flex items-center gap-1.5">
+                            <div
+                                v-if="col.is_complete"
+                                class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/80 backdrop-blur-md border border-emerald-500/40 text-xs font-black text-emerald-400 shadow-lg"
+                            >
+                                <CheckCircle2 class="w-3.5 h-3.5" />
+                                <span>{{ isRTL ? 'مكتملة' : 'Complete' }}</span>
+                            </div>
+                            <div
+                                v-else
+                                class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/70 backdrop-blur-md border border-amber-500/30 text-xs font-black text-amber-300 shadow-lg"
+                            >
+                                <Film class="w-3.5 h-3.5 text-amber-400" />
+                                <span>{{ col.movies_count }} / {{ col.total_parts || col.movies_count }} {{ isRTL ? (col.movies_count > 10 ? 'فيلماً' : 'أفلام') : 'Films' }}</span>
+                            </div>
                         </div>
 
                         <!-- Year Span -->
@@ -154,29 +224,45 @@ const clearSearch = () => {
                             <Calendar class="w-3 h-3 text-cyan-400" />
                             <span>{{ col.year_span }}</span>
                         </div>
+
+                        <!-- Progress Bar at bottom of media -->
+                        <div v-if="col.total_parts && col.total_parts > col.movies_count" class="absolute bottom-0 inset-x-0 h-1 bg-black/50 overflow-hidden">
+                            <div
+                                class="h-full bg-gradient-to-r from-amber-500 to-cyan-400 transition-all duration-500"
+                                :style="{ width: `${col.completion_percentage}%` }"
+                            ></div>
+                        </div>
                     </div>
 
                     <!-- Collection Details -->
                     <div class="p-5 flex-1 flex flex-col justify-between space-y-4">
-                        <div class="space-y-1.5">
-                            <h3 class="text-base font-bold text-white group-hover:text-cyan-400 transition-colors line-clamp-1">
-                                {{ col.name }}
-                            </h3>
+                        <div class="space-y-2">
+                            <div class="flex items-start justify-between gap-2">
+                                <h3 class="text-base font-bold text-white group-hover:text-cyan-400 transition-colors line-clamp-1">
+                                    {{ col.name }}
+                                </h3>
+                                <span
+                                    v-if="col.missing_parts && col.missing_parts.length > 0"
+                                    class="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                                >
+                                    {{ isRTL ? `مفقود ${col.missing_parts.length}` : `-${col.missing_parts.length}` }}
+                                </span>
+                            </div>
 
                             <!-- Movie titles preview chips -->
                             <div class="flex flex-wrap gap-1.5 pt-1">
                                 <span
-                                    v-for="(m, idx) in col.movies.slice(0, 3)"
+                                    v-for="(m, idx) in (Array.isArray(col.movies) ? col.movies : Object.values(col.movies || {})).slice(0, 3)"
                                     :key="m.id"
                                     class="text-[10px] font-medium px-2 py-0.5 rounded-md bg-white/[0.05] border border-white/10 text-slate-300 truncate max-w-[140px]"
                                 >
                                     {{ m.title }}
                                 </span>
                                 <span
-                                    v-if="col.movies.length > 3"
+                                    v-if="(Array.isArray(col.movies) ? col.movies.length : Object.keys(col.movies || {}).length) > 3"
                                     class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
                                 >
-                                    +{{ col.movies.length - 3 }}
+                                    +{{ (Array.isArray(col.movies) ? col.movies.length : Object.keys(col.movies || {}).length) - 3 }}
                                 </span>
                             </div>
                         </div>

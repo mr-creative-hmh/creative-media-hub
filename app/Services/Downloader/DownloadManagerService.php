@@ -394,6 +394,25 @@ class DownloadManagerService
             if ($item->aria2_gid && $this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
                 $status = $this->aria2Service->tellStatus($item->aria2_gid);
                 if ($status) {
+                    // Synchronize child GID if transitioned from metadata to video payload
+                    if (! empty($status['gid']) && $status['gid'] !== $item->aria2_gid) {
+                        $item->aria2_gid = $status['gid'];
+                    }
+
+                    // Extract actual payload file path from aria2 files list
+                    if (! empty($status['files'])) {
+                        foreach ($status['files'] as $f) {
+                            $fPath = str_replace('\\', '/', $f['path'] ?? '');
+                            if (! empty($fPath) && ! str_starts_with(basename($fPath), '[METADATA]')) {
+                                $fExt = strtolower(pathinfo($fPath, PATHINFO_EXTENSION));
+                                if (in_array($fExt, ['mp4', 'mkv', 'avi', 'mov', 'webm'])) {
+                                    $item->destination_path = $fPath;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
                     $item->downloaded_bytes = $status['downloaded_bytes'];
                     if ($status['total_bytes'] > 0) {
                         $item->total_bytes = $status['total_bytes'];
@@ -401,10 +420,17 @@ class DownloadManagerService
                     $item->speed_bytes_sec = $status['speed_bytes_sec'];
 
                     if ($status['status'] === 'completed') {
-                        $item->status = 'completed';
-                        $item->speed_bytes_sec = 0;
-                        $item->save();
-                        $this->autoIndexMedia($item);
+                        // Prevent premature completion on tiny metadata (~20KB-40KB)
+                        if ($status['total_bytes'] > 1000000 || empty($status['following'])) {
+                            $item->status = 'completed';
+                            $item->speed_bytes_sec = 0;
+                            $item->save();
+                            $this->finalizeDownloadedFile($item);
+                            $this->autoIndexMedia($item);
+                        } else {
+                            $item->status = 'downloading';
+                            $item->save();
+                        }
                     } elseif ($status['status'] === 'failed') {
                         $item->status = 'failed';
                         $item->error_message = $status['error_message'] ?: 'Download failed in aria2';
@@ -670,6 +696,12 @@ class DownloadManagerService
         }
 
         try {
+            // If item has auto_organize flag, hand over to LibraryAcquisitionService for canonical H:\Entertainment placement
+            if (! empty($item->torrent_files['auto_organize'])) {
+                app(\App\Services\Scout\LibraryAcquisitionService::class)->handleCompletedDownload($item);
+                return;
+            }
+
             $dest = $item->destination_path;
             if ($dest && File::exists($dest)) {
                 $this->scannerService->processSingleFile($dest, $item->media_type);

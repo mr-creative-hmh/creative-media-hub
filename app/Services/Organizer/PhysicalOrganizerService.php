@@ -191,6 +191,18 @@ class PhysicalOrganizerService
             return $this->formatCollectionName($parsed['collection_name']);
         }
 
+        // Tier 1: Local Master Metadata Index (<0.1ms offline lookup)
+        try {
+            $masterService = app(\App\Services\Metadata\LibraryMasterIndexService::class);
+            $year = !empty($parsed['year']) ? (int)$parsed['year'] : null;
+            $masterMovie = $masterService->lookupMovie($cleanTitle, $year);
+            if ($masterMovie && !empty($masterMovie['collection_name'])) {
+                return $this->formatCollectionName($masterMovie['collection_name']);
+            }
+        } catch (\Throwable $e) {
+            // Master index service unavailable
+        }
+
         // Tier 2: Local Database MediaItem check
         if (! $isSeries && ! empty($cleanTitle)) {
             try {
@@ -267,7 +279,10 @@ class PhysicalOrganizerService
             'Toy Story' => 'Toy Story Collection',
             'Shrek' => 'Shrek Collection',
             'Ice Age' => 'Ice Age Collection',
+            'Minions' => 'Minions Collection',
             'Despicable Me' => 'Despicable Me Collection',
+            'Omar & Salma' => 'Omar & Salma Collection',
+            'عمر وسلمى' => 'Omar & Salma Collection',
             'Kung Fu Panda' => 'Kung Fu Panda Collection',
             'How to Train Your Dragon' => 'How to Train Your Dragon Collection',
             'Mad Max' => 'Mad Max Collection',
@@ -345,6 +360,23 @@ class PhysicalOrganizerService
 
         if ($isSeries) {
             $dbSeries = $this->resolveCachedSeries($cleanTitle, $filePath);
+
+            // Strict Arabic Series Structure Preservation
+            $normFilePath = str_replace('\\', '/', $filePath);
+            $isArabicSeries = false;
+            if (stripos($normFilePath, '/Arabic Series/') !== false || stripos($normFilePath, 'Arabic Series') !== false) {
+                $isArabicSeries = true;
+            } elseif ($dbSeries) {
+                $seriesFolder = str_replace('\\', '/', $dbSeries->folder_path ?? '');
+                if (stripos($seriesFolder, 'Arabic Series') !== false || ($dbSeries->original_language ?? '') === 'ar') {
+                    $isArabicSeries = true;
+                } elseif (preg_match('/\p{Arabic}/u', $dbSeries->title ?? '') || preg_match('/\p{Arabic}/u', $cleanTitle)) {
+                    $isArabicSeries = true;
+                }
+            }
+            if ($isArabicSeries) {
+                $typeDir = 'TV Shows/Arabic Series';
+            }
             if ($dbSeries) {
                 // Resolve Year for TV Series: "Title (2009 - 2011)" or "Title (2009)"
                 $seriesYear = $this->resolveSeriesYearString($dbSeries);

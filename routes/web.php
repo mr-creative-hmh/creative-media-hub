@@ -5,6 +5,7 @@ use App\Http\Controllers\CollectionController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DiskOrganizerController;
 use App\Http\Controllers\DownloadManagerController;
+use App\Http\Controllers\MediaScoutController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\MetadataManagementController;
 use App\Http\Controllers\ScannerController;
@@ -139,6 +140,14 @@ Route::get('/stream/remux/episode/{episode}', [StreamController::class, 'streamR
 
 // Storage & Codec Analytics
 Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics.index');
+
+// Media Scout (Missing Content & Fast Library Acquisition)
+Route::get('/scout', [MediaScoutController::class, 'index'])->name('scout.index');
+Route::get('/api/scout/gaps', [MediaScoutController::class, 'getGaps'])->name('api.scout.gaps');
+Route::post('/api/scout/refresh', [MediaScoutController::class, 'refresh'])->name('api.scout.refresh');
+Route::get('/api/scout/torrents', [MediaScoutController::class, 'getTorrents'])->name('api.scout.torrents');
+Route::post('/api/scout/download', [MediaScoutController::class, 'download'])->name('api.scout.download');
+Route::post('/api/scout/organize-and-scan', [MediaScoutController::class, 'organizeAndScan'])->name('api.scout.organize-and-scan');
 
 // Real Download & Background Ingestion Center
 Route::get('/downloads', [DownloadManagerController::class, 'index'])->name('downloads.index');

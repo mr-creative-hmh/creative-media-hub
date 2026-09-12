@@ -221,8 +221,9 @@ class Aria2Service
         return is_string($result) ? $result : null;
     }
 
-    /**
+        /**
      * Get detailed status of a download.
+     * Recursively follows followedBy chains (e.g. magnet metadata download -> actual payload download).
      */
     public function tellStatus(string $gid): ?array
     {
@@ -231,10 +232,21 @@ class Aria2Service
             return null;
         }
 
+        // If this task spawned a child task (magnet metadata download transitioned to actual payload download)
+        if (! empty($res['followedBy']) && is_array($res['followedBy'])) {
+            $childGid = $res['followedBy'][0];
+            $childStatus = $this->tellStatus($childGid);
+            if ($childStatus) {
+                $childStatus['parent_gid'] = $gid;
+                return $childStatus;
+            }
+        }
+
         $totalLength = (int) ($res['totalLength'] ?? 0);
         $completedLength = (int) ($res['completedLength'] ?? 0);
         $downloadSpeed = (int) ($res['downloadSpeed'] ?? 0);
         $status = (string) ($res['status'] ?? 'unknown');
+        $numSeeders = (int) ($res['numSeeders'] ?? 0);
 
         // Map status: active -> downloading, waiting -> queued, complete -> completed
         $mappedStatus = match ($status) {
@@ -254,45 +266,54 @@ class Aria2Service
             'total_bytes' => $totalLength,
             'downloaded_bytes' => $completedLength,
             'speed_bytes_sec' => $downloadSpeed,
+            'num_seeders' => $numSeeders,
             'files' => $res['files'] ?? [],
             'error_code' => $res['errorCode'] ?? null,
             'error_message' => $res['errorMessage'] ?? null,
+            'parent_gid' => null,
+            'following' => $res['following'] ?? null,
         ];
     }
 
     /**
-     * Pause a download.
+     * Pause a download (resolving active child GID if applicable).
      */
     public function pause(string $gid): bool
     {
-        $res = $this->call('aria2.pause', [$gid]);
+        $status = $this->tellStatus($gid);
+        $targetGid = $status['gid'] ?? $gid;
+        $res = $this->call('aria2.pause', [$targetGid]);
         return $res !== null;
     }
 
     /**
-     * Unpause / resume a download.
+     * Unpause / resume a download (resolving active child GID if applicable).
      */
     public function unpause(string $gid): bool
     {
-        $res = $this->call('aria2.unpause', [$gid]);
+        $status = $this->tellStatus($gid);
+        $targetGid = $status['gid'] ?? $gid;
+        $res = $this->call('aria2.unpause', [$targetGid]);
         return $res !== null;
     }
 
     /**
-     * Remove / cancel a download.
+     * Remove / cancel a download (cleaning up parent and child).
      */
     public function remove(string $gid): bool
     {
-        $res = $this->call('aria2.forceRemove', [$gid]);
+        $status = $this->tellStatus($gid);
+        $targetGid = $status['gid'] ?? $gid;
+        $res = $this->call('aria2.forceRemove', [$targetGid]);
         if ($res === null) {
-            $res = $this->call('aria2.remove', [$gid]);
+            $res = $this->call('aria2.remove', [$targetGid]);
+        }
+        if ($targetGid !== $gid) {
+            $this->call('aria2.forceRemove', [$gid]);
         }
         return $res !== null;
     }
 
-    /**
-     * Change global speed limit and concurrent downloads.
-     */
     public function configureLimits(int $maxConcurrent = 3, int $speedLimitKb = 0): bool
     {
         $opts = [

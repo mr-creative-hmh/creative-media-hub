@@ -10,6 +10,7 @@ use App\Models\Series;
 use App\Models\Subtitle;
 use App\Services\Metadata\MetadataAggregator;
 use App\Services\Metadata\TmdbProvider;
+use App\Services\Metadata\LibraryMasterIndexService;
 use App\Services\Metadata\WebArtworkSearchService;
 use App\Services\Organizer\FilesystemScannerService;
 use App\Services\Organizer\SceneNameParserService;
@@ -31,6 +32,8 @@ class VirtualLibraryScannerService
 
     protected MediaProbeService $mediaProbe;
 
+    protected LibraryMasterIndexService $masterIndex;
+
     protected array $tmdbSeasonCache = [];
 
     public function __construct(
@@ -39,7 +42,8 @@ class VirtualLibraryScannerService
         MetadataAggregator $metadata,
         WebArtworkSearchService $webArtwork,
         EmbeddedSubtitleDetectorService $embeddedSubDetector,
-        MediaProbeService $mediaProbe
+        MediaProbeService $mediaProbe,
+        ?LibraryMasterIndexService $masterIndex = null
     ) {
         $this->fsScanner = $fsScanner;
         $this->nameParser = $nameParser;
@@ -47,6 +51,7 @@ class VirtualLibraryScannerService
         $this->webArtwork = $webArtwork;
         $this->embeddedSubDetector = $embeddedSubDetector;
         $this->mediaProbe = $mediaProbe;
+        $this->masterIndex = $masterIndex ?: app(LibraryMasterIndexService::class);
     }
 
     public function getScanStatus(): array
@@ -362,6 +367,81 @@ class VirtualLibraryScannerService
         return $this->indexMovie($file, $parsed);
     }
 
+    /**
+     * Detects if an incoming video file corresponds to an existing movie that was
+     * physically moved/relocated or upgraded in resolution/quality.
+     */
+    protected function detectRelocatedOrUpgradedMovie(array $file, array $parsed, array $probeData, string $resolution, string $videoCodec, string $audioCodec): ?MediaItem
+    {
+        $newPath = str_replace('\\', '/', $file['path']);
+        $newDir = dirname($newPath);
+        $fileSize = $file['size_bytes'] ?? (file_exists($file['path']) ? filesize($file['path']) : 0);
+
+        // 1. Check exact size match where old path is missing on disk (Fast relocation detection)
+        if ($fileSize > 0) {
+            $sizeMatches = MediaItem::where('file_size_bytes', $fileSize)->get();
+            foreach ($sizeMatches as $cand) {
+                if (!file_exists($cand->file_path)) {
+                    // Exact file relocation detected!
+                    $cand->file_path = $newPath;
+                    $cand->folder_path = $newDir;
+                    $cand->save();
+
+                    $this->relocateSubtitlesForMovie($cand, $file['path']);
+                    return $cand;
+                }
+            }
+        }
+
+        // 2. Semantic Title + Year matching (Quality/Resolution upgrade detection where file size changed)
+        $cleanTitle = $parsed['clean_title'] ?? ($parsed['title'] ?? pathinfo($file['filename'], PATHINFO_FILENAME));
+        $year = $parsed['year'] ?? null;
+
+        $titleQuery = MediaItem::where('title', 'like', $cleanTitle);
+        if ($year) {
+            $titleQuery->where('release_year', $year);
+        }
+        $candidates = $titleQuery->get();
+
+        foreach ($candidates as $cand) {
+            if (!file_exists($cand->file_path)) {
+                // Movie was replaced/upgraded! Update existing record in-place without duplicating
+                $cand->file_path = $newPath;
+                $cand->folder_path = $newDir;
+                $cand->file_size_bytes = $fileSize;
+                $cand->resolution = $resolution;
+                $cand->video_codec = $videoCodec;
+                $cand->audio_codec = $audioCodec;
+                if (!empty($probeData['duration']) && $probeData['duration'] > 0) {
+                    $cand->duration_seconds = (int)round($probeData['duration']);
+                    $cand->runtime_minutes = (int)round($probeData['duration'] / 60);
+                }
+                $cand->save();
+
+                $this->relocateSubtitlesForMovie($cand, $file['path']);
+                return $cand;
+            }
+        }
+
+        return null;
+    }
+
+    protected function relocateSubtitlesForMovie(MediaItem $movie, string $newVideoPath): void
+    {
+        $newDir = dirname($newVideoPath);
+        $subs = Subtitle::where('media_item_id', $movie->id)->get();
+        foreach ($subs as $sub) {
+            if (!file_exists($sub->file_path)) {
+                $base = pathinfo($sub->file_path, PATHINFO_BASENAME);
+                $candidatePath = $newDir . '/' . $base;
+                if (file_exists($candidatePath)) {
+                    $sub->file_path = str_replace('\\', '/', $candidatePath);
+                    $sub->save();
+                }
+            }
+        }
+    }
+
     protected function indexMovie(array $file, array $parsed): MediaItem
     {
         $cleanTitle = $parsed['clean_title'] ?? ($parsed['title'] ?? pathinfo($file['filename'], PATHINFO_FILENAME));
@@ -377,8 +457,6 @@ class VirtualLibraryScannerService
         // Probe actual file for accurate technical metadata
         $probeData = $this->mediaProbe->probe($file['path']);
 
-        // Use probed data > parsed filename data > fallback to Unknown
-        // Note: probeData now returns array with null/0 defaults, not null
         $resolution = (!empty($probeData['resolution']) && $probeData['resolution'] !== 'Unknown')
             ? $probeData['resolution']
             : ($parsed['resolution'] ?? 'Unknown');
@@ -390,13 +468,22 @@ class VirtualLibraryScannerService
             : ($parsed['audio'] ?? 'Unknown');
         $runtimeMinutes = ($probeData['duration'] ?? 0) > 0 ? (int) round($probeData['duration'] / 60) : 110;
 
+        // Check for moved or upgraded existing movie record
+        $relocated = $this->detectRelocatedOrUpgradedMovie($file, $parsed, $probeData, $resolution, $videoCodec, $audioCodec);
+        if ($relocated) {
+            $this->attachAllSubtitles($relocated, $file);
+            return $relocated;
+        }
+
         $posterUrl = $file['local_poster'] ?? null;
         $backdropUrl = $file['local_backdrop'] ?? null;
 
         // Perform rapid metadata search (TMDb / Online) with tight timeout
-        $meta = [];
+        $meta = $this->masterIndex->lookupMovie($cleanTitle, $year) ?? [];
         try {
-            $meta = $this->metadata->aggregateMovieMetadata($cleanTitle, $year, 'en', true);
+            if (empty($meta)) {
+                $meta = $this->metadata->aggregateMovieMetadata($cleanTitle, $year, 'en', true);
+            }
             if (! empty($meta['poster_path']) && empty($posterUrl)) {
                 $posterUrl = $meta['poster_path'];
             }
@@ -565,15 +652,49 @@ class VirtualLibraryScannerService
             ['title' => "Season {$seasonNum}"]
         );
 
-        $existingEp = Episode::where('file_path', $file['path'])->first();
-        if ($existingEp) {
-            $this->attachAllSubtitles($existingEp, $file);
+        // Probe actual file for accurate technical metadata
+        $probeData = $this->mediaProbe->probe($file['path']);
+        $resolution = (!empty($probeData['resolution']) && $probeData['resolution'] !== 'Unknown')
+            ? $probeData['resolution']
+            : ($parsed['resolution'] ?? 'Unknown');
+        $videoCodec = (!empty($probeData['video_codec']) && $probeData['video_codec'] !== 'Unknown')
+            ? $probeData['video_codec']
+            : ($parsed['codec'] ?? 'Unknown');
+        $audioCodec = (!empty($probeData['audio_codec']) && $probeData['audio_codec'] !== 'Unknown')
+            ? $probeData['audio_codec']
+            : ($parsed['audio'] ?? 'Unknown');
+        $runtimeMinutes = ($probeData['duration'] ?? 0) > 0 ? (int) round($probeData['duration'] / 60) : 45;
 
+        // 1. Check if episode uniquely exists by (series_id, season_id, episode_number)
+        $existingEp = Episode::where('series_id', $series->id)
+            ->where('season_id', $season->id)
+            ->where('episode_number', $epNum)
+            ->first();
+
+        if ($existingEp) {
+            $newEpPath = str_replace('\\', '/', $file['path']);
+            if ($existingEp->file_path !== $newEpPath) {
+                $existingEp->file_path = $newEpPath;
+                $existingEp->file_size_bytes = $file['size_bytes'] ?? (file_exists($file['path']) ? filesize($file['path']) : 0);
+                $existingEp->resolution = $resolution;
+                $existingEp->video_codec = $videoCodec;
+                $existingEp->audio_codec = $audioCodec;
+                if (!empty($probeData['duration']) && $probeData['duration'] > 0) {
+                    $existingEp->duration_seconds = (int)round($probeData['duration']);
+                    $existingEp->runtime_minutes = (int)round($probeData['duration'] / 60);
+                }
+                $existingEp->save();
+            }
+            $this->attachAllSubtitles($existingEp, $file);
             return $existingEp;
         }
 
-        // Probe actual file for accurate technical metadata
-        $probeData = $this->mediaProbe->probe($file['path']);
+        // 2. Also check if file_path matched an existing record
+        $existingByPath = Episode::where('file_path', $file['path'])->first();
+        if ($existingByPath) {
+            $this->attachAllSubtitles($existingByPath, $file);
+            return $existingByPath;
+        }
 
         // Use probed data > parsed filename data > fallback to Unknown
         // Note: probeData now returns array with null/0 defaults, not null

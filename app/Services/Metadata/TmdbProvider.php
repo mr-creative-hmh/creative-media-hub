@@ -53,7 +53,7 @@ class TmdbProvider implements MetadataProviderInterface
             'indiana jones' => 'Indiana Jones Collection',
             'shrek' => 'Shrek Collection',
             'despicable me' => 'Despicable Me Collection',
-            'minions' => 'Despicable Me Collection',
+            'minions' => 'Minions Collection',
             'toy story' => 'Toy Story Collection',
             'the godfather' => 'The Godfather Trilogy',
             'terminator' => 'Terminator Collection',
@@ -499,6 +499,56 @@ class TmdbProvider implements MetadataProviderInterface
         }
 
         return [];
+    }
+
+    /**
+     * Fetch complete collection (franchise) details including parts.
+     */
+    public function getCollectionDetails(string|int $collectionId, string $lang = 'en'): ?array
+    {
+        $key = $this->getApiKey();
+        if (! $key) {
+            return null;
+        }
+
+        try {
+            $response = \Illuminate\Support\Facades\Http::timeout(10)->get("{$this->baseUrl}/collection/{$collectionId}", [
+                'api_key' => $key,
+                'language' => $lang === 'ar' ? 'ar-SA' : 'en-US',
+            ]);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                $parts = [];
+                foreach ($data['parts'] ?? [] as $p) {
+                    $parts[] = [
+                        'id' => $p['id'],
+                        'tmdb_id' => $p['id'],
+                        'title' => $p['title'] ?? ($p['original_title'] ?? ''),
+                        'original_title' => $p['original_title'] ?? '',
+                        'release_year' => ! empty($p['release_date']) ? (int) substr($p['release_date'], 0, 4) : null,
+                        'release_date' => $p['release_date'] ?? null,
+                        'overview' => $p['overview'] ?? '',
+                        'poster_path' => ! empty($p['poster_path']) ? "https://image.tmdb.org/t/p/w500{$p['poster_path']}" : null,
+                        'backdrop_path' => ! empty($p['backdrop_path']) ? "https://image.tmdb.org/t/p/w1280{$p['backdrop_path']}" : null,
+                        'rating' => round($p['vote_average'] ?? 0, 1),
+                    ];
+                }
+
+                return [
+                    'id' => $data['id'],
+                    'name' => $data['name'] ?? '',
+                    'overview' => $data['overview'] ?? '',
+                    'poster_path' => ! empty($data['poster_path']) ? "https://image.tmdb.org/t/p/w780{$data['poster_path']}" : null,
+                    'backdrop_path' => ! empty($data['backdrop_path']) ? "https://image.tmdb.org/t/p/w1280{$data['backdrop_path']}" : null,
+                    'parts' => $parts,
+                ];
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("TMDb getCollectionDetails failed for {$collectionId}: " . $e->getMessage());
+        }
+
+        return null;
     }
 
     /**
