@@ -8,10 +8,10 @@ use App\Models\Genre;
 use App\Models\MediaItem;
 use App\Models\Series;
 use App\Models\Subtitle;
+use App\Services\Metadata\LibraryMasterIndexService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
-use App\Services\Organizer\ZeroKeyGenreClassifierService;
 
 class PhysicalOrganizerService
 {
@@ -20,11 +20,15 @@ class PhysicalOrganizerService
     protected SceneNameParserService $parser;
 
     protected static ?array $seriesCache = null;
+
     protected static array $seriesYearCache = [];
+
     protected static array $episodesBySeries = [];
+
     protected static array $movieCache = [];
 
     protected const CACHE_KEY = 'organizer_execution_state';
+
     protected const PLAN_CACHE_KEY = 'organizer_plan_state';
 
     public function __construct(SceneNameParserService $parser)
@@ -193,10 +197,10 @@ class PhysicalOrganizerService
 
         // Tier 1: Local Master Metadata Index (<0.1ms offline lookup)
         try {
-            $masterService = app(\App\Services\Metadata\LibraryMasterIndexService::class);
-            $year = !empty($parsed['year']) ? (int)$parsed['year'] : null;
+            $masterService = app(LibraryMasterIndexService::class);
+            $year = ! empty($parsed['year']) ? (int) $parsed['year'] : null;
             $masterMovie = $masterService->lookupMovie($cleanTitle, $year);
-            if ($masterMovie && !empty($masterMovie['collection_name'])) {
+            if ($masterMovie && ! empty($masterMovie['collection_name'])) {
                 return $this->formatCollectionName($masterMovie['collection_name']);
             }
         } catch (\Throwable $e) {
@@ -222,6 +226,7 @@ class PhysicalOrganizerService
                         ->get()
                         ->first(function ($m) use ($normalizedSearch) {
                             $mNorm = preg_replace('/[^a-z0-9]/i', '', $m->title);
+
                             return str_contains($mNorm, $normalizedSearch) || str_contains($normalizedSearch, $mNorm);
                         });
                     if ($candidate && ! empty($candidate->collection_name)) {
@@ -239,10 +244,10 @@ class PhysicalOrganizerService
         $parentDirs = array_slice($pathParts, max(0, count($pathParts) - 4), -1);
         foreach (array_reverse($parentDirs) as $dir) {
             if (preg_match('/^([a-zA-Z0-9\s\':\-\.]+?)\s+(?:Collection|Boxset|Trilogy|Quadrilogy|Anthology|Saga|Franchise)\b/i', $dir, $m)) {
-                return $this->formatCollectionName(trim($m[1]) . ' Collection');
+                return $this->formatCollectionName(trim($m[1]).' Collection');
             }
             if (preg_match('/\b([a-zA-Z0-9\s\':\-\.]+?)\s+Collection\b/i', $dir, $m)) {
-                return $this->formatCollectionName(trim($m[1]) . ' Collection');
+                return $this->formatCollectionName(trim($m[1]).' Collection');
             }
         }
 
@@ -315,6 +320,7 @@ class PhysicalOrganizerService
         if (! preg_match('/collection$/i', $name)) {
             $name .= ' Collection';
         }
+
         return $name;
     }
 
@@ -476,9 +482,9 @@ class PhysicalOrganizerService
             '{Group}' => $this->sanitizePathSegment($parsed['group'] ?? 'MEDIA'),
             '{FirstLetter}' => $firstLetter,
             '{Season}' => (string) $seasonNum,
-            '{Episode}' => (string) $episodeNum,
+            '{Episode}' => (! empty($parsed['episode_end']) && (int) $parsed['episode_end'] > $episodeNum) ? "{$episodeNum}-{$parsed['episode_end']}" : (string) $episodeNum,
             '{Season:02}' => sprintf('%02d', $seasonNum),
-            '{Episode:02}' => sprintf('%02d', $episodeNum),
+            '{Episode:02}' => (! empty($parsed['episode_end']) && (int) $parsed['episode_end'] > $episodeNum) ? sprintf('%02d-E%02d', $episodeNum, (int) $parsed['episode_end']) : sprintf('%02d', $episodeNum),
             '{EpisodeTitle}' => $epTitle,
             '{ext}' => strtolower(pathinfo($filePath, PATHINFO_EXTENSION) ?: ($parsed['extension'] ?? 'mkv')),
         ];
@@ -535,7 +541,7 @@ class PhysicalOrganizerService
             $destExt = pathinfo($destination, PATHINFO_EXTENSION);
             $counter = 2;
             do {
-                $candidate = "{$destDir}/{$destBase} ({$counter})" . ($destExt ? ".{$destExt}" : '');
+                $candidate = "{$destDir}/{$destBase} ({$counter})".($destExt ? ".{$destExt}" : '');
                 $normCand = strtolower(str_replace('\\', '/', $candidate));
                 $counter++;
             } while (isset($this->claimedDestinations[$normCand]));
@@ -615,7 +621,7 @@ class PhysicalOrganizerService
     /**
      * Initialize Stateful Batch Plan Generation (Zero 30s-timeout risk)
      */
-        /**
+    /**
      * Get real-time status of the background plan generation job.
      */
     public function getPlanJobStatus(): array
@@ -768,6 +774,7 @@ class PhysicalOrganizerService
         $res = $this->startPlanJob($sourcePath, $targetRoot, $moviePattern, $seriesPattern, 'folder', $recursive, $options);
         $res['is_active'] = ($res['status']['status'] ?? '') === 'generating';
         $res['total_files'] = $res['total_files'] ?? ($res['status']['total_files'] ?? 0);
+
         return $res;
     }
 
@@ -850,7 +857,7 @@ class PhysicalOrganizerService
                 $state['plan_items'][] = $item;
                 $state['processed_count']++;
 
-                $destRel = basename(dirname($item['destination_path'])) . '/' . basename($item['destination_path']);
+                $destRel = basename(dirname($item['destination_path'])).'/'.basename($item['destination_path']);
                 $state['logs'][] = [
                     'time' => now()->format('H:i:s'),
                     'level' => 'success',
@@ -861,7 +868,7 @@ class PhysicalOrganizerService
                 $state['logs'][] = [
                     'time' => now()->format('H:i:s'),
                     'level' => 'error',
-                    'message' => "Error analyzing {$filename}: " . $e->getMessage(),
+                    'message' => "Error analyzing {$filename}: ".$e->getMessage(),
                 ];
             }
         }
@@ -986,15 +993,33 @@ class PhysicalOrganizerService
             return '';
         }
         $r = strtolower(trim($raw));
-        if (str_contains($r, '4k') || str_contains($r, '2160') || str_contains($r, 'uhd')) return '4K';
-        if (str_contains($r, '1440') || str_contains($r, '2k')) return '1440p';
-        if (str_contains($r, '1080') || str_contains($r, 'fhd')) return '1080p';
-        if (str_contains($r, '720') || str_contains($r, 'hd')) return '720p';
-        if (str_contains($r, '576')) return '576p';
-        if (str_contains($r, '540')) return '540p';
-        if (str_contains($r, '480') || str_contains($r, 'sd')) return '480p';
-        if (str_contains($r, '360')) return '360p';
-        if (str_contains($r, '240')) return '240p';
+        if (str_contains($r, '4k') || str_contains($r, '2160') || str_contains($r, 'uhd')) {
+            return '4K';
+        }
+        if (str_contains($r, '1440') || str_contains($r, '2k')) {
+            return '1440p';
+        }
+        if (str_contains($r, '1080') || str_contains($r, 'fhd')) {
+            return '1080p';
+        }
+        if (str_contains($r, '720') || str_contains($r, 'hd')) {
+            return '720p';
+        }
+        if (str_contains($r, '576')) {
+            return '576p';
+        }
+        if (str_contains($r, '540')) {
+            return '540p';
+        }
+        if (str_contains($r, '480') || str_contains($r, 'sd')) {
+            return '480p';
+        }
+        if (str_contains($r, '360')) {
+            return '360p';
+        }
+        if (str_contains($r, '240')) {
+            return '240p';
+        }
 
         return $raw === '1080p FHD' ? '1080p' : $raw;
     }
@@ -1131,6 +1156,7 @@ class PhysicalOrganizerService
                             'size_formatted' => $item['size_formatted'] ?? '',
                         ];
                         $state['processed_count']++;
+
                         continue;
                     }
 
@@ -1143,6 +1169,7 @@ class PhysicalOrganizerService
                         'message' => "[ERROR] {$errMsg}",
                     ];
                     $state['processed_count']++;
+
                     continue;
                 }
 
@@ -1159,7 +1186,7 @@ class PhysicalOrganizerService
                 // Execute safe cross-drive move or copy with timeout immunity
                 $this->moveOrCopyFile($source, $dest, $mode);
                 if ($mode === 'move') {
-                    $this->updateDatabasePath($source, $dest);
+                    $this->updateDatabasePath($source, $dest, $item['collection_name'] ?? null);
                 }
 
                 // Handle Companion Subtitles
@@ -1281,7 +1308,7 @@ class PhysicalOrganizerService
             $destExt = pathinfo($dest, PATHINFO_EXTENSION);
             $counter = 1;
             do {
-                $dest = "{$destDir}/{$destBase} ({$counter})" . ($destExt ? ".{$destExt}" : '');
+                $dest = "{$destDir}/{$destBase} ({$counter})".($destExt ? ".{$destExt}" : '');
                 $counter++;
             } while (file_exists($dest));
         }
@@ -1300,6 +1327,7 @@ class PhysicalOrganizerService
             $copied = $this->streamCopy($source, $dest);
             if ($copied) {
                 @unlink($source);
+
                 return true;
             }
 
@@ -1309,6 +1337,7 @@ class PhysicalOrganizerService
             if (! $copied) {
                 throw new \RuntimeException("Failed to copy file from [{$source}] to [{$dest}].");
             }
+
             return true;
         }
     }
@@ -1317,192 +1346,194 @@ class PhysicalOrganizerService
      * Copy file using buffered streams with per-chunk timeout resets
      */
     /**
- * Determine if a directory is a protected root or system directory that should NEVER be cleaned or recursed.
- */
-public function isProtectedDirectory(string $dir): bool
-{
-    $dir = rtrim(str_replace('\\', '/', $dir), '/');
-    $lower = strtolower($dir);
+     * Determine if a directory is a protected root or system directory that should NEVER be cleaned or recursed.
+     */
+    public function isProtectedDirectory(string $dir): bool
+    {
+        $dir = rtrim(str_replace('\\', '/', $dir), '/');
+        $lower = strtolower($dir);
 
-    // Windows drive letters e.g. C:, D:, C:/, D:/
-    if (preg_match('#^[A-Za-z]:/?$#', $dir)) {
-        return true;
-    }
+        // Windows drive letters e.g. C:, D:, C:/, D:/
+        if (preg_match('#^[A-Za-z]:/?$#', $dir)) {
+            return true;
+        }
 
-    // Standard root / system / media directories directly off a drive
-    if (preg_match('#^[A-Za-z]:/(downloads|movies|series|entertainment|tv|anime|music|videos|users|program files|windows)$#i', $dir)) {
-        return true;
-    }
+        // Standard root / system / media directories directly off a drive
+        if (preg_match('#^[A-Za-z]:/(downloads|movies|series|entertainment|tv|anime|music|videos|users|program files|windows)$#i', $dir)) {
+            return true;
+        }
 
-    // Unix system directories
-    if (in_array($lower, ['/', '/var', '/usr', '/home', '/etc', '/bin', '/opt', '/tmp'])) {
-        return true;
-    }
+        // Unix system directories
+        if (in_array($lower, ['/', '/var', '/usr', '/home', '/etc', '/bin', '/opt', '/tmp'])) {
+            return true;
+        }
 
-    // Direct user personal folders: C:/Users/{user}/(Downloads|Desktop|Documents|Videos)
-    if (preg_match('#^[A-Za-z]:/users/[^/]+/(downloads|desktop|documents|videos|music)$#i', $dir)) {
-        return true;
-    }
+        // Direct user personal folders: C:/Users/{user}/(Downloads|Desktop|Documents|Videos)
+        if (preg_match('#^[A-Za-z]:/users/[^/]+/(downloads|desktop|documents|videos|music)$#i', $dir)) {
+            return true;
+        }
 
-    // Safety: path must have at least 2 directory segments after drive (e.g. D:/Downloads/ReleaseName is OK, but D:/Downloads is NOT)
-    $noDrive = preg_replace('#^[A-Za-z]:#', '', $dir);
-    $parts = array_filter(explode('/', trim($noDrive, '/')));
-    if (count($parts) < 2) {
-        return true;
-    }
+        // Safety: path must have at least 2 directory segments after drive (e.g. D:/Downloads/ReleaseName is OK, but D:/Downloads is NOT)
+        $noDrive = preg_replace('#^[A-Za-z]:#', '', $dir);
+        $parts = array_filter(explode('/', trim($noDrive, '/')));
+        if (count($parts) < 2) {
+            return true;
+        }
 
-    return false;
-}
-
-/**
- * Copy file using buffered streams with per-chunk timeout resets
- */
-protected function streamCopy(string $source, string $dest): bool
-{
-    @set_time_limit(0);
-    @ini_set('max_execution_time', '0');
-    ignore_user_abort(true);
-
-    $srcStream = @fopen($source, 'rb');
-    if (! $srcStream) {
         return false;
     }
 
-    $destStream = @fopen($dest, 'wb');
-    if (! $destStream) {
+    /**
+     * Copy file using buffered streams with per-chunk timeout resets
+     */
+    protected function streamCopy(string $source, string $dest): bool
+    {
+        @set_time_limit(0);
+        @ini_set('max_execution_time', '0');
+        ignore_user_abort(true);
+
+        $srcStream = @fopen($source, 'rb');
+        if (! $srcStream) {
+            return false;
+        }
+
+        $destStream = @fopen($dest, 'wb');
+        if (! $destStream) {
+            fclose($srcStream);
+
+            return false;
+        }
+
+        // Stream in 16MB chunks while keeping timeout refreshed
+        $bufferSize = 16 * 1024 * 1024;
+        while (! feof($srcStream)) {
+            @set_time_limit(180);
+            $chunk = fread($srcStream, $bufferSize);
+            if ($chunk === false) {
+                break;
+            }
+            fwrite($destStream, $chunk);
+        }
+
+        fflush($destStream);
         fclose($srcStream);
-        return false;
+        fclose($destStream);
+
+        clearstatcache(true, $source);
+        clearstatcache(true, $dest);
+
+        return File::exists($dest) && File::size($dest) === File::size($source);
     }
 
-    // Stream in 16MB chunks while keeping timeout refreshed
-    $bufferSize = 16 * 1024 * 1024;
-    while (! feof($srcStream)) {
-        @set_time_limit(180);
-        $chunk = fread($srcStream, $bufferSize);
-        if ($chunk === false) {
-            break;
-        }
-        fwrite($destStream, $chunk);
-    }
+    protected function cleanEmptyDirectories(array $sourceDirs, array &$logs): int
+    {
+        @set_time_limit(0);
+        @ini_set('max_execution_time', '0');
+        ignore_user_abort(true);
 
-    fflush($destStream);
-    fclose($srcStream);
-    fclose($destStream);
+        $videoExtensions = ['mp4', 'mkv', 'avi', 'mov', 'm4v', 'webm', 'ts', 'wmv', 'flv', 'iso'];
+        $disposableJunk = [
+            'thumbs.db', 'desktop.ini', '.ds_store', 'ehthumbs.db',
+            'www.yts.mx.txt', 'www.yts.lt.txt', 'www.yts.bz.txt', 'www.yify-torrents.com.txt',
+            'yify.txt', 'torrent-downloaded-from.txt',
+        ];
+        $disposableExtensions = ['txt', 'nfo', 'url', 'website', 'lnk', 'ini', 'db', 'torrent', 'sample', 'log'];
 
-    clearstatcache(true, $source);
-    clearstatcache(true, $dest);
+        $cleanedCount = 0;
+        $allDirs = [];
 
-    return File::exists($dest) && File::size($dest) === File::size($source);
-}
+        // 1. Gather all subdirectories recursively inside every source directory
+        foreach ($sourceDirs as $sourceDir) {
+            $sourceDir = rtrim(str_replace('\\', '/', $sourceDir), '/');
+            if ($this->isProtectedDirectory($sourceDir) || ! File::isDirectory($sourceDir)) {
+                continue;
+            }
 
-protected function cleanEmptyDirectories(array $sourceDirs, array &$logs): int
-{
-    @set_time_limit(0);
-    @ini_set('max_execution_time', '0');
-    ignore_user_abort(true);
+            try {
+                $iterator = new \RecursiveIteratorIterator(
+                    new \RecursiveDirectoryIterator($sourceDir, \RecursiveDirectoryIterator::SKIP_DOTS),
+                    \RecursiveIteratorIterator::CHILD_FIRST
+                );
 
-    $videoExtensions = ['mp4', 'mkv', 'avi', 'mov', 'm4v', 'webm', 'ts', 'wmv', 'flv', 'iso'];
-    $disposableJunk = [
-        'thumbs.db', 'desktop.ini', '.ds_store', 'ehthumbs.db',
-        'www.yts.mx.txt', 'www.yts.lt.txt', 'www.yts.bz.txt', 'www.yify-torrents.com.txt',
-        'yify.txt', 'torrent-downloaded-from.txt',
-    ];
-    $disposableExtensions = ['txt', 'nfo', 'url', 'website', 'lnk', 'ini', 'db', 'torrent', 'sample', 'log'];
-
-    $cleanedCount = 0;
-    $allDirs = [];
-
-    // 1. Gather all subdirectories recursively inside every source directory
-    foreach ($sourceDirs as $sourceDir) {
-        $sourceDir = rtrim(str_replace('\\', '/', $sourceDir), '/');
-        if ($this->isProtectedDirectory($sourceDir) || ! File::isDirectory($sourceDir)) {
-            continue;
-        }
-
-        try {
-            $iterator = new \RecursiveIteratorIterator(
-                new \RecursiveDirectoryIterator($sourceDir, \RecursiveDirectoryIterator::SKIP_DOTS),
-                \RecursiveIteratorIterator::CHILD_FIRST
-            );
-
-            foreach ($iterator as $item) {
-                if ($item->isDir()) {
-                    $sub = str_replace('\\', '/', $item->getPathname());
-                    if (! $this->isProtectedDirectory($sub)) {
-                        $allDirs[] = $sub;
+                foreach ($iterator as $item) {
+                    if ($item->isDir()) {
+                        $sub = str_replace('\\', '/', $item->getPathname());
+                        if (! $this->isProtectedDirectory($sub)) {
+                            $allDirs[] = $sub;
+                        }
                     }
                 }
-            }
-        } catch (\Throwable $e) {
-        }
-
-        $allDirs[] = $sourceDir;
-    }
-
-    $allDirs = array_unique($allDirs);
-    // Sort by length descending so child subfolders are evaluated and deleted before parents
-    usort($allDirs, fn ($a, $b) => strlen($b) <=> strlen($a));
-
-    foreach ($allDirs as $dir) {
-        if ($this->isProtectedDirectory($dir) || ! File::isDirectory($dir)) {
-            continue;
-        }
-
-        $items = @scandir($dir);
-        if ($items === false) {
-            continue;
-        }
-
-        $entries = array_diff($items, ['.', '..']);
-        $hasEssentialFiles = false;
-
-        foreach ($entries as $entry) {
-            $fullPath = "{$dir}/{$entry}";
-            if (File::isDirectory($fullPath)) {
-                $hasEssentialFiles = true;
-                break;
+            } catch (\Throwable $e) {
             }
 
-            $ext = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
-            $nameLower = strtolower($entry);
-
-            if (in_array($ext, $videoExtensions) || in_array($ext, ['srt', 'vtt', 'ass', 'sub'])) {
-                $hasEssentialFiles = true;
-                break;
-            }
-
-            $isJunk = in_array($nameLower, $disposableJunk)
-                || in_array($ext, $disposableExtensions)
-                || (in_array($ext, ['jpg', 'jpeg', 'png', 'webp']) && (str_contains($nameLower, 'yts') || str_contains($nameLower, 'poster') || str_contains($nameLower, 'cover') || str_contains($nameLower, 'banner') || @filesize($fullPath) < 500000));
-
-            if (! $isJunk) {
-                $hasEssentialFiles = true;
-                break;
-            }
+            $allDirs[] = $sourceDir;
         }
 
-        if (! $hasEssentialFiles) {
+        $allDirs = array_unique($allDirs);
+        // Sort by length descending so child subfolders are evaluated and deleted before parents
+        usort($allDirs, fn ($a, $b) => strlen($b) <=> strlen($a));
+
+        foreach ($allDirs as $dir) {
+            if ($this->isProtectedDirectory($dir) || ! File::isDirectory($dir)) {
+                continue;
+            }
+
+            $items = @scandir($dir);
+            if ($items === false) {
+                continue;
+            }
+
+            $entries = array_diff($items, ['.', '..']);
+            $hasEssentialFiles = false;
+
             foreach ($entries as $entry) {
                 $fullPath = "{$dir}/{$entry}";
-                if (File::isFile($fullPath)) {
-                    @unlink($fullPath);
+                if (File::isDirectory($fullPath)) {
+                    $hasEssentialFiles = true;
+                    break;
+                }
+
+                $ext = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
+                $nameLower = strtolower($entry);
+
+                if (in_array($ext, $videoExtensions) || in_array($ext, ['srt', 'vtt', 'ass', 'sub'])) {
+                    $hasEssentialFiles = true;
+                    break;
+                }
+
+                $isJunk = in_array($nameLower, $disposableJunk)
+                    || in_array($ext, $disposableExtensions)
+                    || (in_array($ext, ['jpg', 'jpeg', 'png', 'webp']) && (str_contains($nameLower, 'yts') || str_contains($nameLower, 'poster') || str_contains($nameLower, 'cover') || str_contains($nameLower, 'banner') || @filesize($fullPath) < 500000));
+
+                if (! $isJunk) {
+                    $hasEssentialFiles = true;
+                    break;
                 }
             }
 
-            if (@rmdir($dir) || ! File::isDirectory($dir)) {
-                $cleanedCount++;
-                $logs[] = [
-                    'time' => date('H:i:s'),
-                    'type' => 'info',
-                    'message' => '[CLEANUP] 🧹 Removed empty leftover folder: '.basename($dir),
-                ];
+            if (! $hasEssentialFiles) {
+                foreach ($entries as $entry) {
+                    $fullPath = "{$dir}/{$entry}";
+                    if (File::isFile($fullPath)) {
+                        @unlink($fullPath);
+                    }
+                }
+
+                if (@rmdir($dir) || ! File::isDirectory($dir)) {
+                    $cleanedCount++;
+                    $logs[] = [
+                        'time' => date('H:i:s'),
+                        'type' => 'info',
+                        'message' => '[CLEANUP] 🧹 Removed empty leftover folder: '.basename($dir),
+                    ];
+                }
             }
         }
+
+        return $cleanedCount;
     }
 
-    return $cleanedCount;
-}
-public function getExecutionStatus(): array
+    public function getExecutionStatus(): array
     {
         $state = Cache::get(self::CACHE_KEY);
 
@@ -1531,7 +1562,7 @@ public function getExecutionStatus(): array
     /**
      * Cancel ongoing operation
      */
-        /**
+    /**
      * Pause ongoing execution
      */
     public function pauseExecution(): array
@@ -1570,6 +1601,7 @@ public function getExecutionStatus(): array
 
         return $this->getExecutionStatus();
     }
+
     public function cancelExecution(): array
     {
         $state = Cache::get(self::CACHE_KEY);
@@ -1612,25 +1644,45 @@ public function getExecutionStatus(): array
         ];
     }
 
-    protected function updateDatabasePath(string $oldPath, string $newPath): void
+    protected function updateDatabasePath(string $oldPath, string $newPath, ?string $collectionName = null): void
     {
         try {
             $normOld = str_replace('\\', '/', $oldPath);
             $normNew = str_replace('\\', '/', $newPath);
             $newFolder = pathinfo($normNew, PATHINFO_DIRNAME);
 
+            $updateData = [
+                'file_path' => $normNew,
+                'folder_path' => $newFolder,
+            ];
+            if ($collectionName !== null) {
+                $updateData['collection_name'] = $collectionName ?: null;
+            }
+
             MediaItem::where('file_path', $oldPath)
                 ->orWhere('file_path', $normOld)
-                ->update([
-                    'file_path' => $normNew,
-                    'folder_path' => $newFolder,
-                ]);
+                ->update($updateData);
 
             Episode::where('file_path', $oldPath)
                 ->orWhere('file_path', $normOld)
                 ->update([
                     'file_path' => $normNew,
                 ]);
+
+            $episode = Episode::where('file_path', $normNew)->first();
+
+            if ($episode && $episode->series_id) {
+                // Also update parent Series folder_path if moved
+                $series = Series::find($episode->series_id);
+                if ($series) {
+                    $epDir = dirname($normNew);
+                    $epDirBase = strtolower(basename($epDir));
+                    $seriesFolder = preg_match('/^(season\s*\d+|s\d+|specials?)$/i', $epDirBase) ? dirname($epDir) : $epDir;
+                    if ($series->folder_path !== $seriesFolder) {
+                        $series->update(['folder_path' => $seriesFolder]);
+                    }
+                }
+            }
 
             // Synchronize any embedded subtitles attached to this video file to its new location
             $embeddedSubs = Subtitle::where('file_path', 'LIKE', "embedded:%:{$normOld}")

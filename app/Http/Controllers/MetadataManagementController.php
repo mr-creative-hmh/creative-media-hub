@@ -10,15 +10,18 @@ use App\Models\Season;
 use App\Models\Series;
 use App\Models\Subtitle;
 use App\Services\Metadata\ArtworkDownloadService;
+use App\Services\Metadata\LibraryMasterIndexService;
 use App\Services\Metadata\MetadataAggregator;
 use App\Services\Metadata\TmdbProvider;
 use App\Services\Organizer\SceneNameParserService;
 use App\Services\Scanner\VirtualLibraryScannerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\Finder\Finder;
 
 class MetadataManagementController extends Controller
 {
@@ -941,7 +944,7 @@ class MetadataManagementController extends Controller
                 foreach ($season->episodes as $ep) {
                     if ($ep->file_path && ! file_exists($ep->file_path)) {
                         $epFilename = basename($ep->file_path);
-                        $finder = new \Symfony\Component\Finder\Finder();
+                        $finder = new Finder;
                         try {
                             $finder->files()->in($newPath)->name($epFilename);
                             foreach ($finder as $file) {
@@ -949,7 +952,8 @@ class MetadataManagementController extends Controller
                                 $relinkedCount++;
                                 break;
                             }
-                        } catch (\Throwable $e) {}
+                        } catch (\Throwable $e) {
+                        }
                     }
                 }
             }
@@ -968,7 +972,7 @@ class MetadataManagementController extends Controller
             'H:/Entertainment/Movies',
             'D:/Downloads',
         ];
-        
+
         $monitoredJson = AppSetting::where('key', 'scanner_monitored_directories')->first()?->value;
         if ($monitoredJson) {
             $monitored = json_decode($monitoredJson, true);
@@ -982,9 +986,11 @@ class MetadataManagementController extends Controller
         $cleanTitleLower = strtolower($cleanTitle);
 
         foreach ($searchDirs as $dir) {
-            if (! is_dir($dir)) continue;
+            if (! is_dir($dir)) {
+                continue;
+            }
             try {
-                $finder = new \Symfony\Component\Finder\Finder();
+                $finder = new Finder;
                 $finder->files()->in($dir)->depth('< 4')->name('/\.(mp4|mkv|avi|mov|m4v)$/i');
                 foreach ($finder as $file) {
                     $filename = $file->getFilename();
@@ -995,7 +1001,8 @@ class MetadataManagementController extends Controller
                         }
                     }
                 }
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
         }
 
         return null;
@@ -1007,15 +1014,17 @@ class MetadataManagementController extends Controller
             'H:/Entertainment/TV Shows',
             'D:/Downloads',
         ];
-        
+
         $cleanTitle = trim(preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $series->title ?? ''));
         $cleanTitle = preg_replace('/\s+/', ' ', $cleanTitle);
         $cleanTitleLower = strtolower($cleanTitle);
 
         foreach ($searchDirs as $dir) {
-            if (! is_dir($dir)) continue;
+            if (! is_dir($dir)) {
+                continue;
+            }
             try {
-                $finder = new \Symfony\Component\Finder\Finder();
+                $finder = new Finder;
                 $finder->directories()->in($dir)->depth('< 3');
                 foreach ($finder as $directory) {
                     $dirNameLower = strtolower($directory->getFilename());
@@ -1023,7 +1032,8 @@ class MetadataManagementController extends Controller
                         return str_replace('\\', '/', $directory->getRealPath());
                     }
                 }
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
         }
 
         return null;
@@ -1038,5 +1048,123 @@ class MetadataManagementController extends Controller
         $bytes /= pow(1024, $pow);
 
         return round($bytes, $precision).' '.$units[$pow];
+    }
+
+    public function listCollections(): JsonResponse
+    {
+        $collections = MediaItem::whereNotNull('collection_name')
+            ->where('collection_name', '!=', '')
+            ->select('collection_name', 'collection_id', 'collection_id_source')
+            ->distinct()
+            ->orderBy('collection_name')
+            ->get()
+            ->map(fn ($c) => [
+                'name' => $c->collection_name,
+                'id' => $c->collection_id,
+                'source' => $c->collection_id_source ?: 'tmdb',
+                'count' => MediaItem::where('collection_name', $c->collection_name)->count(),
+            ]);
+
+        return response()->json($collections);
+    }
+
+    public function updateMovieCollection(Request $request, int $id): JsonResponse
+    {
+        $movie = MediaItem::findOrFail($id);
+        $validated = $request->validate([
+            'collection_name' => 'nullable|string|max:255',
+            'collection_id' => 'nullable|string|max:100',
+            'collection_id_source' => 'nullable|string|in:tmdb,imdb,anilist,tvdb,custom',
+            'reorganize_folder' => 'nullable|boolean',
+        ]);
+
+        $newColName = trim($validated['collection_name'] ?? '');
+        $newColId = $validated['collection_id'] ?? null;
+        $newSource = $validated['collection_id_source'] ?? ($newColId ? 'tmdb' : 'custom');
+        $shouldReorganize = (bool) ($validated['reorganize_folder'] ?? true);
+
+        $oldFilePath = $movie->file_path;
+        $oldDir = dirname($oldFilePath);
+
+        // Update model fields
+        $movie->collection_name = $newColName ?: null;
+        $movie->collection_id = $newColName ? ($newColId ?: null) : null;
+        $movie->collection_id_source = $newColName ? $newSource : null;
+
+        // Physical folder relocation if requested and file exists
+        if ($shouldReorganize && file_exists($oldFilePath)) {
+            $movieDirName = basename($oldDir);
+            $parentDir = dirname($oldDir);
+
+            // If oldDir was inside a collection folder e.g. /Action/My Spy Collection/My Spy (2020)
+            // parentDir is /Action/My Spy Collection, so genreDir is /Action
+            $genreDir = str_ends_with(basename($parentDir), ' Collection') ? dirname($parentDir) : $parentDir;
+
+            if (! empty($newColName)) {
+                // Move into {Genre}/{Collection Name} Collection/{Movie (Year)}/
+                $targetParent = $genreDir.'/'.$newColName.' Collection';
+                $targetDir = $targetParent.'/'.$movieDirName;
+
+                if ($oldDir !== $targetDir) {
+                    if (! is_dir($targetParent)) {
+                        @mkdir($targetParent, 0777, true);
+                    }
+                    if (@rename($oldDir, $targetDir)) {
+                        $fileName = basename($oldFilePath);
+                        $movie->file_path = $targetDir.'/'.$fileName;
+                        $movie->folder_path = $targetDir;
+
+                        // Update subtitle paths
+                        $subs = Subtitle::where('file_path', 'like', $oldDir.'%')->get();
+                        foreach ($subs as $sub) {
+                            $sub->update(['file_path' => str_replace($oldDir, $targetDir, $sub->file_path)]);
+                        }
+
+                        // Clean up old collection folder if empty
+                        if (str_ends_with(basename($parentDir), ' Collection')) {
+                            $remaining = glob($parentDir.'/*');
+                            if (empty($remaining)) {
+                                @rmdir($parentDir);
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Unlink: Move out to {Genre}/{Movie (Year)}/
+                $targetDir = $genreDir.'/'.$movieDirName;
+                if ($oldDir !== $targetDir) {
+                    if (@rename($oldDir, $targetDir)) {
+                        $fileName = basename($oldFilePath);
+                        $movie->file_path = $targetDir.'/'.$fileName;
+                        $movie->folder_path = $targetDir;
+
+                        $subs = Subtitle::where('file_path', 'like', $oldDir.'%')->get();
+                        foreach ($subs as $sub) {
+                            $sub->update(['file_path' => str_replace($oldDir, $targetDir, $sub->file_path)]);
+                        }
+
+                        if (str_ends_with(basename($parentDir), ' Collection')) {
+                            $remaining = glob($parentDir.'/*');
+                            if (empty($remaining)) {
+                                @rmdir($parentDir);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        $movie->save();
+
+        Cache::forget('collections.index.data.v3');
+        app(LibraryMasterIndexService::class)->buildAll(false, false, false);
+
+        return response()->json([
+            'success' => true,
+            'movie' => $movie->fresh(),
+            'message' => ! empty($newColName)
+                ? "Movie successfully linked to {$newColName}!"
+                : 'Movie successfully detached from collection!',
+        ]);
     }
 }

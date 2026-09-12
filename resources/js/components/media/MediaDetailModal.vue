@@ -20,6 +20,12 @@ const emit = defineEmits(['close', 'play', 'downloadSub', 'updated']);
 const { t, isRTL } = useI18n();
 
 const showFixMatch = ref(false);
+const fixMatchInitialTab = ref<'search' | 'direct_id' | 'collection' | 'manual'>('search');
+
+const openFixMatchWithTab = (tab: 'search' | 'direct_id' | 'collection' | 'manual' = 'search') => {
+    fixMatchInitialTab.value = tab;
+    showFixMatch.value = true;
+};
 const isDownloadingAr = ref(false);
 const isDownloadingEn = ref(false);
 
@@ -126,7 +132,7 @@ const handleMetadataUpdated = (updatedItem: any) => {
                             </button>
 
                             <button
-                                @click="showFixMatch = true"
+                                @click="openFixMatchWithTab('search')"
                                 class="flex items-center gap-2 px-4 py-3 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-white/10 transition-all cursor-pointer"
                             >
                                 <Sparkles class="w-4 h-4 text-cyan-500" />

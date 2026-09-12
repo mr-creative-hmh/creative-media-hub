@@ -405,4 +405,43 @@ class ComprehensiveSceneParserTest extends TestCase
         $this->assertEquals(2008, $p2['year']);
         $this->assertEquals('576p SD', $p2['resolution']);
     }
+
+    public function test_multi_episode_scene_parsing(): void
+    {
+        $cases = [
+            '2 Broke Girls - S06E01-E02 - And the Two Openings - Part One & Part Two [720p].mkv' => [
+                'season' => 6,
+                'episode' => 1,
+                'episode_end' => 2,
+                'clean_title' => '2 Broke Girls',
+            ],
+            'Friends.S01E01E02.The.Pilot.1080p.mkv' => [
+                'season' => 1,
+                'episode' => 1,
+                'episode_end' => 2,
+                'clean_title' => 'Friends',
+            ],
+            'Game.of.Thrones.S01E01-02.720p.mkv' => [
+                'season' => 1,
+                'episode' => 1,
+                'episode_end' => 2,
+                'clean_title' => 'Game of Thrones',
+            ],
+            'Modern.Family.S02E01.E02.HDTV.mkv' => [
+                'season' => 2,
+                'episode' => 1,
+                'episode_end' => 2,
+                'clean_title' => 'Modern Family',
+            ],
+        ];
+
+        foreach ($cases as $filename => $expected) {
+            $parsed = $this->parser->parse($filename);
+            $this->assertEquals('series', $parsed['type'], "Failed type for {$filename}");
+            $this->assertEquals($expected['season'], $parsed['season'], "Failed season for {$filename}");
+            $this->assertEquals($expected['episode'], $parsed['episode'], "Failed episode for {$filename}");
+            $this->assertEquals($expected['episode_end'], $parsed['episode_end'], "Failed episode_end for {$filename}");
+            $this->assertEquals($expected['clean_title'], $parsed['clean_title'], "Failed clean_title for {$filename}");
+        }
+    }
 }

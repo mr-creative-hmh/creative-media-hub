@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use App\Models\MediaItem;
+use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 class AuditAndCorrectCollectionsCommand extends Command
@@ -17,26 +17,27 @@ class AuditAndCorrectCollectionsCommand extends Command
 
     public function handle(): int
     {
-        $fix = (bool)$this->option('fix');
-        $alignPhysical = (bool)$this->option('align-physical');
-        $dryRun = (bool)$this->option('dry-run');
+        $fix = (bool) $this->option('fix');
+        $alignPhysical = (bool) $this->option('align-physical');
+        $dryRun = (bool) $this->option('dry-run');
 
-        $this->info("=== Starting Collections Audit & Correction ===");
+        $this->info('=== Starting Collections Audit & Correction ===');
         if ($dryRun) {
-            $this->comment("Mode: DRY RUN (No changes will be written)");
+            $this->comment('Mode: DRY RUN (No changes will be written)');
         } else {
-            $this->comment("Mode: " . ($fix ? "FIX DB " : "") . ($alignPhysical ? "ALIGN PHYSICAL " : "PREVIEW ONLY"));
+            $this->comment('Mode: '.($fix ? 'FIX DB ' : '').($alignPhysical ? 'ALIGN PHYSICAL ' : 'PREVIEW ONLY'));
         }
 
-        $this->auditAndFixVirtualCollections($fix && !$dryRun);
+        $this->auditAndFixVirtualCollections($fix && ! $dryRun);
 
         if ($alignPhysical) {
-            $this->alignPhysicalCollections(!$dryRun);
+            $this->alignPhysicalCollections(! $dryRun);
         } else {
             $this->previewPhysicalAlignments();
         }
 
         $this->info("\n=== Collections Audit Complete ===");
+
         return Command::SUCCESS;
     }
 
@@ -46,7 +47,7 @@ class AuditAndCorrectCollectionsCommand extends Command
     protected function auditAndFixVirtualCollections(bool $apply): void
     {
         $this->newLine();
-        $this->info("--- 1. Virtual Collection Audit & ID Normalization ---");
+        $this->info('--- 1. Virtual Collection Audit & ID Normalization ---');
 
         // 1. Omar & Salma Collection
         $omarMovies = MediaItem::where('title', 'like', '%Omar%Salma%')
@@ -129,10 +130,10 @@ class AuditAndCorrectCollectionsCommand extends Command
         }
 
         // 5. Christopher Nolan Grouping Disentanglement
-        $batmanMovies = MediaItem::where(function($q) {
+        $batmanMovies = MediaItem::where(function ($q) {
             $q->where('title', 'Batman Begins')
-              ->orWhere('title', 'The Dark Knight')
-              ->orWhere('title', 'The Dark Knight Rises');
+                ->orWhere('title', 'The Dark Knight')
+                ->orWhere('title', 'The Dark Knight Rises');
         })->get();
 
         foreach ($batmanMovies as $m) {
@@ -146,7 +147,102 @@ class AuditAndCorrectCollectionsCommand extends Command
             }
         }
 
-        $this->info("  ✓ Virtual collection checks and normalizations complete.");
+        // 6. Men in Black Collection Unification
+        $mibMovies = MediaItem::where('collection_name', 'like', '%Men in Black%')
+            ->orWhere('title', 'like', '%Men in Black%')
+            ->get();
+        foreach ($mibMovies as $m) {
+            if ($m->collection_id !== 86055 || $m->collection_name !== 'Men in Black Collection') {
+                $this->line("  * Unifying Men in Black [ID {$m->id}] {$m->title} -> collection_id: 86055, name: Men in Black Collection");
+                if ($apply) {
+                    $m->collection_id = 86055;
+                    $m->collection_name = 'Men in Black Collection';
+                    $m->collection_id_source = 'tmdb';
+                    $m->save();
+                }
+            }
+        }
+
+        // 7. Housefull Collection Normalization
+        $housefullMovies = MediaItem::where('collection_name', 'like', '%Housefull%')
+            ->orWhere('title', 'like', '%Housefull%')
+            ->get();
+        foreach ($housefullMovies as $m) {
+            if ($m->collection_id !== 142015 || $m->collection_name !== 'Housefull Collection') {
+                $this->line("  * Normalizing Housefull [ID {$m->id}] {$m->title} -> collection_id: 142015, name: Housefull Collection");
+                if ($apply) {
+                    $m->collection_id = 142015;
+                    $m->collection_name = 'Housefull Collection';
+                    $m->collection_id_source = 'tmdb';
+                    $m->save();
+                }
+            }
+        }
+
+        // 8. My Spy Collection Normalization
+        $mySpyMovies = MediaItem::where('collection_name', 'like', '%My Spy%')
+            ->orWhere('title', 'like', '%My Spy%')
+            ->get();
+        foreach ($mySpyMovies as $m) {
+            if ($m->collection_id !== 1090373 || $m->collection_name !== 'My Spy Collection') {
+                $this->line("  * Normalizing My Spy [ID {$m->id}] {$m->title} -> collection_id: 1090373, name: My Spy Collection");
+                if ($apply) {
+                    $m->collection_id = 1090373;
+                    $m->collection_name = 'My Spy Collection';
+                    $m->collection_id_source = 'tmdb';
+                    $m->save();
+                }
+            }
+        }
+
+        // 9. Sync movies physically inside collection folders with empty collection_name in DB
+        $unlinkedMovies = MediaItem::where(function ($q) {
+            $q->whereNull('collection_name')->orWhere('collection_name', '');
+        })->get();
+
+        foreach ($unlinkedMovies as $m) {
+            if (! $m->file_path || ! file_exists($m->file_path)) {
+                continue;
+            }
+            $path = str_replace('\\', '/', $m->file_path);
+            $parentDir = dirname(dirname($path));
+            $parentName = basename($parentDir);
+
+            if (preg_match('/^(.*?)(?:\s+(?:Collection|Trilogy|Anthology|Saga|Boxset))$/ui', $parentName, $cMatch)) {
+                $colName = trim($parentName);
+                if ($colName === 'Christopher Nolan Collection') {
+                    // Standalone director folder - handled in physical alignment
+                    continue;
+                }
+
+                $sibling = MediaItem::where('collection_name', $colName)->whereNotNull('collection_id')->first();
+                $colId = $sibling?->collection_id;
+                $colSource = $sibling?->collection_id_source ?: 'tmdb';
+
+                if (! $colId) {
+                    $knownIds = [
+                        'Housefull Collection' => 142015,
+                        'My Spy Collection' => 1090373,
+                        'Mardaani Collection' => 736592,
+                        'Despicable Me Collection' => 86066,
+                        'Transformers Collection' => 8650,
+                        'A Quiet Place Collection' => 521226,
+                        'Ip Man Collection' => 70068,
+                    ];
+                    $colId = $knownIds[$colName] ?? null;
+                }
+
+                $this->line("  * Syncing movie from disk collection [ID {$m->id}] {$m->title} -> collection: '{$colName}', id: ".($colId ?: 'null'));
+                if ($apply) {
+                    $m->collection_name = $colName;
+                    $m->collection_id = $colId;
+                    $m->collection_id_source = $colSource;
+                    $m->save();
+                }
+            }
+        }
+
+        $this->info('  ✓ Virtual collection checks and normalizations complete.');
     }
 
     /**
@@ -155,10 +251,10 @@ class AuditAndCorrectCollectionsCommand extends Command
     protected function previewPhysicalAlignments(): void
     {
         $this->newLine();
-        $this->info("--- 2. Physical Collection Alignment (Preview) ---");
+        $this->info('--- 2. Physical Collection Alignment (Preview) ---');
 
         $plan = $this->buildPhysicalAlignmentPlan();
-        $this->info("  Found " . count($plan) . " collection movies currently in standalone folders.");
+        $this->info('  Found '.count($plan).' collection movies currently in standalone folders.');
 
         foreach (array_slice($plan, 0, 15) as $item) {
             $this->line("    * [ID {$item['movie']->id}] {$item['movie']->title} ({$item['movie']->collection_name}):");
@@ -167,10 +263,10 @@ class AuditAndCorrectCollectionsCommand extends Command
         }
 
         if (count($plan) > 15) {
-            $this->line("    ... and " . (count($plan) - 15) . " more.");
+            $this->line('    ... and '.(count($plan) - 15).' more.');
         }
 
-        $this->comment("  To execute physical moves, run with --align-physical.");
+        $this->comment('  To execute physical moves, run with --align-physical.');
     }
 
     /**
@@ -179,10 +275,10 @@ class AuditAndCorrectCollectionsCommand extends Command
     protected function alignPhysicalCollections(bool $apply): void
     {
         $this->newLine();
-        $this->info("--- 2. Executing Physical Collection Alignment ---");
+        $this->info('--- 2. Executing Physical Collection Alignment ---');
 
         $plan = $this->buildPhysicalAlignmentPlan();
-        $this->info("  Moving " . count($plan) . " collection movies into canonical collection directories...");
+        $this->info('  Moving '.count($plan).' collection movies into canonical collection directories...');
 
         $successCount = 0;
 
@@ -197,25 +293,28 @@ class AuditAndCorrectCollectionsCommand extends Command
             $this->line("     To  : {$targetDir}");
 
             if ($apply) {
-                if (!file_exists($currentDir)) {
+                if (! file_exists($currentDir)) {
                     $this->error("     Source directory does not exist: {$currentDir}");
+
                     continue;
                 }
 
-                if (!is_dir($targetParent)) {
+                if (! is_dir($targetParent)) {
                     @mkdir($targetParent, 0777, true);
                 }
 
                 // If targetDir already exists (e.g. partial previous run), don't overwrite blindly
                 if (file_exists($targetDir)) {
                     $this->warn("     Target directory already exists: {$targetDir}");
+
                     continue;
                 }
 
                 // Atomic folder rename/move
                 $moved = @rename($currentDir, $targetDir);
-                if (!$moved) {
+                if (! $moved) {
                     $this->error("     Failed to move folder from {$currentDir} to {$targetDir}");
+
                     continue;
                 }
 
@@ -229,7 +328,7 @@ class AuditAndCorrectCollectionsCommand extends Command
                 $movie->folder_path = $newDir;
                 $movie->save();
 
-                $this->info("     ✓ Successfully moved and updated DB record.");
+                $this->info('     ✓ Successfully moved and updated DB record.');
                 $successCount++;
             }
         }
@@ -249,7 +348,9 @@ class AuditAndCorrectCollectionsCommand extends Command
         $plan = [];
 
         foreach ($collMovies as $m) {
-            if (!file_exists($m->file_path)) continue;
+            if (! file_exists($m->file_path)) {
+                continue;
+            }
 
             $normPath = str_replace('\\', '/', $m->file_path);
             $parts = explode('/', $normPath);
@@ -257,20 +358,25 @@ class AuditAndCorrectCollectionsCommand extends Command
             // Check if already in a collection subfolder
             $inCollectionSubfolder = false;
             foreach ($parts as $p) {
+                if ($p === 'Christopher Nolan Collection') {
+                    // Non-franchise director folder: must be realigned!
+                    continue;
+                }
                 if (stripos($p, 'collection') !== false || stripos($p, 'trilogy') !== false || stripos($p, 'saga') !== false || stripos($p, 'anthology') !== false) {
                     $inCollectionSubfolder = true;
                     break;
                 }
             }
 
-            if (!$inCollectionSubfolder) {
+            if (! $inCollectionSubfolder) {
                 $movieDir = str_replace('\\', '/', dirname($m->file_path));
-                $genreDir = dirname($movieDir);
+                $parent = dirname($movieDir);
+                $genreDir = basename($parent) === 'Christopher Nolan Collection' ? dirname($parent) : $parent;
                 $movieFolderName = basename($movieDir);
 
                 // Find matching existing collection directory in this genre, or create a clean canonical one
                 $collFolder = $this->resolveCanonicalCollectionFolder($genreDir, $m->collection_name);
-                $targetDir = $genreDir . '/' . $collFolder . '/' . $movieFolderName;
+                $targetDir = $genreDir.'/'.$collFolder.'/'.$movieFolderName;
 
                 $plan[] = [
                     'movie' => $m,
@@ -279,6 +385,35 @@ class AuditAndCorrectCollectionsCommand extends Command
                     'collection_name' => $collFolder,
                 ];
             }
+        }
+
+        // Also check standalone movies sitting in Christopher Nolan Collection (Inception, Interstellar, Memento, etc.)
+        $nolanStandalone = MediaItem::where('file_path', 'like', '%Christopher Nolan Collection%')->get();
+        foreach ($nolanStandalone as $m) {
+            if (! file_exists($m->file_path)) {
+                continue;
+            }
+            $movieDir = str_replace('\\', '/', dirname($m->file_path));
+            $nolanDir = dirname($movieDir);
+            if (basename($nolanDir) !== 'Christopher Nolan Collection') {
+                continue;
+            }
+            $genreDir = dirname($nolanDir);
+            $movieFolderName = basename($movieDir);
+
+            // If already queued above (e.g. Batman movies), skip
+            $alreadyQueued = collect($plan)->contains(fn ($p) => $p['movie']->id === $m->id);
+            if ($alreadyQueued) {
+                continue;
+            }
+
+            $targetDir = $genreDir.'/'.$movieFolderName;
+            $plan[] = [
+                'movie' => $m,
+                'current_dir' => $movieDir,
+                'target_dir' => $targetDir,
+                'collection_name' => '(Standalone Movie Out of Director Folder)',
+            ];
         }
 
         return $plan;
@@ -290,13 +425,13 @@ class AuditAndCorrectCollectionsCommand extends Command
     protected function resolveCanonicalCollectionFolder(string $genreDir, string $rawCollectionName): string
     {
         // 1. Check existing directories in $genreDir
-        $existing = glob($genreDir . '/*', GLOB_ONLYDIR);
+        $existing = glob($genreDir.'/*', GLOB_ONLYDIR);
         $normSearch = strtolower(trim(preg_replace('/[^a-zA-Z0-9]/', '', $rawCollectionName)));
 
         foreach ($existing as $dir) {
             $base = basename($dir);
             $normBase = strtolower(trim(preg_replace('/[^a-zA-Z0-9]/', '', $base)));
-            
+
             // Exact match on alphanumeric chars
             if ($normSearch === $normBase) {
                 return $base;
@@ -313,7 +448,7 @@ class AuditAndCorrectCollectionsCommand extends Command
         $clean = trim(preg_replace('[/\\\\:*?"<>|]', '', $clean));
         $clean = preg_replace('/\s+/', ' ', $clean);
 
-        if (!preg_match('/(collection|trilogy|saga|anthology)$/i', $clean)) {
+        if (! preg_match('/(collection|trilogy|saga|anthology)$/i', $clean)) {
             $clean .= ' Collection';
         }
 

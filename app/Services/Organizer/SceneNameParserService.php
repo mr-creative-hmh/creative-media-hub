@@ -88,8 +88,8 @@ class SceneNameParserService
         $group = null;
         $isParentSeasonFolder = false;
 
-                // Remove soft hyphens, zero-width spaces, and normalize typographical quotes/pipes
-        $filename = str_replace(["\xad", "\xe2\x80\x8b", "¦"], ['', '', '-'], $filename);
+        // Remove soft hyphens, zero-width spaces, and normalize typographical quotes/pipes
+        $filename = str_replace(["\xad", "\xe2\x80\x8b", '¦'], ['', '', '-'], $filename);
         $filename = str_replace('الحزء', 'الجزء', $filename);
         // Strip common YouTube channel and production promotional prefixes
         $filename = preg_replace('/^(?:Future Cinema & TV Productions|المستقبل للإنتاج|قناة .*? الرسمية)[\s\-–¦|]+(?:مسلسل\s+)?/ui', '', $filename);
@@ -227,7 +227,7 @@ class SceneNameParserService
         if (preg_match('/-(?:\[)?([a-zA-Z0-9\.]+)(?:\])?$/i', $working, $gMatches)) {
             $groupCandidate = $gMatches[1];
             $isSeasonEp = preg_match('/[sS]\d{1,2}[eE]\d{1,3}|\b(?:ep|episode|part)\s*\d+|\b\d{1,2}x\d{1,3}\b/i', $groupCandidate);
-            if (! $isSeasonEp && ! preg_match('/^(?:x264|x265|h264|h265|hevc|1080p|720p|576p|540p|480p|360p|240p|2160p|4k|aac|ddp|mp4|mkv|\d+)$/i', $groupCandidate)) {
+            if (! $isSeasonEp && ! preg_match('/^(?:x264|x265|h264|h265|hevc|1080p|720p|576p|540p|480p|360p|240p|2160p|4k|aac|ddp|mp4|mkv|\d+)$/i', $groupCandidate) && ! preg_match('/^\d{1,3}\./', $groupCandidate)) {
                 $group = $groupCandidate;
                 $working = substr($working, 0, -strlen($gMatches[0]));
             }
@@ -255,15 +255,19 @@ class SceneNameParserService
         $rawSeriesPart = '';
         $rawAfterPart = '';
 
-        // Pattern A: S00E00 Specials / Multi-episode S01E01E02 / S01E01-E02
-        if (preg_match('/^(.*?)[._\-\s]+[sS](\d{1,2})[eE](\d{1,3})(?:(?:[eE]|[-_ ])(\d{1,3}))[._\-\s]*(.*?)$/i', $working, $tvMatch)) {
-            $type = 'series';
-            $isSeriesDetected = true;
-            $rawSeriesPart = $tvMatch[1];
-            $season = (int) $tvMatch[2];
-            $episode = (int) $tvMatch[3];
-            $episodeEnd = (int) $tvMatch[4];
-            $rawAfterPart = $tvMatch[5];
+        // Pattern A: S00E00 Specials / Multi-episode S01E01E02 / S01E01-E02 / S01E01-02 / S01E01.E02
+        if (preg_match('/^(.*?)[._\-\s]+[sS](\d{1,2})[eE](\d{1,3})(?:(?:[-_ .]?[eE]|[-_])(\d{1,3}))(?!\d|[kKpP])[._\-\s]*(.*?)$/i', $working, $tvMatch)) {
+            $matchedEnd = (int) $tvMatch[4];
+            $matchedEp = (int) $tvMatch[3];
+            if ($matchedEnd > $matchedEp && $matchedEnd <= $matchedEp + 15) {
+                $type = 'series';
+                $isSeriesDetected = true;
+                $rawSeriesPart = $tvMatch[1];
+                $season = (int) $tvMatch[2];
+                $episode = $matchedEp;
+                $episodeEnd = $matchedEnd;
+                $rawAfterPart = $tvMatch[5];
+            }
         }
         // Pattern B: Standard S01E02 / S00E01 / S00E00
         elseif (preg_match('/^(.*?)(?:[._\-\s]|^)[sS](\d{1,2})[eE](\d{1,3})[._\-\s]*(.*?)$/i', $working, $tvMatch)) {
@@ -587,7 +591,6 @@ class SceneNameParserService
         return '240p';
     }
 
-    
     /**
      * Map of keywords/patterns to canonical movie collection and franchise names.
      */
@@ -711,7 +714,9 @@ class SceneNameParserService
 
         foreach ($this->canonicalFranchises as $keyword => $canonicalName) {
             foreach ($searchTerms as $term) {
-                if (empty($term)) continue;
+                if (empty($term)) {
+                    continue;
+                }
                 if ($term === $keyword || str_starts_with($term, $keyword) || str_contains($term, $keyword)) {
                     return $canonicalName;
                 }

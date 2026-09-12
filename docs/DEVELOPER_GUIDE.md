@@ -43,18 +43,21 @@ npm run dev
 
 ## 2. Running Automated Tests & Quality Checks
 
-Creative Media Hub includes automated unit and feature test suites covering parser behavior, route integrity, streaming responses, metadata cascades, subtitle health verification, and direct ID lookup.
+Creative Media Hub includes automated unit and feature test suites covering parser behavior, route integrity, streaming responses, metadata cascades, subtitle health verification, direct ID lookup, multi-episode ingestion, and collection auditing.
 
 ```bash
-# Run the complete PHPUnit test suite (71 tests, 600 assertions)
+# Run the complete PHPUnit test suite
 php artisan test
 
-# Run specific feature test suites
+# Run specific feature and unit test suites
+php artisan test --filter=ComprehensiveSceneParserTest
+php artisan test --filter=ScannerRelocationAndUpgradeTest
+php artisan test --filter=MetadataRenameAndCollectionTest
+php artisan test --filter=MediaScoutTest
 php artisan test --filter=SubtitleHealthCheckTest
 php artisan test --filter=MetadataDirectIdLookupTest
-php artisan test --filter=SceneNameParserServiceTest
+php artisan test --filter=OrganizerServicesTest
 php artisan test --filter=StreamingAndRoutesTest
-php artisan test --filter=VirtualLibraryScannerTest
 php artisan test --filter=DashboardTest
 
 # Static Type Checking (Vue 3 + TypeScript)
@@ -86,9 +89,34 @@ php artisan subtitles:check --path="D:/Media/Movies" --fix
 
 ---
 
-## 3. Extending the System
+## 4. Collection Franchise Auditor CLI
 
-### 3.1. Adding a New Metadata Provider
+To audit movie collections, fix unlinked franchise sequels, and align physical directories:
+
+```bash
+# Audit collections and identify unlinked movies / single-movie false positives
+php artisan library:audit-collections
+
+# Automatically associate unlinked sequels and save TMDb collection IDs
+php artisan library:audit-collections --fix
+
+# Perform both database association and physical disk folder realignment
+php artisan library:audit-collections --fix --align-physical
+```
+
+---
+
+## 5. Multi-Episode Scene Parsing & Hardlink Rules
+
+- **Parser Support**: `SceneNameParserService` recognizes `S01E01-E02`, `S01E01E02`, `S01E01-02`, and `S01E01.E02`.
+- **Scanner Entity Creation**: `VirtualLibraryScannerService` creates separate `Episode` records for each episode in the range with distinct TMDb titles and synopses.
+- **Physical Hardlink Tokens**: In `PhysicalOrganizerService`, `{Episode:02}` automatically expands to `01-E02` for multi-episode files, and `updateDatabasePath()` updates all sibling episode database records in one query.
+
+---
+
+## 6. Extending the System
+
+### 6.1. Adding a New Metadata Provider
 1. Create a new class in `app/Services/Metadata/Providers/` implementing `MetadataProviderInterface`.
 2. Implement required methods:
    - `searchMovie(string $query, ?int $year): array`
@@ -97,15 +125,16 @@ php artisan subtitles:check --path="D:/Media/Movies" --fix
    - `getSeriesDetails(string|int $id, string $lang): ?array`
 3. Register the provider in `app/Services/Metadata/MetadataAggregator.php` within `$this->providers`.
 
-### 3.2. Adding Scene Parsing Rules
+### 6.2. Adding Scene Parsing Rules
 1. Open `app/Services/Organizer/SceneNameParserService.php`.
 2. Add new regex patterns in `parse()` before the fallback patterns.
-3. Always add unit test cases in `tests/Unit/SceneNameParserServiceTest.php` to verify no regressions.
+3. Always add unit test cases in `tests/Unit/ComprehensiveSceneParserTest.php` to verify no regressions.
 
 ---
 
-## 4. Code Standards & Architecture Guidelines
+## 7. Code Standards & Architecture Guidelines
 - **Strict Types**: Always declare types for method parameters and return values.
 - **Eloquent Relations**: Always eager-load relations (`with(['genres', 'subtitles'])`) in controllers to prevent N+1 query overhead.
 - **Async Execution**: Avoid executing blocking operations (like heavy FFmpeg transcodes) inside synchronous web request loops; delegate to background workers or streaming generators.
 - **Bilingual Consistency**: Ensure all new UI strings are added to both `resources/js/i18n/en.json` and `resources/js/i18n/ar.json`.
+- **Laravel Pint**: Run `vendor/bin/pint --dirty --format agent` before finalizing any PHP code changes.

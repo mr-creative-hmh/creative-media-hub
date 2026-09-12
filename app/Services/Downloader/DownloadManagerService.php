@@ -5,6 +5,7 @@ namespace App\Services\Downloader;
 use App\Models\AppSetting;
 use App\Models\DownloadItem;
 use App\Services\Scanner\VirtualLibraryScannerService;
+use App\Services\Scout\LibraryAcquisitionService;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -12,7 +13,9 @@ use Illuminate\Support\Facades\Log;
 class DownloadManagerService
 {
     protected BencodeParserService $bencodeParser;
+
     protected VirtualLibraryScannerService $scannerService;
+
     protected Aria2Service $aria2Service;
 
     public function __construct(
@@ -441,6 +444,7 @@ class DownloadManagerService
                         $item->save();
                     }
                     $processed++;
+
                     continue;
                 }
             }
@@ -606,6 +610,11 @@ class DownloadManagerService
             }
             $item->update(['status' => 'paused', 'speed_bytes_sec' => 0]);
 
+            $hasActive = DownloadItem::where('status', 'downloading')->exists();
+            if (! $hasActive && $this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
+                $this->aria2Service->stopDaemonIfIdle();
+            }
+
             return true;
         }
 
@@ -664,6 +673,11 @@ class DownloadManagerService
 
         $item->delete();
 
+        $hasActive = DownloadItem::where('status', 'downloading')->exists();
+        if (! $hasActive && $this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
+            $this->aria2Service->stopDaemonIfIdle();
+        }
+
         return true;
     }
 
@@ -698,7 +712,8 @@ class DownloadManagerService
         try {
             // If item has auto_organize flag, hand over to LibraryAcquisitionService for canonical H:\Entertainment placement
             if (! empty($item->torrent_files['auto_organize'])) {
-                app(\App\Services\Scout\LibraryAcquisitionService::class)->handleCompletedDownload($item);
+                app(LibraryAcquisitionService::class)->handleCompletedDownload($item);
+
                 return;
             }
 
@@ -709,5 +724,15 @@ class DownloadManagerService
         } catch (\Throwable $e) {
             Log::warning("Auto-indexing failed for download {$item->title}: ".$e->getMessage());
         }
+    }
+
+    public function getDaemonStatus(): array
+    {
+        return $this->aria2Service->getDaemonStatus();
+    }
+
+    public function stopDaemon(): bool
+    {
+        return $this->aria2Service->stopDaemon();
     }
 }

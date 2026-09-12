@@ -252,11 +252,11 @@ const filteredCollections = computed(() => {
                             <!-- Movie titles preview chips -->
                             <div class="flex flex-wrap gap-1.5 pt-1">
                                 <span
-                                    v-for="(m, idx) in (Array.isArray(col.movies) ? col.movies : Object.values(col.movies || {})).slice(0, 3)"
-                                    :key="m.id"
+                                    v-for="(m, idx) in ((Array.isArray(col.movies) ? col.movies : Object.values(col.movies || {})) as any[]).slice(0, 3)"
+                                    :key="(m as any).id"
                                     class="text-[10px] font-medium px-2 py-0.5 rounded-md bg-white/[0.05] border border-white/10 text-slate-300 truncate max-w-[140px]"
                                 >
-                                    {{ m.title }}
+                                    {{ (m as any).title }}
                                 </span>
                                 <span
                                     v-if="(Array.isArray(col.movies) ? col.movies.length : Object.keys(col.movies || {}).length) > 3"

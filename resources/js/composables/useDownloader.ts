@@ -71,6 +71,7 @@ export interface DownloaderInspection {
 
 const downloads = ref<DownloadItem[]>([]);
 const isWorkerRunning = ref(false);
+const daemonStatus = ref<any>(null);
 let workerInterval: any = null;
 
 export function useDownloader() {
@@ -225,6 +226,33 @@ export function useDownloader() {
         } catch (e) {}
     };
 
+        const fetchDaemonStatus = async () => {
+        try {
+            const res = await fetch('/api/downloads/daemon/status');
+            if (res.ok) {
+                daemonStatus.value = await res.json();
+            }
+        } catch (e) {}
+    };
+
+    const stopDaemon = async () => {
+        try {
+            const res = await fetch('/api/downloads/daemon/stop', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                },
+            });
+            if (res.ok) {
+                const data = await res.json();
+                daemonStatus.value = data.daemon;
+                return true;
+            }
+        } catch (e) {}
+        return false;
+    };
+
     const startBackgroundWorker = () => {
         if (isWorkerRunning.value) return;
         isWorkerRunning.value = true;
@@ -354,5 +382,8 @@ export function useDownloader() {
         resumeDownload,
         retryDownload,
         deleteDownload,
+        daemonStatus,
+        fetchDaemonStatus,
+        stopDaemon,
     };
 }

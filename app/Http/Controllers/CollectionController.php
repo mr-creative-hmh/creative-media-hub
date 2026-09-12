@@ -4,17 +4,23 @@ namespace App\Http\Controllers;
 
 use App\Models\MediaItem;
 use App\Services\Metadata\LibraryMasterIndexService;
+use App\Services\Scout\LibraryGapService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
-use Illuminate\Support\Facades\Cache;
 use Inertia\Response;
 
 class CollectionController extends Controller
 {
-    public function index(Request $request, LibraryMasterIndexService $masterService): Response
+    public function index(Request $request, LibraryMasterIndexService $masterService, LibraryGapService $gapService): Response
     {
         $search = $request->input('search');
+
+        if ($request->boolean('refresh')) {
+            Cache::forget('collections.index.data.v5');
+            $gapService->getGroupedCollectionGaps(true);
+        }
 
         // Query all movies that have a collection_name
         $query = MediaItem::query()
@@ -30,22 +36,23 @@ class CollectionController extends Controller
             });
         }
 
-        if (empty($search) && !app()->environment('testing')) {
-            $raw = Cache::remember('collections.index.data.v3', 3600, function () use ($masterService) {
+        if (empty($search) && ! app()->environment('testing')) {
+            $raw = Cache::remember('collections.index.data.v5', 3600, function () use ($masterService, $gapService) {
                 $allMovies = MediaItem::query()
                     ->whereNotNull('collection_name')
                     ->where('collection_name', '!=', '')
                     ->with(['genres', 'subtitles'])
                     ->orderBy('release_year')
                     ->get();
-                return $this->compileCollections($allMovies, $masterService)->toArray();
+
+                return $this->compileCollections($allMovies, $masterService, $gapService)->toArray();
             });
             $collections = collect(array_values($raw));
             $totalFranchiseMovies = $collections->sum('movies_count');
         } else {
             $allMoviesInCollections = $query->orderBy('release_year')->get();
-            $collections = $this->compileCollections($allMoviesInCollections, $masterService);
-            $totalFranchiseMovies = $allMoviesInCollections->count();
+            $collections = $this->compileCollections($allMoviesInCollections, $masterService, $gapService);
+            $totalFranchiseMovies = $collections->sum('movies_count');
         }
 
         return Inertia::render('Collections/Index', [
@@ -54,11 +61,11 @@ class CollectionController extends Controller
                 'search' => $search,
             ],
             'total_collections' => $collections->count(),
-            'total_franchise_movies' => $totalFranchiseMovies ?? $collections->sum('movies_count'),
+            'total_franchise_movies' => $totalFranchiseMovies,
         ]);
     }
 
-    public function show(string $slug, LibraryMasterIndexService $masterService): Response
+    public function show(string $slug, LibraryMasterIndexService $masterService, LibraryGapService $gapService): Response
     {
         // Find collection by slug
         $all = MediaItem::whereNotNull('collection_name')->where('collection_name', '!=', '')->get();
@@ -79,43 +86,48 @@ class CollectionController extends Controller
             ->orderBy('release_year')
             ->get()
             ->unique(fn ($m) => $m->tmdb_id ?: strtolower(trim($m->title)))
-            ->values()
-            ->map(function ($m) {
-                $slug = $m->slug ?: "movie-{$m->id}";
+            ->values();
 
-                return [
-                    'id' => $m->id,
-                    'type' => 'movie',
-                    'title' => $m->title,
-                    'title_ar' => $m->title_ar,
-                    'original_title' => $m->original_title,
-                    'slug' => $slug,
-                    'slug_url' => route('movies.show.slug', $slug),
-                    'release_year' => $m->release_year,
-                    'rating' => $m->rating,
-                    'poster_path' => $m->poster_path,
-                    'backdrop_path' => $m->backdrop_path,
-                    'overview' => $m->overview,
-                    'overview_ar' => $m->overview_ar,
-                    'runtime_minutes' => $m->runtime_minutes,
-                    'resolution' => $m->resolution,
-                    'video_codec' => $m->video_codec,
-                    'audio_codec' => $m->audio_codec,
-                    'file_path' => $m->file_path,
-                    'collection_name' => $m->collection_name,
-                    'is_favorite' => (bool) $m->is_favorite,
-                    'trailer_url' => $m->trailer_url,
-                    'genres' => $m->genres,
-                    'people' => $m->people,
-                    'directors' => $m->directors,
-                    'actors' => $m->actors,
-                    'subtitles' => $m->subtitles,
-                    'subtitles_count' => $m->subtitles->count(),
-                    'watch_history' => $m->watchHistories->first(),
-                    'stream_url' => route('stream.movie', $m->id),
-                    'remux_url' => route('stream.remux.movie', $m->id),
-                ];
-            });
+        if ($movies->count() < 2) {
+            abort(404, 'Movie collection not found');
+        }
+
+        $movies = $movies->map(function ($m) {
+            $slug = $m->slug ?: "movie-{$m->id}";
+
+            return [
+                'id' => $m->id,
+                'type' => 'movie',
+                'title' => $m->title,
+                'title_ar' => $m->title_ar,
+                'original_title' => $m->original_title,
+                'slug' => $slug,
+                'slug_url' => route('movies.show.slug', $slug),
+                'release_year' => $m->release_year,
+                'rating' => $m->rating,
+                'poster_path' => $m->poster_path,
+                'backdrop_path' => $m->backdrop_path,
+                'overview' => $m->overview,
+                'overview_ar' => $m->overview_ar,
+                'runtime_minutes' => $m->runtime_minutes,
+                'resolution' => $m->resolution,
+                'video_codec' => $m->video_codec,
+                'audio_codec' => $m->audio_codec,
+                'file_path' => $m->file_path,
+                'collection_name' => $m->collection_name,
+                'is_favorite' => (bool) $m->is_favorite,
+                'trailer_url' => $m->trailer_url,
+                'genres' => $m->genres,
+                'people' => $m->people,
+                'directors' => $m->directors,
+                'actors' => $m->actors,
+                'subtitles' => $m->subtitles,
+                'subtitles_count' => $m->subtitles->count(),
+                'watch_history' => $m->watchHistories->first(),
+                'stream_url' => route('stream.movie', $m->id),
+                'remux_url' => route('stream.remux.movie', $m->id),
+            ];
+        });
 
         $years = $movies->pluck('release_year')->filter()->sort()->values();
         $yearSpan = $years->isNotEmpty()
@@ -125,44 +137,70 @@ class CollectionController extends Controller
         $poster = $movies->first()['collection_poster'] ?? $movies->pluck('poster_path')->filter()->first();
         $backdrop = $movies->pluck('backdrop_path')->filter()->first();
 
-        // Check Master Index for franchise parts
-        $ext = $masterService->getExtendedCollection((int)($movies->first()['collection_id'] ?? 0));
-        if (!$ext) {
-            $extSlug = Str::slug($matchedName);
-            $extendedMap = collect($masterService->getAllExtendedCollections())->keyBy(fn ($c) => Str::slug($c['name'] ?? ''));
-            $ext = $extendedMap->get($extSlug);
-        }
+        $colId = (int) ($movies->first()['collection_id'] ?? 0);
+        $scoutGaps = $gapService->getGroupedCollectionGaps(false);
+        $gapsByColId = collect($scoutGaps)->keyBy('collection_id');
+        $gapsBySlug = collect($scoutGaps)->keyBy(fn ($g) => Str::slug($g['collection_name'] ?? ''));
 
-        $totalParts = $ext ? count($ext['parts'] ?? []) : $movies->count();
-        $totalParts = max($totalParts, $movies->count());
-        $ownedCount = $movies->count();
-        $isComplete = $ownedCount >= $totalParts;
-        $completionPct = round(($ownedCount / max(1, $totalParts)) * 100);
+        $gap = $gapsByColId->get($colId) ?? $gapsBySlug->get(Str::slug($matchedName));
 
-        $missingParts = [];
-        if ($ext && !empty($ext['parts'])) {
-            $ownedTmdb = $movies->pluck('tmdb_id')->filter()->toArray();
-            $ownedTitles = $movies->pluck('title')->map(fn ($t) => strtolower(trim($t)))->toArray();
+        if ($gap && ! empty($gap['missing_movies'])) {
+            $totalParts = max((int) ($gap['total_count'] ?? 0), $movies->count());
+            $ownedCount = $movies->count();
+            $isComplete = false;
+            $completionPct = $totalParts > 0 ? round(($ownedCount / $totalParts) * 100) : 100;
+            $missingParts = array_map(function ($m) {
+                return [
+                    'tmdb_id' => $m['tmdb_id'] ?? null,
+                    'title' => $m['movie_title'] ?? ($m['title'] ?? ''),
+                    'title_ar' => $m['title_ar'] ?? null,
+                    'release_year' => $m['release_year'] ?? null,
+                    'poster_path' => $m['poster_path'] ?? null,
+                    'overview' => $m['overview'] ?? null,
+                ];
+            }, $gap['missing_movies']);
+        } else {
+            // Check Master Index for franchise parts
+            $ext = $masterService->getExtendedCollection($colId);
+            if (! $ext) {
+                $extSlug = Str::slug($matchedName);
+                $extendedMap = collect($masterService->getAllExtendedCollections())->keyBy(fn ($c) => Str::slug($c['name'] ?? ''));
+                $ext = $extendedMap->get($extSlug);
+            }
 
-            foreach ($ext['parts'] as $part) {
-                $isOwned = false;
-                if (!empty($part['tmdb_id']) && in_array($part['tmdb_id'], $ownedTmdb)) {
-                    $isOwned = true;
-                } elseif (in_array(strtolower(trim($part['title'] ?? '')), $ownedTitles)) {
-                    $isOwned = true;
-                }
+            $totalParts = $ext ? count($ext['parts'] ?? []) : $movies->count();
+            $totalParts = max($totalParts, $movies->count());
+            $ownedCount = $movies->count();
+            $missingParts = [];
 
-                if (!$isOwned) {
-                    $missingParts[] = [
-                        'tmdb_id' => $part['tmdb_id'] ?? null,
-                        'title' => $part['title'] ?? '',
-                        'title_ar' => $part['title_ar'] ?? null,
-                        'release_year' => $part['release_year'] ?? null,
-                        'poster_path' => $part['poster_path'] ?? null,
-                        'overview' => $part['overview'] ?? null,
-                    ];
+            if ($ext && ! empty($ext['parts'])) {
+                $ownedTmdb = $movies->pluck('tmdb_id')->filter()->map(fn ($id) => (int) $id)->toArray();
+                $ownedTitles = $movies->pluck('title')->map(fn ($t) => strtolower(trim($t)))->toArray();
+
+                foreach ($ext['parts'] as $part) {
+                    $pTmdbId = (int) ($part['tmdb_id'] ?? 0);
+                    $pTitle = strtolower(trim($part['title'] ?? ''));
+
+                    $isOwned = (! empty($part['is_owned']))
+                        || ($pTmdbId > 0 && in_array($pTmdbId, $ownedTmdb, true))
+                        || in_array($pTitle, $ownedTitles, true);
+
+                    if (! $isOwned) {
+                        $missingParts[] = [
+                            'tmdb_id' => $part['tmdb_id'] ?? null,
+                            'title' => $part['title'] ?? '',
+                            'title_ar' => $part['title_ar'] ?? null,
+                            'release_year' => $part['release_year'] ?? null,
+                            'poster_path' => $part['poster_path'] ?? null,
+                            'overview' => $part['overview'] ?? null,
+                        ];
+                    }
                 }
             }
+
+            $isComplete = empty($missingParts) && ($ownedCount >= $totalParts);
+            $totalParts = max($totalParts, $ownedCount + count($missingParts));
+            $completionPct = $totalParts > 0 ? round(($ownedCount / $totalParts) * 100) : 100;
         }
 
         return Inertia::render('Collections/Show', [
@@ -183,23 +221,24 @@ class CollectionController extends Controller
         ]);
     }
 
-    protected function compileCollections($allMoviesInCollections, $masterService)
+    protected function compileCollections($allMoviesInCollections, $masterService, ?LibraryGapService $gapService = null)
     {
+        $gapService = $gapService ?? app(LibraryGapService::class);
+        $scoutGaps = $gapService->getGroupedCollectionGaps(false);
+        $gapsByColId = collect($scoutGaps)->keyBy('collection_id');
+        $gapsBySlug = collect($scoutGaps)->keyBy(fn ($g) => Str::slug($g['collection_name'] ?? ''));
+
         $grouped = $allMoviesInCollections->groupBy('collection_name');
         $extendedMap = collect($masterService->getAllExtendedCollections())->keyBy(function ($c) {
             return Str::slug($c['name'] ?? '');
         });
+        $extendedById = collect($masterService->getAllExtendedCollections())->keyBy('collection_id');
 
         return $grouped
-            ->filter(function ($movies, $name) use ($extendedMap) {
-                if ($movies->count() >= 2) {
-                    return true;
-                }
-                $slug = Str::slug($name);
-                $ext = $extendedMap->get($slug);
-                return $ext && count($ext['parts'] ?? []) >= 2;
+            ->filter(function ($movies) {
+                return $movies->count() >= 2;
             })
-            ->map(function ($movies, $name) use ($extendedMap) {
+            ->map(function ($movies, $name) use ($extendedMap, $extendedById, $gapsByColId, $gapsBySlug) {
                 $years = $movies->pluck('release_year')->filter()->sort()->values();
                 $yearSpan = $years->isNotEmpty()
                     ? ($years->first() === $years->last() ? (string) $years->first() : "{$years->first()} - {$years->last()}")
@@ -210,38 +249,62 @@ class CollectionController extends Controller
                 $backdrop = $movies->pluck('backdrop_path')->filter()->first();
                 $avgRating = round($movies->avg('rating'), 1);
                 $slug = Str::slug($name);
+                $colId = (int) ($movies->first()->collection_id ?? 0);
 
-                $ext = $extendedMap->get($slug);
-                $totalParts = $ext ? count($ext['parts'] ?? []) : $movies->count();
-                $totalParts = max($totalParts, $movies->count());
-                $ownedCount = $movies->count();
-                $isComplete = $ownedCount >= $totalParts;
-                $completionPct = round(($ownedCount / max(1, $totalParts)) * 100);
+                // Priority 1: Check Media Scout Gaps (real-time TMDB gap detection)
+                $gap = $gapsByColId->get($colId) ?? $gapsBySlug->get($slug);
 
-                $missingParts = [];
-                if ($ext && !empty($ext['parts'])) {
-                    $ownedTmdb = $movies->pluck('tmdb_id')->filter()->toArray();
-                    $ownedTitles = $movies->pluck('title')->map(fn ($t) => strtolower(trim($t)))->toArray();
+                if ($gap && ! empty($gap['missing_movies'])) {
+                    $totalParts = max((int) ($gap['total_count'] ?? 0), $movies->count());
+                    $ownedCount = $movies->count();
+                    $isComplete = false;
+                    $completionPct = $totalParts > 0 ? round(($ownedCount / $totalParts) * 100) : 100;
+                    $missingParts = array_map(function ($m) {
+                        return [
+                            'tmdb_id' => $m['tmdb_id'] ?? null,
+                            'title' => $m['movie_title'] ?? ($m['title'] ?? ''),
+                            'title_ar' => $m['title_ar'] ?? null,
+                            'release_year' => $m['release_year'] ?? null,
+                            'poster_path' => $m['poster_path'] ?? null,
+                            'overview' => $m['overview'] ?? null,
+                        ];
+                    }, $gap['missing_movies']);
+                } else {
+                    // Priority 2: Check Master Index collections_extended.json
+                    $ext = $extendedById->get($colId) ?? $extendedMap->get($slug);
+                    $hasExtended = $ext && (! empty($ext['parts']) || ! empty($ext['total_parts']));
+                    $totalParts = $hasExtended ? max((int) ($ext['total_parts'] ?? 0), count($ext['parts'] ?? []), $movies->count()) : $movies->count();
+                    $ownedCount = $movies->count();
 
-                    foreach ($ext['parts'] as $part) {
-                        $isOwned = false;
-                        if (!empty($part['tmdb_id']) && in_array($part['tmdb_id'], $ownedTmdb)) {
-                            $isOwned = true;
-                        } elseif (in_array(strtolower(trim($part['title'] ?? '')), $ownedTitles)) {
-                            $isOwned = true;
-                        }
+                    $missingParts = [];
+                    if ($ext && ! empty($ext['parts'])) {
+                        $ownedTmdb = $movies->pluck('tmdb_id')->filter()->map(fn ($id) => (int) $id)->toArray();
+                        $ownedTitles = $movies->pluck('title')->map(fn ($t) => strtolower(trim($t)))->toArray();
 
-                        if (!$isOwned) {
-                            $missingParts[] = [
-                                'tmdb_id' => $part['tmdb_id'] ?? null,
-                                'title' => $part['title'] ?? '',
-                                'title_ar' => $part['title_ar'] ?? null,
-                                'release_year' => $part['release_year'] ?? null,
-                                'poster_path' => $part['poster_path'] ?? null,
-                                'overview' => $part['overview'] ?? null,
-                            ];
+                        foreach ($ext['parts'] as $part) {
+                            $pTmdbId = (int) ($part['tmdb_id'] ?? 0);
+                            $pTitle = strtolower(trim($part['title'] ?? ''));
+
+                            $isOwned = (! empty($part['is_owned']))
+                                || ($pTmdbId > 0 && in_array($pTmdbId, $ownedTmdb, true))
+                                || in_array($pTitle, $ownedTitles, true);
+
+                            if (! $isOwned) {
+                                $missingParts[] = [
+                                    'tmdb_id' => $part['tmdb_id'] ?? null,
+                                    'title' => $part['title'] ?? '',
+                                    'title_ar' => $part['title_ar'] ?? null,
+                                    'release_year' => $part['release_year'] ?? null,
+                                    'poster_path' => $part['poster_path'] ?? null,
+                                    'overview' => $part['overview'] ?? null,
+                                ];
+                            }
                         }
                     }
+
+                    $isComplete = empty($missingParts) && ($ownedCount >= $totalParts);
+                    $totalParts = max($totalParts, $ownedCount + count($missingParts));
+                    $completionPct = $totalParts > 0 ? round(($ownedCount / $totalParts) * 100) : 100;
                 }
 
                 return [
@@ -271,5 +334,4 @@ class CollectionController extends Controller
                 ];
             })->values()->sortByDesc('movies_count')->values();
     }
-
 }

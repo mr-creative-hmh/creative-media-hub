@@ -2,24 +2,30 @@
 
 namespace App\Services\Metadata;
 
-use App\Models\MediaItem;
-use App\Models\Series;
-use App\Models\Season;
+use App\Models\AppSetting;
 use App\Models\Episode;
+use App\Models\MediaItem;
+use App\Models\Season;
+use App\Models\Series;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class LibraryMasterIndexService
 {
     protected string $indexPath;
+
     protected TmdbProvider $tmdb;
+
     protected MetadataAggregator $aggregator;
 
     protected ?array $moviesIndex = null;
+
     protected ?array $seriesIndex = null;
+
     protected ?array $collectionsIndex = null;
+
     protected ?array $popularCache = null;
 
     public function __construct(TmdbProvider $tmdb, MetadataAggregator $aggregator)
@@ -28,7 +34,7 @@ class LibraryMasterIndexService
         $this->aggregator = $aggregator;
         $this->indexPath = storage_path('app/metadata-index');
 
-        if (!File::isDirectory($this->indexPath)) {
+        if (! File::isDirectory($this->indexPath)) {
             File::makeDirectory($this->indexPath, 0755, true, true);
         }
     }
@@ -46,9 +52,12 @@ class LibraryMasterIndexService
      */
     public function toRelativePath(?string $path): ?string
     {
-        if (!$path) return null;
+        if (! $path) {
+            return null;
+        }
         $norm = str_replace('\\', '/', $path);
         $clean = preg_replace('#^[a-zA-Z]:/(?:Entertainment/)?#i', '', $norm);
+
         return ltrim($clean, '/');
     }
 
@@ -59,15 +68,16 @@ class LibraryMasterIndexService
     {
         $root = config('media.library_root');
         if ($root && is_dir($root)) {
-            return rtrim(str_replace('\\', '/', $root), '/') . '/' . ltrim($relativePath, '/');
+            return rtrim(str_replace('\\', '/', $root), '/').'/'.ltrim($relativePath, '/');
         }
         foreach (['H:', 'D:', 'E:', 'C:'] as $drive) {
-            $candidate = "{$drive}/Entertainment/" . ltrim($relativePath, '/');
+            $candidate = "{$drive}/Entertainment/".ltrim($relativePath, '/');
             if (file_exists($candidate) || is_dir(dirname($candidate))) {
                 return $candidate;
             }
         }
-        return "H:/Entertainment/" . ltrim($relativePath, '/');
+
+        return 'H:/Entertainment/'.ltrim($relativePath, '/');
     }
 
     // =========================================================================
@@ -138,27 +148,39 @@ class LibraryMasterIndexService
 
     public function lookupEpisode(int|string $seriesIdentifier, int $seasonNumber, int $episodeNumber): ?array
     {
-        $series = is_numeric($seriesIdentifier) 
+        $series = is_numeric($seriesIdentifier)
             ? ($this->seriesIndex['by_tmdb'][$seriesIdentifier] ?? null)
             : $this->lookupSeries($seriesIdentifier);
 
-        if (!$series) {
+        if (! $series) {
             return null;
         }
 
         $epKey = sprintf('S%02dE%02d', $seasonNumber, $episodeNumber);
+
         return $series['episodes'][$epKey] ?? null;
     }
 
-    public function getExtendedCollection(int $collectionId): ?array
+    public function getExtendedCollection(int|string $collectionId): ?array
     {
         $this->loadCollectionsIndex();
-        return $this->collectionsIndex[$collectionId] ?? null;
+        if (isset($this->collectionsIndex[$collectionId])) {
+            return $this->collectionsIndex[$collectionId];
+        }
+        $search = Str::slug((string) $collectionId);
+        foreach ($this->collectionsIndex ?? [] as $col) {
+            if (Str::slug($col['name'] ?? '') === $search || (string) ($col['collection_id'] ?? '') === (string) $collectionId) {
+                return $col;
+            }
+        }
+
+        return null;
     }
 
     public function getAllExtendedCollections(): array
     {
         $this->loadCollectionsIndex();
+
         return array_values($this->collectionsIndex ?? []);
     }
 
@@ -242,7 +264,9 @@ class LibraryMasterIndexService
         $this->loadCollectionsIndex();
 
         $collId = $collectionData['collection_id'] ?? ($collectionData['id'] ?? null);
-        if (!$collId) return;
+        if (! $collId) {
+            return;
+        }
 
         $this->collectionsIndex[$collId] = $collectionData;
         $this->saveJson('collections_extended.json', $this->collectionsIndex);
@@ -257,7 +281,7 @@ class LibraryMasterIndexService
      */
     public function enrichMissingDatabaseMetadata(?callable $logger = null): array
     {
-        $log = $logger ?: fn($msg) => null;
+        $log = $logger ?: fn ($msg) => null;
         $stats = [
             'movies_ar_titles_fixed' => 0,
             'movies_backdrops_fixed' => 0,
@@ -266,14 +290,14 @@ class LibraryMasterIndexService
             'episodes_stills_fixed' => 0,
         ];
 
-        $log("Starting Web Enrichment for Database Records...");
+        $log('Starting Web Enrichment for Database Records...');
 
         // 1. Fill 34 Movies Missing Arabic Titles
-        $moviesNoAr = MediaItem::where(function($q) {
+        $moviesNoAr = MediaItem::where(function ($q) {
             $q->whereNull('title_ar')->orWhere('title_ar', '');
         })->whereNotNull('tmdb_id')->get();
 
-        $log("  Processing " . $moviesNoAr->count() . " movies missing Arabic title...");
+        $log('  Processing '.$moviesNoAr->count().' movies missing Arabic title...');
         foreach ($moviesNoAr as $m) {
             $arTitle = $this->fetchArabicTitleFromTmdb('movie', $m->tmdb_id, $m->title);
             if ($arTitle) {
@@ -285,13 +309,13 @@ class LibraryMasterIndexService
         }
 
         // 2. Fill Missing Movie Backdrops
-        $moviesNoBackdrop = MediaItem::where(function($q) {
+        $moviesNoBackdrop = MediaItem::where(function ($q) {
             $q->whereNull('backdrop_path')->orWhere('backdrop_path', '');
         })->whereNotNull('tmdb_id')->get();
 
         foreach ($moviesNoBackdrop as $m) {
             $details = $this->tmdb->getMovieDetails($m->tmdb_id);
-            if (!empty($details['backdrop_path'])) {
+            if (! empty($details['backdrop_path'])) {
                 $m->backdrop_path = $details['backdrop_path'];
                 $m->save();
                 $stats['movies_backdrops_fixed']++;
@@ -300,7 +324,7 @@ class LibraryMasterIndexService
         }
 
         // 2b. Fill Missing Series Arabic Titles & Movie Overviews
-        $seriesNoAr = Series::where(function($q) {
+        $seriesNoAr = Series::where(function ($q) {
             $q->whereNull('title_ar')->orWhere('title_ar', '');
         })->whereNotNull('tmdb_id')->get();
         foreach ($seriesNoAr as $s) {
@@ -312,12 +336,12 @@ class LibraryMasterIndexService
             }
         }
 
-        $moviesNoOverview = MediaItem::where(function($q) {
+        $moviesNoOverview = MediaItem::where(function ($q) {
             $q->whereNull('overview')->orWhere('overview', '');
         })->whereNotNull('tmdb_id')->get();
         foreach ($moviesNoOverview as $m) {
             $details = $this->tmdb->getMovieDetails($m->tmdb_id);
-            if (!empty($details['overview'])) {
+            if (! empty($details['overview'])) {
                 $m->overview = $details['overview'];
                 $m->save();
                 $log("    ✓ Movie [ID {$m->id}] {$m->title} overview restored.");
@@ -325,45 +349,47 @@ class LibraryMasterIndexService
         }
 
         // 3. Fix 622 Generic Episode Titles & 232 Missing Arabic Episode Metadata
-        $genericEps = Episode::where(function($q) {
+        $genericEps = Episode::where(function ($q) {
             $q->where('title', 'like', 'Episode %')
-              ->orWhere('title', 'like', 'Ep %')
-              ->orWhereNull('title')
-              ->orWhere('title', '')
-              ->orWhereNull('title_ar')
-              ->orWhere('title_ar', '');
+                ->orWhere('title', 'like', 'Ep %')
+                ->orWhereNull('title')
+                ->orWhere('title', '')
+                ->orWhereNull('title_ar')
+                ->orWhere('title_ar', '');
         })->with('series')->get();
 
-        $log("  Processing " . $genericEps->count() . " episodes with generic/missing titles...");
-        
+        $log('  Processing '.$genericEps->count().' episodes with generic/missing titles...');
+
         // Group by series to batch TMDB season requests
         $bySeries = $genericEps->groupBy('series_id');
 
         foreach ($bySeries as $seriesId => $eps) {
             $series = $eps->first()->series;
-            if (!$series || !$series->tmdb_id) continue;
+            if (! $series || ! $series->tmdb_id) {
+                continue;
+            }
 
             // Group episodes by season number
             $seasons = Season::whereIn('id', $eps->pluck('season_id')->unique())->get()->keyBy('id');
-            $epsBySeasonNum = $eps->groupBy(fn($ep) => $seasons[$ep->season_id]->season_number ?? 1);
+            $epsBySeasonNum = $eps->groupBy(fn ($ep) => $seasons[$ep->season_id]->season_number ?? 1);
 
             foreach ($epsBySeasonNum as $seasonNum => $seasonEps) {
                 // Fetch TMDB season data in English and Arabic
-                $enSeasonData = $this->fetchTmdbSeasonData($series->tmdb_id, (int)$seasonNum, 'en');
-                $arSeasonData = $this->fetchTmdbSeasonData($series->tmdb_id, (int)$seasonNum, 'ar');
+                $enSeasonData = $this->fetchTmdbSeasonData($series->tmdb_id, (int) $seasonNum, 'en');
+                $arSeasonData = $this->fetchTmdbSeasonData($series->tmdb_id, (int) $seasonNum, 'ar');
 
                 $enMap = collect($enSeasonData['episodes'] ?? [])->keyBy('episode_number');
                 $arMap = collect($arSeasonData['episodes'] ?? [])->keyBy('episode_number');
 
                 foreach ($seasonEps as $ep) {
-                    $epNum = (int)$ep->episode_number;
+                    $epNum = (int) $ep->episode_number;
                     $tmdbEn = $enMap[$epNum] ?? null;
                     $tmdbAr = $arMap[$epNum] ?? null;
 
                     $changed = false;
 
                     // Update English title if current is generic
-                    if ($tmdbEn && !empty($tmdbEn['name']) && !preg_match('/^Episode \d+$/i', $tmdbEn['name'])) {
+                    if ($tmdbEn && ! empty($tmdbEn['name']) && ! preg_match('/^Episode \d+$/i', $tmdbEn['name'])) {
                         if (empty($ep->title) || preg_match('/^Episode \d+$/i', $ep->title)) {
                             $ep->title = $tmdbEn['name'];
                             $stats['episodes_titles_enriched']++;
@@ -372,13 +398,13 @@ class LibraryMasterIndexService
                     }
 
                     // Update Arabic title & overview
-                    if ($tmdbAr && !empty($tmdbAr['name']) && !preg_match('/^الحلقة \d+$/i', $tmdbAr['name'])) {
+                    if ($tmdbAr && ! empty($tmdbAr['name']) && ! preg_match('/^الحلقة \d+$/i', $tmdbAr['name'])) {
                         if (empty($ep->title_ar)) {
                             $ep->title_ar = $tmdbAr['name'];
                             $stats['episodes_ar_enriched']++;
                             $changed = true;
                         }
-                    } elseif (empty($ep->title_ar) && !empty($ep->title)) {
+                    } elseif (empty($ep->title_ar) && ! empty($ep->title)) {
                         // Fallback translate title
                         $translated = $this->translateText($ep->title);
                         if ($translated) {
@@ -389,10 +415,10 @@ class LibraryMasterIndexService
                     }
 
                     if (empty($ep->overview_ar)) {
-                        if ($tmdbAr && !empty($tmdbAr['overview'])) {
+                        if ($tmdbAr && ! empty($tmdbAr['overview'])) {
                             $ep->overview_ar = $tmdbAr['overview'];
                             $changed = true;
-                        } elseif (!empty($ep->overview)) {
+                        } elseif (! empty($ep->overview)) {
                             $translatedOv = $this->translateText($ep->overview);
                             if ($translatedOv) {
                                 $ep->overview_ar = $translatedOv;
@@ -402,8 +428,8 @@ class LibraryMasterIndexService
                     }
 
                     // Restore still image if missing
-                    if (empty($ep->still_path) && $tmdbEn && !empty($tmdbEn['still_path'])) {
-                        $ep->still_path = "https://image.tmdb.org/t/p/w780" . $tmdbEn['still_path'];
+                    if (empty($ep->still_path) && $tmdbEn && ! empty($tmdbEn['still_path'])) {
+                        $ep->still_path = 'https://image.tmdb.org/t/p/w780'.$tmdbEn['still_path'];
                         $stats['episodes_stills_fixed']++;
                         $changed = true;
                     }
@@ -415,7 +441,8 @@ class LibraryMasterIndexService
             }
         }
 
-        $log("  ✓ Database Enrichment Complete: " . json_encode($stats));
+        $log('  ✓ Database Enrichment Complete: '.json_encode($stats));
+
         return $stats;
     }
 
@@ -428,34 +455,34 @@ class LibraryMasterIndexService
      */
     public function buildMasterIndex(bool $enrichFromWeb = true, bool $includePopular = true, ?callable $logger = null): array
     {
-        $log = $logger ?: fn($msg) => null;
-        $log("=== Building Local Master Metadata Index ===");
+        $log = $logger ?: fn ($msg) => null;
+        $log('=== Building Local Master Metadata Index ===');
 
         if ($enrichFromWeb) {
             $this->enrichMissingDatabaseMetadata($log);
         }
 
         // 1. Build collections_extended.json
-        $log("Step 1: Compiling collections_extended.json...");
+        $log('Step 1: Compiling collections_extended.json...');
         $collectionsIndex = $this->compileExtendedCollections($enrichFromWeb, $log);
         $this->saveJson('collections_extended.json', $collectionsIndex);
         $this->collectionsIndex = $collectionsIndex;
 
         // 2. Build movies_master_index.json
-        $log("Step 2: Compiling movies_master_index.json...");
+        $log('Step 2: Compiling movies_master_index.json...');
         $moviesIndex = $this->compileMoviesIndex($log);
         $this->saveJson('movies_master_index.json', $moviesIndex);
         $this->moviesIndex = $moviesIndex;
 
         // 3. Build series_master_index.json
-        $log("Step 3: Compiling series_master_index.json...");
+        $log('Step 3: Compiling series_master_index.json...');
         $seriesIndex = $this->compileSeriesIndex($log);
         $this->saveJson('series_master_index.json', $seriesIndex);
         $this->seriesIndex = $seriesIndex;
 
         // 4. Pre-seed popular titles ("Just in case for later")
         if ($includePopular) {
-            $log("Step 4: Pre-seeding popular & trending movies and series...");
+            $log('Step 4: Pre-seeding popular & trending movies and series...');
             $popularCache = $this->compilePopularCache($log);
             $this->saveJson('popular_cache.json', $popularCache);
             $this->popularCache = $popularCache;
@@ -469,93 +496,172 @@ class LibraryMasterIndexService
             'popular_series_seeded' => count($this->popularCache['series_by_tmdb'] ?? []),
         ];
 
-        $log("=== Master Index Generation Complete: " . json_encode($summary) . " ===");
+        $log('=== Master Index Generation Complete: '.json_encode($summary).' ===');
+
         return $summary;
     }
 
     protected function compileExtendedCollections(bool $enrichFromWeb, callable $log): array
     {
         $collections = [];
-        $uniqueCollections = MediaItem::whereNotNull('collection_id')
-            ->where('collection_id', '>', 0)
-            ->select('collection_id', 'collection_name')
+        $uniqueCollections = MediaItem::whereNotNull('collection_name')
+            ->where('collection_name', '!=', '')
+            ->select('collection_name', 'collection_id', 'collection_id_source')
             ->distinct()
             ->get();
 
-        $log("  Processing " . $uniqueCollections->count() . " collections...");
+        $log('  Processing '.$uniqueCollections->count().' collections...');
 
-        $indianCollections = [
-            'Housefull Collection', 'Mardaani Collection', '3 Idiots Collection', 'Dabangg Collection',
-            'Dhoom Collection', 'Race Collection', 'Raid Collection', 'Tiger Collection',
-            'Aashiqui Collection', 'Goodachari Collection', 'Baby Collection', 'Taare Zameen Par Collection', 'Student of the Year Collection'
-        ];
+        $existingCollections = $this->loadCollectionsIndex();
 
         foreach ($uniqueCollections as $col) {
-            $colId = (int)$col->collection_id;
-            $colName = $col->collection_name;
+            $colName = trim($col->collection_name);
+            $colId = (int) ($col->collection_id ?? 0);
+            $source = $col->collection_id_source ?: ($colId > 0 ? 'tmdb' : 'custom');
 
-            if (in_array($colName, $indianCollections)) continue;
-
-            // Fetch owned movies
-            $ownedMovies = MediaItem::where('collection_id', $colId)->get();
-            if ($ownedMovies->count() < 2) continue; // Enforce strict >= 2 owned movies rule
+            // Fetch owned movies by collection_name
+            $ownedMovies = MediaItem::where('collection_name', $colName)->orderBy('release_year')->get();
+            if ($ownedMovies->count() < 2 || $colId == 1758656) {
+                continue;
+            } // Enforce strict >= 2 owned movies rule & skip cartoon short anthologies
             $ownedTmdbIds = $ownedMovies->pluck('tmdb_id')->filter()->toArray();
 
             $colData = [
-                'collection_id' => $colId,
+                'collection_id' => $colId ?: crc32($colName),
+                'collection_id_source' => $source,
                 'name' => $colName,
                 'name_en' => $colName,
                 'name_ar' => null,
                 'overview' => null,
                 'overview_ar' => null,
-                'poster_path' => $ownedMovies->first()->collection_poster ?? null,
-                'backdrop_path' => null,
+                'poster_path' => $ownedMovies->pluck('collection_poster')->filter()->first() ?? $ownedMovies->pluck('poster_path')->filter()->first(),
+                'backdrop_path' => $ownedMovies->pluck('backdrop_path')->filter()->first(),
                 'total_parts' => $ownedMovies->count(),
                 'owned_count' => $ownedMovies->count(),
+                'is_complete' => true,
                 'parts' => [],
             ];
 
-            // Fetch extended parts from TMDB
-            if ($enrichFromWeb) {
-                $tmdbColEn = $this->tmdb->getCollectionDetails($colId, 'en');
-                $tmdbColAr = $this->tmdb->getCollectionDetails($colId, 'ar');
+            // Fetch extended parts from TMDB (checking scout cache first, then API)
+            $tmdbColEn = null;
+            $tmdbColAr = null;
 
-                if ($tmdbColEn) {
-                    $colData['name_en'] = $tmdbColEn['name'] ?? $colName;
-                    $colData['name_ar'] = $tmdbColAr['name'] ?? null;
-                    $colData['overview'] = $tmdbColEn['overview'] ?? null;
-                    $colData['overview_ar'] = $tmdbColAr['overview'] ?? null;
-                    $colData['poster_path'] = $tmdbColEn['poster_path'] ?? $colData['poster_path'];
-                    $colData['backdrop_path'] = $tmdbColEn['backdrop_path'] ?? null;
+            if ($colId > 0) {
+                $cached = Cache::get("scout_tmdb_col_{$colId}");
+                if (! empty($cached['parts'])) {
+                    $tmdbColEn = $cached;
+                } else {
+                    $tmdbColEn = $this->tmdb->getCollectionDetails($colId, 'en');
+                    if ($tmdbColEn) {
+                        Cache::put("scout_tmdb_col_{$colId}", $tmdbColEn, 86400 * 7);
+                    }
+                }
+                if ($enrichFromWeb) {
+                    $tmdbColAr = $this->tmdb->getCollectionDetails($colId, 'ar');
+                }
+            }
 
-                    $parts = [];
-                    foreach ($tmdbColEn['parts'] ?? [] as $idx => $p) {
-                        $pTmdbId = $p['tmdb_id'] ?? $p['id'];
-                        $isOwned = in_array($pTmdbId, $ownedTmdbIds);
-                        $matchedOwned = $isOwned ? $ownedMovies->firstWhere('tmdb_id', $pTmdbId) : null;
+            if ($tmdbColEn && ! empty($tmdbColEn['parts'])) {
+                $colData['name_en'] = $tmdbColEn['name'] ?? $colName;
+                $colData['name_ar'] = $tmdbColAr['name'] ?? null;
+                $colData['overview'] = $tmdbColEn['overview'] ?? null;
+                $colData['overview_ar'] = $tmdbColAr['overview'] ?? null;
+                $colData['poster_path'] = ! empty($tmdbColEn['poster_path'])
+                    ? (str_starts_with($tmdbColEn['poster_path'], 'http') ? $tmdbColEn['poster_path'] : "https://image.tmdb.org/t/p/w780{$tmdbColEn['poster_path']}")
+                    : $colData['poster_path'];
+                $colData['backdrop_path'] = ! empty($tmdbColEn['backdrop_path'])
+                    ? (str_starts_with($tmdbColEn['backdrop_path'], 'http') ? $tmdbColEn['backdrop_path'] : "https://image.tmdb.org/t/p/w1280{$tmdbColEn['backdrop_path']}")
+                    : null;
 
-                        $arPart = ($tmdbColAr['parts'] ?? [])[$idx] ?? [];
+                $parts = [];
+                $ownedCount = 0;
+                $today = now()->format('Y-m-d');
+                $ownedTitles = $ownedMovies->pluck('title')->map(fn ($t) => strtolower(trim($t)))->toArray();
 
-                        $parts[] = [
-                            'tmdb_id' => $pTmdbId,
-                            'title' => $p['title'] ?? '',
-                            'title_en' => $p['title'] ?? '',
-                            'title_ar' => $arPart['title'] ?? null,
-                            'release_year' => $p['release_year'] ?? null,
-                            'release_date' => $p['release_date'] ?? null,
-                            'poster_path' => $p['poster_path'] ?? null,
-                            'backdrop_path' => $p['backdrop_path'] ?? null,
-                            'overview' => $p['overview'] ?? null,
-                            'overview_ar' => $arPart['overview'] ?? null,
-                            'rating' => $p['rating'] ?? null,
-                            'is_owned' => $isOwned,
-                            'local_media_id' => $matchedOwned->id ?? null,
-                        ];
+                foreach ($tmdbColEn['parts'] as $idx => $p) {
+                    $relDate = $p['release_date'] ?? null;
+                    if (empty($relDate) || $relDate > $today) {
+                        continue;
                     }
 
-                    $colData['parts'] = $parts;
-                    $colData['total_parts'] = count($parts);
+                    $pTmdbId = (int) ($p['tmdb_id'] ?? $p['id']);
+                    $pTitle = strtolower(trim($p['title'] ?? ($p['original_title'] ?? '')));
+                    $isOwned = in_array($pTmdbId, $ownedTmdbIds, true) || in_array($pTitle, $ownedTitles, true);
+
+                    $matchedOwned = null;
+                    if ($isOwned) {
+                        $matchedOwned = $ownedMovies->first(fn ($om) => (int) $om->tmdb_id === $pTmdbId || strtolower(trim($om->title)) === $pTitle);
+                    } else {
+                        // Global library check
+                        $globalOwned = MediaItem::where('tmdb_id', $pTmdbId)
+                            ->orWhere(function ($q) use ($pTitle) {
+                                if (strlen($pTitle) > 3) {
+                                    $q->whereRaw('LOWER(title) = ?', [$pTitle]);
+                                }
+                            })->first();
+                        if ($globalOwned) {
+                            $isOwned = true;
+                            $matchedOwned = $globalOwned;
+                        }
+                    }
+
+                    if ($isOwned) {
+                        $ownedCount++;
+                    }
+
+                    $arPart = ($tmdbColAr['parts'] ?? [])[$idx] ?? [];
+
+                    $parts[] = [
+                        'tmdb_id' => $pTmdbId,
+                        'title' => $p['title'] ?? '',
+                        'title_en' => $p['title'] ?? '',
+                        'title_ar' => $arPart['title'] ?? null,
+                        'release_year' => $p['release_year'] ?? (! empty($p['release_date']) ? (int) substr($p['release_date'], 0, 4) : null),
+                        'release_date' => $p['release_date'] ?? null,
+                        'poster_path' => ! empty($p['poster_path'])
+                            ? (str_starts_with($p['poster_path'], 'http') ? $p['poster_path'] : "https://image.tmdb.org/t/p/w500{$p['poster_path']}")
+                            : null,
+                        'backdrop_path' => ! empty($p['backdrop_path'])
+                            ? (str_starts_with($p['backdrop_path'], 'http') ? $p['backdrop_path'] : "https://image.tmdb.org/t/p/w1280{$p['backdrop_path']}")
+                            : null,
+                        'overview' => $p['overview'] ?? null,
+                        'overview_ar' => $arPart['overview'] ?? null,
+                        'rating' => $p['rating'] ?? ($p['vote_average'] ?? null),
+                        'is_owned' => $isOwned,
+                        'local_media_id' => $matchedOwned->id ?? null,
+                    ];
                 }
+
+                $colData['parts'] = $parts;
+                $colData['total_parts'] = max(count($parts), $ownedCount);
+                $colData['owned_count'] = $ownedCount;
+                $colData['is_complete'] = $ownedCount >= count($parts);
+            } elseif (! empty($existingCollections[$colData['collection_id']]['parts'])) {
+                // Preserve existing cached parts from previous web enrichments
+                $existing = $existingCollections[$colData['collection_id']];
+                $parts = [];
+                $ownedCount = 0;
+                foreach ($existing['parts'] as $p) {
+                    $pTmdbId = (int) ($p['tmdb_id'] ?? 0);
+                    $isOwned = $pTmdbId ? in_array($pTmdbId, $ownedTmdbIds, true) : false;
+                    $matchedOwned = $isOwned ? $ownedMovies->firstWhere('tmdb_id', $pTmdbId) : null;
+                    $p['is_owned'] = $isOwned;
+                    $p['local_media_id'] = $matchedOwned->id ?? null;
+                    if ($isOwned) {
+                        $ownedCount++;
+                    }
+                    $parts[] = $p;
+                }
+                $colData['name_en'] = $existing['name_en'] ?? $colData['name_en'];
+                $colData['name_ar'] = $existing['name_ar'] ?? null;
+                $colData['overview'] = $existing['overview'] ?? null;
+                $colData['overview_ar'] = $existing['overview_ar'] ?? null;
+                $colData['poster_path'] = $existing['poster_path'] ?? $colData['poster_path'];
+                $colData['backdrop_path'] = $existing['backdrop_path'] ?? $colData['backdrop_path'];
+                $colData['parts'] = $parts;
+                $colData['total_parts'] = max(count($parts), $ownedCount);
+                $colData['owned_count'] = $ownedCount;
+                $colData['is_complete'] = $ownedCount >= count($parts);
             }
 
             // Fallback if TMDB didn't provide parts
@@ -573,9 +679,10 @@ class LibraryMasterIndexService
                         'local_media_id' => $om->id,
                     ];
                 }
+                $colData['is_complete'] = true;
             }
 
-            $collections[$colId] = $colData;
+            $collections[$colData['collection_id']] = $colData;
         }
 
         return $collections;
@@ -587,7 +694,7 @@ class LibraryMasterIndexService
         $bySlug = [];
 
         $movies = MediaItem::all();
-        $log("  Indexing " . $movies->count() . " movies from database...");
+        $log('  Indexing '.$movies->count().' movies from database...');
 
         foreach ($movies as $m) {
             $slug = Str::slug($m->title);
@@ -642,7 +749,7 @@ class LibraryMasterIndexService
         $bySlug = [];
 
         $allSeries = Series::with(['seasons', 'episodes'])->get();
-        $log("  Indexing " . $allSeries->count() . " series from database...");
+        $log('  Indexing '.$allSeries->count().' series from database...');
 
         foreach ($allSeries as $s) {
             $slug = Str::slug($s->title);
@@ -709,9 +816,10 @@ class LibraryMasterIndexService
 
     protected function compilePopularCache(callable $log): array
     {
-        $key = config('services.tmdb.key') ?: \App\Models\AppSetting::get('tmdb_api_key');
-        if (!$key) {
-            $log("  TMDb API key not found, skipping web popular cache.");
+        $key = config('services.tmdb.key') ?: AppSetting::get('tmdb_api_key');
+        if (! $key) {
+            $log('  TMDb API key not found, skipping web popular cache.');
+
             return ['movies_by_tmdb' => [], 'movies_by_slug' => [], 'series_by_tmdb' => [], 'series_by_slug' => []];
         }
 
@@ -721,10 +829,10 @@ class LibraryMasterIndexService
         $seriesBySlug = [];
 
         // Fetch Top 500 popular movies (25 pages x 20)
-        $log("  Fetching top popular movies from TMDb...");
+        $log('  Fetching top popular movies from TMDb...');
         for ($page = 1; $page <= 15; $page++) {
             try {
-                $res = Http::timeout(6)->get("https://api.themoviedb.org/3/movie/popular", [
+                $res = Http::timeout(6)->get('https://api.themoviedb.org/3/movie/popular', [
                     'api_key' => $key,
                     'page' => $page,
                     'language' => 'en-US',
@@ -733,11 +841,11 @@ class LibraryMasterIndexService
                     foreach ($res->json('results', []) as $m) {
                         $tmdbId = $m['id'];
                         $title = $m['title'] ?? '';
-                        $year = !empty($m['release_date']) ? (int)substr($m['release_date'], 0, 4) : null;
+                        $year = ! empty($m['release_date']) ? (int) substr($m['release_date'], 0, 4) : null;
                         $slug = Str::slug($title);
 
                         $genreIds = $m['genre_ids'] ?? [];
-                        $genreMap = [28=>'Action',12=>'Adventure',16=>'Animation',35=>'Comedy',80=>'Crime & Mystery',99=>'Documentary',18=>'Drama',10751=>'Family',14=>'Fantasy',36=>'History',27=>'Horror',10402=>'Music',9648=>'Crime & Mystery',10749=>'Romance',878=>'Sci-Fi',53=>'Thriller',10752=>'Action',37=>'Western'];
+                        $genreMap = [28 => 'Action', 12 => 'Adventure', 16 => 'Animation', 35 => 'Comedy', 80 => 'Crime & Mystery', 99 => 'Documentary', 18 => 'Drama', 10751 => 'Family', 14 => 'Fantasy', 36 => 'History', 27 => 'Horror', 10402 => 'Music', 9648 => 'Crime & Mystery', 10749 => 'Romance', 878 => 'Sci-Fi', 53 => 'Thriller', 10752 => 'Action', 37 => 'Western'];
                         $genre = $genreMap[$genreIds[0] ?? 28] ?? 'Action';
                         $cleanTitle = preg_replace('/[\/:*?"<>|]/', '', $title);
                         $yearStr = $year ? " ({$year})" : '';
@@ -755,14 +863,16 @@ class LibraryMasterIndexService
                             'relative_file_blueprint' => $relBlueprint,
                             'relative_path' => "{$relFolder}/{$relBlueprint}",
                             'overview' => $m['overview'] ?? '',
-                            'poster_path' => !empty($m['poster_path']) ? "https://image.tmdb.org/t/p/w780{$m['poster_path']}" : null,
-                            'backdrop_path' => !empty($m['backdrop_path']) ? "https://image.tmdb.org/t/p/w1280{$m['backdrop_path']}" : null,
+                            'poster_path' => ! empty($m['poster_path']) ? "https://image.tmdb.org/t/p/w780{$m['poster_path']}" : null,
+                            'backdrop_path' => ! empty($m['backdrop_path']) ? "https://image.tmdb.org/t/p/w1280{$m['backdrop_path']}" : null,
                             'rating' => $m['vote_average'] ?? null,
                             'is_owned' => false,
                         ];
 
                         $moviesByTmdb[$tmdbId] = $entry;
-                        if ($year) $moviesBySlug["{$slug}-{$year}"] = $entry;
+                        if ($year) {
+                            $moviesBySlug["{$slug}-{$year}"] = $entry;
+                        }
                         $moviesBySlug[$slug] = $entry;
                     }
                 }
@@ -772,10 +882,10 @@ class LibraryMasterIndexService
         }
 
         // Fetch Top 200 popular series (10 pages x 20)
-        $log("  Fetching top popular TV series from TMDb...");
+        $log('  Fetching top popular TV series from TMDb...');
         for ($page = 1; $page <= 10; $page++) {
             try {
-                $res = Http::timeout(6)->get("https://api.themoviedb.org/3/tv/popular", [
+                $res = Http::timeout(6)->get('https://api.themoviedb.org/3/tv/popular', [
                     'api_key' => $key,
                     'page' => $page,
                     'language' => 'en-US',
@@ -784,7 +894,7 @@ class LibraryMasterIndexService
                     foreach ($res->json('results', []) as $s) {
                         $tmdbId = $s['id'];
                         $title = $s['name'] ?? '';
-                        $year = !empty($s['first_air_date']) ? (int)substr($s['first_air_date'], 0, 4) : null;
+                        $year = ! empty($s['first_air_date']) ? (int) substr($s['first_air_date'], 0, 4) : null;
                         $slug = Str::slug($title);
 
                         $cleanTitle = preg_replace('/[\/:*?"<>|]/', '', $title);
@@ -804,14 +914,16 @@ class LibraryMasterIndexService
                             'season_blueprint' => 'Season {Season:02d}',
                             'episode_file_blueprint' => $epBlueprint,
                             'overview' => $s['overview'] ?? '',
-                            'poster_path' => !empty($s['poster_path']) ? "https://image.tmdb.org/t/p/w780{$s['poster_path']}" : null,
-                            'backdrop_path' => !empty($s['backdrop_path']) ? "https://image.tmdb.org/t/p/w1280{$s['backdrop_path']}" : null,
+                            'poster_path' => ! empty($s['poster_path']) ? "https://image.tmdb.org/t/p/w780{$s['poster_path']}" : null,
+                            'backdrop_path' => ! empty($s['backdrop_path']) ? "https://image.tmdb.org/t/p/w1280{$s['backdrop_path']}" : null,
                             'rating' => $s['vote_average'] ?? null,
                             'is_owned' => false,
                         ];
 
                         $seriesByTmdb[$tmdbId] = $entry;
-                        if ($year) $seriesBySlug["{$slug}-{$year}"] = $entry;
+                        if ($year) {
+                            $seriesBySlug["{$slug}-{$year}"] = $entry;
+                        }
                         $seriesBySlug[$slug] = $entry;
                     }
                 }
@@ -834,27 +946,32 @@ class LibraryMasterIndexService
 
     protected function fetchArabicTitleFromTmdb(string $type, int $tmdbId, string $fallbackTitle): ?string
     {
-        $key = config('services.tmdb.key') ?: \App\Models\AppSetting::get('tmdb_api_key');
-        if (!$key) return $this->translateText($fallbackTitle);
+        $key = config('services.tmdb.key') ?: AppSetting::get('tmdb_api_key');
+        if (! $key) {
+            return $this->translateText($fallbackTitle);
+        }
 
         try {
             $url = "https://api.themoviedb.org/3/{$type}/{$tmdbId}?api_key={$key}&language=ar-SA";
             $res = Http::timeout(6)->get($url);
             if ($res->successful()) {
                 $arName = $res->json($type === 'movie' ? 'title' : 'name');
-                if (!empty($arName) && $arName !== $fallbackTitle) {
+                if (! empty($arName) && $arName !== $fallbackTitle) {
                     return $arName;
                 }
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+        }
 
         return $this->translateText($fallbackTitle);
     }
 
     protected function fetchTmdbSeasonData(int $seriesTmdbId, int $seasonNumber, string $lang): ?array
     {
-        $key = config('services.tmdb.key') ?: \App\Models\AppSetting::get('tmdb_api_key');
-        if (!$key) return null;
+        $key = config('services.tmdb.key') ?: AppSetting::get('tmdb_api_key');
+        if (! $key) {
+            return null;
+        }
 
         try {
             $langCode = $lang === 'ar' ? 'ar-SA' : 'en-US';
@@ -865,14 +982,17 @@ class LibraryMasterIndexService
             if ($res->successful()) {
                 return $res->json();
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+        }
 
         return null;
     }
 
     protected function translateText(string $text): ?string
     {
-        if (empty($text)) return null;
+        if (empty($text)) {
+            return null;
+        }
 
         try {
             $res = Http::timeout(5)->get('https://clients5.google.com/translate_a/t', [
@@ -883,11 +1003,12 @@ class LibraryMasterIndexService
             ]);
             if ($res->successful()) {
                 $data = $res->json();
-                if (is_array($data) && !empty($data[0])) {
+                if (is_array($data) && ! empty($data[0])) {
                     return is_array($data[0]) ? ($data[0][0] ?? null) : $data[0];
                 }
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+        }
 
         return null;
     }
@@ -898,34 +1019,42 @@ class LibraryMasterIndexService
 
     protected function loadMoviesIndex(): void
     {
-        if ($this->moviesIndex !== null) return;
-        $file = $this->indexPath . '/movies_master_index.json';
+        if ($this->moviesIndex !== null) {
+            return;
+        }
+        $file = $this->indexPath.'/movies_master_index.json';
         $this->moviesIndex = File::exists($file) ? json_decode(File::get($file), true) : ['by_tmdb' => [], 'by_slug' => []];
     }
 
     protected function loadSeriesIndex(): void
     {
-        if ($this->seriesIndex !== null) return;
-        $file = $this->indexPath . '/series_master_index.json';
+        if ($this->seriesIndex !== null) {
+            return;
+        }
+        $file = $this->indexPath.'/series_master_index.json';
         $this->seriesIndex = File::exists($file) ? json_decode(File::get($file), true) : ['by_tmdb' => [], 'by_slug' => []];
     }
 
     protected function loadCollectionsIndex(): void
     {
-        if ($this->collectionsIndex !== null) return;
-        $file = $this->indexPath . '/collections_extended.json';
+        if ($this->collectionsIndex !== null) {
+            return;
+        }
+        $file = $this->indexPath.'/collections_extended.json';
         $this->collectionsIndex = File::exists($file) ? json_decode(File::get($file), true) : [];
     }
 
     protected function loadPopularCache(): void
     {
-        if ($this->popularCache !== null) return;
-        $file = $this->indexPath . '/popular_cache.json';
+        if ($this->popularCache !== null) {
+            return;
+        }
+        $file = $this->indexPath.'/popular_cache.json';
         $this->popularCache = File::exists($file) ? json_decode(File::get($file), true) : ['movies_by_tmdb' => [], 'movies_by_slug' => [], 'series_by_tmdb' => [], 'series_by_slug' => []];
     }
 
     protected function saveJson(string $filename, array $data): void
     {
-        File::put($this->indexPath . '/' . $filename, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        File::put($this->indexPath.'/'.$filename, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 }

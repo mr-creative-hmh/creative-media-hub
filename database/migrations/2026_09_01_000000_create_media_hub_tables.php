@@ -42,6 +42,7 @@ return new class extends Migration
                 $table->boolean('is_favorite')->default(false)->index();
                 $table->string('collection_name')->nullable()->index();
                 $table->unsignedBigInteger('collection_id')->nullable()->index();
+                $table->string('collection_id_source')->nullable()->index();
                 $table->string('collection_poster')->nullable();
                 $table->string('original_language')->nullable()->index();
                 $table->string('origin_country')->nullable();

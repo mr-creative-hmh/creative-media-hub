@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Services\Organizer\FilesystemScannerService;
 use App\Services\Organizer\PhysicalOrganizerService;
 use App\Services\Organizer\SceneNameParserService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -126,7 +127,7 @@ class OrganizerServicesTest extends TestCase
 
     public function test_filesystem_scanner_browse_directory_root(): void
     {
-        $scanner = app(\App\Services\Organizer\FilesystemScannerService::class);
+        $scanner = app(FilesystemScannerService::class);
         $result = $scanner->browseDirectory(null);
 
         $this->assertArrayHasKey('drives', $result);
@@ -138,10 +139,10 @@ class OrganizerServicesTest extends TestCase
 
     public function test_filesystem_scanner_browse_directory_path(): void
     {
-        $scanner = app(\App\Services\Organizer\FilesystemScannerService::class);
-        $tempDir = str_replace('\\', '/', sys_get_temp_dir()) . '/cmh_test_' . uniqid();
-        @mkdir($tempDir . '/SubFolderA/Nested', 0777, true);
-        @mkdir($tempDir . '/SubFolderB', 0777, true);
+        $scanner = app(FilesystemScannerService::class);
+        $tempDir = str_replace('\\', '/', sys_get_temp_dir()).'/cmh_test_'.uniqid();
+        @mkdir($tempDir.'/SubFolderA/Nested', 0777, true);
+        @mkdir($tempDir.'/SubFolderB', 0777, true);
 
         try {
             $result = $scanner->browseDirectory($tempDir);
@@ -153,9 +154,9 @@ class OrganizerServicesTest extends TestCase
             $this->assertEquals('SubFolderB', $result['directories'][1]['name']);
             $this->assertFalse($result['directories'][1]['has_children']);
         } finally {
-            @rmdir($tempDir . '/SubFolderA/Nested');
-            @rmdir($tempDir . '/SubFolderA');
-            @rmdir($tempDir . '/SubFolderB');
+            @rmdir($tempDir.'/SubFolderA/Nested');
+            @rmdir($tempDir.'/SubFolderA');
+            @rmdir($tempDir.'/SubFolderB');
             @rmdir($tempDir);
         }
     }
@@ -215,5 +216,27 @@ class OrganizerServicesTest extends TestCase
         // 4. Cancel
         $cancel = $organizer->cancelPlanGeneration();
         $this->assertTrue($cancel['cancelled']);
+    }
+
+    public function test_physical_organizer_handles_multi_episode_series_formatting(): void
+    {
+        $parser = new SceneNameParserService;
+        $organizer = new PhysicalOrganizerService($parser);
+
+        $parsed = $parser->parse('2 Broke Girls - S06E01-E02 - And the Two Openings - Part One & Part Two [720p].mkv');
+        $scanned = [
+            [
+                'path' => 'C:/Downloads/2 Broke Girls - S06E01-E02 - And the Two Openings - Part One & Part Two [720p].mkv',
+                'filename' => '2 Broke Girls - S06E01-E02 - And the Two Openings - Part One & Part Two [720p].mkv',
+                'size_bytes' => 300000000,
+                'parsed' => $parsed,
+            ],
+        ];
+
+        $pattern = '{Type}/{Title}/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} - {EpisodeTitle} [{CleanResolution}].{ext}';
+        $plan = $organizer->generateDryRun($scanned, 'C:/Media', null, $pattern);
+
+        $this->assertCount(1, $plan);
+        $this->assertStringContainsString('S06E01-E02', $plan[0]['destination_path']);
     }
 }

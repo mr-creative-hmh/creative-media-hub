@@ -3,15 +3,16 @@
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\CollectionController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DatabaseBackupController;
 use App\Http\Controllers\DiskOrganizerController;
 use App\Http\Controllers\DownloadManagerController;
-use App\Http\Controllers\MediaScoutController;
+use App\Http\Controllers\FixMatchCollectionController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\MediaScoutController;
 use App\Http\Controllers\MetadataManagementController;
 use App\Http\Controllers\ScannerController;
 use App\Http\Controllers\SeriesController;
 use App\Http\Controllers\SettingsController;
-use App\Http\Controllers\DatabaseBackupController;
 use App\Http\Controllers\StreamController;
 use App\Http\Controllers\SubtitleController;
 use Illuminate\Support\Facades\Route;
@@ -29,6 +30,8 @@ Route::post('/movies/{mediaItem}/favorite', [MediaController::class, 'toggleFavo
 Route::get('/api/media/search-metadata', [MediaController::class, 'searchMetadata'])->name('api.media.search-metadata');
 Route::post('/api/media/{mediaItem}/fix-match', [MediaController::class, 'fixMatch'])->name('api.media.fix-match');
 Route::post('/api/media/{mediaItem}/update-metadata', [MediaController::class, 'updateMetadata'])->name('api.media.update-metadata');
+Route::get('/api/fix-match/collections', [FixMatchCollectionController::class, 'getCollections'])->name('api.fix-match.collections');
+Route::post('/api/fix-match/collection', [FixMatchCollectionController::class, 'updateCollection'])->name('api.fix-match.update-collection');
 Route::delete('/api/media/{id}', [ScannerController::class, 'deleteSingleMedia'])->name('api.media.delete');
 Route::get('/api/vibes', [MediaController::class, 'getVibes'])->name('api.vibes');
 Route::get('/api/person/{person}', [MediaController::class, 'getCastExplorer'])->name('api.person');
@@ -57,6 +60,8 @@ Route::post('/api/metadata/{type}/{id}/convert-type', [MetadataManagementControl
 Route::post('/api/metadata/{type}/{id}/rename-file', [MetadataManagementController::class, 'renameFile'])->name('api.metadata.rename-file');
 Route::post('/api/metadata/{type}/{id}/verify-file', [MetadataManagementController::class, 'verifyFile'])->name('api.metadata.verify-file');
 Route::post('/api/metadata/{type}/{id}/relocate-file', [MetadataManagementController::class, 'relocateFile'])->name('api.metadata.relocate-file');
+Route::get('/api/collections/list', [MetadataManagementController::class, 'listCollections'])->name('api.collections.list');
+Route::post('/api/metadata/movie/{id}/collection', [MetadataManagementController::class, 'updateMovieCollection'])->name('api.metadata.movie.collection');
 Route::delete('/api/metadata/{type}/{id}', [MetadataManagementController::class, 'deleteItem'])->name('api.metadata.delete-item');
 
 // Virtual Media Scanner & Background Job Control Center
@@ -152,6 +157,8 @@ Route::post('/api/scout/organize-and-scan', [MediaScoutController::class, 'organ
 // Real Download & Background Ingestion Center
 Route::get('/downloads', [DownloadManagerController::class, 'index'])->name('downloads.index');
 Route::get('/api/downloads/list', [DownloadManagerController::class, 'list'])->name('api.downloads.list');
+Route::get('/api/downloads/daemon/status', [DownloadManagerController::class, 'daemonStatus'])->name('api.downloads.daemon.status');
+Route::post('/api/downloads/daemon/stop', [DownloadManagerController::class, 'stopDaemon'])->name('api.downloads.daemon.stop');
 Route::post('/api/downloads', [DownloadManagerController::class, 'store'])->name('api.downloads.store');
 Route::post('/api/downloads/inspect', [DownloadManagerController::class, 'inspect'])->name('api.downloads.inspect');
 Route::get('/api/downloads/settings', [DownloadManagerController::class, 'getSettings'])->name('api.downloads.settings');

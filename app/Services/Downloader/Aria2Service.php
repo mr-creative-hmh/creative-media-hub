@@ -2,12 +2,14 @@
 
 namespace App\Services\Downloader;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class Aria2Service
 {
     protected string $rpcUrl;
+
     protected ?string $binaryPath = null;
 
     public function __construct(string $rpcUrl = 'http://127.0.0.1:6800/jsonrpc')
@@ -64,42 +66,230 @@ class Aria2Service
     }
 
     /**
-     * Ensure aria2 JSON-RPC daemon is running.
+     * Get all currently running OS PIDs for aria2c.
+     *
+     * @return array<int> List of PIDs
      */
-    public function ensureDaemon(): bool
+    public function getRunningProcessPids(): array
     {
-        // 1. Quick check if already responding
-        if ($this->ping()) {
-            return true;
-        }
-
-        $bin = $this->getBinaryPath();
-        if (! $bin) {
-            return false;
-        }
-
-        // 2. Launch daemon in background
+        $pids = [];
         try {
             if (PHP_OS_FAMILY === 'Windows') {
-                $escapedBin = escapeshellarg($bin);
-                pclose(popen("start /B \"\" {$escapedBin} --enable-rpc=true --rpc-listen-all=true --rpc-listen-port=6800 --quiet=true", 'r'));
+                $out = @shell_exec('tasklist /FI "IMAGENAME eq aria2c.exe" /FO CSV /NH 2>NUL');
+                if ($out) {
+                    $lines = explode("\n", trim($out));
+                    foreach ($lines as $line) {
+                        $line = trim($line);
+                        if (empty($line) || str_contains($line, 'No tasks')) {
+                            continue;
+                        }
+                        $parts = str_getcsv($line);
+                        if (! empty($parts[1]) && is_numeric($parts[1])) {
+                            $pids[] = (int) $parts[1];
+                        }
+                    }
+                }
             } else {
-                $escapedBin = escapeshellarg($bin);
-                exec("{$escapedBin} --enable-rpc=true --rpc-listen-all=true --rpc-listen-port=6800 --quiet=true > /dev/null 2>&1 &");
-            }
-
-            // Wait up to 2 seconds for socket bind
-            for ($i = 0; $i < 10; $i++) {
-                usleep(200000); // 200ms
-                if ($this->ping()) {
-                    return true;
+                $out = @shell_exec('pgrep -x aria2c 2>/dev/null');
+                if ($out) {
+                    foreach (explode("\n", trim($out)) as $pid) {
+                        if (is_numeric(trim($pid))) {
+                            $pids[] = (int) trim($pid);
+                        }
+                    }
                 }
             }
         } catch (\Throwable $e) {
-            Log::warning('Failed to auto-launch aria2 daemon: ' . $e->getMessage());
+            Log::warning('Error querying aria2c process list: '.$e->getMessage());
         }
 
-        return $this->ping();
+        return array_values(array_unique($pids));
+    }
+
+    /**
+     * Check if at least one aria2c process is active on the OS.
+     */
+    public function isProcessRunning(): bool
+    {
+        return count($this->getRunningProcessPids()) > 0;
+    }
+
+    /**
+     * Kill duplicate orphan aria2c processes, keeping at most one.
+     */
+    public function killDuplicateProcesses(?int $keepPid = null): void
+    {
+        $pids = $this->getRunningProcessPids();
+        if (count($pids) <= 1) {
+            return;
+        }
+
+        $targetKeep = $keepPid ?? $pids[0];
+        foreach ($pids as $pid) {
+            if ($pid !== $targetKeep) {
+                $this->killPid($pid);
+            }
+        }
+    }
+
+    /**
+     * Terminate a specific PID safely.
+     */
+    public function killPid(int $pid): void
+    {
+        try {
+            if (PHP_OS_FAMILY === 'Windows') {
+                @shell_exec("taskkill /F /PID {$pid} 2>NUL");
+            } else {
+                @shell_exec("kill -9 {$pid} 2>/dev/null");
+            }
+        } catch (\Throwable $e) {
+            // Ignore
+        }
+    }
+
+    /**
+     * Ensure aria2 JSON-RPC daemon is running under a strict singleton lock.
+     */
+    public function ensureDaemon(): bool
+    {
+        // 1. Quick check: if already responding, clean up any duplicate orphans and return
+        if ($this->ping()) {
+            $this->killDuplicateProcesses();
+
+            return true;
+        }
+
+        // 2. Use a cache lock to avoid race conditions when multiple requests check simultaneously
+        $lock = Cache::lock('aria2_daemon_lifecycle', 5);
+        try {
+            return (bool) $lock->block(3, function () {
+                if ($this->ping()) {
+                    $this->killDuplicateProcesses();
+
+                    return true;
+                }
+
+                $bin = $this->getBinaryPath();
+                if (! $bin) {
+                    return false;
+                }
+
+                // If processes are running on OS but not responding to RPC, kill them first (hung instances)
+                $existingPids = $this->getRunningProcessPids();
+                if (! empty($existingPids)) {
+                    foreach ($existingPids as $pid) {
+                        $this->killPid($pid);
+                    }
+                    usleep(100000); // 100ms
+                }
+
+                // Launch daemon in background
+                try {
+                    if (PHP_OS_FAMILY === 'Windows') {
+                        $escapedBin = escapeshellarg($bin);
+                        pclose(popen("start /B \"\" {$escapedBin} --enable-rpc=true --rpc-listen-all=true --rpc-listen-port=6800 --quiet=true", 'r'));
+                    } else {
+                        $escapedBin = escapeshellarg($bin);
+                        exec("{$escapedBin} --enable-rpc=true --rpc-listen-all=true --rpc-listen-port=6800 --quiet=true > /dev/null 2>&1 &");
+                    }
+
+                    // Wait up to 1.5 seconds for socket bind
+                    for ($i = 0; $i < 8; $i++) {
+                        usleep(200000); // 200ms
+                        if ($this->ping()) {
+                            $this->killDuplicateProcesses();
+
+                            return true;
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('Failed to auto-launch aria2 daemon: '.$e->getMessage());
+                }
+
+                return $this->ping();
+            });
+        } catch (\Throwable $e) {
+            Log::warning('Lock exception during aria2 ensureDaemon: '.$e->getMessage());
+
+            return $this->ping();
+        }
+    }
+
+    /**
+     * Stop the aria2 daemon completely (graceful RPC shutdown + OS process kill fallback).
+     */
+    public function stopDaemon(): bool
+    {
+        $lock = Cache::lock('aria2_daemon_lifecycle', 5);
+        try {
+            return (bool) $lock->block(3, function () {
+                // 1. Attempt graceful shutdown via JSON-RPC if responding
+                if ($this->ping()) {
+                    try {
+                        Http::timeout(2)->post($this->rpcUrl, [
+                            'jsonrpc' => '2.0',
+                            'id' => 'shutdown',
+                            'method' => 'aria2.forceShutdown',
+                        ]);
+                    } catch (\Throwable $e) {
+                        // ignore
+                    }
+                    usleep(200000); // 200ms
+                }
+
+                // 2. Force-kill all remaining OS aria2c processes
+                $pids = $this->getRunningProcessPids();
+                foreach ($pids as $pid) {
+                    $this->killPid($pid);
+                }
+
+                if (PHP_OS_FAMILY === 'Windows') {
+                    @shell_exec('taskkill /F /IM aria2c.exe /T 2>NUL');
+                } else {
+                    @shell_exec('killall -9 aria2c 2>/dev/null');
+                }
+
+                usleep(150000); // 150ms
+
+                return ! $this->isProcessRunning();
+            });
+        } catch (\Throwable $e) {
+            Log::warning('Exception during stopDaemon: '.$e->getMessage());
+
+            return ! $this->isProcessRunning();
+        }
+    }
+
+    /**
+     * Stop the daemon if there are no active or waiting downloads.
+     */
+    public function stopDaemonIfIdle(): bool
+    {
+        if (! $this->isProcessRunning()) {
+            return true;
+        }
+
+        if (! $this->ping()) {
+            // Hung process, stop it
+            return $this->stopDaemon();
+        }
+
+        try {
+            $stat = $this->call('aria2.getGlobalStat');
+            $numActive = (int) ($stat['numActive'] ?? 0);
+            $numWaiting = (int) ($stat['numWaiting'] ?? 0);
+
+            if ($numActive === 0 && $numWaiting === 0) {
+                Log::info('Aria2 daemon is idle with 0 active/waiting downloads. Stopping daemon.');
+
+                return $this->stopDaemon();
+            }
+        } catch (\Throwable $e) {
+            // If failed to fetch stat, don't kill arbitrarily unless not responding
+        }
+
+        return false;
     }
 
     /**
@@ -121,6 +311,28 @@ class Aria2Service
     }
 
     /**
+     * Get real-time status of the daemon and processes.
+     */
+    public function getDaemonStatus(): array
+    {
+        $pids = $this->getRunningProcessPids();
+        $isPingable = $this->ping();
+        $globalStat = $isPingable ? $this->call('aria2.getGlobalStat') : null;
+
+        return [
+            'running' => count($pids) > 0,
+            'responding' => $isPingable,
+            'process_count' => count($pids),
+            'pids' => $pids,
+            'global_stat' => $globalStat,
+            'num_active' => (int) ($globalStat['numActive'] ?? 0),
+            'num_waiting' => (int) ($globalStat['numWaiting'] ?? 0),
+            'download_speed' => (int) ($globalStat['downloadSpeed'] ?? 0),
+            'upload_speed' => (int) ($globalStat['uploadSpeed'] ?? 0),
+        ];
+    }
+
+    /**
      * Call an aria2 JSON-RPC method.
      */
     public function call(string $method, array $params = []): mixed
@@ -139,10 +351,11 @@ class Aria2Service
 
             if ($res->successful()) {
                 $data = $res->json();
+
                 return $data['result'] ?? null;
             }
         } catch (\Throwable $e) {
-            Log::error("aria2 RPC call failed for {$method}: " . $e->getMessage());
+            Log::error("aria2 RPC call failed for {$method}: ".$e->getMessage());
         }
 
         return null;
@@ -150,11 +363,6 @@ class Aria2Service
 
     /**
      * Add a .torrent file to aria2.
-     *
-     * @param string $torrentFilePath Path to .torrent on disk or raw binary
-     * @param string $destFolder Target download folder
-     * @param array $selectFiles 1-based indexes of files to download
-     * @return string|null The download GID
      */
     public function addTorrent(string $torrentFilePath, string $destFolder, array $selectFiles = [], array $options = []): ?string
     {
@@ -175,7 +383,6 @@ class Aria2Service
         ], $options);
 
         if (! empty($selectFiles)) {
-            // Ensure indexes are 1-based comma separated string
             $indexes = array_map('intval', $selectFiles);
             $indexes = array_filter($indexes, fn ($i) => $i > 0);
             if (! empty($indexes)) {
@@ -190,11 +397,6 @@ class Aria2Service
 
     /**
      * Add a magnet link or HTTP/HTTPS direct URL to aria2.
-     *
-     * @param string $uri Magnet URI or HTTP URL
-     * @param string $destFolder Target download folder
-     * @param array $selectFiles 1-based indexes of files to download
-     * @return string|null The download GID
      */
     public function addUri(string $uri, string $destFolder, array $selectFiles = [], array $options = []): ?string
     {
@@ -221,9 +423,9 @@ class Aria2Service
         return is_string($result) ? $result : null;
     }
 
-        /**
+    /**
      * Get detailed status of a download.
-     * Recursively follows followedBy chains (e.g. magnet metadata download -> actual payload download).
+     * Recursively follows followedBy chains (magnet metadata -> payload download).
      */
     public function tellStatus(string $gid): ?array
     {
@@ -232,12 +434,13 @@ class Aria2Service
             return null;
         }
 
-        // If this task spawned a child task (magnet metadata download transitioned to actual payload download)
+        // If this task spawned a child task (magnet metadata download -> actual payload download)
         if (! empty($res['followedBy']) && is_array($res['followedBy'])) {
             $childGid = $res['followedBy'][0];
             $childStatus = $this->tellStatus($childGid);
             if ($childStatus) {
                 $childStatus['parent_gid'] = $gid;
+
                 return $childStatus;
             }
         }
@@ -283,6 +486,7 @@ class Aria2Service
         $status = $this->tellStatus($gid);
         $targetGid = $status['gid'] ?? $gid;
         $res = $this->call('aria2.pause', [$targetGid]);
+
         return $res !== null;
     }
 
@@ -294,6 +498,7 @@ class Aria2Service
         $status = $this->tellStatus($gid);
         $targetGid = $status['gid'] ?? $gid;
         $res = $this->call('aria2.unpause', [$targetGid]);
+
         return $res !== null;
     }
 
@@ -311,6 +516,7 @@ class Aria2Service
         if ($targetGid !== $gid) {
             $this->call('aria2.forceRemove', [$gid]);
         }
+
         return $res !== null;
     }
 

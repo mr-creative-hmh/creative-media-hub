@@ -11,6 +11,15 @@ import {
 
 const { t, isRTL } = useI18n();
 
+const displayItemTitle = (item: any): string => {
+    if (item.type === 'episode' || item.category === 'series') {
+        const series = (isRTL.value && item.series_title_ar) ? item.series_title_ar : (item.series_title || item.title);
+        const ep = formatSeasonEpisodeTitle(item, { isRTL: isRTL.value });
+        return `${series} - ${ep}`;
+    }
+    return (isRTL.value && item.title_ar) ? item.title_ar : (item.title || '');
+};
+
 const activeTab = ref<'all' | 'movie' | 'series' | 'collection'>('all');
 const searchQuery = ref('');
 const isLoading = ref(true);

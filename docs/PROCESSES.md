@@ -1,52 +1,64 @@
 # ⚙️ Creative Media Hub — Core Processes & Pipeline Lifecycle
 
 > **Author**: Eng. Hasan Mohammad Hasan  
-> **Repository**: [creative-media-hub](https://github.com/mr-creative-hmh/creative-media-hub)
+> **Repository**: [creative-media-hub](https://github.com/mr-creative-hmh/creative-media-hub)  
+> **Version**: 2.5 (Media Scout, Multi-Episode Pipeline, Fix Match Studio, Hardlink Zero-Copy)
 
 ---
 
 ## 1. Process Overview & Lifecycles
 
-Creative Media Hub is powered by 9 interconnected pipelines designed for maximum data integrity, non-blocking performance, and full bilingual (Arabic/English) support.
+Creative Media Hub is powered by 14 interconnected pipelines designed for maximum data integrity, non-blocking performance, zero duplicate rows, and full bilingual (Arabic/English) support.
 
 ```
-       [Storage Directory Tree]
-                  │
-                  ▼
-   1. Virtual Scanner & Crawler ──► 2. Intelligent Scene Parser
-                                              │
-                                              ▼
-   4. Boxsets & Sagas Clustering ◄── 3. Metadata Waterfall (TMDb / OMDb / Arabizer)
-                  │
-                  ├──────────────────────────────┐
-                  ▼                              ▼
-   5. Hybrid Stream & Remuxer       6. Subtitle Extraction & Sync
-                  │                              │
-                  ▼                              ▼
-   7. Watch History Hub & Engine      8. Fix Match & Error Studio
-                  │
-                  ▼
-   9. Zero-Copy NTFS Hardlink Organizer
+       [Storage Directory Tree / Inbound Torrents]
+                           │
+                           ▼
+            1. Virtual Scanner & Crawler
+                           │
+                           ▼
+            2. Intelligent Scene Parser ──► Multi-Episode Engine (S01E01-02)
+                           │
+                           ▼
+            3. Metadata Waterfall (TMDb / OMDb / Arabizer)
+                           │
+            ┌──────────────┴──────────────┐
+            ▼                             ▼
+   4. Boxsets & Sagas (owned >= 2)   12. Media Scout & Gap Tracker
+            │                             │
+            │                             ▼
+            │                        13. Automated Acquisition (P2P / Flatten)
+            │                             │
+            ├─────────────────────────────┴────────────────┐
+            ▼                                              ▼
+   5. Hybrid Stream & Remuxer                     6. Subtitle Extraction & Sync
+            │                                              │
+            ▼                                              ▼
+   7. Watch History Hub & Engine                  8. Fix Match & Collection Studio
+            │                                              │
+            ▼                                              ▼
+   9. NTFS Hardlink Organizer                     14. Relocation Deduplication
 ```
 
 ---
 
-## 2. Deep Dive: The 9 Core Pipelines
+## 2. Deep Dive: Core Pipelines
 
 ### 2.1. Virtual Library Scanner & Multi-Worker Crawler
 - **Location**: `App\Services\Scanner\VirtualLibraryScannerService`
 - **Mechanism**:
   - Traverses specified directory paths (`Movies/`, `Series/`, custom folders) recursively using parallel iterators.
-  - Computes file hashes / inode keys to avoid redundant disk I/O.
-  - Chunks discovered items into batches of 5, pushing them to asynchronous worker queues.
+  - Computes file hashes and inode keys to avoid redundant disk I/O.
+  - Chunks discovered items into non-blocking batches of 5, pushing them to asynchronous worker queues.
   - Features real-time state persistence (`storage/app/scanner_state.json`) with pause, resume, and cancellation support.
 
 ---
 
-### 2.2. Intelligent Scene Name Parser (Arabic & Multilingual Engine)
+### 2.2. Intelligent Scene Name Parser & Multi-Episode Engine
 - **Location**: `App\Services\Organizer\SceneNameParserService`
 - **Key Capabilities**:
   - **Eastern Arabic Numeral Normalization**: Converts `١, ٢, ٣, ٤, ٥` to `1, 2, 3, 4, 5`.
+  - **Canonical Multi-Episode Parsing**: Seamlessly recognizes combined episode formats (`S01E01-E02`, `S01E01E02`, `S01E01-02`, `S01E01.E02`) without misidentifying resolution tags like `.1080p` as episode numbers.
   - **Folder Ancestor Context Inheritance**: If an episode file is named `01.mp4` inside `Breaking Bad/Season 01/`, the parser ascends parent directories to extract series title and season number.
   - **Collection Sequel Parsing**: Recognizes sequence prefixes on movies (e.g. `1.Ip.Man.2008.mp4`, `2.Fast.2.Furious.2003.mkv`) inside movie trees without misclassifying them as TV show episodes.
   - **Scene Tag Stripping**: Cleans release group tags (`BluRay`, `1080p`, `x265`, `HEVC`, `AAC`, `DTS`, `YTS`, `RARBG`, `Elkady`, `Aflam`).
@@ -66,11 +78,13 @@ Creative Media Hub is powered by 9 interconnected pipelines designed for maximum
 
 ---
 
-### 2.4. Boxsets & Franchise Sagas Clustering Engine
-- **Location**: `App\Http\Controllers\CollectionController`
-- **Rules**:
+### 2.4. Boxsets & Franchise Sagas Clustering Engine (Strict `count >= 2`)
+- **Location**: `App\Http\Controllers\CollectionController` & `LibraryGapService`
+- **Rules & Capabilities**:
   - Aggregates movies having `collection_name` or TMDb `belongs_to_collection`.
-  - Enforces a strict threshold of **`count >= 2`** to eliminate false-positive single-movie collections from `/collections`.
+  - **Strict `count >= 2` Threshold**: Guarantees that single standalone movies never create solitary false-positive collections on `/collections`.
+  - **Real-Time Saga Completion**: Integrates with `LibraryGapService` to compute true saga completion percentages against total released franchise parts, highlighting missing titles and displaying "In Progress" badges.
+  - **Automated Collection Audit CLI**: Supported by `php artisan library:audit-collections {--fix} {--align-physical}` to fix unlinked sequels and align physical directory hierarchies.
   - Renders chronological timeline views showing release span (e.g. *Harry Potter: 2001 - 2022 (9 films)*) and total boxset duration.
 
 ---
@@ -109,13 +123,14 @@ Creative Media Hub is powered by 9 interconnected pipelines designed for maximum
 
 ---
 
-### 2.8. Fix Match & Direct ID Resolution Studio
-- **Location**: `App\Http\Controllers\MetadataManagementController`
+### 2.8. Fix Match & Collection Studio Pipeline
+- **Location**: `App\Http\Controllers\MetadataManagementController` & `FixMatchCollectionController`
 - **Capabilities**:
   - **Instant Live Search**: Live title search with automatic release tag stripping.
   - **Direct ID Resolution**: Accepts numeric TMDb IDs (`27205`), IMDb IDs (`tt1375666`), or direct URLs (`themoviedb.org`, `imdb.com`).
   - **Waterfall Cascade**: Resolves IMDb IDs via TMDb `/find` API with automatic fallback to OMDb.
   - **Automated Arabization & Artwork Caching**: Downloads and caches local poster/backdrop images, fetches Arabic titles/synopses (`ensureArabicMetadata`), updates the database model, and syncs genres and seasons.
+  - **Franchise Collection Studio**: Dedicated Collection tab in `FixMatchModal.vue`. Search existing collections, assign with 1-click, create custom franchises, link official TMDb collection IDs, and automatically reorganize physical movie folders.
   - **1-Click Utilities**: 1-Click Movie ↔ Series conversion and scene re-parsing.
 
 ---
@@ -125,13 +140,11 @@ Creative Media Hub is powered by 9 interconnected pipelines designed for maximum
 - **Components**: `WatchHistoryBar.vue` (inline scoped trays with remove button & View All link)
 - **Database**: Enforces unique `['watchable_type', 'watchable_id']` index on `watch_histories`.
 - **Deduplication**: Automatic deduplication and series episode grouping to latest watched episode.
-- **Location**: `App\Models\WatchHistory` & `ContinueWatchingBar.vue`
 - **Features**:
   - **Context-Segregated Trays**:
     - `type=movie`: Filtered strictly to feature films on the Movies page.
     - `type=series`: Filtered to TV shows on the Series page, automatically grouping by series to show only the latest in-progress episode.
     - `type=collection`: Filtered to franchise movies on the Collections page.
-    - Dashboard remains clean and distraction-free.
   - **Auto-Dismiss**: Automatically marks media as finished and clears it from the resume bar when progress exceeds 92%.
 
 ---
@@ -152,3 +165,42 @@ Creative Media Hub is powered by 9 interconnected pipelines designed for maximum
   - Employs NTFS hardlinks (`mklink /H`) so files are organized into standard paths (`Movies/Title (Year)/Title (Year) [1080p].ext`) without duplicating disk space.
   - Continuous torrent seeding remains unaffected.
   - Includes a full **Dry-Run Simulation Mode** with side-by-side filename preview before execution.
+  - Multi-Episode token support: Formats `{Episode:02}` as `01-E02` for multi-episode files and synchronizes all sibling episode records in the database.
+
+---
+
+### 2.12. Media Scout Gap Detection & Automated Acquisition Pipeline
+- **Location**: `App\Services\Scout\LibraryGapService` & `App\Services\Scout\LibraryAcquisitionService`
+- **Lifecycle**:
+  1. **Franchise & Season Audit**: When a collection or TV series is loaded, `LibraryGapService` queries TMDb to determine all released movies in the franchise or episodes in the season.
+  2. **Gap Calculation**: Compares TMDb parts with local media items to identify missing movies or missing episodes, calculating real completion percentage.
+  3. **Automated Torrent Search**: When acquisition is initiated, `LibraryAcquisitionService` queries torrent providers for healthy torrents matching the missing content.
+  4. **Batch Downloader Ingestion**: Enqueues verified magnet links into the download manager.
+  5. **Post-Download Flattening & Canonical Renaming**:
+     - Recursively flattens nested folder trees created by torrent clients.
+     - Renames video files to canonical pattern: `Show - S01E01 - Title [1080p].ext` or `Genre/Collection/Movie (Year)/Movie (Year).ext`.
+     - Moves companion subtitles (`.ar.srt`, `.en.srt`) alongside the renamed video file.
+     - Removes leftover empty directories and triggers scanner refresh.
+
+---
+
+### 2.13. Multi-Episode Ingestion, Inode Mapping & Subtitle Linking Pipeline
+- **Location**: `App\Services\Scanner\VirtualLibraryScannerService` & `PhysicalOrganizerService`
+- **Lifecycle**:
+  1. **Multi-Episode Scene Discovery**: When a file matching `S01E01-E02`, `S01E01E02`, `S01E01-02`, or `S01E01.E02` is encountered, `SceneNameParserService` extracts `episode = 1` and `episode_end = 2`.
+  2. **Constituent Episode Ingestion**: The scanner enters a loop across `range($episode, $episodeEnd)`. For each episode number:
+     - Resolves the individual episode title and overview from TMDb (e.g. Episode 1: "Pilot", Episode 2: "And the Break-up Scene").
+     - Creates or updates an `Episode` record in the database with that episode number and metadata.
+     - Sets `file_path` on each episode record pointing to the shared multi-episode video file.
+  3. **Subtitle Synchronization**: Subtitle tracks linked to the video file are replicated across all constituent episode records in the range.
+  4. **Organizer Synchronization**: When organizing files with `{Episode:02}`, `PhysicalOrganizerService` outputs canonical multi-episode naming (`01-E02`) and updates all sibling episodes pointing to the shared path in one atomic database query.
+
+---
+
+### 2.14. Rescan & In-Place Relocation Deduplication Pipeline
+- **Location**: `App\Services\Scanner\VirtualLibraryScannerService`
+- **Lifecycle**:
+  1. **Title Normalization**: Converts series titles into normalized alphanumeric strings (e.g. `Sense 8` → `sense8`, `Sense8` → `sense8`).
+  2. **Folder Relocation Detection**: When scanning a series folder that has been moved or renamed, the scanner matches the existing series record by normalized title and prior path before considering creating a new record.
+  3. **In-Place Update**: Updates `folder_path` on the existing `Series` record, and updates `file_path` on existing `Episode` and `Subtitle` records.
+  4. **Zero Duplicate Rows**: Prevents orphan duplicate series entries from cluttering the catalog.

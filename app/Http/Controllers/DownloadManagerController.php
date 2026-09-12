@@ -148,4 +148,19 @@ class DownloadManagerController extends Controller
 
         return response()->json(['success' => $success]);
     }
+
+    public function daemonStatus(): JsonResponse
+    {
+        return response()->json($this->downloadService->getDaemonStatus());
+    }
+
+    public function stopDaemon(): JsonResponse
+    {
+        $stopped = $this->downloadService->stopDaemon();
+
+        return response()->json([
+            'success' => $stopped,
+            'daemon' => $this->downloadService->getDaemonStatus(),
+        ]);
+    }
 }

@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Episode;
 use App\Models\MediaItem;
 use App\Models\Season;
-use App\Models\Series;
 use App\Services\Organizer\PhysicalOrganizerService;
 use App\Services\Scanner\VirtualLibraryScannerService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -92,6 +91,52 @@ class ScannerRelocationAndUpgradeTest extends TestCase
         $fresh = Episode::find($ep1->id);
         $this->assertEquals(str_replace('\\', '/', $upgradedFile), $fresh->file_path);
         $this->assertEquals('1080p FHD', $fresh->resolution);
+    }
+
+    public function test_multi_episode_file_indexing_creates_both_episodes_sharing_filepath(): void
+    {
+        $scanner = app(VirtualLibraryScannerService::class);
+
+        $multiFile = "{$this->testDir}/2 Broke Girls - S06E01-E02 - And the Two Openings [720p].mkv";
+        file_put_contents($multiFile, str_repeat('C', 2048));
+
+        $reflectionMethod = new \ReflectionMethod($scanner, 'indexSeriesEpisode');
+        $reflectionMethod->setAccessible(true);
+
+        $file = [
+            'path' => $multiFile,
+            'size' => 2048,
+            'filename' => basename($multiFile),
+            'extension' => 'mkv',
+        ];
+        $parsed = [
+            'type' => 'series',
+            'series_title' => '2 Broke Girls',
+            'season' => 6,
+            'episode' => 1,
+            'episode_end' => 2,
+            'episode_title' => 'And the Two Openings',
+            'resolution' => '720p HD',
+        ];
+
+        $primaryEp = $reflectionMethod->invoke($scanner, $file, $parsed);
+
+        $this->assertNotNull($primaryEp);
+        $this->assertEquals(1, $primaryEp->episode_number);
+
+        // Both Episode 1 and Episode 2 must exist and point to the same multi-episode file
+        $season = Season::where('series_id', $primaryEp->series_id)->where('season_number', 6)->first();
+        $this->assertNotNull($season);
+
+        $eps = Episode::where('season_id', $season->id)->orderBy('episode_number')->get();
+        $this->assertCount(2, $eps);
+
+        $normMultiPath = str_replace('\\', '/', $multiFile);
+        $this->assertEquals(1, $eps[0]->episode_number);
+        $this->assertEquals($normMultiPath, $eps[0]->file_path);
+
+        $this->assertEquals(2, $eps[1]->episode_number);
+        $this->assertEquals($normMultiPath, $eps[1]->file_path);
     }
 
     public function test_physical_organizer_preserves_arabic_series_directory(): void

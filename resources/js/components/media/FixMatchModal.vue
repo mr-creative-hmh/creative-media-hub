@@ -5,20 +5,23 @@ import {
     X, Search, Sparkles, Check, Image as ImageIcon, Star, Calendar,
     Film, Tv, RefreshCw, AlertCircle, Save, SlidersHorizontal, Layers,
     Hash, Repeat, ArrowRightLeft, Wand2, Copy, FileVideo, Folder, HardDrive,
-    FileEdit
+    FileEdit, Trash2, FolderSync, Link2, Unlink, Plus
 } from 'lucide-vue-next';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     show: boolean;
     item: any;
     type?: 'movie' | 'series';
-}>();
+    initialTab?: 'search' | 'direct_id' | 'collection' | 'manual';
+}>(), {
+    initialTab: 'search',
+});
 
 const emit = defineEmits(['close', 'updated', 'deleted']);
 
 const { isRTL, t } = useI18n();
 
-const activeTab = ref<'search' | 'direct_id' | 'manual'>('search');
+const activeTab = ref<'search' | 'direct_id' | 'collection' | 'manual'>('search');
 const searchQuery = ref('');
 const searchYear = ref<string>('');
 const directIdInput = ref('');
@@ -42,6 +45,152 @@ const verificationResult = ref<{
     existing_episodes?: number;
 } | null>(null);
 const customRelocatePath = ref('');
+// Collection Management State
+const collectionList = ref<{ name: string; id: any; source: string; count: number }[]>([]);
+const isLoadingCollections = ref(false);
+const collectionMode = ref<'existing' | 'new'>('existing');
+const selectedExistingCollection = ref('');
+const newCollectionName = ref('');
+const collectionExternalId = ref('');
+const collectionSource = ref<'tmdb' | 'imdb' | 'anilist' | 'tvdb' | 'custom'>('tmdb');
+const reorganizeDiskFolder = ref(true);
+const isSavingCollection = ref(false);
+const collectionSearchFilter = ref('');
+
+const filteredCollections = computed(() => {
+    if (!collectionSearchFilter.value.trim()) return collectionList.value;
+    const q = collectionSearchFilter.value.toLowerCase();
+    return collectionList.value.filter(c => c.name.toLowerCase().includes(q));
+});
+
+const fetchCollectionList = async () => {
+    isLoadingCollections.value = true;
+    try {
+        const res = await fetch('/api/collections/list');
+        if (res.ok) {
+            collectionList.value = await res.json();
+        }
+    } catch (e) {
+        console.error('Failed to load collections list', e);
+    } finally {
+        isLoadingCollections.value = false;
+    }
+};
+
+const switchToCollectionTab = () => {
+    activeTab.value = 'collection';
+    initCollectionFields();
+    fetchCollectionList();
+};
+
+const initCollectionFields = () => {
+    if (!props.item) return;
+    const currentName = props.item.collection_name || '';
+    const currentId = props.item.collection_id || '';
+    const currentSrc = props.item.collection_id_source || (currentId ? 'tmdb' : 'custom');
+
+    selectedExistingCollection.value = currentName;
+    newCollectionName.value = currentName;
+    collectionExternalId.value = String(currentId || '');
+    collectionSource.value = currentSrc;
+    collectionMode.value = currentName ? 'existing' : 'new';
+};
+
+const selectExistingCollection = (c: { name: string; id: any; source: string }) => {
+    selectedExistingCollection.value = c.name;
+    newCollectionName.value = c.name;
+    collectionExternalId.value = c.id ? String(c.id) : '';
+    collectionSource.value = (c.source as any) || 'tmdb';
+};
+
+const saveCollectionChanges = async () => {
+    if (!props.item?.id) return;
+    isSavingCollection.value = true;
+    searchError.value = '';
+    successMessage.value = '';
+
+    const targetName = collectionMode.value === 'existing'
+        ? selectedExistingCollection.value.trim()
+        : newCollectionName.value.trim();
+
+    try {
+        const res = await fetch(`/api/metadata/movie/${props.item.id}/collection`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+            body: JSON.stringify({
+                collection_name: targetName,
+                collection_id: collectionExternalId.value.trim() || null,
+                collection_id_source: collectionSource.value,
+                reorganize_folder: reorganizeDiskFolder.value,
+            }),
+        });
+
+        const data = await res.json();
+        if (data.success && data.movie) {
+            successMessage.value = data.message || (isRTL.value ? 'تم تحديث السلسلة بنجاح!' : 'Collection updated successfully!');
+            props.item.collection_name = data.movie.collection_name;
+            props.item.collection_id = data.movie.collection_id;
+            props.item.collection_id_source = data.movie.collection_id_source;
+            props.item.file_path = data.movie.file_path;
+            props.item.folder_path = data.movie.folder_path;
+            emit('updated', data.movie);
+            fetchCollectionList();
+        } else {
+            searchError.value = data.message || (isRTL.value ? 'فشل تحديث السلسلة.' : 'Failed to update collection.');
+        }
+    } catch (e: any) {
+        searchError.value = e?.message || (isRTL.value ? 'حدث خطأ أثناء حفظ السلسلة.' : 'Error saving collection.');
+    } finally {
+        isSavingCollection.value = false;
+    }
+};
+
+const unlinkCollection = async () => {
+    if (!props.item?.id) return;
+    isSavingCollection.value = true;
+    searchError.value = '';
+    successMessage.value = '';
+
+    try {
+        const res = await fetch(`/api/metadata/movie/${props.item.id}/collection`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+            body: JSON.stringify({
+                collection_name: null,
+                collection_id: null,
+                collection_id_source: null,
+                reorganize_folder: reorganizeDiskFolder.value,
+            }),
+        });
+
+        const data = await res.json();
+        if (data.success && data.movie) {
+            successMessage.value = data.message || (isRTL.value ? 'تم فك ارتباط الفيلم بالسلسلة بنجاح!' : 'Movie detached from collection!');
+            props.item.collection_name = null;
+            props.item.collection_id = null;
+            props.item.collection_id_source = null;
+            props.item.file_path = data.movie.file_path;
+            props.item.folder_path = data.movie.folder_path;
+            selectedExistingCollection.value = '';
+            newCollectionName.value = '';
+            collectionExternalId.value = '';
+            emit('updated', data.movie);
+            fetchCollectionList();
+        } else {
+            searchError.value = data.message || (isRTL.value ? 'فشل فك الارتباط.' : 'Failed to detach.');
+        }
+    } catch (e: any) {
+        searchError.value = e?.message || (isRTL.value ? 'حدث خطأ أثناء فك الارتباط.' : 'Error detaching collection.');
+    } finally {
+        isSavingCollection.value = false;
+    }
+};
 const showRelocateInput = ref(false);
 
 const verifyDiskFile = async () => {
@@ -183,6 +332,18 @@ const cleanTitleForSearch = (raw: string): { title: string; year: string } => {
     
     return { title: clean, year };
 };
+
+watch(() => props.show, (showing) => {
+    if (showing) {
+        if (props.initialTab) {
+            activeTab.value = props.initialTab;
+            if (props.initialTab === 'collection') {
+                initCollectionFields();
+                fetchCollectionList();
+            }
+        }
+    }
+});
 
 watch(() => props.item, (newItem) => {
     if (newItem) {
@@ -588,6 +749,15 @@ const saveManualEdit = async () => {
                         <SlidersHorizontal class="w-3.5 h-3.5" />
                         <span>{{ isRTL ? 'تعديل يدوي' : 'Manual Edit' }}</span>
                     </button>
+                    <button
+                        v-if="!isSeriesType"
+                        @click="switchToCollectionTab"
+                        class="px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
+                        :class="activeTab === 'collection' ? 'bg-cyan-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'"
+                    >
+                        <Layers class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'إدارة السلسلة' : 'Collection' }}</span>
+                    </button>
                 </div>
 
                 <!-- Quick Action Tools -->
@@ -817,6 +987,17 @@ const saveManualEdit = async () => {
                     <div class="md:col-span-2">
                         <label class="block text-xs font-medium text-slate-400 mb-1">{{ isRTL ? 'اسم السلسلة / المجموعة' : 'Collection / Franchise Name' }}</label>
                         <input v-model="form.collection_name" type="text" placeholder="e.g. The Dark Knight Collection" class="w-full bg-slate-900/90 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500" />
+                        <div class="mt-1.5 flex items-center justify-between text-[11px] text-slate-400">
+                            <span>{{ isRTL ? 'لربط معرف السلسلة، المصدر، والمزامنة على القرص:' : 'To configure Collection ID, source & disk folder sync:' }}</span>
+                            <button
+                                type="button"
+                                @click="switchToCollectionTab"
+                                class="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1 cursor-pointer"
+                            >
+                                <Layers class="w-3 h-3" />
+                                <span>{{ isRTL ? 'فتح تبويب إدارة السلسلة' : 'Open Collection Tab' }} &rarr;</span>
+                            </button>
+                        </div>
                     </div>
                     <div class="md:col-span-2">
                         <label class="block text-xs font-medium text-slate-400 mb-1">{{ isRTL ? 'رابط البوستر (Poster URL)' : 'Poster Image URL' }}</label>
@@ -844,6 +1025,190 @@ const saveManualEdit = async () => {
                     >
                         <Save class="w-4 h-4" />
                         <span>{{ isRTL ? 'حفظ التعديلات' : 'Save Changes' }}</span>
+                    </button>
+                </div>
+
+                        </div>
+
+<!-- Tab 4: Collection Management -->
+            <div v-if="activeTab === 'collection'" class="flex-1 overflow-y-auto space-y-4 pr-1">
+                <!-- Status Banner -->
+                <div v-if="item?.collection_name" class="p-4 rounded-2xl bg-gradient-to-r from-cyan-950/40 via-slate-900 to-purple-950/30 border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg shadow-cyan-950/20">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center shrink-0">
+                            <Layers class="w-5 h-5 text-cyan-400" />
+                        </div>
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] uppercase tracking-wider font-extrabold text-cyan-400">{{ isRTL ? 'مرتبط بسلسلة' : 'Currently Linked to Collection' }}</span>
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                    {{ item.collection_id_source ? item.collection_id_source.toUpperCase() : 'TMDB' }}
+                                </span>
+                            </div>
+                            <h4 class="text-base font-black text-white truncate">{{ item.collection_name }}</h4>
+                            <p v-if="item.collection_id" class="text-xs text-slate-400 font-mono">
+                                ID: <span class="text-cyan-300">{{ item.collection_id }}</span>
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        @click="unlinkCollection"
+                        :disabled="isSavingCollection"
+                        class="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 border border-rose-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                    >
+                        <Unlink class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'فك الارتباط بالسلسلة' : 'Detach Movie' }}</span>
+                    </button>
+                </div>
+                <div v-else class="p-4 rounded-2xl bg-slate-900/80 border border-white/10 flex items-center gap-3">
+                    <AlertCircle class="w-5 h-5 text-amber-400 shrink-0" />
+                    <div>
+                        <h4 class="text-sm font-bold text-white">{{ isRTL ? 'فيلم منفصل (غير مرتبط بأي سلسلة)' : 'Standalone Movie (No Collection Assigned)' }}</h4>
+                        <p class="text-xs text-slate-400">{{ isRTL ? 'يمكنك ربطه بسلسلة حالية من مكتبتك أو إنشاء سلسلة جديدة أدناه.' : 'You can assign it to an existing library franchise or create a new collection below.' }}</p>
+                    </div>
+                </div>
+
+                <!-- Mode Selection -->
+                <div class="flex items-center gap-2 p-1 bg-slate-900/80 rounded-xl border border-white/5">
+                    <button
+                        type="button"
+                        @click="collectionMode = 'existing'"
+                        class="flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        :class="collectionMode === 'existing' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'"
+                    >
+                        <FolderSync class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'اختيار من السلاسل الحالية' : 'Choose Existing Collection' }}</span>
+                    </button>
+                    <button
+                        type="button"
+                        @click="collectionMode = 'new'"
+                        class="flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        :class="collectionMode === 'new' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'"
+                    >
+                        <Plus class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'إنشاء / ربط سلسلة جديدة' : 'Define New Collection' }}</span>
+                    </button>
+                </div>
+
+                <!-- Existing Collections Picker -->
+                <div v-if="collectionMode === 'existing'" class="space-y-3">
+                    <div class="flex items-center gap-2">
+                        <div class="relative flex-1">
+                            <Search class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                            <input
+                                v-model="collectionSearchFilter"
+                                type="text"
+                                :placeholder="isRTL ? 'البحث في السلاسل المتاحة...' : 'Search available collections...'"
+                                class="w-full bg-slate-900/90 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                            />
+                        </div>
+                        <span class="text-xs text-slate-400 font-mono px-2.5 py-1.5 bg-slate-900/60 rounded-xl border border-white/5 shrink-0">
+                            {{ filteredCollections.length }} {{ isRTL ? 'سلسلة' : 'collections' }}
+                        </span>
+                    </div>
+
+                    <div v-if="isLoadingCollections" class="py-8 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
+                        <RefreshCw class="w-4 h-4 animate-spin text-cyan-400" />
+                        <span>{{ isRTL ? 'جارٍ تحميل السلاسل...' : 'Loading collections list...' }}</span>
+                    </div>
+                    <div v-else-if="filteredCollections.length === 0" class="py-8 text-center text-slate-500 text-xs bg-slate-900/40 rounded-xl border border-white/5">
+                        {{ isRTL ? 'لم يتم العثور على سلاسل مطابقة.' : 'No matching collections found.' }}
+                    </div>
+                    <div v-else class="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+                        <div
+                            v-for="col in filteredCollections"
+                            :key="col.name"
+                            @click="selectExistingCollection(col)"
+                            class="p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 text-left"
+                            :class="selectedExistingCollection === col.name ? 'bg-cyan-500/15 border-cyan-500 text-white shadow-sm' : 'bg-slate-900/50 hover:bg-slate-900 border-white/5 text-slate-300'"
+                        >
+                            <div class="min-w-0 flex items-center gap-2.5">
+                                <Layers class="w-4 h-4 shrink-0" :class="selectedExistingCollection === col.name ? 'text-cyan-400' : 'text-slate-500'" />
+                                <div class="min-w-0">
+                                    <span class="text-xs font-bold block truncate">{{ col.name }}</span>
+                                    <div class="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
+                                        <span v-if="col.id">ID: {{ col.id }} ({{ (col.source || 'tmdb').toUpperCase() }})</span>
+                                        <span>&bull; {{ col.count }} {{ isRTL ? 'أفلام مقتناة' : 'owned movies' }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-if="selectedExistingCollection === col.name" class="w-5 h-5 rounded-full bg-cyan-500 text-slate-950 flex items-center justify-center shrink-0">
+                                <Check class="w-3.5 h-3.5 stroke-[3]" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- New Collection Form -->
+                <div v-if="collectionMode === 'new'" class="space-y-3 p-4 rounded-xl bg-slate-900/50 border border-white/5">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">
+                            {{ isRTL ? 'اسم السلسلة / المجموعة الجديدة' : 'Collection / Franchise Name' }} <span class="text-rose-400">*</span>
+                        </label>
+                        <input
+                            v-model="newCollectionName"
+                            type="text"
+                            placeholder="e.g. Bad Boys Collection"
+                            class="w-full bg-slate-900/90 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
+                        />
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">
+                                {{ isRTL ? 'معرّف السلسلة الخارجي (TMDB Collection ID)' : 'External Collection ID (e.g. TMDB ID)' }}
+                            </label>
+                            <input
+                                v-model="collectionExternalId"
+                                type="text"
+                                placeholder="e.g. 14890"
+                                class="w-full bg-slate-900/90 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-cyan-500"
+                            />
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">
+                                {{ isRTL ? 'مصدر المعرّف' : 'ID Source' }}
+                            </label>
+                            <select
+                                v-model="collectionSource"
+                                class="w-full bg-slate-900/90 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                            >
+                                <option value="tmdb">TMDB</option>
+                                <option value="imdb">IMDb</option>
+                                <option value="tvdb">TheTVDB</option>
+                                <option value="custom">Custom / Local</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reorganize Physical Folder Checkbox -->
+                <div class="p-3.5 rounded-xl bg-slate-900/70 border border-white/10 flex items-start gap-3">
+                    <input
+                        id="reorgCheck"
+                        v-model="reorganizeDiskFolder"
+                        type="checkbox"
+                        class="mt-0.5 w-4 h-4 rounded text-cyan-500 bg-slate-950 border-white/20 focus:ring-cyan-500 cursor-pointer"
+                    />
+                    <label for="reorgCheck" class="text-xs text-slate-300 cursor-pointer select-none">
+                        <span class="font-bold text-white block">{{ isRTL ? 'إعادة تنظيم مجلد الفيلم على القرص تلقائياً' : 'Automatically relocate movie folder on disk into collection folder' }}</span>
+                        <span class="text-[11px] text-slate-400 block mt-0.5">
+                            {{ isRTL ? 'يقوم بنقل المجلد إلى مسار السلسلة الرسمي: Movies/{Genre}/{Collection Name}/{Movie Title}/' : 'Moves files to canonical structure: Movies/{Genre}/{Collection Name}/{Movie Title}/' }}
+                        </span>
+                    </label>
+                </div>
+
+                <!-- Save Action Button -->
+                <div class="pt-2 flex justify-end">
+                    <button
+                        type="button"
+                        @click="saveCollectionChanges"
+                        :disabled="isSavingCollection || (collectionMode === 'existing' && !selectedExistingCollection.trim()) || (collectionMode === 'new' && !newCollectionName.trim())"
+                        class="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm transition-all flex items-center gap-2 shadow-lg shadow-cyan-500/20 disabled:opacity-50 cursor-pointer"
+                    >
+                        <RefreshCw v-if="isSavingCollection" class="w-4 h-4 animate-spin" />
+                        <Save v-else class="w-4 h-4" />
+                        <span>{{ isRTL ? 'حفظ وتطبيق إعدادات السلسلة' : 'Save & Apply Collection' }}</span>
                     </button>
                 </div>
             </div>

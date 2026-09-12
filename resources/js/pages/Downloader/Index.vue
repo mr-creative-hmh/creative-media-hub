@@ -53,6 +53,9 @@ const {
     resumeDownload,
     retryDownload,
     deleteDownload,
+    daemonStatus,
+    fetchDaemonStatus,
+    stopDaemon,
 } = useDownloader();
 
 const activeFilter = ref<'all' | 'downloading' | 'paused' | 'completed'>('all');
@@ -87,6 +90,7 @@ const settingsForm = ref({
 const isSavingSettings = ref(false);
 
 onMounted(() => {
+    fetchDaemonStatus();
     if (props.initialDownloads && props.initialDownloads.length > 0 && downloads.value.length === 0) {
         downloads.value = props.initialDownloads;
     }
@@ -304,6 +308,19 @@ const handleSaveSettings = async () => {
             </div>
 
             <div class="flex items-center gap-3">
+                <!-- Daemon Engine Status Pill -->
+                <div v-if="daemonStatus" class="flex items-center gap-2 px-3 py-2 rounded-xl glass-panel border text-xs font-mono"
+                    :class="daemonStatus.running ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300' : 'border-slate-700 bg-slate-900/40 text-slate-400'">
+                    <span class="w-2 h-2 rounded-full" :class="daemonStatus.running ? 'bg-cyan-400 animate-pulse' : 'bg-slate-500'"></span>
+                    <span class="font-bold font-sans">{{ isRTL ? 'محرك التنزيل:' : 'Engine:' }}</span>
+                    <span>{{ daemonStatus.running ? (daemonStatus.pids?.length > 0 ? `PID ${daemonStatus.pids[0]}` : 'Active') : (isRTL ? 'خامل (متوقف)' : 'Idle') }}</span>
+                    <button v-if="daemonStatus.running && activeDownloads.length === 0"
+                        @click="stopDaemon"
+                        class="ml-1 px-2 py-0.5 rounded text-[10px] bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 transition-all cursor-pointer"
+                        :title="isRTL ? 'إيقاف المحرك وتحرير الذاكرة' : 'Stop Engine & Free RAM'">
+                        {{ isRTL ? 'إيقاف' : 'Stop' }}
+                    </button>
+                </div>
                 <button
                     @click="showFastOrganize = true"
                     class="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 font-bold text-xs transition-all cursor-pointer shadow-sm"

@@ -94,15 +94,18 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 - **Automatic Fallback Waterfall**: Queries TMDb `/find` external source with automatic fallback to OMDb.
 - **Bilingual Arabization & Artwork Caching**: Automatically saves English and Arabic titles and synopses, and caches high-res artwork locally.
 - **1-Click Movie ↔ Series Converter & Scene Re-Parser**: Instantly convert accidental classifications and re-evaluate filenames.
+- **Collection Studio Tab (`FixMatchModal.vue`)**: Dedicated franchise management tab with instant search across existing collections, 1-click assignment, custom collection creation, TMDb collection ID linkage, and automated physical folder realignment.
 
 ### 4. 🧲 Smart Downloader with Torrent Multi-File Selection
 - **Multi-File Torrent Checklist**: Inspects torrents and magnet links, allowing users to select individual video files with quick buttons (`Select All`, `Videos Only`, `Clear`).
 - **Direct vs Torrent Modes**: Dedicated modes for direct HTTP downloads and P2P torrent streaming ingestion.
 - **Default vs Custom Folder Routing**: Automatically routes movies and series to default library folders or custom user-selected paths.
 
-### 5. 🍿 Movie Boxsets & Franchise Sagas
-- Clusters multi-film movie franchises (e.g. *Harry Potter (9 films)*, *Fast & Furious (11 films)*, *The Dark Knight Trilogy*, *Knives Out*, *Ip Man Collection*) with chronological release timelines.
-- Intelligent **`count >= 2`** threshold eliminates solitary 1-movie false positives from `/collections`.
+### 5. 🍿 Movie Boxsets & Franchise Sagas (Strict `owned >= 2`)
+- **Strict Franchise Verification**: Eliminates solitary 1-movie false positives from `/collections` by enforcing a strict `owned >= 2` rule.
+- **Real-Time Saga Completion & Media Scout Integration**: Displays true completion percentages, release spans, and "In Progress" badges calculated against complete TMDb franchise parts.
+- **Missing Film Identification**: Pinpoints missing franchise installments with 1-click search and acquisition triggers.
+- **CLI Collection Auditor**: Built-in `php artisan library:audit-collections {--fix} {--align-physical}` command to detect unlinked franchise movies, fix database collection associations, and physically align folder structures.
 
 ### 6. 🌍 Regional Cinema Origin Filtering
 - 1-Click regional filtering:
@@ -202,6 +205,21 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 - **Zero-Key Free Metadata Chain**: TVMaze Free API, AniList GraphQL, and Wikipedia/Wikidata API operate alongside TMDb and OMDb.
 - **Live Connectivity Testing**: Re-order provider priority and test API connectivity in real time directly from Settings.
 - **Fix Match Studio Enhancements**: Direct ID resolution (TMDb, IMDb, TVMaze), automatic Arabic title/synopsis fetch, multi-format poster detection (`.jpg`, `.png`, `.webp`), and season/episode artwork synchronization.
+
+### 20. 📡 Media Scout & Smart Library Acquisition
+- **Real-Time Gap Tracking (`LibraryGapService`)**: Automatically audits movie sagas and TV series seasons against official TMDb parts, calculating exact missing counts and saga completion percentages.
+- **Automated Season Torrent Acquisition (`LibraryAcquisitionService`)**: Automatically searches, scrapes, filters, and triggers batch downloads for missing episodes or seasons.
+- **Post-Download Processing Pipeline**: Recursively flattens downloaded archives, standardizes video files to canonical naming conventions (`Show - S01E01 - Title [1080p].ext`), relocates companion subtitle files (`.ar.srt`, `.en.srt`), and cleans up empty download folders.
+
+### 21. 🎞️ Multi-Episode Scene Parsing & Database Multiplication
+- **Canonical Multi-Episode Scene Formats**: Fully parses combined episode naming schemes (`S01E01-E02`, `S01E01E02`, `S01E01-02`, `S01E01.E02`) without misidentifying resolution tags (such as `.1080p`) as episode numbers.
+- **Database Entity Multiplication**: The Virtual Library Scanner automatically creates and populates individual `Episode` database records for every episode covered in the multi-part file, fetching distinct TMDb titles and synopses.
+- **Shared Media File & Subtitle Linkage**: Links each individual episode record to the same shared physical video file and replicates subtitle track attachments so each episode streams seamlessly.
+- **Physical Organizer Token Integration**: The `{Episode:02}` token automatically formats multi-episodes as `01-E02` on disk, and `updateDatabasePath()` synchronizes all sibling episode records in one atomic pass.
+
+### 22. 🔄 Rescan & Relocation Deduplication Engine
+- **Alphanumeric Title Normalization**: Compares sanitized alphanumeric strings to accurately correlate existing library items when folder names vary slightly (e.g. *Sense8* vs *Sense 8*).
+- **In-Place Path Relocation**: Updates the existing series and episode records in the database rather than creating duplicate series or detached episodes when folders are moved.
 
 
 ---

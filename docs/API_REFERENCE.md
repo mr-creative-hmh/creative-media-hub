@@ -67,6 +67,37 @@
 - **`POST /api/metadata/{type}/{id}/convert-type`**  
   1-Click conversion: converts an accidental Series to Movie or Movie to Series.
 
+### 2.4. FixMatch Collection Studio
+- **`GET /api/fix-match/collections`**  
+  Retrieves all unique movie and franchise collections across the library with item counts, external TMDb collection IDs, and sources.
+  **Response:**
+  ```json
+  {
+    "success": true,
+    "collections": [
+      {
+        "name": "Bad Boys Collection",
+        "id": "9443",
+        "source": "tmdb",
+        "count": 4
+      }
+    ]
+  }
+  ```
+- **`POST /api/fix-match/collection`**  
+  Assigns, modifies, or detaches a collection from a media item (`movie` or `series`). Supports creating new collections, linking TMDb IDs, and optional automated physical disk directory relocation.
+  ```json
+  {
+    "media_id": 12,
+    "media_type": "movie",
+    "collection_mode": "existing",
+    "existing_collection_name": "Bad Boys Collection",
+    "collection_external_id": "9443",
+    "collection_source": "tmdb",
+    "reorganize_folder": true
+  }
+  ```
+
 ---
 
 ## 3. Subtitles API Endpoints
@@ -257,3 +288,31 @@
     "folders": ["H:/Torrents/Complete", "C:/Users/hasan/Downloads"]
   }
   ```
+
+---
+
+## 9. Media Scout & Smart Library Acquisition Endpoints
+
+### 9.1. Gap Detection
+- **`GET /api/scout/gaps`**  
+  Scans all movie franchises and TV shows in the library, returning detected missing movies and missing episodes alongside completion percentages and severity ratings.
+- **`POST /api/scout/refresh`**  
+  Forces a fresh audit across TMDb and local catalog tables, clearing out-of-date cache entries.
+
+### 9.2. Automated Torrent Search & Acquisition
+- **`GET /api/scout/torrents?query={title}&type={movie|series}&season={season_num}`**  
+  Searches verified P2P torrent trackers for healthy releases with seeders and audio/video quality tags.
+- **`POST /api/scout/download`**  
+  Queues a missing franchise movie or season pack into the download manager.
+- **`POST /api/scout/organize-and-scan`**  
+  Initiates the post-download automation pipeline: flattens nested torrent subfolders, renames video files to canonical naming patterns, moves companion subtitle files, and rescans the library.
+
+---
+
+## 10. Boxsets & Franchise Sagas Endpoints
+
+- **`GET /collections`**  
+  Returns all verified multi-movie franchises meeting the strict `owned >= 2` threshold, populated with release date spans, total running times, and Media Scout completion percentages.
+- **`GET /collections/{slug}`**  
+  Returns detailed franchise view including chronological movies timeline, missing installment warnings, and 1-click Media Scout acquisition triggers.
+

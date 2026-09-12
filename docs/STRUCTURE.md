@@ -77,11 +77,12 @@ creative-media-hub/
 | `DashboardController` | Aggregates hero spotlight media (explicitly tagged movies and TV shows with Season 1 Episode 1 pre-resolved) and top-rated shelves. |
 | `MediaController` | Handles movie catalog listing, regional origin filtering, genre filtering, search, and continue watching records. |
 | `SeriesController` | Manages TV show catalog, season/episode hierarchy, and episodic continue watching progress. |
-| `CollectionController` | Groups multi-film movie franchises (`count >= 2`) into chronological saga timelines. |
+| `CollectionController` | Groups multi-film movie franchises (`count >= 2`) into chronological saga timelines, integrated with Media Scout real-time gap tracking and completion badges. |
 | `StreamController` | Serves HTTP 206 byte-range partial content and streams on-the-fly FFmpeg fragmented MP4 remuxes with process lifecycle cleanup. |
 | `MetadataManagementController` | Powers Fix Match Studio, direct TMDb/IMDb ID lookup (`/api/metadata/lookup-id`), 1-click movie↔series conversion, and scene re-parsing. |
+| `FixMatchCollectionController` | Powers franchise management in FixMatchModal, 1-click collection assignment, custom collection creation, TMDb collection ID linkage, and physical folder reorganization. |
 | `DownloadManagerController` | Manages direct HTTP and torrent downloads, torrent file tree inspection, and target path routing. |
-| `PhysicalOrganizerController` | Simulates and executes zero-copy NTFS hardlink migrations with dry-run verification. |
+| `PhysicalOrganizerController` | Simulates and executes zero-copy NTFS hardlink migrations with dry-run verification and multi-episode `{Episode:02}` token formatting (`01-E02`). |
 | `SubtitleController` | Handles SubDL and OpenSubtitles v3 search, on-the-fly archive decompression, WebVTT serving, and health checks. |
 | `SettingsController` | Manages media library directories, scanner state, API keys, and transcode cache clearing. |
 | `AnalyticsController` | Provides storage usage metrics, resolution distributions, codec breakdowns, and library counts. |
@@ -91,9 +92,11 @@ creative-media-hub/
 ### 2.2. Service Layer (`app/Services/`)
 | Service | Purpose |
 | :--- | :--- |
-| `Scanner/VirtualLibraryScannerService` | Discovers media files on disk, computes inode keys, and dispatches batch processing queues without modifying disk files. |
-| `Organizer/SceneNameParserService` | Normalizes release titles, extracts Eastern/Western numerals, strips scene tags, and inherits directory ancestor context. |
-| `Organizer/PhysicalOrganizerService` | Generates NTFS hardlink hierarchies (`mklink /H`) maintaining active torrent seeding without using extra disk space. |
+| `Scanner/VirtualLibraryScannerService` | Discovers media files on disk, computes inode keys, ingests multi-episode files with individual database entity multiplication, and deduplicates relocated series folders without creating redundant rows. |
+| `Organizer/SceneNameParserService` | Normalizes release titles, extracts Eastern/Western numerals, strips scene tags, parses multi-episode patterns (`S01E01-E02`, `S01E01E02`, `S01E01-02`, `S01E01.E02`), and inherits directory ancestor context. |
+| `Organizer/PhysicalOrganizerService` | Generates NTFS hardlink hierarchies (`mklink /H`) maintaining active torrent seeding, formats multi-episode `{Episode:02}` tokens as `01-E02`, and synchronizes all sibling episode database paths atomically. |
+| `Scout/LibraryGapService` | Audits movie sagas and TV seasons against TMDb, calculates missing parts/episodes, completion percentages, and gap severity. |
+| `Scout/LibraryAcquisitionService` | Scrapes verified torrents, initiates batch downloads, and handles post-download pipeline (folder flattening, canonical renaming, companion subtitle movement). |
 | `Metadata/MetadataAggregator` | Cascades metadata queries across TMDb, OMDb, AniList, and TVMaze with automated Arabic translation. |
 | `Streaming/FfmpegLocatorService` | Auto-detects FFmpeg/FFprobe binaries across Windows, Linux, and macOS environments. |
 | `Subtitles/SubtitleHealthCheckService` | Inspects subtitle cue text, detects true dialogue language, strips corrupt stubs, and standardizes file extensions. |
@@ -132,6 +135,7 @@ creative-media-hub/
 - `HeroBanner.vue`: Dynamic hero carousel with autoplay, rating badges, background backdrop cross-fading, and type-safe "Play Now" / "More Details" dispatchers.
 - `MediaCard.vue`: Responsive media card with hover zoom, quick action triggers, rating badges, and resolution tags.
 - `MediaDetailModal.vue`: Rich modal overlay displaying synopses, cast credits, technical codecs, audio channels, and direct playback triggers.
+- `FixMatchModal.vue`: Comprehensive metadata correction modal with Direct ID lookup, Arabic translation toggle, movie/series converter, and dedicated Collection Studio tab for 1-click franchise linking and physical reorganization.
 - `WatchHistoryBar.vue`: Context-segregated horizontal progress bar with instant resume buttons.
 
 ### 4.3. Subtitles & Health (`components/subtitles/`)

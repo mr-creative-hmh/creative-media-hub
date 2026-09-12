@@ -2,7 +2,7 @@
 
 > **Author**: Eng. Hasan Mohammad Hasan  
 > **Repository**: [creative-media-hub](https://github.com/mr-creative-hmh/creative-media-hub)  
-> **Version**: 2.0 (Boxsets, Regional Cinema, Intelligent Parser, Hybrid Remuxer)
+> **Version**: 2.5 (Media Scout, Multi-Episode Engine, Fix Match Collection Studio, Zero-Lock SQLite WAL)
 
 ---
 
@@ -33,6 +33,7 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
 |   ├── CollectionController (Movie Boxsets, Chronological Sagas, Franchise Resume) |
 |   ├── StreamController (HTTP 206 Byte-Range & Non-Blocking FFmpeg Remuxer)        |
 |   ├── MetadataManagementController (Fix Match Studio, Direct TMDb/IMDb Lookup)    |
+|   ├── FixMatchCollectionController (Franchise Studio, 1-Click Collection Linking) |
 |   ├── DownloadManagerController (Torrent/Direct Inspector, Multi-File Selection)  |
 |   ├── PhysicalOrganizerController (Zero-Copy NTFS Hardlink Engine)               |
 |   ├── SubtitleController (Embedded Extractor, SubDL/OpenSubtitles Sync & Checker) |
@@ -45,8 +46,9 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
 |  +--------------------------------+  +------------------------------------------+  |
 |  | VirtualLibraryScannerService   |  | SceneNameParserService (Arabic + En)     |  |
 |  | - Parallel Directory Traversal |  | - Eastern Numeral Normalization          |  |
-|  | - Non-Blocking Batch Queues    |  | - Folder Ancestor Context Inheritance    |  |
-|  | - State Store & Pause/Resume   |  | - Collection Prefix & Sequel Detection   |  |
+|  | - Multi-Episode Ingestion      |  | - Multi-Episode Patterns (S01E01-02)     |  |
+|  | - Relocation Deduplication     |  | - Folder Ancestor Context Inheritance    |  |
+|  | - Non-Blocking Batch Queues    |  | - Collection Prefix & Sequel Detection   |  |
 |  +--------------------------------+  +------------------------------------------+  |
 |  +--------------------------------+  +------------------------------------------+  |
 |  | MetadataAggregator (Waterfall) |  | FfmpegLocatorService & Stream Engine     |  |
@@ -54,6 +56,12 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
 |  | - OMDb (IMDb Ratings/Awards)   |  | - On-the-Fly Fragmented MP4 Remuxing     |  |
 |  | - AniList (Anime Specialist)   |  | - Background FastStart Disk Caching      |  |
 |  | - Arabic Translation Engine    |  | - Process Lifecycle & Orphan Reaper      |  |
+|  +--------------------------------+  +------------------------------------------+  |
+|  +--------------------------------+  +------------------------------------------+  |
+|  | LibraryGapService (Media Scout)|  | LibraryAcquisitionService                |  |
+|  | - Real-Time Saga Gaps (TMDb)   |  | - Automated Torrent Scraping & Search    |  |
+|  | - TV Season Missing Episodes   |  | - Batch Download Initiation & Tracking   |  |
+|  | - Completion Percentage Engine |  | - Recursive Flattening & Canonical Rename|  |
 |  +--------------------------------+  +------------------------------------------+  |
 |  +--------------------------------+  +------------------------------------------+  |
 |  | SubtitleHealth & Cloud Sync    |  | DownloadManagerService                   |  |
@@ -65,8 +73,8 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
 |  +--------------------------------+  +------------------------------------------+  |
 |  | EmbeddedSubtitleDetector       |  | PhysicalOrganizerService                 |  |
 |  | - FFprobe Stream Analysis      |  | - Zero-Copy NTFS Hardlink Engine         |  |
-|  | - WebVTT Conversion Pipeline   |  | - Replay Protection & Conflict Matrix    |  |
-|  | - Subtitle Language Tagging    |  | - Dry-Run Simulation & Reversal Safety   |  |
+|  | - WebVTT Conversion Pipeline   |  | - Multi-Episode {Episode:02} (01-E02)    |  |
+|  | - Subtitle Language Tagging    |  | - Atomic Sibling Path Updates            |  |
 |  +--------------------------------+  +------------------------------------------+  |
 +-----------------------------------------+-----------------------------------------+
                                           | Eloquent ORM & Storage I/O
@@ -145,6 +153,30 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
 - **Episodic Resolution**: For TV series slides, the backend pre-resolves Season 1 Episode 1 (`first_episode`) along with its season playlist and subtitles. When a user clicks "Play Now" on a series slide, the cinema player immediately launches Episode 1 rather than accidentally streaming a movie with a matching numeric ID.
 - **Action Bifurcation**: "Play Now" initiates immediate playback, while "More Details" opens the modal for movies or transitions directly to the series view page (`/series/{slug}`).
 
+### 3.6. Media Scout Gap Tracking & Automated Acquisition Pipeline
+- **Real-Time Gap Engine (`LibraryGapService`)**:
+  - Audits movie franchises against official TMDb collection parts, calculating completion percentage and surfacing missing movies with their original release dates.
+  - Audits TV shows against official season episode counts, identifying missing episodes and season gaps.
+- **Smart Acquisition (`LibraryAcquisitionService`)**:
+  - Scrapes and verifies season packs or individual episode torrents with automated health rating.
+  - Initiates batch downloads through the download manager.
+  - Post-download automation: recursively unpacks/flattens nested torrent subfolders, applies canonical renaming (`Show - S01E01 - Title [1080p].ext`), relocates matching subtitle files (`.ar.srt`, `.en.srt`), and updates library catalog records without manual user intervention.
+
+### 3.7. Multi-Episode Scene Ingestion & Database Architecture
+- **Parser Canonical Formats**: `SceneNameParserService` parses combined episodes (`S01E01-E02`, `S01E01E02`, `S01E01-02`, `S01E01.E02`) through Pattern A, extracting `episode` and `episode_end`.
+- **Database Multiplication**: `VirtualLibraryScannerService::indexSeriesEpisode()` loops over `range($episode, $episodeEnd)`, creating or updating distinct `Episode` database records for each constituent episode. Each record receives its individual title and synopsis from TMDb while referencing the shared physical file path.
+- **Subtitle Link Replication**: Subtitle tracks associated with the multi-episode file are linked to all constituent episode database entities so that playback from any episode in the range displays full subtitles.
+- **Physical Organizer Integration**: The `{Episode:02}` token detects `episode_end` and formats the segment as `01-E02`. During reorganization, `updateDatabasePath()` synchronizes all sibling episode records pointing to that file path in one atomic database query.
+
+### 3.8. Strict Multi-Movie Collections (`owned >= 2`) & FixMatch Studio
+- **Strict Franchise Threshold**: The Collections catalog (`/collections`) strictly enforces `count >= 2` to eliminate solitary single-movie collections.
+- **Media Scout Completion Badges**: Displays dynamic progress badges (`In Progress` vs `Complete`) based on total parts in the franchise.
+- **FixMatch Collection Studio (`FixMatchCollectionController`)**:
+  - Dedicated Collection tab in `FixMatchModal.vue`.
+  - Enables instant 1-click assignment of a movie to an existing collection or creation of a new custom franchise.
+  - Automatically queries and links TMDb collection ID metadata and updates the movie's physical folder hierarchy on disk.
+- **CLI Collection Auditor**: `php artisan library:audit-collections {--fix} {--align-physical}` scans the entire library for unlinked sequels, auto-assigns collection metadata, and reorganizes movie folders.
+
 ---
 
 ## 4. Key Design Patterns Applied
@@ -159,11 +191,11 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
 
 ---
 
-## 8. Database Disaster Recovery & Selective Restore Architecture
+## 5. Database Disaster Recovery & Selective Restore Architecture
 
 Creative Media Hub includes an enterprise-grade disaster recovery and database backup subsystem designed for zero data loss and granular restore control.
 
-### 8.1. Architecture & Table Mapping
+### 5.1. Architecture & Table Mapping
 The database consists of standalone catalog tables, hierarchical TV tables, polymorphic relationship pivots, and operational records:
 - **Movies (`movies` section)**: Maps to `media_items` table, `genreables` (filtered by `genreable_type` = `App\Models\MediaItem`), and `personables`.
 - **Series (`series` section)**: Maps to `series`, `seasons`, and `episodes` tables, plus corresponding `genreables` and `personables`.
@@ -172,7 +204,7 @@ The database consists of standalone catalog tables, hierarchical TV tables, poly
 - **Watch History (`watch_history` section)**: Maps to `watch_histories` table.
 - **Shared Entities (`genres`, `people`)**: Automatically synchronized using `updateOrInsert` whenever movies or series are restored.
 
-### 8.2. Selective Overwrite Guarantees
+### 5.2. Selective Overwrite Guarantees
 When a user restores in **Clean Overwrite** mode with specific sections (e.g. `["movies"]`):
 1. Foreign key constraints are safely bypassed (`PRAGMA foreign_keys = OFF;` in SQLite or `SET FOREIGN_KEY_CHECKS = 0;` in MySQL).
 2. The entire restoration is wrapped in an atomic database transaction (`DB::transaction()`).
@@ -180,13 +212,13 @@ When a user restores in **Clean Overwrite** mode with specific sections (e.g. `[
 4. **All unselected sections remain 100% intact and untouched.**
 5. Foreign key checks are re-enabled in a `finally` block regardless of transaction success or failure.
 
-### 8.3. Dual-Format Support (JSON & SQLite)
+### 5.3. Dual-Format Support (JSON & SQLite)
 - **JSON Format**: Human-readable, structured dump containing metadata counts and table records. Restores across different database engines.
 - **SQLite Format**: Binary `.sqlite` / `.db` snapshots can be restored as full clones or selectively extracted table-by-table via PDO memory queries without overwriting the active database.
 
 ---
 
-## 9. Universal Job Center & Unified Background Orchestration
+## 6. Universal Job Center & Unified Background Orchestration
 
 All asynchronous operations in Creative Media Hub report to a unified state coordination layer (`UnifiedJobCenterModal.vue` backed by `useActivityCenter.ts` and `useActivityCenterState.ts`):
 - **Universal Status Aggregation**: Tracks Scanner, Hardlink Organizer, Subtitle Auditor, and Folder Watcher states concurrently.

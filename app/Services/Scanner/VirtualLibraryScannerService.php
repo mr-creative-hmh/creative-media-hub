@@ -8,9 +8,9 @@ use App\Models\MediaItem;
 use App\Models\Season;
 use App\Models\Series;
 use App\Models\Subtitle;
+use App\Services\Metadata\LibraryMasterIndexService;
 use App\Services\Metadata\MetadataAggregator;
 use App\Services\Metadata\TmdbProvider;
-use App\Services\Metadata\LibraryMasterIndexService;
 use App\Services\Metadata\WebArtworkSearchService;
 use App\Services\Organizer\FilesystemScannerService;
 use App\Services\Organizer\SceneNameParserService;
@@ -381,13 +381,14 @@ class VirtualLibraryScannerService
         if ($fileSize > 0) {
             $sizeMatches = MediaItem::where('file_size_bytes', $fileSize)->get();
             foreach ($sizeMatches as $cand) {
-                if (!file_exists($cand->file_path)) {
+                if (! file_exists($cand->file_path)) {
                     // Exact file relocation detected!
                     $cand->file_path = $newPath;
                     $cand->folder_path = $newDir;
                     $cand->save();
 
                     $this->relocateSubtitlesForMovie($cand, $file['path']);
+
                     return $cand;
                 }
             }
@@ -403,8 +404,22 @@ class VirtualLibraryScannerService
         }
         $candidates = $titleQuery->get();
 
+        // Also search by normalized alphanumeric title if no direct title match
+        if ($candidates->isEmpty()) {
+            $normClean = preg_replace('/[^a-z0-9]/i', '', $cleanTitle);
+            if (! empty($normClean)) {
+                $candidates = MediaItem::all()->filter(function ($cand) use ($normClean, $year) {
+                    if ($year && $cand->release_year && (int) $cand->release_year !== (int) $year) {
+                        return false;
+                    }
+
+                    return preg_replace('/[^a-z0-9]/i', '', $cand->title) === $normClean;
+                });
+            }
+        }
+
         foreach ($candidates as $cand) {
-            if (!file_exists($cand->file_path)) {
+            if (! file_exists($cand->file_path)) {
                 // Movie was replaced/upgraded! Update existing record in-place without duplicating
                 $cand->file_path = $newPath;
                 $cand->folder_path = $newDir;
@@ -412,13 +427,14 @@ class VirtualLibraryScannerService
                 $cand->resolution = $resolution;
                 $cand->video_codec = $videoCodec;
                 $cand->audio_codec = $audioCodec;
-                if (!empty($probeData['duration']) && $probeData['duration'] > 0) {
-                    $cand->duration_seconds = (int)round($probeData['duration']);
-                    $cand->runtime_minutes = (int)round($probeData['duration'] / 60);
+                if (! empty($probeData['duration']) && $probeData['duration'] > 0) {
+                    $cand->duration_seconds = (int) round($probeData['duration']);
+                    $cand->runtime_minutes = (int) round($probeData['duration'] / 60);
                 }
                 $cand->save();
 
                 $this->relocateSubtitlesForMovie($cand, $file['path']);
+
                 return $cand;
             }
         }
@@ -431,9 +447,9 @@ class VirtualLibraryScannerService
         $newDir = dirname($newVideoPath);
         $subs = Subtitle::where('media_item_id', $movie->id)->get();
         foreach ($subs as $sub) {
-            if (!file_exists($sub->file_path)) {
+            if (! file_exists($sub->file_path)) {
                 $base = pathinfo($sub->file_path, PATHINFO_BASENAME);
-                $candidatePath = $newDir . '/' . $base;
+                $candidatePath = $newDir.'/'.$base;
                 if (file_exists($candidatePath)) {
                     $sub->file_path = str_replace('\\', '/', $candidatePath);
                     $sub->save();
@@ -457,13 +473,13 @@ class VirtualLibraryScannerService
         // Probe actual file for accurate technical metadata
         $probeData = $this->mediaProbe->probe($file['path']);
 
-        $resolution = (!empty($probeData['resolution']) && $probeData['resolution'] !== 'Unknown')
+        $resolution = (! empty($probeData['resolution']) && $probeData['resolution'] !== 'Unknown')
             ? $probeData['resolution']
             : ($parsed['resolution'] ?? 'Unknown');
-        $videoCodec = (!empty($probeData['video_codec']) && $probeData['video_codec'] !== 'Unknown')
+        $videoCodec = (! empty($probeData['video_codec']) && $probeData['video_codec'] !== 'Unknown')
             ? $probeData['video_codec']
             : ($parsed['codec'] ?? 'Unknown');
-        $audioCodec = (!empty($probeData['audio_codec']) && $probeData['audio_codec'] !== 'Unknown')
+        $audioCodec = (! empty($probeData['audio_codec']) && $probeData['audio_codec'] !== 'Unknown')
             ? $probeData['audio_codec']
             : ($parsed['audio'] ?? 'Unknown');
         $runtimeMinutes = ($probeData['duration'] ?? 0) > 0 ? (int) round($probeData['duration'] / 60) : 110;
@@ -472,6 +488,7 @@ class VirtualLibraryScannerService
         $relocated = $this->detectRelocatedOrUpgradedMovie($file, $parsed, $probeData, $resolution, $videoCodec, $audioCodec);
         if ($relocated) {
             $this->attachAllSubtitles($relocated, $file);
+
             return $relocated;
         }
 
@@ -566,84 +583,124 @@ class VirtualLibraryScannerService
         $showTitle = $this->nameParser->cleanTitleString($rawShowTitle);
         $seasonNum = (int) ($parsed['season'] ?? 1);
         $epNum = (int) ($parsed['episode'] ?? 1);
+        $epEnd = isset($parsed['episode_end']) ? (int) $parsed['episode_end'] : null;
         $epTitle = $parsed['episode_title'] ?? "Episode {$epNum}";
         $year = $parsed['year'] ?? null;
         $endYear = $parsed['end_year'] ?? null;
-
-        $series = Series::where('title', 'like', $showTitle)
-            ->orWhere('original_title', 'like', $showTitle)
-            ->first();
 
         $epPath = str_replace('\\', '/', $file['path']);
         $epDir = dirname($epPath);
         $epDirBase = strtolower(basename($epDir));
         $seriesFolder = preg_match('/^(season\s*\d+|s\d+|specials?)$/i', $epDirBase) ? dirname($epDir) : $epDir;
+        $seriesFolderNorm = str_replace('\\', '/', $seriesFolder);
 
+        // 1. First, match Series by exact folder_path (handles relocated/renamed series folders)
+        $series = Series::where('folder_path', $seriesFolderNorm)->first();
+
+        // 2. If not found by folder_path, match by title / original_title
         if (! $series) {
-            $series = retry(4, function () use ($showTitle, $year, $endYear, $seriesFolder) {
-                return Series::create([
-                    'title' => $showTitle,
-                    'original_title' => $showTitle,
-                    'release_year' => $year,
-                    'end_year' => $endYear,
-                    'folder_path' => $seriesFolder,
-                    'overview' => "Experience the complete series of {$showTitle}.",
-                    'rating' => 8.0,
-                    'status' => $endYear ? 'Ended' : 'Continuing',
-                ]);
-            }, 150);
+            $series = Series::where('title', 'like', $showTitle)
+                ->orWhere('original_title', 'like', $showTitle)
+                ->first();
+        }
 
-            try {
-                $meta = $this->metadata->aggregateSeriesMetadata($showTitle, $year, 'en', true);
-                $posterUrl = $meta['poster_path'] ?? ($file['local_poster'] ?? null);
-                $backdropUrl = $meta['backdrop_path'] ?? ($file['local_backdrop'] ?? null);
-                $seriesYear = $meta['release_year'] ?? ($meta['year'] ?? $year);
-                $seriesEndYear = $meta['end_year'] ?? $endYear;
-                $seriesStatus = !empty($meta['status']) ? $meta['status'] : ($seriesEndYear ? 'Ended' : $series->status);
-
-                retry(3, function () use ($series, $meta, $posterUrl, $backdropUrl, $seriesYear, $seriesEndYear, $seriesStatus) {
-                    $series->update([
-                        'title_ar' => $meta['title_ar'] ?? null,
-                        'overview' => $meta['overview'] ?? $series->overview,
-                        'overview_ar' => $meta['overview_ar'] ?? null,
-                        'tmdb_id' => $meta['tmdb_id'] ?? null,
-                        'imdb_id' => $meta['imdb_id'] ?? null,
-                        'poster_path' => $posterUrl,
-                        'backdrop_path' => $backdropUrl,
-                        'release_year' => $seriesYear,
-                        'end_year' => $seriesEndYear,
-                        'status' => $seriesStatus,
-                        'rating' => $meta['rating'] ?? 8.0,
-                    ]);
-
-                    if (! empty($meta['genres'])) {
-                        $genreIds = [];
-                        foreach ($meta['genres'] as $gName) {
-                            $g = Genre::firstOrCreate(
-                                ['slug' => Str::slug($gName)],
-                                ['name_en' => $gName, 'name_ar' => $gName]
-                            );
-                            $genreIds[] = $g->id;
-                        }
-                        $series->genres()->sync($genreIds);
-                    }
-                }, 100);
-            } catch (\Throwable $e) {
+        // 3. If not found, match by normalized alphanumeric title (e.g. "Sense8" vs "Sense 8")
+        if (! $series) {
+            $normShowTitle = preg_replace('/[^a-z0-9]/i', '', $showTitle);
+            if (! empty($normShowTitle)) {
+                $series = Series::all()->first(function ($s) use ($normShowTitle) {
+                    return preg_replace('/[^a-z0-9]/i', '', $s->title) === $normShowTitle
+                        || preg_replace('/[^a-z0-9]/i', '', $s->original_title ?? '') === $normShowTitle;
+                });
             }
-        } else {
-            // Series already exists: update missing year, end_year, or folder_path if newly discovered
+        }
+
+        // If existing series was found, update missing year, end_year, or folder_path if moved
+        if ($series) {
             $updates = [];
+            if ($series->folder_path !== $seriesFolderNorm && is_dir($seriesFolderNorm)) {
+                $updates['folder_path'] = $seriesFolderNorm;
+            }
             if (empty($series->release_year) && $year) {
                 $updates['release_year'] = $year;
             }
             if (empty($series->end_year) && $endYear) {
                 $updates['end_year'] = $endYear;
             }
-            if (empty($series->folder_path) && $seriesFolder) {
-                $updates['folder_path'] = $seriesFolder;
-            }
             if (! empty($updates)) {
                 $series->update($updates);
+            }
+        } else {
+            // Before creating a new series, query TMDB metadata to check if TMDb ID already exists
+            $meta = [];
+            try {
+                $meta = $this->metadata->aggregateSeriesMetadata($showTitle, $year, 'en', true);
+            } catch (\Throwable $e) {
+                // ignore
+            }
+
+            if (! empty($meta['tmdb_id'])) {
+                $seriesByTmdb = Series::where('tmdb_id', $meta['tmdb_id'])->first();
+                if ($seriesByTmdb) {
+                    $series = $seriesByTmdb;
+                    if ($series->folder_path !== $seriesFolderNorm && is_dir($seriesFolderNorm)) {
+                        $series->folder_path = $seriesFolderNorm;
+                        $series->save();
+                    }
+                }
+            }
+
+            if (! $series) {
+                $series = retry(4, function () use ($showTitle, $year, $endYear, $seriesFolderNorm) {
+                    return Series::create([
+                        'title' => $showTitle,
+                        'original_title' => $showTitle,
+                        'release_year' => $year,
+                        'end_year' => $endYear,
+                        'folder_path' => $seriesFolderNorm,
+                        'overview' => "Experience the complete series of {$showTitle}.",
+                        'rating' => 8.0,
+                        'status' => $endYear ? 'Ended' : 'Continuing',
+                    ]);
+                }, 150);
+
+                if (! empty($meta)) {
+                    $posterUrl = $meta['poster_path'] ?? ($file['local_poster'] ?? null);
+                    $backdropUrl = $meta['backdrop_path'] ?? ($file['local_backdrop'] ?? null);
+                    $seriesYear = $meta['release_year'] ?? ($meta['year'] ?? $year);
+                    $seriesEndYear = $meta['end_year'] ?? $endYear;
+                    $seriesStatus = ! empty($meta['status']) ? $meta['status'] : ($seriesEndYear ? 'Ended' : $series->status);
+
+                    try {
+                        $series->update([
+                            'title_ar' => $meta['title_ar'] ?? null,
+                            'overview' => $meta['overview'] ?? $series->overview,
+                            'overview_ar' => $meta['overview_ar'] ?? null,
+                            'tmdb_id' => $meta['tmdb_id'] ?? null,
+                            'imdb_id' => $meta['imdb_id'] ?? null,
+                            'poster_path' => $posterUrl,
+                            'backdrop_path' => $backdropUrl,
+                            'release_year' => $seriesYear,
+                            'end_year' => $seriesEndYear,
+                            'status' => $seriesStatus,
+                            'rating' => $meta['rating'] ?? 8.0,
+                        ]);
+
+                        if (! empty($meta['genres'])) {
+                            $genreIds = [];
+                            foreach ($meta['genres'] as $gName) {
+                                $g = Genre::firstOrCreate(
+                                    ['slug' => Str::slug($gName)],
+                                    ['name_en' => $gName, 'name_ar' => $gName]
+                                );
+                                $genreIds[] = $g->id;
+                            }
+                            $series->genres()->sync($genreIds);
+                        }
+                    } catch (\Throwable $e) {
+                        Log::warning("Could not sync metadata to series {$series->id}: ".$e->getMessage());
+                    }
+                }
             }
         }
 
@@ -654,128 +711,118 @@ class VirtualLibraryScannerService
 
         // Probe actual file for accurate technical metadata
         $probeData = $this->mediaProbe->probe($file['path']);
-        $resolution = (!empty($probeData['resolution']) && $probeData['resolution'] !== 'Unknown')
+        $resolution = (! empty($probeData['resolution']) && $probeData['resolution'] !== 'Unknown')
             ? $probeData['resolution']
             : ($parsed['resolution'] ?? 'Unknown');
-        $videoCodec = (!empty($probeData['video_codec']) && $probeData['video_codec'] !== 'Unknown')
+        $videoCodec = (! empty($probeData['video_codec']) && $probeData['video_codec'] !== 'Unknown')
             ? $probeData['video_codec']
             : ($parsed['codec'] ?? 'Unknown');
-        $audioCodec = (!empty($probeData['audio_codec']) && $probeData['audio_codec'] !== 'Unknown')
+        $audioCodec = (! empty($probeData['audio_codec']) && $probeData['audio_codec'] !== 'Unknown')
             ? $probeData['audio_codec']
             : ($parsed['audio'] ?? 'Unknown');
         $runtimeMinutes = ($probeData['duration'] ?? 0) > 0 ? (int) round($probeData['duration'] / 60) : 45;
 
-        // 1. Check if episode uniquely exists by (series_id, season_id, episode_number)
-        $existingEp = Episode::where('series_id', $series->id)
-            ->where('season_id', $season->id)
-            ->where('episode_number', $epNum)
-            ->first();
+        $fileNormPath = str_replace('\\', '/', $file['path']);
+        $fileSizeBytes = $file['size_bytes'] ?? (file_exists($file['path']) ? filesize($file['path']) : 0);
+        $epNumbers = ($epEnd && $epEnd > $epNum) ? range($epNum, $epEnd) : [$epNum];
 
-        if ($existingEp) {
-            $newEpPath = str_replace('\\', '/', $file['path']);
-            if ($existingEp->file_path !== $newEpPath) {
-                $existingEp->file_path = $newEpPath;
-                $existingEp->file_size_bytes = $file['size_bytes'] ?? (file_exists($file['path']) ? filesize($file['path']) : 0);
-                $existingEp->resolution = $resolution;
-                $existingEp->video_codec = $videoCodec;
-                $existingEp->audio_codec = $audioCodec;
-                if (!empty($probeData['duration']) && $probeData['duration'] > 0) {
-                    $existingEp->duration_seconds = (int)round($probeData['duration']);
-                    $existingEp->runtime_minutes = (int)round($probeData['duration'] / 60);
+        $processedEpisodes = [];
+
+        foreach ($epNumbers as $currentEpNum) {
+            $existingEp = Episode::where('series_id', $series->id)
+                ->where('season_id', $season->id)
+                ->where('episode_number', $currentEpNum)
+                ->first();
+
+            if ($existingEp) {
+                if ($existingEp->file_path !== $fileNormPath) {
+                    $existingEp->file_path = $fileNormPath;
+                    $existingEp->file_size_bytes = $fileSizeBytes;
+                    $existingEp->resolution = $resolution;
+                    $existingEp->video_codec = $videoCodec;
+                    $existingEp->audio_codec = $audioCodec;
+                    if (! empty($probeData['duration']) && $probeData['duration'] > 0) {
+                        $existingEp->duration_seconds = (int) round($probeData['duration']);
+                        $existingEp->runtime_minutes = (int) round($probeData['duration'] / 60);
+                    }
+                    $existingEp->save();
                 }
-                $existingEp->save();
+                $this->attachAllSubtitles($existingEp, $file);
+                $processedEpisodes[] = $existingEp;
+
+                continue;
             }
-            $this->attachAllSubtitles($existingEp, $file);
-            return $existingEp;
-        }
 
-        // 2. Also check if file_path matched an existing record
-        $existingByPath = Episode::where('file_path', $file['path'])->first();
-        if ($existingByPath) {
-            $this->attachAllSubtitles($existingByPath, $file);
-            return $existingByPath;
-        }
+            // Resolve bilingual episode metadata from TMDb if series has tmdb_id
+            $currEpTitle = ($currentEpNum === $epNum && ! empty($parsed['episode_title']))
+                ? $parsed['episode_title']
+                : "Episode {$currentEpNum}";
+            $currEpTitleAr = null;
+            $currEpOverview = "Episode {$currentEpNum}";
+            $currEpOverviewAr = null;
+            $currEpStillPath = null;
+            $currEpRating = 0;
+            $currEpAirDate = null;
+            $currRuntimeMinutes = $runtimeMinutes;
 
-        // Use probed data > parsed filename data > fallback to Unknown
-        // Note: probeData now returns array with null/0 defaults, not null
-        $resolution = (!empty($probeData['resolution']) && $probeData['resolution'] !== 'Unknown')
-            ? $probeData['resolution']
-            : ($parsed['resolution'] ?? 'Unknown');
-        $videoCodec = (!empty($probeData['video_codec']) && $probeData['video_codec'] !== 'Unknown')
-            ? $probeData['video_codec']
-            : ($parsed['codec'] ?? 'Unknown');
-        $audioCodec = (!empty($probeData['audio_codec']) && $probeData['audio_codec'] !== 'Unknown')
-            ? $probeData['audio_codec']
-            : ($parsed['audio'] ?? 'Unknown');
-        $runtimeMinutes = ($probeData['duration'] ?? 0) > 0 ? (int) round($probeData['duration'] / 60) : 45;
-
-        // Resolve bilingual episode metadata from TMDb if series has tmdb_id
-        $epTitleAr = null;
-        $epOverview = "Episode {$epNum}";
-        $epOverviewAr = null;
-        $epStillPath = null;
-        $epRating = 0;
-        $epAirDate = null;
-
-        if ($series->tmdb_id) {
-            $cacheKey = "{$series->tmdb_id}_s{$seasonNum}";
-            if (! isset($this->tmdbSeasonCache[$cacheKey])) {
-                $this->tmdbSeasonCache[$cacheKey] = $this->metadata->getSeasonEpisodesBilingual($series->tmdb_id, $seasonNum);
-            }
-            $tmdbEp = $this->tmdbSeasonCache[$cacheKey][$epNum] ?? null;
-            if ($tmdbEp) {
-                $epTitle = $tmdbEp['title'];
-                $epTitleAr = $tmdbEp['title_ar'] ?? null;
-                $epOverview = $tmdbEp['overview'] ?: $epOverview;
-                $epOverviewAr = $tmdbEp['overview_ar'] ?? null;
-                $epStillPath = $tmdbEp['still_path'] ?? null;
-                $epRating = $tmdbEp['rating'] ?? 0;
-                $epAirDate = $tmdbEp['air_date'] ?? null;
-                if (! empty($tmdbEp['runtime_minutes']) && $runtimeMinutes === 45) {
-                    $runtimeMinutes = $tmdbEp['runtime_minutes'];
+            if ($series->tmdb_id) {
+                $cacheKey = "{$series->tmdb_id}_s{$seasonNum}";
+                if (! isset($this->tmdbSeasonCache[$cacheKey])) {
+                    $this->tmdbSeasonCache[$cacheKey] = $this->metadata->getSeasonEpisodesBilingual($series->tmdb_id, $seasonNum);
+                }
+                $tmdbEp = $this->tmdbSeasonCache[$cacheKey][$currentEpNum] ?? null;
+                if ($tmdbEp) {
+                    $currEpTitle = $tmdbEp['title'];
+                    $currEpTitleAr = $tmdbEp['title_ar'] ?? null;
+                    $currEpOverview = $tmdbEp['overview'] ?: $currEpOverview;
+                    $currEpOverviewAr = $tmdbEp['overview_ar'] ?? null;
+                    $currEpStillPath = $tmdbEp['still_path'] ?? null;
+                    $currEpRating = $tmdbEp['rating'] ?? 0;
+                    $currEpAirDate = $tmdbEp['air_date'] ?? null;
+                    if (! empty($tmdbEp['runtime_minutes']) && $currRuntimeMinutes === 45) {
+                        $currRuntimeMinutes = $tmdbEp['runtime_minutes'];
+                    }
                 }
             }
+
+            $newEp = retry(4, function () use ($series, $season, $currentEpNum, $currEpTitle, $currEpTitleAr, $currEpOverview, $currEpOverviewAr, $currEpStillPath, $currEpRating, $currEpAirDate, $fileNormPath, $fileSizeBytes, $resolution, $videoCodec, $audioCodec, $currRuntimeMinutes, $probeData) {
+                return Episode::create([
+                    'series_id' => $series->id,
+                    'season_id' => $season->id,
+                    'episode_number' => $currentEpNum,
+                    'title' => $currEpTitle,
+                    'title_ar' => $currEpTitleAr,
+                    'overview' => $currEpOverview,
+                    'overview_ar' => $currEpOverviewAr,
+                    'still_path' => $currEpStillPath,
+                    'rating' => $currEpRating,
+                    'air_date' => $currEpAirDate,
+                    'runtime_minutes' => $currRuntimeMinutes,
+                    'duration_seconds' => ! empty($probeData['duration']) && $probeData['duration'] > 0 ? (int) round($probeData['duration']) : ($currRuntimeMinutes * 60),
+                    'file_path' => $fileNormPath,
+                    'file_size_bytes' => $fileSizeBytes,
+                    'resolution' => $resolution,
+                    'video_codec' => $videoCodec,
+                    'audio_codec' => $audioCodec,
+                    'video_profile' => $probeData['video_profile'] ?? null,
+                    'video_bitrate' => $probeData['video_bitrate'] ?? 0,
+                    'audio_channels' => $probeData['audio_channels'] ?? 0,
+                    'audio_channel_layout' => $probeData['audio_channel_layout'] ?? null,
+                    'audio_bitrate' => $probeData['audio_bitrate'] ?? 0,
+                    'framerate' => $probeData['framerate'] ?? 0,
+                    'container_format' => $probeData['container'] ?? null,
+                    'hdr_format' => $probeData['hdr_format'] ?? null,
+                    'color_space' => $probeData['color_space'] ?? null,
+                    'color_transfer' => $probeData['color_transfer'] ?? null,
+                    'total_bitrate' => $probeData['total_bitrate'] ?? 0,
+                ]);
+            }, 150);
+
+            $this->attachAllSubtitles($newEp, $file);
+            $processedEpisodes[] = $newEp;
         }
 
-        $episode = retry(4, function () use ($series, $season, $epNum, $epTitle, $epTitleAr, $epOverview, $epOverviewAr, $epStillPath, $epRating, $epAirDate, $file, $resolution, $videoCodec, $audioCodec, $runtimeMinutes, $probeData) {
-            $ep = Episode::create([
-                'series_id' => $series->id,
-                'season_id' => $season->id,
-                'episode_number' => $epNum,
-                'title' => $epTitle,
-                'title_ar' => $epTitleAr,
-                'overview' => $epOverview,
-                'overview_ar' => $epOverviewAr,
-                'still_path' => $epStillPath,
-                'rating' => $epRating,
-                'air_date' => $epAirDate,
-                'runtime_minutes' => $runtimeMinutes,
-                'duration_seconds' => ! empty($probeData['duration']) && $probeData['duration'] > 0 ? (int) round($probeData['duration']) : ($runtimeMinutes * 60),
-                'file_path' => $file['path'],
-                'file_size_bytes' => $file['size_bytes'] ?? 0,
-                'resolution' => $resolution,
-                'video_codec' => $videoCodec,
-                'audio_codec' => $audioCodec,
-                'video_profile' => $probeData['video_profile'] ?? null,
-                'video_bitrate' => $probeData['video_bitrate'] ?? 0,
-                'audio_channels' => $probeData['audio_channels'] ?? 0,
-                'audio_channel_layout' => $probeData['audio_channel_layout'] ?? null,
-                'audio_bitrate' => $probeData['audio_bitrate'] ?? 0,
-                'framerate' => $probeData['framerate'] ?? 0,
-                'container_format' => $probeData['container'] ?? null,
-                'hdr_format' => $probeData['hdr_format'] ?? null,
-                'color_space' => $probeData['color_space'] ?? null,
-                'color_transfer' => $probeData['color_transfer'] ?? null,
-                'total_bitrate' => $probeData['total_bitrate'] ?? 0,
-                'still_path' => null,
-            ]);
-
-            return $ep;
-        }, 150);
-
-        $this->attachAllSubtitles($episode, $file);
-
-        return $episode;
+        return $processedEpisodes[0] ?? $existingEp;
     }
 
     protected function filterAlreadyIndexedFiles(array $files): array
@@ -811,14 +858,14 @@ class VirtualLibraryScannerService
         $normalizedVideoPath = str_replace('\\', '/', $file['path'] ?? '');
 
         // Clean up obsolete embedded tracks for this model that point to non-existent or obsolete video paths
-        \App\Models\Subtitle::where('subtitlable_type', get_class($model))
+        Subtitle::where('subtitlable_type', get_class($model))
             ->where('subtitlable_id', $model->id)
             ->where('is_embedded', true)
             ->where('file_path', 'NOT LIKE', "%:{$normalizedVideoPath}")
             ->delete();
 
         // Get existing normalized subtitle paths
-        $existingSubs = \App\Models\Subtitle::where('subtitlable_type', get_class($model))
+        $existingSubs = Subtitle::where('subtitlable_type', get_class($model))
             ->where('subtitlable_id', $model->id)
             ->get();
 
@@ -859,7 +906,7 @@ class VirtualLibraryScannerService
                     $hasDefault = true;
                 }
 
-                \App\Models\Subtitle::updateOrCreate(
+                Subtitle::updateOrCreate(
                     [
                         'subtitlable_type' => get_class($model),
                         'subtitlable_id' => $model->id,
@@ -893,7 +940,7 @@ class VirtualLibraryScannerService
                     $hasArabic = true;
                 }
 
-                \App\Models\Subtitle::updateOrCreate(
+                Subtitle::updateOrCreate(
                     [
                         'subtitlable_type' => get_class($model),
                         'subtitlable_id' => $model->id,
@@ -990,7 +1037,7 @@ class VirtualLibraryScannerService
                         'rating' => $meta['rating'] ?? $series->rating,
                         'release_year' => $series->release_year ?? ($meta['release_year'] ?? $meta['year'] ?? null),
                         'end_year' => $series->end_year ?? ($meta['end_year'] ?? null),
-                        'status' => (!empty($meta['status']) && $series->status === 'Continuing') ? $meta['status'] : $series->status,
+                        'status' => (! empty($meta['status']) && $series->status === 'Continuing') ? $meta['status'] : $series->status,
                     ]);
 
                     if (! empty($meta['genres'])) {
