@@ -32,7 +32,8 @@ import {
     SkipForward,
     Download,
     Search,
-    Loader2
+    Loader2,
+    Languages
 } from 'lucide-vue-next';
 
 interface SubtitleItem {
@@ -183,6 +184,7 @@ const subtitleSearchQuery = ref('');
 const subtitleSearchLang = ref('ar');
 const isSearchingSubtitles = ref(false);
 const isDownloadingSubtitle = ref(false);
+const isTranslatingSubtitle = ref(false);
 const subtitleSearchResults = ref<any[]>([]);
 const subtitleSearchError = ref<string | null>(null);
 
@@ -810,6 +812,73 @@ const downloadAndApplySubtitle = async (result: any) => {
         globalToast.error(e.message || err, 'Download Error');
     } finally {
         isDownloadingSubtitle.value = false;
+    }
+};
+
+const translateSubtitleToArabic = async (sourceSubId?: number | string) => {
+    if (!activeItem.value || isTranslatingSubtitle.value) return;
+
+    isTranslatingSubtitle.value = true;
+    const mediaId = activeItem.value?.watchable_id || activeItem.value?.id;
+    const mediaType = isEpisode.value ? 'episode' : 'movie';
+
+    const translatingMsg = isRTL.value
+        ? 'جاري ترجمة وتوليد الترجمة العربية بالذكاء الاصطناعي...'
+        : 'Translating English subtitle to Arabic...';
+    showToast(translatingMsg);
+
+    try {
+        const payload: Record<string, any> = {
+            media_id: mediaId,
+            media_type: mediaType,
+        };
+        if (typeof sourceSubId === 'number') {
+            payload.subtitle_id = sourceSubId;
+        }
+
+        const res = await fetch('/api/subtitles/generate-arabic', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+            },
+            body: JSON.stringify(payload),
+        });
+
+        const data = await res.json();
+        if (!res.ok || data.status === 'error') {
+            throw new Error(data.message || 'Failed to generate Arabic translation');
+        }
+
+        if (data.subtitle) {
+            const newSub = data.subtitle;
+            const existingIdx = availableSubtitles.value.findIndex(s => String(s.id) === String(newSub.id));
+            if (existingIdx >= 0) {
+                availableSubtitles.value[existingIdx] = newSub;
+            } else {
+                availableSubtitles.value.push(newSub);
+            }
+
+            // Immediately activate the newly translated Arabic track
+            await selectSubtitle(newSub.id, false);
+
+            const successMsg = isRTL.value
+                ? 'تم توليد وتفعيل الترجمة العربية بنجاح بدقة زمنية تامة!'
+                : 'Arabic subtitle generated & activated successfully!';
+            showToast(successMsg);
+            globalToast.success(successMsg, isRTL.value ? 'الترجمة جاهزة' : 'Subtitles Ready');
+
+            if (showSubtitleSearchModal.value) {
+                showSubtitleSearchModal.value = false;
+            }
+        }
+    } catch (e: any) {
+        const errMsg = e.message || (isRTL.value ? 'تعذر توليد الترجمة العربية' : 'Failed to generate Arabic subtitle');
+        showToast(errMsg);
+        globalToast.error(errMsg, isRTL.value ? 'خطأ في الترجمة' : 'Translation Error');
+    } finally {
+        isTranslatingSubtitle.value = false;
     }
 };
 
@@ -1650,20 +1719,50 @@ onBeforeUnmount(() => {
                                             v-for="sub in availableSubtitles"
                                             :key="sub.id"
                                             @click="selectSubtitle(sub.id)"
-                                            class="px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-all cursor-pointer"
+                                            class="px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-all cursor-pointer group/sub"
                                             :class="String(selectedSubtitleId) === String(sub.id) ? 'bg-purple-500 text-white' : 'text-slate-300 hover:bg-white/10'"
                                         >
                                             <div class="flex items-center gap-1.5 truncate">
                                                 <span class="uppercase text-[10px] px-1 py-0.5 rounded bg-black/40">{{ sub.language || 'CC' }}</span>
                                                 <span class="truncate">{{ sub.language_name || 'Subtitle' }}</span>
                                             </div>
-                                            <Check v-if="String(selectedSubtitleId) === String(sub.id)" class="w-3.5 h-3.5 shrink-0" />
+                                            <div class="flex items-center gap-1">
+                                                <button
+                                                    v-if="['en', 'eng'].includes(sub.language?.toLowerCase())"
+                                                    type="button"
+                                                    @click.stop="translateSubtitleToArabic(sub.id)"
+                                                    :disabled="isTranslatingSubtitle"
+                                                    class="p-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 hover:text-white transition-all cursor-pointer opacity-80 group-hover/sub:opacity-100"
+                                                    :title="isRTL ? 'ترجمة هذا المسار الإنجليزي إلى العربية' : 'Translate this English track to Arabic'"
+                                                >
+                                                    <Sparkles class="w-3 h-3 text-emerald-400" />
+                                                </button>
+                                                <Check v-if="String(selectedSubtitleId) === String(sub.id)" class="w-3.5 h-3.5 shrink-0" />
+                                            </div>
                                         </button>
                                     </div>
 
-                                    <!-- Online Subtitle Search & Download Trigger -->
-                                    <div class="border-t border-white/10 pt-2">
+                                    <!-- Actions: Instant Translation & Search Subtitles -->
+                                    <div class="border-t border-white/10 pt-2 flex flex-col gap-1.5">
+                                        <!-- Instant Arabic Translation from English -->
                                         <button
+                                            type="button"
+                                            @click="translateSubtitleToArabic()"
+                                            :disabled="isTranslatingSubtitle"
+                                            class="w-full px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-500/25 via-teal-500/20 to-cyan-500/20 hover:from-emerald-500/40 hover:to-teal-500/35 text-emerald-300 hover:text-white border border-emerald-500/40 text-xs font-bold flex items-center justify-between transition-all cursor-pointer shadow-sm disabled:opacity-50 group/tr"
+                                            :title="isRTL ? 'توليد ترجمة عربية سينمائية دقيقة من مسار الترجمة الإنجليزي' : 'Translate English subtitle to Arabic with cinema accuracy'"
+                                        >
+                                            <div class="flex items-center gap-2">
+                                                <Loader2 v-if="isTranslatingSubtitle" class="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+                                                <Sparkles v-else class="w-3.5 h-3.5 text-emerald-400 group-hover/tr:scale-110 transition-transform" />
+                                                <span>{{ isTranslatingSubtitle ? (isRTL ? 'جاري الترجمة للعربية...' : 'Translating to Arabic...') : (isRTL ? 'ترجمة فورية إلى العربية (من EN)' : 'Translate to Arabic (from EN)') }}</span>
+                                            </div>
+                                            <span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-200 font-mono font-bold">AI</span>
+                                        </button>
+
+                                        <!-- Online Subtitle Search & Download Trigger -->
+                                        <button
+                                            type="button"
                                             @click="openSubtitleSearchModal"
                                             class="w-full px-3 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
                                         >
@@ -1953,6 +2052,29 @@ onBeforeUnmount(() => {
                                 {{ l.label }}
                             </button>
                         </div>
+
+                        <!-- Instant Arabic AI Translation Card -->
+                        <div class="p-3 rounded-2xl bg-gradient-to-r from-emerald-950/60 via-teal-950/40 to-slate-900 border border-emerald-500/40 flex items-center justify-between gap-3 shadow-lg">
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <div class="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+                                    <Sparkles class="w-4 h-4" />
+                                </div>
+                                <div class="min-w-0">
+                                    <div class="text-xs font-bold text-white truncate">{{ isRTL ? 'توليد ترجمة عربية فورية بالذكاء الاصطناعي' : 'Instant Arabic Translation' }}</div>
+                                    <div class="text-[10px] text-emerald-300/80 truncate">{{ isRTL ? 'توليد ترجمة دقيقة مطابقة للتوقيت من المسار الإنجليزي' : 'AI-synthesized Arabic subtitles aligned from English' }}</div>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                @click="translateSubtitleToArabic()"
+                                :disabled="isTranslatingSubtitle"
+                                class="shrink-0 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shadow-md shadow-emerald-500/20"
+                            >
+                                <Loader2 v-if="isTranslatingSubtitle" class="w-3.5 h-3.5 animate-spin" />
+                                <Sparkles v-else class="w-3.5 h-3.5" />
+                                <span>{{ isTranslatingSubtitle ? (isRTL ? 'جاري الترجمة...' : 'Translating...') : (isRTL ? 'ترجمة الآن' : 'Translate Now') }}</span>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Results List -->
@@ -1962,8 +2084,18 @@ onBeforeUnmount(() => {
                             <span class="text-xs">{{ isRTL ? 'جاري فحص مزودي الترجمة...' : 'Scanning subtitle providers...' }}</span>
                         </div>
 
-                        <div v-else-if="subtitleSearchResults.length === 0" class="py-12 text-center text-slate-400 text-xs">
-                            {{ isRTL ? 'لا توجد نتائج بحث مطابقة. جرب البحث باسم مختلف.' : 'No matching subtitles found. Try refining search title.' }}
+                        <div v-else-if="subtitleSearchResults.length === 0" class="py-10 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2.5">
+                            <div>{{ isRTL ? 'لا توجد نتائج بحث مطابقة. جرب البحث باسم مختلف أو توليد ترجمة عربية فوراً.' : 'No matching subtitles found. Try refining search title or generate Arabic now.' }}</div>
+                            <button
+                                type="button"
+                                @click="translateSubtitleToArabic()"
+                                :disabled="isTranslatingSubtitle"
+                                class="mt-1 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold inline-flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all"
+                            >
+                                <Loader2 v-if="isTranslatingSubtitle" class="w-3.5 h-3.5 animate-spin" />
+                                <Sparkles v-else class="w-3.5 h-3.5" />
+                                <span>{{ isTranslatingSubtitle ? (isRTL ? 'جاري الترجمة للعربية...' : 'Translating...') : (isRTL ? 'توليد ترجمة عربية من الإنجليزية فوراً' : 'Generate Arabic Subtitle from English Now') }}</span>
+                            </button>
                         </div>
 
                         <div

@@ -281,8 +281,20 @@ class SubtitleManagerService
             }
         }
 
-        // 4. If still no valid subtitle content found, return null (never create fake dummy files!)
+        // 4. If still no valid subtitle content found, return null (or fallback to English translation if Arabic requested)
         if (empty($content) || ! str_contains($content, '-->')) {
+            if ($langCode === 'ar') {
+                Log::info("No direct Arabic subtitle found for {$media->title}. Attempting translation from English...");
+                try {
+                    $translated = app(SubtitleTranslatorService::class)->generateArabicForMedia($media);
+                    if ($translated) {
+                        return $translated;
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning("Translation fallback failed for {$media->title}: ".$e->getMessage());
+                }
+            }
+
             Log::info("No real subtitle content retrieved for {$media->title} [{$langCode}]");
 
             return null;
@@ -405,7 +417,7 @@ class SubtitleManagerService
         }
 
         // Detect Windows-1256 (Arabic) or ISO-8859-1 if non-UTF-8
-        $detector = app(\App\Services\Subtitles\SubtitleLanguageDetectorService::class);
+        $detector = app(SubtitleLanguageDetectorService::class);
         $rawBody = $detector->sanitizeToUtf8($rawBody);
 
         // If SSA / ASS format, seamlessly convert to clean standard SRT
@@ -455,6 +467,7 @@ class SubtitleManagerService
             'is_embedded' => false,
         ]);
     }
+
     /**
      * Convert SubStation Alpha (SSA) and Advanced SubStation Alpha (ASS) subtitles into clean standard SRT.
      */
@@ -470,6 +483,7 @@ class SubtitleManagerService
                 $parts = explode(':', $trimmed, 2);
                 $fields = array_map('trim', explode(',', $parts[1] ?? ''));
                 $formatFields = array_map('strtolower', $fields);
+
                 continue;
             }
 
@@ -492,9 +506,15 @@ class SubtitleManagerService
                     $sIdx = array_search('start', $formatFields);
                     $eIdx = array_search('end', $formatFields);
                     $tIdx = array_search('text', $formatFields);
-                    if ($sIdx !== false) $startIndex = $sIdx;
-                    if ($eIdx !== false) $endIndex = $eIdx;
-                    if ($tIdx !== false) $textIndex = $tIdx;
+                    if ($sIdx !== false) {
+                        $startIndex = $sIdx;
+                    }
+                    if ($eIdx !== false) {
+                        $endIndex = $eIdx;
+                    }
+                    if ($tIdx !== false) {
+                        $textIndex = $tIdx;
+                    }
                 }
 
                 $start = trim($parts[$startIndex] ?? '');
@@ -540,7 +560,7 @@ class SubtitleManagerService
             $idx++;
         }
 
-        return trim($srt) . "\n";
+        return trim($srt)."\n";
     }
 
     /**
@@ -557,13 +577,21 @@ class SubtitleManagerService
         $s = $m[3];
         $ms = $m[4];
         if (strlen($ms) === 2) {
-            $ms = $ms . '0';
+            $ms = $ms.'0';
         } elseif (strlen($ms) === 1) {
-            $ms = $ms . '00';
+            $ms = $ms.'00';
         } elseif (strlen($ms) > 3) {
             $ms = substr($ms, 0, 3);
         }
 
         return "{$h}:{$min}:{$s},{$ms}";
+    }
+
+    /**
+     * Generate an Arabic subtitle from an existing or downloaded English subtitle.
+     */
+    public function generateArabicSubtitle(MediaItem|Episode $media, ?int $sourceSubtitleId = null): ?Subtitle
+    {
+        return app(SubtitleTranslatorService::class)->generateArabicForMedia($media, $sourceSubtitleId);
     }
 }

@@ -220,6 +220,43 @@ const downloadAllMissing = async (lang: string) => {
     }
 };
 
+const isGeneratingArabicId = ref<number | null>(null);
+
+const generateArabicFromEnglish = async (item: any) => {
+    isGeneratingArabicId.value = item.id;
+    try {
+        const res = await fetch('/api/subtitles/generate-arabic', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+            body: JSON.stringify({
+                media_id: item.id,
+                media_type: item.type,
+            }),
+        });
+
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            item.missing_ar = false;
+            toast.success(
+                isRTL.value ? 'تم توليد وترجمة ملف الترجمة العربية بنجاح وحفظه!' : 'Arabic subtitle successfully translated from English!',
+                isRTL.value ? 'تم التوليد' : 'Translation Ready'
+            );
+        } else {
+            toast.error(
+                data.message || (isRTL.value ? 'تعذر توليد الترجمة العربية: تأكد من وجود ترجمة إنجليزية أولاً' : 'Failed to generate Arabic translation: Ensure English subtitle is available'),
+                isRTL.value ? 'خطأ في التوليد' : 'Generation Failed'
+            );
+        }
+    } catch (e: any) {
+        toast.error(e.message || 'Error communicating with translation service', 'Error');
+    } finally {
+        isGeneratingArabicId.value = null;
+    }
+};
+
 onMounted(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get('tab');
@@ -684,33 +721,47 @@ onMounted(() => {
                     </div>
 
                     <!-- Action Buttons -->
-                    <div class="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 dark:border-white/5">
-                        <!-- Arabic Subtitle Action -->
-                        <button
-                            @click="openPickerModal(item, 'ar')"
-                            :disabled="!item.missing_ar"
-                            class="flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                            :class="!item.missing_ar
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-default'
-                                : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-md shadow-cyan-500/20'"
-                        >
-                            <Check v-if="!item.missing_ar" class="w-3.5 h-3.5" />
-                            <Download v-else class="w-3.5 h-3.5" />
-                            <span>{{ !item.missing_ar ? (isRTL ? 'العربية متوفرة' : 'Arabic Ready') : (isRTL ? 'تحميل العربية' : 'Get Arabic') }}</span>
-                        </button>
+                    <div class="space-y-2 mt-4 pt-3 border-t border-slate-100 dark:border-white/5">
+                        <div class="flex items-center gap-2">
+                            <!-- Arabic Subtitle Action -->
+                            <button
+                                @click="openPickerModal(item, 'ar')"
+                                :disabled="!item.missing_ar"
+                                class="flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                                :class="!item.missing_ar
+                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-default'
+                                    : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-md shadow-cyan-500/20'"
+                            >
+                                <Check v-if="!item.missing_ar" class="w-3.5 h-3.5" />
+                                <Download v-else class="w-3.5 h-3.5" />
+                                <span>{{ !item.missing_ar ? (isRTL ? 'العربية متوفرة' : 'Arabic Ready') : (isRTL ? 'تحميل العربية' : 'Get Arabic') }}</span>
+                            </button>
 
-                        <!-- English Subtitle Action -->
+                            <!-- English Subtitle Action -->
+                            <button
+                                @click="openPickerModal(item, 'en')"
+                                :disabled="!item.missing_en"
+                                class="flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                                :class="!item.missing_en
+                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-default'
+                                    : 'bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-700 dark:text-white border border-slate-200 dark:border-white/10'"
+                            >
+                                <Check v-if="!item.missing_en" class="w-3.5 h-3.5" />
+                                <Download v-else class="w-3.5 h-3.5" />
+                                <span>{{ !item.missing_en ? (isRTL ? 'الإنجليزية متوفرة' : 'English Ready') : (isRTL ? 'تحميل الإنجليزية' : 'Get English') }}</span>
+                            </button>
+                        </div>
+
+                        <!-- 1-Click Arabic Translation from English -->
                         <button
-                            @click="openPickerModal(item, 'en')"
-                            :disabled="!item.missing_en"
-                            class="flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                            :class="!item.missing_en
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-default'
-                                : 'bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-700 dark:text-white border border-slate-200 dark:border-white/10'"
+                            v-if="item.missing_ar"
+                            @click="generateArabicFromEnglish(item)"
+                            :disabled="isGeneratingArabicId === item.id"
+                            class="w-full py-1.5 px-3 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 active:scale-95 disabled:opacity-50"
                         >
-                            <Check v-if="!item.missing_en" class="w-3.5 h-3.5" />
-                            <Download v-else class="w-3.5 h-3.5" />
-                            <span>{{ !item.missing_en ? (isRTL ? 'الإنجليزية متوفرة' : 'English Ready') : (isRTL ? 'تحميل الإنجليزية' : 'Get English') }}</span>
+                            <RefreshCw v-if="isGeneratingArabicId === item.id" class="w-3 h-3 animate-spin text-cyan-400" />
+                            <Sparkles v-else class="w-3 h-3 text-cyan-400" />
+                            <span>{{ isGeneratingArabicId === item.id ? (isRTL ? 'جارٍ الترجمة والتوليد...' : 'Translating from English...') : (isRTL ? 'توليد ترجمة عربية من الإنجليزية' : 'Translate Arabic from English') }}</span>
                         </button>
                     </div>
                 </div>

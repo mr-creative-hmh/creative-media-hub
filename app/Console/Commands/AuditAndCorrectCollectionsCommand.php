@@ -90,6 +90,9 @@ class AuditAndCorrectCollectionsCommand extends Command
         // 3. X-Men Collection
         $xmenMovies = MediaItem::where('title', 'like', '%X-Men%')
             ->orWhere('file_path', 'like', '%X-Men%')
+            ->orWhere('title', 'like', '%X2%')
+            ->orWhere('file_path', 'like', '%/X2 %')
+            ->orWhere('id', 1317)
             ->get();
 
         foreach ($xmenMovies as $m) {

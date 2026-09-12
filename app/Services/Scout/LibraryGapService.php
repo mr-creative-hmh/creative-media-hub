@@ -5,13 +5,11 @@ namespace App\Services\Scout;
 use App\Models\AppSetting;
 use App\Models\Episode;
 use App\Models\MediaItem;
-use App\Models\Season;
 use App\Models\Series;
 use App\Services\Metadata\TmdbProvider;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 
 class LibraryGapService
 {
@@ -134,8 +132,8 @@ class LibraryGapService
                 ->whereNotNull('tmdb_id')
                 ->where(function ($q) {
                     $q->where('status', 'like', '%Continuing%')
-                      ->orWhere('status', 'like', '%Returning%')
-                      ->orWhereNull('status');
+                        ->orWhere('status', 'like', '%Returning%')
+                        ->orWhereNull('status');
                 })
                 ->limit(40)
                 ->get();
@@ -208,6 +206,7 @@ class LibraryGapService
                     $flat[] = $mm;
                 }
             }
+
             return $flat;
         });
     }
@@ -224,12 +223,12 @@ class LibraryGapService
         return Cache::remember('scout_grouped_collections', self::CACHE_TTL, function () {
             $today = Carbon::today()->format('Y-m-d');
 
-            // Genuine collections having 2 or more movies in local library (matching CollectionController)
+            // Genuine collections having 1 or more movies in local library (Media Scout tracks franchise gaps even from a single owned movie)
             $collectionCounts = MediaItem::whereNotNull('collection_id')
                 ->where('collection_id', '>', 0)
                 ->groupBy('collection_id')
                 ->selectRaw('collection_id, count(*) as cnt')
-                ->having('cnt', '>=', 2)
+                ->having('cnt', '>=', 1)
                 ->pluck('cnt', 'collection_id');
 
             $collectionIds = $collectionCounts->keys()->toArray();
@@ -347,11 +346,11 @@ class LibraryGapService
                 }
 
                 if (! empty($missingParts)) {
-                    $colPoster = ! empty($colDetails['poster_path']) 
-                        ? "https://image.tmdb.org/t/p/w780{$colDetails['poster_path']}" 
+                    $colPoster = ! empty($colDetails['poster_path'])
+                        ? "https://image.tmdb.org/t/p/w780{$colDetails['poster_path']}"
                         : ($ownedParts[0]['poster_path'] ?? null);
-                    $colBackdrop = ! empty($colDetails['backdrop_path']) 
-                        ? "https://image.tmdb.org/t/p/w1280{$colDetails['backdrop_path']}" 
+                    $colBackdrop = ! empty($colDetails['backdrop_path'])
+                        ? "https://image.tmdb.org/t/p/w1280{$colDetails['backdrop_path']}"
                         : null;
 
                     $totalCount = count($parts);

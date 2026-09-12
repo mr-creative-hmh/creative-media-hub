@@ -316,3 +316,45 @@
 - **`GET /collections/{slug}`**  
   Returns detailed franchise view including chronological movies timeline, missing installment warnings, and 1-click Media Scout acquisition triggers.
 
+---
+
+## 11. Subtitles & Real-Time Translation Endpoints
+
+### 11.1. Subtitles For Media
+- **`GET /api/subtitles/for-media?type={movie|episode}&id={id}`**  
+  Retrieves all attached subtitle tracks for a movie or series episode with language tags and embedded flags.
+
+### 11.2. Real Subtitle Search
+- **`GET /api/subtitles/search?query={title}&language={lang}&media_id={id}&media_type={movie|episode}`**  
+  Searches live online subtitle databases (SubDL, OpenSubtitles v3, YTS) with auto-resolved IMDb IDs.
+
+### 11.3. Subtitle Download & Attachment
+- **`POST /api/subtitles/download`**  
+  Downloads and attaches an online subtitle archive (.zip/.gz/.srt) directly to the target media item.
+
+### 11.4. Instant Arabic Subtitle Translation
+- **`POST /api/subtitles/generate-arabic`**  
+  Translates an existing English `.srt` subtitle (or downloads one on the fly if missing) into cinema-standard Modern Standard Arabic while preserving 100% of millisecond timestamps and dialogue formatting.
+  ```json
+  {
+    "media_id": 42,
+    "media_type": "movie",
+    "subtitle_id": 105
+  }
+  ```
+  **Response:**
+  ```json
+  {
+    "status": "success",
+    "message": "Arabic subtitle successfully translated from English and attached.",
+    "subtitle": {
+      "id": 182,
+      "language": "ar",
+      "language_name": "Arabic",
+      "format": "srt",
+      "file_path": "/storage/app/subtitles/media_42.ar.srt",
+      "is_default": true
+    }
+  }
+  ```
+

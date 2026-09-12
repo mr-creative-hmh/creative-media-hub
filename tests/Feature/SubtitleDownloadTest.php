@@ -111,8 +111,8 @@ class SubtitleDownloadTest extends TestCase
 
     public function test_download_auto_converts_windows1256_arabic_to_utf8(): void
     {
-        $arabicText = "مرحباً بكم في العالم السحري";
-        $windows1256Srt = "1\r\n00:00:01,000 --> 00:00:04,000\r\n" . iconv('UTF-8', 'Windows-1256//IGNORE', $arabicText);
+        $arabicText = 'مرحباً بكم في العالم السحري';
+        $windows1256Srt = "1\r\n00:00:01,000 --> 00:00:04,000\r\n".iconv('UTF-8', 'Windows-1256//IGNORE', $arabicText);
 
         Http::fake([
             'https://subs.test/arabic_win1256.srt' => Http::response($windows1256Srt, 200),
@@ -142,5 +142,58 @@ class SubtitleDownloadTest extends TestCase
         $this->assertStringContainsString($arabicText, $savedContent);
 
         @unlink($sub->file_path);
+    }
+
+    public function test_generate_arabic_endpoint_translates_from_english_subtitle(): void
+    {
+        $testDir = storage_path('framework/testing/sub_feature_test');
+        if (! File::isDirectory($testDir)) {
+            File::makeDirectory($testDir, 0755, true);
+        }
+
+        $mediaPath = "{$testDir}/FeatureMovie.mkv";
+        $enSrtPath = "{$testDir}/FeatureMovie.en.srt";
+        File::put($mediaPath, 'dummy media');
+        File::put($enSrtPath, "1\n00:00:01,500 --> 00:00:04,500\nHello world from feature test.\n");
+
+        $movie = MediaItem::create([
+            'title' => 'Feature Movie Test',
+            'release_year' => 2024,
+            'file_path' => $mediaPath,
+        ]);
+
+        Subtitle::create([
+            'subtitlable_id' => $movie->id,
+            'subtitlable_type' => MediaItem::class,
+            'language' => 'en',
+            'language_name' => 'English',
+            'format' => 'srt',
+            'file_path' => $enSrtPath,
+            'is_default' => false,
+        ]);
+
+        Http::fake([
+            'https://clients5.google.com/*' => Http::response([
+                '[[[0]]] أهلاً بالعالم من اختبار الميزة.',
+            ], 200),
+        ]);
+
+        $response = $this->postJson('/api/subtitles/generate-arabic', [
+            'media_id' => $movie->id,
+            'media_type' => 'movie',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('status', 'success');
+        $subId = $response->json('subtitle.id');
+        $this->assertNotNull($subId);
+
+        $arabicSub = Subtitle::find($subId);
+        $this->assertNotNull($arabicSub);
+        $this->assertEquals('ar', $arabicSub->language);
+        $this->assertTrue($arabicSub->is_default);
+        $this->assertFileExists($arabicSub->file_path);
+
+        File::deleteDirectory($testDir);
     }
 }

@@ -110,6 +110,7 @@ Route::post('/api/organizer/watcher/run-now', [DiskOrganizerController::class, '
 Route::get('/subtitles', [SubtitleController::class, 'index'])->name('subtitles.index');
 Route::get('/api/subtitles/search', [SubtitleController::class, 'search'])->name('api.subtitles.search');
 Route::post('/api/subtitles/download', [SubtitleController::class, 'downloadForMedia'])->name('api.subtitles.download');
+Route::post('/api/subtitles/generate-arabic', [SubtitleController::class, 'generateArabic'])->name('api.subtitles.generate-arabic');
 Route::get('/api/subtitles/for-media', [SubtitleController::class, 'forMedia'])->name('api.subtitles.for-media');
 Route::get('/api/subtitles/list', [SubtitleController::class, 'forMedia'])->name('api.subtitles.list');
 Route::post('/api/subtitles/verify-engine', [SubtitleController::class, 'verifyEngine'])->name('api.subtitles.verify-engine');

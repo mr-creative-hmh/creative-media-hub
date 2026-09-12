@@ -101,6 +101,7 @@ creative-media-hub/
 | `Streaming/FfmpegLocatorService` | Auto-detects FFmpeg/FFprobe binaries across Windows, Linux, and macOS environments. |
 | `Subtitles/SubtitleHealthCheckService` | Inspects subtitle cue text, detects true dialogue language, strips corrupt stubs, and standardizes file extensions. |
 | `Subtitles/SubtitleManagerService` | Manages subtitle extraction, cloud search, archive decompression, and database association. |
+| `Subtitles/SubtitleTranslatorService` | Parses English SRT subtitles, batch-translates dialogue lines to Modern Standard Arabic via tagged markers (`[[[idx]]]`, `¶`), and reconstructs valid SRT files with 100% millisecond timestamp fidelity. |
 
 ---
 
@@ -127,7 +128,7 @@ creative-media-hub/
 ## 4. Frontend Vue 3 Component Catalog (`resources/js/`)
 
 ### 4.1. Cinema Player (`components/player/`)
-- `CinemaPlayer.vue`: Fullscreen cinematic player with native keyboard shortcuts, audio equalizer, playback speed presets, subtitle selector, and in-player cloud subtitle downloader. Built with strict `dir="ltr"` container orientation for stable timeline scrubbers across all interface languages.
+- `CinemaPlayer.vue`: Fullscreen cinematic player with native keyboard shortcuts, audio equalizer, playback speed presets, subtitle selector, 1-click on-the-fly Arabic subtitle translation, and in-player cloud subtitle downloader. Built with strict `dir="ltr"` container orientation for stable timeline scrubbers across all interface languages.
 - `CinemaLoader.vue`: Celestial multi-orbit glowing loader with animated comet particles for buffering states.
 - `PlayerSettingsMenu.vue`: Dropdown menu for audio boost, equalizer presets, and stream source switching.
 
@@ -137,7 +138,9 @@ creative-media-hub/
 - `MediaDetailModal.vue`: Rich modal overlay displaying synopses, cast credits, technical codecs, audio channels, and direct playback triggers.
 - `FixMatchModal.vue`: Comprehensive metadata correction modal with Direct ID lookup, Arabic translation toggle, movie/series converter, and dedicated Collection Studio tab for 1-click franchise linking and physical reorganization.
 - `WatchHistoryBar.vue`: Context-segregated horizontal progress bar with instant resume buttons.
+- `WatchHistoryCard.vue`: Dedicated multi-tier progress card displaying full title, badge, and duration without truncation across all watch history surfaces.
 
 ### 4.3. Subtitles & Health (`components/subtitles/`)
 - `SubtitleSearchModal.vue`: In-player and standalone modal for searching and downloading real cloud subtitles from SubDL and OpenSubtitles v3.
+- `SubtitlePickerModal.vue`: Subtitle selection and 1-click Arabic translation modal attached to media cards.
 - `SubtitleHealthModal.vue`: Interactive audit dialog for running dry-run simulations, language detection audits, and batch cleaning.

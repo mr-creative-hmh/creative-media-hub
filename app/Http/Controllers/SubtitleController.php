@@ -342,6 +342,34 @@ class SubtitleController extends Controller
         ]);
     }
 
+    public function generateArabic(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'media_id' => 'required|integer',
+            'media_type' => 'required|in:movie,episode',
+            'subtitle_id' => 'nullable|integer',
+        ]);
+
+        $model = $validated['media_type'] === 'movie'
+            ? MediaItem::findOrFail($validated['media_id'])
+            : Episode::findOrFail($validated['media_id']);
+
+        $subtitle = $this->manager->generateArabicSubtitle($model, $validated['subtitle_id'] ?? null);
+
+        if (! $subtitle) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No English subtitle was found or could be downloaded/translated to Arabic for this item.',
+            ], 422);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Arabic subtitle successfully translated from English and attached.',
+            'subtitle' => $subtitle,
+        ]);
+    }
+
     public function forMedia(Request $request): JsonResponse
     {
         $type = $request->input('type', 'movie');

@@ -4,6 +4,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import { formatEpisodeTitle, formatSeasonEpisodeTitle } from '@/lib/mediaTitle';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import WatchHistoryCard from '@/components/media/WatchHistoryCard.vue';
 import {
     History, Clock, Play, Trash2, X, Film, Tv, Layers,
     Search, AlertTriangle, CheckCircle2, ChevronRight, ChevronLeft, Sparkles, Gamepad2
@@ -384,66 +385,14 @@ onMounted(() => {
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-                        <div
+                        <WatchHistoryCard
                             v-for="item in moviesList"
                             :key="`${item.watchable_type}_${item.watchable_id}`"
-                            @click="play(item, item.playlist)"
-                            class="glass-panel group relative rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 hover:border-cyan-500/40 hover:shadow-xl hover:shadow-cyan-500/10 transition-all flex flex-col bg-white dark:bg-[#07090E]"
-                        >
-                            <!-- Thumbnail -->
-                            <div class="relative aspect-video w-full overflow-hidden bg-slate-900">
-                                <img
-                                    :src="item.backdrop_path || item.poster_path"
-                                    :alt="item.title"
-                                    class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-85 group-hover:opacity-100"
-                                />
-                                <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent"></div>
-
-                                <!-- Resolution & Codec Badges -->
-                                <div class="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
-                                    <span v-if="item.resolution" class="px-2 py-0.5 rounded bg-black/70 backdrop-blur-md text-cyan-300 text-[10px] font-mono font-bold border border-cyan-500/30">
-                                        {{ item.resolution }}
-                                    </span>
-                                </div>
-
-                                <!-- Remove Button -->
-                                <button
-                                    @click="(e) => removeItem(item, e)"
-                                    :title="t('watch_history.remove_tooltip')"
-                                    class="absolute top-2.5 right-2.5 z-20 w-8 h-8 rounded-full bg-black/60 hover:bg-rose-600 text-slate-300 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 backdrop-blur-sm border border-white/20 hover:border-rose-500 cursor-pointer shadow-md active:scale-90"
-                                >
-                                    <X class="w-4 h-4" />
-                                </button>
-
-                                <!-- Play Overlay -->
-                                <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-xs">
-                                    <div class="w-12 h-12 rounded-full bg-cyan-500 text-slate-950 flex items-center justify-center shadow-xl shadow-cyan-500/50 group-hover:scale-110 active:scale-95 transition-transform">
-                                        <Play class="w-5 h-5 fill-current ml-0.5" />
-                                    </div>
-                                </div>
-
-                                <!-- Progress Bar -->
-                                <div class="absolute bottom-0 inset-x-0 h-1.5 bg-black/60">
-                                    <div class="h-full bg-gradient-to-r from-cyan-400 to-blue-500 rounded-r-full" :style="{ width: `${item.percent}%` }"></div>
-                                </div>
-                            </div>
-
-                            <!-- Content Details -->
-                            <div class="p-4 flex flex-col justify-between flex-1">
-                                <div>
-                                    <h4 class="font-bold text-sm text-slate-900 dark:text-white truncate group-hover:text-cyan-400 transition-colors">
-                                        {{ isRTL && item.title_ar ? item.title_ar : item.title }}
-                                    </h4>
-                                    <div class="flex items-center gap-2 mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                                        <span class="font-mono text-cyan-400 font-semibold">{{ item.current_time_formatted }}</span>
-                                        <span class="opacity-50">/</span>
-                                        <span class="font-mono">{{ item.duration_formatted }}</span>
-                                        <span class="opacity-50">•</span>
-                                        <span class="font-semibold">{{ item.percent }}%</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                            :item="item"
+                            @play="play"
+                            @remove="removeItem"
+                            @play-interactive="playBandersnatch"
+                        />
                     </div>
                 </div>
 
@@ -472,67 +421,14 @@ onMounted(() => {
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-                        <div
+                        <WatchHistoryCard
                             v-for="item in collectionsList"
                             :key="`${item.watchable_type}_${item.watchable_id}`"
-                            @click="play(item, item.playlist)"
-                            class="glass-panel group relative rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 hover:border-amber-500/40 hover:shadow-xl hover:shadow-amber-500/10 transition-all flex flex-col bg-white dark:bg-[#07090E]"
-                        >
-                            <!-- Thumbnail -->
-                            <div class="relative aspect-video w-full overflow-hidden bg-slate-900">
-                                <img
-                                    :src="item.backdrop_path || item.poster_path"
-                                    :alt="item.title"
-                                    class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-85 group-hover:opacity-100"
-                                />
-                                <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent"></div>
-
-                                <!-- Collection Badge -->
-                                <div class="absolute top-2.5 left-2.5 z-10">
-                                    <span class="px-2.5 py-0.5 rounded-md bg-amber-500/90 text-slate-950 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-md">
-                                        <Layers class="w-3 h-3" />
-                                        <span class="max-w-[140px] truncate">{{ item.collection_name }}</span>
-                                    </span>
-                                </div>
-
-                                <!-- Remove Button -->
-                                <button
-                                    @click="(e) => removeItem(item, e)"
-                                    :title="t('watch_history.remove_tooltip')"
-                                    class="absolute top-2.5 right-2.5 z-20 w-8 h-8 rounded-full bg-black/60 hover:bg-rose-600 text-slate-300 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 backdrop-blur-sm border border-white/20 hover:border-rose-500 cursor-pointer shadow-md active:scale-90"
-                                >
-                                    <X class="w-4 h-4" />
-                                </button>
-
-                                <!-- Play Overlay -->
-                                <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-xs">
-                                    <div class="w-12 h-12 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center shadow-xl shadow-amber-500/50 group-hover:scale-110 active:scale-95 transition-transform">
-                                        <Play class="w-5 h-5 fill-current ml-0.5" />
-                                    </div>
-                                </div>
-
-                                <!-- Progress Bar -->
-                                <div class="absolute bottom-0 inset-x-0 h-1.5 bg-black/60">
-                                    <div class="h-full bg-gradient-to-r from-amber-400 to-orange-500 rounded-r-full" :style="{ width: `${item.percent}%` }"></div>
-                                </div>
-                            </div>
-
-                            <!-- Content Details -->
-                            <div class="p-4 flex flex-col justify-between flex-1">
-                                <div>
-                                    <h4 class="font-bold text-sm text-slate-900 dark:text-white truncate group-hover:text-amber-400 transition-colors">
-                                        {{ isRTL && item.title_ar ? item.title_ar : item.title }}
-                                    </h4>
-                                    <div class="flex items-center gap-2 mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                                        <span class="font-mono text-amber-400 font-semibold">{{ item.current_time_formatted }}</span>
-                                        <span class="opacity-50">/</span>
-                                        <span class="font-mono">{{ item.duration_formatted }}</span>
-                                        <span class="opacity-50">•</span>
-                                        <span class="font-semibold">{{ item.percent }}%</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                            :item="item"
+                            @play="play"
+                            @remove="removeItem"
+                            @play-interactive="playBandersnatch"
+                        />
                     </div>
                 </div>
 
@@ -561,70 +457,14 @@ onMounted(() => {
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-                        <div
+                        <WatchHistoryCard
                             v-for="item in seriesList"
                             :key="`${item.watchable_type}_${item.watchable_id}`"
-                            @click="play(item, item.playlist)"
-                            class="glass-panel group relative rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 hover:border-indigo-500/40 hover:shadow-xl hover:shadow-indigo-500/10 transition-all flex flex-col bg-white dark:bg-[#07090E]"
-                        >
-                            <!-- Thumbnail -->
-                            <div class="relative aspect-video w-full overflow-hidden bg-slate-900">
-                                <img
-                                    :src="item.poster_path || item.backdrop_path"
-                                    :alt="item.title"
-                                    class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-85 group-hover:opacity-100"
-                                />
-                                <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent"></div>
-
-                                <!-- Episode Badge -->
-                                <div class="absolute top-2.5 left-2.5 z-10">
-                                    <span class="px-2.5 py-0.5 rounded-md bg-indigo-600/90 text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-md">
-                                        <Tv class="w-3 h-3" />
-                                        <span>S{{ item.season_number }} E{{ item.episode_number }}</span>
-                                    </span>
-                                </div>
-
-                                <!-- Remove Button -->
-                                <button
-                                    @click="(e) => removeItem(item, e)"
-                                    :title="t('watch_history.remove_tooltip')"
-                                    class="absolute top-2.5 right-2.5 z-20 w-8 h-8 rounded-full bg-black/60 hover:bg-rose-600 text-slate-300 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 backdrop-blur-sm border border-white/20 hover:border-rose-500 cursor-pointer shadow-md active:scale-90"
-                                >
-                                    <X class="w-4 h-4" />
-                                </button>
-
-                                <!-- Play Overlay -->
-                                <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-xs">
-                                    <div class="w-12 h-12 rounded-full bg-indigo-500 text-white flex items-center justify-center shadow-xl shadow-indigo-500/50 group-hover:scale-110 active:scale-95 transition-transform">
-                                        <Play class="w-5 h-5 fill-current ml-0.5" />
-                                    </div>
-                                </div>
-
-                                <!-- Progress Bar -->
-                                <div class="absolute bottom-0 inset-x-0 h-1.5 bg-black/60">
-                                    <div class="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 rounded-r-full" :style="{ width: `${item.percent}%` }"></div>
-                                </div>
-                            </div>
-
-                            <!-- Content Details -->
-                            <div class="p-4 flex flex-col justify-between flex-1">
-                                <div>
-                                    <h4 class="font-bold text-sm text-slate-900 dark:text-white truncate group-hover:text-indigo-400 transition-colors">
-                                        {{ isRTL && item.series_title_ar ? item.series_title_ar : item.series_title }}
-                                    </h4>
-                                    <p class="text-xs text-slate-400 truncate mt-0.5">
-                                        {{ formatSeasonEpisodeTitle(item, { isRTL }) }}
-                                    </p>
-                                    <div class="flex items-center gap-2 mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                                        <span class="font-mono text-indigo-400 font-semibold">{{ item.current_time_formatted }}</span>
-                                        <span class="opacity-50">/</span>
-                                        <span class="font-mono">{{ item.duration_formatted }}</span>
-                                        <span class="opacity-50">•</span>
-                                        <span class="font-semibold">{{ item.percent }}%</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                            :item="item"
+                            @play="play"
+                            @remove="removeItem"
+                            @play-interactive="playBandersnatch"
+                        />
                     </div>
                 </div>
             </div>
@@ -647,77 +487,14 @@ onMounted(() => {
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-                    <div
+                    <WatchHistoryCard
                         v-for="item in filteredItems"
                         :key="`${item.watchable_type}_${item.watchable_id}`"
-                        @click="play(item, item.playlist)"
-                        class="glass-panel group relative rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 hover:border-cyan-500/40 hover:shadow-xl hover:shadow-cyan-500/10 transition-all flex flex-col bg-white dark:bg-[#07090E]"
-                    >
-                        <!-- Thumbnail -->
-                        <div class="relative aspect-video w-full overflow-hidden bg-slate-900">
-                            <img
-                                :src="item.backdrop_path || item.poster_path"
-                                :alt="item.title"
-                                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-85 group-hover:opacity-100"
-                            />
-                            <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent"></div>
-
-                            <!-- Badges -->
-                            <div class="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5">
-                                <span
-                                    v-if="item.category === 'collection' || item.collection_name"
-                                    class="px-2 py-0.5 rounded-md bg-amber-500/90 text-slate-950 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-md"
-                                >
-                                    <Layers class="w-3 h-3" />
-                                    <span class="max-w-[120px] truncate">{{ item.collection_name }}</span>
-                                </span>
-                                <span
-                                    v-else-if="item.type === 'episode' || item.category === 'series'"
-                                    class="px-2 py-0.5 rounded-md bg-indigo-600/90 text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-md"
-                                >
-                                    <Tv class="w-3 h-3" />
-                                    <span>S{{ item.season_number }} E{{ item.episode_number }}</span>
-                                </span>
-                            </div>
-
-                            <!-- Remove Button -->
-                            <button
-                                @click="(e) => removeItem(item, e)"
-                                :title="t('watch_history.remove_tooltip')"
-                                class="absolute top-2.5 right-2.5 z-20 w-8 h-8 rounded-full bg-black/60 hover:bg-rose-600 text-slate-300 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 backdrop-blur-sm border border-white/20 hover:border-rose-500 cursor-pointer shadow-md active:scale-90"
-                            >
-                                <X class="w-4 h-4" />
-                            </button>
-
-                            <!-- Play Overlay -->
-                            <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-xs">
-                                <div class="w-12 h-12 rounded-full bg-cyan-500 text-slate-950 flex items-center justify-center shadow-xl shadow-cyan-500/50 group-hover:scale-110 active:scale-95 transition-transform">
-                                    <Play class="w-5 h-5 fill-current ml-0.5" />
-                                </div>
-                            </div>
-
-                            <!-- Progress Bar -->
-                            <div class="absolute bottom-0 inset-x-0 h-1.5 bg-black/60">
-                                <div class="h-full bg-gradient-to-r from-cyan-400 to-blue-500 rounded-r-full" :style="{ width: `${item.percent}%` }"></div>
-                            </div>
-                        </div>
-
-                        <!-- Content Details -->
-                        <div class="p-4 flex flex-col justify-between flex-1">
-                            <div>
-                                <h4 class="font-bold text-sm text-slate-900 dark:text-white truncate group-hover:text-cyan-400 transition-colors">
-                                    {{ displayItemTitle(item) }}
-                                </h4>
-                                <div class="flex items-center gap-2 mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                                    <span class="font-mono text-cyan-400 font-semibold">{{ item.current_time_formatted }}</span>
-                                    <span class="opacity-50">/</span>
-                                    <span class="font-mono">{{ item.duration_formatted }}</span>
-                                    <span class="opacity-50">•</span>
-                                    <span class="font-semibold">{{ item.percent }}%</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                        :item="item"
+                        @play="play"
+                        @remove="removeItem"
+                        @play-interactive="playBandersnatch"
+                    />
                 </div>
             </div>
         </div>

@@ -221,6 +221,22 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 - **Alphanumeric Title Normalization**: Compares sanitized alphanumeric strings to accurately correlate existing library items when folder names vary slightly (e.g. *Sense8* vs *Sense 8*).
 - **In-Place Path Relocation**: Updates the existing series and episode records in the database rather than creating duplicate series or detached episodes when folders are moved.
 
+### 23. 🌐 Cinema-Standard Arabic Subtitle Translation & In-Player Generation
+- **Intelligent SRT Translation (`SubtitleTranslatorService`)**: Automatically synthesizes Modern Standard Arabic `.srt` files directly from English subtitle tracks when Arabic subtitles are missing or unavailable.
+- **Timestamp & Formatting Fidelity**: Uses indexed bracket markers `[[[idx]]]` and paragraph break tokens `¶` to batch translate dialogue lines while preserving 100% of millisecond timecodes (`00:01:23,456 --> 00:01:26,789`), dialogue line breaks, and sound cue brackets (e.g. `[music]` → `[موسيقى]`).
+- **In-Player 1-Click Translation Action (`CinemaPlayer.vue`)**:
+  - Direct 1-click **"ترجمة فورية إلى العربية (من EN) / Translate to Arabic (from EN)"** trigger inside the player's Subtitles dropdown drawer with real-time loading feedback.
+  - Contextual `<Sparkles>` translation shortcut button beside every English track in the available subtitle list.
+  - Instant Arabic Translation card and 1-click fallback trigger inside the In-Player Subtitle Search & Download Modal.
+  - Automatic activation and seamless live WebVTT cue overlay rendering without interrupting or restarting video playback.
+- **Dedicated Subtitle Studio & Picker Integration**: Also available as 1-click actions in `Subtitles/Index.vue` and `SubtitlePickerModal.vue`.
+
+### 24. 🎴 Watch History Multi-Tier Card Ergonomics (`WatchHistoryCard.vue`)
+- **Non-Truncating Multi-Tier Card Layout**: Eliminates single-line truncated titles across the Watch History Bar and all 4 Hub grids (`All`, `Movies`, `Series`, `Collections`) with structured tiers:
+  - **Tier 1**: Clean, bold primary media title.
+  - **Tier 2**: Contextual badges (`S1 · E22` pill + localized episode title or franchise collection name).
+  - **Tier 3**: Playback duration timestamp (`18m / 44m`) alongside high-visibility completion percentage pills.
+
 
 ---
 

@@ -183,6 +183,46 @@ const setLanguage = (lang: 'ar' | 'en') => {
     }
 };
 
+const isTranslating = ref(false);
+
+const handleGenerateArabicFromEnglish = async () => {
+    if (!props.media) return;
+    isTranslating.value = true;
+    try {
+        const res = await fetch('/api/subtitles/generate-arabic', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+            },
+            body: JSON.stringify({
+                media_id: props.media.id,
+                media_type: props.media.type || 'movie',
+            }),
+        });
+
+        const data = await res.json();
+        if (!res.ok || data.status === 'error') {
+            throw new Error(data.message || 'Failed to generate Arabic translation');
+        }
+
+        toast.success(
+            isRTL.value 
+                ? 'تم توليد وترجمة ملف الترجمة العربية بنجاح وحفظه بدقة زمنية تامة!' 
+                : 'Arabic subtitle successfully translated from English!',
+            'Translation Ready'
+        );
+
+        emit('downloaded', data.subtitle);
+        emit('close');
+    } catch (err: any) {
+        toast.error(err.message || 'Error generating Arabic subtitle', 'Translation Failed');
+    } finally {
+        isTranslating.value = false;
+    }
+};
+
 watch(
     () => props.isOpen,
     (newVal) => {
@@ -285,6 +325,19 @@ watch(
                         <Loader2 v-else class="w-3.5 h-3.5 animate-spin text-cyan-400" />
                         <span>Search</span>
                     </button>
+
+                    <button
+                        v-if="targetLanguage === 'ar'"
+                        type="button"
+                        :disabled="isTranslating"
+                        @click="handleGenerateArabicFromEnglish"
+                        class="px-3.5 py-2 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 hover:from-cyan-500/30 hover:to-blue-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold rounded-xl transition flex items-center gap-1.5 shrink-0 active:scale-95 cursor-pointer disabled:opacity-50"
+                        :title="isRTL ? 'توليد ترجمة عربية كاملة من ملف الترجمة الإنجليزية' : 'Translate full Arabic SRT from English subtitle'"
+                    >
+                        <Loader2 v-if="isTranslating" class="w-3.5 h-3.5 animate-spin" />
+                        <Sparkles v-else class="w-3.5 h-3.5 text-cyan-400" />
+                        <span>{{ isTranslating ? (isRTL ? 'جارٍ التوليد...' : 'Translating...') : (isRTL ? 'توليد من الإنجليزية' : 'Translate from EN') }}</span>
+                    </button>
                 </form>
             </div>
 
@@ -320,6 +373,27 @@ watch(
                     >
                         Retry Search
                     </button>
+
+                    <!-- Instant Arabic Translation Fallback Box -->
+                    <div v-if="targetLanguage === 'ar'" class="mt-6 p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex flex-col items-center gap-2 max-w-md mx-auto">
+                        <div class="flex items-center gap-2 text-cyan-400 font-bold text-xs">
+                            <Sparkles class="w-4 h-4 animate-pulse" />
+                            <span>{{ isRTL ? 'توليد ذكي فوري من ملف الترجمة الإنجليزية' : 'Instant Translation from English' }}</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 text-center">
+                            {{ isRTL ? 'يقوم النظام بترجمة وتوليد ملف ترجمة عربي سينمائي كامل وفوري مع الحفاظ التام على التوقيت بالمللي ثانية.' : 'Generate a full Modern Standard Arabic SRT directly translated from the English subtitle.' }}
+                        </p>
+                        <button
+                            type="button"
+                            :disabled="isTranslating"
+                            @click="handleGenerateArabicFromEnglish"
+                            class="mt-1 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                            <Loader2 v-if="isTranslating" class="w-4 h-4 animate-spin" />
+                            <Sparkles v-else class="w-4 h-4" />
+                            <span>{{ isTranslating ? (isRTL ? 'جارٍ الترجمة والتوليد...' : 'Translating...') : (isRTL ? 'توليد ترجمة عربية من الإنجليزية الآن' : 'Generate Arabic from English Now') }}</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Result Cards List -->
