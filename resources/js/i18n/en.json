@@ -1,6 +1,8 @@
 {
     "app_name": "Creative Media Hub",
-    "app_tagline": "Next-Gen Virtual Cinema & Storage Management Platform",
+    "app_name_first": "Creative",
+    "app_name_second": "Media Hub",
+    "app_tagline": "Next-Gen Virtual Cinema Platform",
     "nav": {
         "dashboard": "Dashboard",
         "movies": "Movies",
@@ -283,5 +285,30 @@
         "target_drive": "Target Drive",
         "explore_saga": "Explore Saga",
         "explore_series": "Explore Series"
+    },
+    "accent_theme": {
+        "title": "Cinema Accent Theme",
+        "subtitle": "Personalize the chromatic glow and control highlights across your cinema hub",
+        "change_accent": "Change Cinema Accent Color",
+        "active": "Active",
+        "presets": "Curated Palettes",
+        "palettes": {
+            "cyan_name": "Electric Cyan",
+            "cyan_desc": "Futuristic Crystal & Tron Sci-Fi",
+            "red_name": "Crimson Ruby",
+            "red_desc": "Theatrical Velvet & Netflix Premiere",
+            "amber_name": "Amber Gold",
+            "amber_desc": "IMAX Gold & Oscar Prestige",
+            "emerald_name": "Emerald Matrix",
+            "emerald_desc": "Matrix Cyberpunk & High-Tech Neon",
+            "violet_name": "Cosmic Violet",
+            "violet_desc": "Deep Space Nebula & Dune Fantasy",
+            "rose_name": "Cyberpunk Rose",
+            "rose_desc": "Tokyo Neon & Synthwave Indie",
+            "orange_name": "Sunset Orange",
+            "orange_desc": "Golden Hour & Action Blockbuster",
+            "blue_name": "Cobalt Blue",
+            "blue_desc": "Paramount Studio & Deep Marvel Blue"
+        }
     }
 }

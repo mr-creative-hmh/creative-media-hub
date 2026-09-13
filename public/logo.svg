@@ -1,38 +1,55 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
     <defs>
-        <linearGradient id="cml-grad-primary" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id="cmh-border-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#06B6D4" stop-opacity="0.9" />
+            <stop offset="50%" stop-color="rgba(255, 255, 255, 0.25)" />
+            <stop offset="100%" stop-color="#3B82F6" stop-opacity="0.7" />
+        </linearGradient>
+        <linearGradient id="cmh-timeline-grad" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stop-color="#06B6D4" />
-            <stop offset="50%" stop-color="#3B82F6" />
-            <stop offset="100%" stop-color="#6366F1" />
+            <stop offset="100%" stop-color="#3B82F6" />
         </linearGradient>
-        <linearGradient id="cml-grad-accent" x1="0%" y1="100%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="#3B82F6" />
-            <stop offset="100%" stop-color="#A855F7" />
+        <linearGradient id="cmh-play-core-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#FFFFFF" />
+            <stop offset="100%" stop-color="#06B6D4" />
         </linearGradient>
-        <filter id="cml-glow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="16" result="blur" />
-            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-        </filter>
-        <filter id="cml-shadow" x="-10%" y="-10%" width="120%" height="120%">
-            <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#06B6D4" flood-opacity="0.35" />
-        </filter>
+        <radialGradient id="cmh-ambient-glow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#06B6D4" stop-opacity="0.38" />
+            <stop offset="100%" stop-color="transparent" stop-opacity="0" />
+        </radialGradient>
     </defs>
 
-    <!-- Outer Rounded Squircle Base -->
-    <rect x="32" y="32" width="448" height="448" rx="112" fill="#07090E" stroke="url(#cml-grad-primary)" stroke-width="6" />
-    <rect x="44" y="44" width="424" height="424" rx="100" fill="url(#cml-grad-primary)" fill-opacity="0.08" />
+    <!-- 1. Ambient Glow Backplate -->
+    <circle cx="50" cy="50" r="44" fill="url(#cmh-ambient-glow)" />
 
-    <!-- Stylized "C" Arc / Film Strip Ribbon -->
-    <path d="M 330 140 C 240 100, 140 160, 140 256 C 140 352, 240 412, 330 372 C 354 362, 368 338, 358 314 C 348 290, 324 276, 300 286 C 246 310, 204 286, 204 256 C 204 226, 246 202, 300 226 C 324 236, 348 222, 358 198 C 368 174, 354 150, 330 140 Z" fill="url(#cml-grad-primary)" filter="url(#cml-shadow)" />
+    <!-- 2. Dark Cinema Squircle Shield -->
+    <rect x="5" y="5" width="90" height="90" rx="22" fill="#080C16" stroke="url(#cmh-border-grad)" stroke-width="2.5" />
 
-    <!-- Stylized "M" & Play Prism Nexus -->
-    <path d="M 270 196 L 380 256 L 270 316 Z" fill="url(#cml-grad-accent)" filter="url(#cml-shadow)" />
+    <!-- 3. Top Cinema Film Strip Perforations -->
+    <rect x="14" y="12" width="72" height="8" rx="2" fill="rgba(255, 255, 255, 0.06)" />
+    <rect x="18" y="13.5" width="6" height="5" rx="1" fill="#080C16" stroke="#06B6D4" stroke-width="0.75" />
+    <rect x="37" y="13.5" width="6" height="5" rx="1" fill="#080C16" stroke="#06B6D4" stroke-width="0.75" />
+    <rect x="57" y="13.5" width="6" height="5" rx="1" fill="#080C16" stroke="#06B6D4" stroke-width="0.75" />
+    <rect x="76" y="13.5" width="6" height="5" rx="1" fill="#080C16" stroke="#06B6D4" stroke-width="0.75" />
 
-    <!-- Film Sprocket Elements -->
-    <circle cx="152" cy="190" r="14" fill="#06B6D4" fill-opacity="0.9" />
-    <circle cx="132" cy="256" r="16" fill="#3B82F6" />
-    <circle cx="152" cy="322" r="14" fill="#6366F1" fill-opacity="0.9" />
+    <!-- 4. Bold Letter C (Creative) -->
+    <path d="M 33 26 L 23 26 C 16.5 26 13 30.5 13 37 L 13 63 C 13 69.5 16.5 74 23 74 L 33 74 L 33 65 L 24 65 C 22 65 21 63.5 21 61 L 21 39 C 21 36.5 22 35 24 35 L 33 35 Z" fill="#FFFFFF" />
 
-    <!-- Central Sparkle Core -->
-    <circle cx="304" cy="256" r="8" fill="#FFFFFF" filter="url(#cml-glow)" />
+    <!-- 5. Bold Letter M (Media) - Cinema Play Core -->
+    <path d="M 37 26 L 44 26 L 44 74 L 37 74 Z" fill="#FFFFFF" />
+    <path d="M 56 26 L 63 26 L 63 74 L 56 74 Z" fill="#FFFFFF" />
+    <path d="M 44 26 L 50 38 L 56 26 L 56 34 L 50 45 L 44 34 Z" fill="#FFFFFF" />
+    <path d="M 46 47 C 46 45.8 47.4 45.1 48.4 45.8 L 56.5 52.8 C 57.5 53.6 57.5 55.2 56.5 56.0 L 48.4 63.0 C 47.4 63.7 46 63.0 46 61.8 Z" fill="url(#cmh-play-core-grad)" />
+
+    <!-- 6. Bold Letter H (Hub) - Interconnected Signal Crossbar -->
+    <path d="M 67 26 L 74 26 L 74 74 L 67 74 Z" fill="#FFFFFF" />
+    <path d="M 80 26 L 87 26 L 87 74 L 80 74 Z" fill="#FFFFFF" />
+    <rect x="74" y="46.5" width="6" height="7" fill="#FFFFFF" />
+    <circle cx="77" cy="50" r="5" fill="none" stroke="#06B6D4" stroke-width="1.8" />
+    <circle cx="77" cy="50" r="2.2" fill="#06B6D4" />
+
+    <!-- 7. Bottom Cinema Streaming Timeline -->
+    <rect x="14" y="81" width="72" height="3" rx="1.5" fill="rgba(255, 255, 255, 0.12)" />
+    <rect x="14" y="81" width="48" height="3" rx="1.5" fill="url(#cmh-timeline-grad)" />
+    <circle cx="62" cy="82.5" r="2.5" fill="#FFFFFF" />
 </svg>

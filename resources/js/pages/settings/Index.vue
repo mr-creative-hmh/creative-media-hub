@@ -4,12 +4,14 @@ import { Head } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import { useThemeAccent } from '@/composables/useThemeAccent';
 import {
     Settings as SettingsIcon, Save, Key, Globe, Sparkles,
     CheckCircle2, AlertCircle, ArrowUp, ArrowDown, ShieldCheck,
     Layers, Cpu, Database, HardDrive, RefreshCw, Zap, Check, X, Trash2,
     DownloadCloud, UploadCloud, RotateCcw, FileText, FileJson, Clock,
-    AlertTriangle, Shield, CheckCheck, FolderArchive, Film, Tv, CheckSquare, Square
+    AlertTriangle, Shield, CheckCheck, FolderArchive, Film, Tv, CheckSquare, Square,
+    Palette
 } from 'lucide-vue-next';
 import ConfirmModal from '@/components/common/ConfirmModal.vue';
 
@@ -40,6 +42,7 @@ const props = defineProps<{
 }>();
 
 const { t, isRTL, setLocale } = useI18n();
+const { currentAccent, activePalette, setAccent, ACCENT_PALETTES } = useThemeAccent();
 
 const form = ref({
     tmdb_api_key: props.settings.tmdb_api_key || '',
@@ -622,6 +625,94 @@ const promptDeleteBackup = (backup: any) => {
 
 
         <div class="space-y-8">
+            <!-- 0. Virtual Cinema Theme & Dynamic Accent Color System -->
+            <div class="glass-panel rounded-3xl p-6 sm:p-8 border border-white/10 space-y-6">
+                <div class="flex items-center justify-between flex-wrap gap-4 pb-4 border-b border-white/10">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 flex items-center justify-center">
+                            <Palette class="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-base text-white">
+                                {{ t('accent_theme.title') }}
+                            </h3>
+                            <p class="text-xs text-slate-400">
+                                {{ t('accent_theme.subtitle') }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
+                        <span
+                            class="w-3 h-3 rounded-full transition-transform duration-300"
+                            :style="{
+                                backgroundColor: activePalette.color,
+                                boxShadow: '0 0 12px ' + activePalette.color
+                            }"
+                        ></span>
+                        <span class="text-xs font-bold text-slate-200">
+                            {{ t(activePalette.nameKey) }}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- 8 Palette Selection Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                    <button
+                        v-for="palette in ACCENT_PALETTES"
+                        :key="palette.key"
+                        type="button"
+                        @click="setAccent(palette.key)"
+                        class="p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 cursor-pointer group relative overflow-hidden"
+                        :class="[
+                            currentAccent === palette.key
+                                ? 'bg-white/10 border-white/40 shadow-xl shadow-black/60 ring-2'
+                                : 'bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.06]',
+                            isRTL ? 'text-right' : 'text-left'
+                        ]"
+                        :style="{
+                            borderColor: currentAccent === palette.key ? palette.color : undefined,
+                            boxShadow: currentAccent === palette.key ? `0 0 20px ${palette.glowColor}` : undefined
+                        }"
+                    >
+                        <!-- Top Row: Swatch & Active Pill -->
+                        <div class="flex items-center justify-between w-full">
+                            <div
+                                class="w-8 h-8 rounded-xl flex items-center justify-center shadow-md transition-transform group-hover:scale-110"
+                                :style="{
+                                    background: `linear-gradient(135deg, ${palette.color} 0%, ${palette.secondaryColor} 100%)`,
+                                    boxShadow: `0 0 16px ${palette.glowColor}`
+                                }"
+                            >
+                                <span v-if="currentAccent === palette.key" class="w-2 h-2 rounded-full bg-white shadow-xs"></span>
+                            </div>
+
+                            <span
+                                v-if="currentAccent === palette.key"
+                                class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider"
+                                :style="{
+                                    backgroundColor: palette.color + '25',
+                                    color: palette.color,
+                                    border: `1px solid ${palette.color}60`
+                                }"
+                            >
+                                {{ t('accent_theme.active') }}
+                            </span>
+                        </div>
+
+                        <!-- Bottom Row: Title & Tone -->
+                        <div class="w-full">
+                            <div class="font-bold text-sm text-white group-hover:text-white transition-colors">
+                                {{ t(palette.nameKey) }}
+                            </div>
+                            <div class="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
+                                {{ t(palette.descKey) }}
+                            </div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
             <!-- 1. Metadata Providers Customization, Priority Ordering & Live Testing -->
             <div class="glass-panel rounded-3xl p-6 sm:p-8 border border-white/10 space-y-6">
                 <div class="flex items-center justify-between flex-wrap gap-4 pb-4 border-b border-white/10">

@@ -144,3 +144,8 @@ creative-media-hub/
 - `SubtitleSearchModal.vue`: In-player and standalone modal for searching and downloading real cloud subtitles from SubDL and OpenSubtitles v3.
 - `SubtitlePickerModal.vue`: Subtitle selection and 1-click Arabic translation modal attached to media cards.
 - `SubtitleHealthModal.vue`: Interactive audit dialog for running dry-run simulations, language detection audits, and batch cleaning.
+
+### 4.4. Brand Identity & Theming (`components/common/`)
+- `AppLogo.vue`: Dynamic CMH Cinema Marquee vector monogram (C - M - H) integrated with clapper perforations, pulsing play heartbeat, broadcast beacon radar, and animated streaming timeline scrubber. Dynamically adapts its SVG gradients and glow to the user's active cinema accent color.
+- `AccentColorPicker.vue`: Dropdown selector offering 8 cinema-grade ambient lighting themes (`Electric Cyan`, `Crimson Ruby`, `Amber Gold`, `Emerald Matrix`, `Cosmic Violet`, `Cyberpunk Rose`, `Sunset Orange`, `Cobalt Blue`). Features seamless RTL and LTR bi-directional alignment with uniform item rows and active checkmark indicators.
+- `composables/useThemeAccent.ts`: Reactive theming architecture that binds active palettes to document-level CSS custom properties (`--accent-primary`, `--accent-secondary`, `--accent-glow`) with zero-flash startup and `localStorage` persistence.

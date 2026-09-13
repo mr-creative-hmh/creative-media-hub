@@ -8,6 +8,7 @@ import { useOrganizerPlan } from '@/composables/useOrganizerPlan';
 import { useSubtitleJob } from '@/composables/useSubtitleJob';
 import { useActivityCenter } from '@/composables/useActivityCenter';
 import AppLogo from '@/components/common/AppLogo.vue';
+import AccentColorPicker from '@/components/common/AccentColorPicker.vue';
 import {
     Search, Globe, LayoutDashboard, History, Film, Layers, Clapperboard, FolderSync,
     Subtitles, BarChart3, DownloadCloud, Menu, X, Tv,
@@ -115,6 +116,9 @@ const mobileNavItems = [
                 <span>{{ isRTL ? 'مركز العمليات' : 'Job Center' }}</span>
             </button>
 
+            <!-- Cinema Accent Color Picker -->
+            <AccentColorPicker />
+
             <!-- Language Switcher -->
             <button
                 @click="toggleLanguage"
@@ -130,9 +134,12 @@ const mobileNavItems = [
     <div v-if="isMobileMenuOpen" class="lg:hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col p-6 animate-in fade-in">
         <div class="flex items-center justify-between pb-6 border-b border-white/10">
             <AppLogo size="md" :show-text="true" />
-            <button @click="isMobileMenuOpen = false" class="p-2 text-slate-400 hover:text-white cursor-pointer">
-                <X class="w-6 h-6" />
-            </button>
+            <div class="flex items-center gap-2">
+                <AccentColorPicker :compact="true" />
+                <button @click="isMobileMenuOpen = false" class="p-2 text-slate-400 hover:text-white cursor-pointer">
+                    <X class="w-6 h-6" />
+                </button>
+            </div>
         </div>
         <div class="flex flex-col gap-2 pt-6">
             <Link

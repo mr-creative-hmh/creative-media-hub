@@ -237,6 +237,24 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
   - **Tier 2**: Contextual badges (`S1 · E22` pill + localized episode title or franchise collection name).
   - **Tier 3**: Playback duration timestamp (`18m / 44m`) alongside high-visibility completion percentage pills.
 
+### 25. 🎨 Dynamic Cinema Accent Lighting & Animated Marquee Brand System
+- **8 Curated Cinema-Grade Lighting Themes (`useThemeAccent.ts`)**:
+  - 🌌 **Electric Cyan** (`#06B6D4` / `#3B82F6`): Sci-Fi futurism and high-tech cinematic clarity.
+  - 🍷 **Crimson Ruby** (`#E11D48` / `#9333EA`): Hollywood red carpet and lavish theatre ambiance.
+  - 👑 **Amber Gold** (`#F59E0B` / `#D97706`): Classic celluloid film, IMAX prestige, and warm awards gala tone.
+  - ⚡ **Emerald Matrix** (`#10B981` / `#059669`): Cyberpunk neon green and phosphor terminal glow.
+  - 🔮 **Cosmic Violet** (`#8B5CF6` / `#6366F1`): Deep space nebula, cosmic noir, and fantasy wonder.
+  - 🌸 **Cyberpunk Rose** (`#F43F5E` / `#EC4899`): Neo-Tokyo synthwave and radiant midnight magenta.
+  - 🌅 **Sunset Orange** (`#F97316` / `#EA580C`): Golden hour anamorphic lens flares and action-packed warmth.
+  - 🌊 **Cobalt Blue** (`#2563EB` / `#1D4ED8`): Deep oceanic drama, midnight thriller, and cool sapphire sheen.
+- **Zero-Flash Startup Architecture**: Synchronously initializes `--accent-primary`, `--accent-secondary`, and `--accent-glow` in `app.blade.php` before client-side Vue mounting, preserving user preferences across sessions via `localStorage`.
+- **✨ Animated CMH Cinema Marquee Vector Mark (`AppLogo.vue`)**:
+  - Integrated clapperboard / film strip perforations, pulsing play heartbeat core inside the 'M', signal beacon radar inside the 'H', and an animated streaming scrubber timeline.
+  - Dynamically binds its ambient breathing aura and vector highlights to the user's active cinema accent color.
+- **Bi-Directional RTL/LTR Native Alignment (`AccentColorPicker.vue`)**:
+  - Built with native directional flow (`text-start`, `start-0`, `end-0`) and fixed-width checkmark slots, guaranteeing uniform item rows and consistent right-to-left layout in Arabic mode.
+- **Synchronized Icon Asset Suite**:
+  - Crisp vector brand assets (`public/favicon.svg`, `public/logo.svg`), high-resolution mobile app icons (`public/apple-touch-icon.png`, 512×512), and multi-resolution Windows desktop icons (`public/favicon.ico`, 16px to 256px).
 
 ---
 
