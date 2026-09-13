@@ -173,10 +173,34 @@ const progressGradient = computed(() => {
             <!-- Bottom Vignette Gradient -->
             <div class="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/85 via-black/40 to-transparent pointer-events-none z-10"></div>
 
-            <!-- Top Badges Row -->
-            <div class="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-20 pointer-events-none">
+            <!-- Center Hover Play Overlay (z-20) -->
+            <div v-if="isInteractive" class="absolute inset-0 z-20 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-xs">
+                <button
+                    @click.stop="emit('play', item, item.playlist)"
+                    class="w-10 h-10 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center shadow-xl shadow-cyan-500/50 hover:scale-110 active:scale-95 transition-transform cursor-pointer"
+                    :title="isRTL ? 'مشاهدة عادية' : 'Normal Playback'"
+                >
+                    <Play class="w-4 h-4 fill-current ml-0.5" />
+                </button>
+                <button
+                    @click.stop="(e) => emit('play-interactive', item, e)"
+                    class="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400 text-white flex items-center gap-1.5 shadow-xl shadow-rose-600/50 hover:scale-105 active:scale-95 transition-transform text-xs font-bold cursor-pointer"
+                    :title="isRTL ? 'بدء التجربة التفاعلية' : 'Launch Interactive Experience'"
+                >
+                    <Gamepad2 class="w-3.5 h-3.5" />
+                    <span>{{ isRTL ? 'تفاعلي' : 'Interactive' }}</span>
+                </button>
+            </div>
+            <div v-else class="absolute inset-0 z-20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-xs pointer-events-none">
+                <div class="w-11 h-11 rounded-full bg-cyan-500 text-slate-950 flex items-center justify-center shadow-xl shadow-cyan-500/50 group-hover:scale-110 active:scale-95 transition-transform pointer-events-auto">
+                    <Play class="w-4.5 h-4.5 fill-current ml-0.5" />
+                </div>
+            </div>
+
+            <!-- Top Badges & Action Row (z-30, strictly above blur overlay) -->
+            <div class="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-30 pointer-events-none">
                 <!-- Left: Media Type / Episode / Collection Pill -->
-                <div class="flex items-center gap-1.5 flex-wrap">
+                <div class="flex items-center gap-1.5 flex-wrap pointer-events-auto">
                     <span
                         v-if="isInteractive"
                         class="px-2 py-0.5 rounded-md bg-gradient-to-r from-red-600 to-rose-500 backdrop-blur-md text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-lg shadow-rose-600/30 animate-pulse pointer-events-auto"
@@ -210,20 +234,21 @@ const progressGradient = computed(() => {
                     </span>
                 </div>
 
-                <!-- Right: Remove Button -->
+                <!-- Right: Remove / Delete Button (z-40, above blur overlay, crisp and clickable) -->
                 <button
                     @click.stop="(e) => emit('remove', item, e)"
                     :title="t('watch_history.remove_tooltip')"
-                    class="w-7 h-7 rounded-full bg-black/70 hover:bg-rose-600 text-slate-300 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 backdrop-blur-md border border-white/20 hover:border-rose-500 cursor-pointer shadow-lg active:scale-90 pointer-events-auto shrink-0"
+                    aria-label="Remove from history"
+                    class="w-7 h-7 rounded-full bg-black/80 hover:bg-rose-600 text-slate-200 hover:text-white flex items-center justify-center transition-all opacity-80 sm:opacity-0 group-hover:opacity-100 backdrop-blur-md border border-white/20 hover:border-rose-500 cursor-pointer shadow-xl active:scale-90 pointer-events-auto shrink-0 z-40"
                 >
                     <X class="w-3.5 h-3.5" />
                 </button>
             </div>
 
-            <!-- Floating Remaining Time Badge (Bottom-End of Thumbnail) -->
+            <!-- Floating Remaining Time Badge (Bottom-End of Thumbnail, z-30) -->
             <div
                 v-if="remainingText"
-                class="absolute bottom-2.5 end-2.5 z-20 pointer-events-none"
+                class="absolute bottom-2.5 end-2.5 z-30 pointer-events-none"
             >
                 <span class="px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md text-[10px] font-mono font-bold text-slate-200 border border-white/10 shadow-sm flex items-center gap-1">
                     <Clock class="w-2.5 h-2.5 text-cyan-400" />
@@ -231,32 +256,8 @@ const progressGradient = computed(() => {
                 </span>
             </div>
 
-            <!-- Center Hover Play Overlay -->
-            <div v-if="isInteractive" class="absolute inset-0 z-20 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-xs">
-                <button
-                    @click.stop="emit('play', item, item.playlist)"
-                    class="w-10 h-10 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center shadow-xl shadow-cyan-500/50 hover:scale-110 active:scale-95 transition-transform cursor-pointer"
-                    :title="isRTL ? 'مشاهدة عادية' : 'Normal Playback'"
-                >
-                    <Play class="w-4 h-4 fill-current ml-0.5" />
-                </button>
-                <button
-                    @click.stop="(e) => emit('play-interactive', item, e)"
-                    class="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400 text-white flex items-center gap-1.5 shadow-xl shadow-rose-600/50 hover:scale-105 active:scale-95 transition-transform text-xs font-bold cursor-pointer"
-                    :title="isRTL ? 'بدء التجربة التفاعلية' : 'Launch Interactive Experience'"
-                >
-                    <Gamepad2 class="w-3.5 h-3.5" />
-                    <span>{{ isRTL ? 'تفاعلي' : 'Interactive' }}</span>
-                </button>
-            </div>
-            <div v-else class="absolute inset-0 z-20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-xs">
-                <div class="w-11 h-11 rounded-full bg-cyan-500 text-slate-950 flex items-center justify-center shadow-xl shadow-cyan-500/50 group-hover:scale-110 active:scale-95 transition-transform">
-                    <Play class="w-4.5 h-4.5 fill-current ml-0.5" />
-                </div>
-            </div>
-
-            <!-- Progress Bar at Base of Thumbnail -->
-            <div class="absolute bottom-0 inset-x-0 h-1.5 bg-black/70 z-20">
+            <!-- Progress Bar at Base of Thumbnail (z-30) -->
+            <div class="absolute bottom-0 inset-x-0 h-1.5 bg-black/70 z-30 pointer-events-none">
                 <div
                     class="h-full bg-gradient-to-r rounded-r-full shadow-sm transition-all duration-300"
                     :class="progressGradient"
