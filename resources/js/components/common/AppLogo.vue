@@ -14,7 +14,7 @@ withDefaults(
     }
 );
 
-const { t } = useI18n();
+const { t, isRTL } = useI18n();
 </script>
 
 <template>
@@ -148,8 +148,9 @@ const { t } = useI18n();
         </div>
 
         <!-- Typography Branding using centralized translations -->
-        <div v-if="showText" class="flex flex-col select-none leading-none">
+        <div v-if="showText" class="flex flex-col select-none leading-none items-start">
             <span
+                dir="ltr"
                 class="font-black tracking-tight text-white whitespace-nowrap inline-flex items-center gap-1.5"
                 :class="[
                     size === 'sm'
