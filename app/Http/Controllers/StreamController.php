@@ -11,6 +11,8 @@ use App\Services\Subtitles\EmbeddedSubtitleDetectorService;
 use App\Services\Subtitles\SubtitleLanguageDetectorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
+use Inertia\Inertia;
+use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StreamController extends Controller
@@ -189,7 +191,7 @@ class StreamController extends Controller
 
         // 1. Deduplicate by watchable_type + watchable_id
         $deduped = $rawHistory->unique(function ($h) {
-            return $h->watchable_type . '_' . $h->watchable_id;
+            return $h->watchable_type.'_'.$h->watchable_id;
         });
 
         // 2. Group episodes by series so only the latest watched episode of each series is shown
@@ -218,7 +220,7 @@ class StreamController extends Controller
             'all' => $uniqueList->count(),
             'movies' => $uniqueList->filter(fn ($h) => $h->watchable instanceof MediaItem)->count(),
             'series' => $uniqueList->filter(fn ($h) => $h->watchable instanceof Episode)->count(),
-            'collections' => $uniqueList->filter(fn ($h) => $h->watchable instanceof MediaItem && !empty($h->watchable->collection_name))->count(),
+            'collections' => $uniqueList->filter(fn ($h) => $h->watchable instanceof MediaItem && ! empty($h->watchable->collection_name))->count(),
         ];
 
         // 4. Filter by requested type if specified and not 'all'
@@ -228,7 +230,7 @@ class StreamController extends Controller
         } elseif ($type === 'series' || $type === 'episode') {
             $filtered = $filtered->filter(fn ($h) => $h->watchable instanceof Episode);
         } elseif ($type === 'collection' || $type === 'collections') {
-            $filtered = $filtered->filter(fn ($h) => $h->watchable instanceof MediaItem && !empty($h->watchable->collection_name));
+            $filtered = $filtered->filter(fn ($h) => $h->watchable instanceof MediaItem && ! empty($h->watchable->collection_name));
         }
 
         // 5. Transform into rich UI objects
@@ -236,12 +238,15 @@ class StreamController extends Controller
             $hrs = floor($sec / 3600);
             $mins = floor(($sec % 3600) / 60);
             $secs = $sec % 60;
+
             return $hrs > 0 ? sprintf('%d:%02d:%02d', $hrs, $mins, $secs) : sprintf('%02d:%02d', $mins, $secs);
         };
 
         $items = $filtered->map(function ($h) use ($formatTime) {
             $item = $h->watchable;
-            if (! $item) return null;
+            if (! $item) {
+                return null;
+            }
 
             $percent = $h->duration_seconds > 0 ? min(100, round(($h->progress_seconds / $h->duration_seconds) * 100)) : 0;
             $remaining = max(0, $h->duration_seconds - $h->progress_seconds);
@@ -249,7 +254,7 @@ class StreamController extends Controller
             if ($item instanceof MediaItem) {
                 $item->loadMissing('subtitles');
                 $slug = $item->slug ?: "movie-{$item->id}";
-                $isCollection = !empty($item->collection_name);
+                $isCollection = ! empty($item->collection_name);
 
                 $playlist = [];
                 if ($isCollection) {
@@ -317,9 +322,11 @@ class StreamController extends Controller
 
                 $cleanEpTitle = function (?string $rawTitle, ?string $sName): string {
                     $t = trim($rawTitle ?? '');
-                    if ($t === '') return '';
+                    if ($t === '') {
+                        return '';
+                    }
                     if ($sName && str_starts_with(mb_strtolower($t), mb_strtolower($sName))) {
-                        $t = trim(preg_replace('/^' . preg_quote($sName, '/') . '[\s\-:]*/ui', '', $t));
+                        $t = trim(preg_replace('/^'.preg_quote($sName, '/').'[\s\-:]*/ui', '', $t));
                     }
                     $t = trim(preg_replace('/^S\d+\s*E\d+[\s\-:]*/i', '', $t));
                     $t = trim(preg_replace('/^(?:Season|الموسم)\s*\d+.*?[-:]*(?:Episode|الحلقة)\s*\d+[\s\-:]*/ui', '', $t));
@@ -328,34 +335,46 @@ class StreamController extends Controller
                     if (preg_match('/^(?:Episode|الحلقة|Ep|Part)\s*\d+$/ui', $t) || preg_match('/^S\d+\s*E\d+$/i', $t)) {
                         return '';
                     }
+
                     return $t;
                 };
 
                 $epTitleEn = $cleanEpTitle($item->title, $sNameEn);
                 $epTitleAr = $cleanEpTitle($item->title_ar, $sNameAr);
-                if (empty($epTitleAr) && !empty($epTitleEn)) {
+                if (empty($epTitleAr) && ! empty($epTitleEn)) {
                     $epTitleAr = $epTitleEn;
                 }
 
-                $fullTitleEn = "{$sNameEn} - Season {$sNum} - Episode {$eNum}" . ($epTitleEn ? " - {$epTitleEn}" : '');
-                $fullTitleAr = "{$sNameAr} - الموسم {$sNum} - الحلقة {$eNum}" . ($epTitleAr ? " - {$epTitleAr}" : '');
+                $fullTitleEn = "{$sNameEn} - Season {$sNum} - Episode {$eNum}".($epTitleEn ? " - {$epTitleEn}" : '');
+                $fullTitleAr = "{$sNameAr} - الموسم {$sNum} - الحلقة {$eNum}".($epTitleAr ? " - {$epTitleAr}" : '');
 
-                $seasonId = $item->season_id;
-                $seasonEpisodes = Episode::query()
-                    ->when($seasonId, fn($q) => $q->where('season_id', $seasonId))
-                    ->when(! $seasonId, fn($q) => $q->where('series_id', $item->series_id)->where('season_number', $sNum))
-                    ->orderBy('episode_number', 'asc')
+                $seriesId = $series?->id ?? $item->series_id;
+                $allSeriesEpisodes = Episode::query()
+                    ->where('episodes.series_id', $seriesId)
+                    ->leftJoin('seasons', 'seasons.id', '=', 'episodes.season_id')
+                    ->orderBy('seasons.season_number', 'asc')
+                    ->orderBy('episodes.episode_number', 'asc')
+                    ->select('episodes.*', 'seasons.season_number as computed_season_number')
                     ->with('subtitles')
                     ->get();
 
-                $epPlaylist = $seasonEpisodes->map(function ($ep) use ($sNameEn, $sNameAr, $sNum, $series, $cleanEpTitle) {
+                if ($allSeriesEpisodes->isEmpty()) {
+                    $allSeriesEpisodes = Episode::query()
+                        ->where('season_id', $item->season_id)
+                        ->orderBy('episode_number', 'asc')
+                        ->with('subtitles')
+                        ->get();
+                }
+
+                $epPlaylist = $allSeriesEpisodes->map(function ($ep) use ($sNameEn, $sNameAr, $series, $cleanEpTitle) {
+                    $epSNum = $ep->computed_season_number ?? ($ep->season_number ?? 1);
                     $epTitleClean = $cleanEpTitle($ep->title, $sNameEn);
                     $epTitleArClean = $cleanEpTitle($ep->title_ar, $sNameAr);
-                    if (empty($epTitleArClean) && !empty($epTitleClean)) {
+                    if (empty($epTitleArClean) && ! empty($epTitleClean)) {
                         $epTitleArClean = $epTitleClean;
                     }
-                    $pTitleEn = "{$sNameEn} - Season {$sNum} - Episode {$ep->episode_number}" . ($epTitleClean ? " - {$epTitleClean}" : '');
-                    $pTitleAr = "{$sNameAr} - الموسم {$sNum} - الحلقة {$ep->episode_number}" . ($epTitleArClean ? " - {$epTitleArClean}" : '');
+                    $pTitleEn = "{$sNameEn} - Season {$epSNum} - Episode {$ep->episode_number}".($epTitleClean ? " - {$epTitleClean}" : '');
+                    $pTitleAr = "{$sNameAr} - الموسم {$epSNum} - الحلقة {$ep->episode_number}".($epTitleArClean ? " - {$epTitleArClean}" : '');
 
                     return [
                         'id' => $ep->id,
@@ -367,7 +386,7 @@ class StreamController extends Controller
                         'still_path' => $ep->still_path ?: ($series ? $series->poster_path : null),
                         'poster_path' => $ep->still_path ?: ($series ? $series->poster_path : null),
                         'duration_seconds' => $ep->duration_seconds,
-                        'season_number' => $sNum,
+                        'season_number' => $epSNum,
                         'episode_number' => $ep->episode_number,
                         'subtitles' => $ep->subtitles ?? [],
                         'type' => 'episode',
@@ -423,7 +442,6 @@ class StreamController extends Controller
         ]);
     }
 
-
     /**
      * Get dynamic playlist for a given episode or collection movie.
      */
@@ -437,7 +455,7 @@ class StreamController extends Controller
         }
 
         if ($type === 'episode') {
-            $ep = Episode::with(['season.episodes.subtitles', 'series'])->find($id);
+            $ep = Episode::with(['season.series', 'series'])->find($id);
             if (! $ep) {
                 return response()->json(['playlist' => []]);
             }
@@ -445,14 +463,32 @@ class StreamController extends Controller
             $series = $ep->series ?? $ep->season?->series;
             $sNameEn = $series ? $series->title : 'Series';
             $sNameAr = $series ? ($series->title_ar ?: $series->title) : '';
-            $sNum = $ep->season_number ?? ($ep->season?->season_number ?? 1);
-            $episodes = $ep->season?->episodes ?? Episode::where('season_id', $ep->season_id)->orderBy('episode_number')->with('subtitles')->get();
+            $seriesId = $series?->id ?? $ep->series_id;
+
+            $episodes = Episode::query()
+                ->where('episodes.series_id', $seriesId)
+                ->leftJoin('seasons', 'seasons.id', '=', 'episodes.season_id')
+                ->orderBy('seasons.season_number', 'asc')
+                ->orderBy('episodes.episode_number', 'asc')
+                ->select('episodes.*', 'seasons.season_number as computed_season_number')
+                ->with('subtitles')
+                ->get();
+
+            if ($episodes->isEmpty()) {
+                $episodes = Episode::query()
+                    ->where('season_id', $ep->season_id)
+                    ->orderBy('episode_number', 'asc')
+                    ->with('subtitles')
+                    ->get();
+            }
 
             $cleanEpTitle = function (?string $rawTitle, ?string $sName): string {
                 $t = trim($rawTitle ?? '');
-                if ($t === '') return '';
+                if ($t === '') {
+                    return '';
+                }
                 if ($sName && str_starts_with(mb_strtolower($t), mb_strtolower($sName))) {
-                    $t = trim(preg_replace('/^' . preg_quote($sName, '/') . '[\s\-:]*/ui', '', $t));
+                    $t = trim(preg_replace('/^'.preg_quote($sName, '/').'[\s\-:]*/ui', '', $t));
                 }
                 $t = trim(preg_replace('/^S\d+\s*E\d+[\s\-:]*/i', '', $t));
                 $t = trim(preg_replace('/^(?:Season|الموسم)\s*\d+.*?[-:]*(?:Episode|الحلقة)\s*\d+[\s\-:]*/ui', '', $t));
@@ -461,17 +497,19 @@ class StreamController extends Controller
                 if (preg_match('/^(?:Episode|الحلقة|Ep|Part)\s*\d+$/ui', $t) || preg_match('/^S\d+\s*E\d+$/i', $t)) {
                     return '';
                 }
+
                 return $t;
             };
 
-            $playlist = $episodes->map(function ($e) use ($series, $sNameEn, $sNameAr, $sNum, $cleanEpTitle) {
+            $playlist = $episodes->map(function ($e) use ($series, $sNameEn, $sNameAr, $cleanEpTitle) {
+                $epSNum = $e->computed_season_number ?? ($e->season_number ?? 1);
                 $epTitleClean = $cleanEpTitle($e->title, $sNameEn);
                 $epTitleArClean = $cleanEpTitle($e->title_ar, $sNameAr);
-                if (empty($epTitleArClean) && !empty($epTitleClean)) {
+                if (empty($epTitleArClean) && ! empty($epTitleClean)) {
                     $epTitleArClean = $epTitleClean;
                 }
-                $pTitleEn = "{$sNameEn} - Season {$sNum} - Episode {$e->episode_number}" . ($epTitleClean ? " - {$epTitleClean}" : '');
-                $pTitleAr = "{$sNameAr} - الموسم {$sNum} - الحلقة {$e->episode_number}" . ($epTitleArClean ? " - {$epTitleArClean}" : '');
+                $pTitleEn = "{$sNameEn} - Season {$epSNum} - Episode {$e->episode_number}".($epTitleClean ? " - {$epTitleClean}" : '');
+                $pTitleAr = "{$sNameAr} - الموسم {$epSNum} - الحلقة {$e->episode_number}".($epTitleArClean ? " - {$epTitleArClean}" : '');
 
                 return [
                     'id' => $e->id,
@@ -483,7 +521,7 @@ class StreamController extends Controller
                     'still_path' => $e->still_path ?: ($series ? $series->poster_path : null),
                     'poster_path' => $e->still_path ?: ($series ? $series->poster_path : null),
                     'duration_seconds' => $e->duration_seconds,
-                    'season_number' => $sNum,
+                    'season_number' => $epSNum,
                     'episode_number' => $e->episode_number,
                     'subtitles' => $e->subtitles ?? [],
                     'type' => 'episode',
@@ -502,7 +540,7 @@ class StreamController extends Controller
 
         if ($type === 'movie') {
             $movie = MediaItem::find($id);
-            if ($movie && !empty($movie->collection_name)) {
+            if ($movie && ! empty($movie->collection_name)) {
                 $movies = MediaItem::where('collection_name', $movie->collection_name)
                     ->orderBy('release_year', 'asc')
                     ->orderBy('title', 'asc')
@@ -532,6 +570,7 @@ class StreamController extends Controller
 
         return response()->json(['playlist' => []]);
     }
+
     public function getContinueWatching(Request $request)
     {
         return $this->getWatchHistory($request);
@@ -545,6 +584,7 @@ class StreamController extends Controller
         $record = WatchHistory::find($id);
         if ($record) {
             $record->delete();
+
             return response()->json([
                 'success' => true,
                 'message' => 'Item removed from watch history',
@@ -591,9 +631,9 @@ class StreamController extends Controller
         ]);
     }
 
-    public function watchHistoryPage(Request $request): \Inertia\Response
+    public function watchHistoryPage(Request $request): Response
     {
-        return \Inertia\Inertia::render('WatchHistory/Index');
+        return Inertia::render('WatchHistory/Index');
     }
 
     public function getCacheStatus(Request $request)

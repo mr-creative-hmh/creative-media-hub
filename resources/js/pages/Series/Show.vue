@@ -75,8 +75,35 @@ const launchInteractiveBandersnatch = (ep: any, e?: Event) => {
 };
 
 const playEpisode = (ep: any, playFn: (item: any, playlist?: any[]) => void) => {
-    const seasonEps = selectedSeason()?.episodes || [];
-    const playlist = seasonEps.map((e: any) => ({
+    const seasons = (props.series.seasons || []).slice().sort((a: any, b: any) => (a.season_number || 0) - (b.season_number || 0));
+    const allSeriesEps: any[] = [];
+    seasons.forEach((season: any) => {
+        const sNum = season.season_number || 1;
+        const eps = (season.episodes || []).slice().sort((a: any, b: any) => (a.episode_number || 0) - (b.episode_number || 0));
+        eps.forEach((e: any) => {
+            allSeriesEps.push({
+                ...e,
+                id: e.id,
+                type: 'episode',
+                watchable_id: e.id,
+                watchable_type: 'episode',
+                series: props.series,
+                series_id: props.series.id,
+                season_number: sNum,
+                episode_number: e.episode_number,
+                runtime_minutes: e.runtime_minutes,
+                duration_seconds: e.duration_seconds || (e.runtime_minutes ? e.runtime_minutes * 60 : 0),
+                resolution: e.resolution,
+                video_codec: e.video_codec,
+                audio_codec: e.audio_codec,
+                subtitles: e.subtitles || [],
+                title: e.title,
+                title_ar: e.title_ar,
+            });
+        });
+    });
+
+    const playlist = allSeriesEps.length > 0 ? allSeriesEps : (selectedSeason()?.episodes || []).map((e: any) => ({
         ...e,
         id: e.id,
         type: 'episode',
@@ -104,7 +131,7 @@ const playEpisode = (ep: any, playFn: (item: any, playlist?: any[]) => void) => 
         watchable_type: 'episode',
         series: props.series,
         series_id: props.series.id,
-        season_number: selectedSeason()?.season_number || 1,
+        season_number: ep.season_number || selectedSeason()?.season_number || 1,
         episode_number: ep.episode_number,
         runtime_minutes: ep.runtime_minutes,
         duration_seconds: ep.duration_seconds || (ep.runtime_minutes ? ep.runtime_minutes * 60 : 0),

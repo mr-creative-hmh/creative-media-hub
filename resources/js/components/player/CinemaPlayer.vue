@@ -76,9 +76,15 @@ const isPlaying = ref(false);
 const isMuted = ref(false);
 const volume = ref(1.0);
 
-// Initialize initial progress from prop, item, or watchable metadata
-const initialSec = Number(props.initialProgress) || Number(props.item?.progress_seconds) || Number(props.item?.initial_progress) || 0;
-const currentTime = ref(initialSec > 0 ? initialSec : 0);
+// Initialize initial progress from prop, item, or watchable metadata.
+// Consumed once upon seeking and NEVER bled into subsequent playlist items.
+const pendingInitialSeek = ref<number>(
+    Number(props.initialProgress) ||
+    Number(props.item?.progress_seconds) ||
+    Number(props.item?.initial_progress) ||
+    0
+);
+const currentTime = ref(pendingInitialSeek.value > 0 ? pendingInitialSeek.value : 0);
 
 // Initialize duration from original file metadata immediately
 const hasExactDuration = Number(props.item?.duration_seconds) > 0;
@@ -135,17 +141,41 @@ const autoFetchPlaylist = async (item: any) => {
     }
 };
 
+const getItemMediaType = (item: any): 'episode' | 'movie' => {
+    if (!item) return 'movie';
+    if (
+        item.type === 'episode' ||
+        item.watchable_type === 'episode' ||
+        item.category === 'series' ||
+        Boolean(item.season_id) ||
+        Boolean(item.episode_number)
+    ) {
+        return 'episode';
+    }
+    return 'movie';
+};
+
 const currentIndex = computed(() => {
-    if (!currentPlaylist.value || currentPlaylist.value.length === 0) return -1;
+    if (!currentPlaylist.value || currentPlaylist.value.length === 0 || !activeItem.value) return -1;
+    const activeMediaId = String(activeItem.value.id ?? activeItem.value.watchable_id ?? '');
+    const activeMediaType = getItemMediaType(activeItem.value);
+
     return currentPlaylist.value.findIndex((p: any) => {
-        const pType = p.type || (p.season_id || p.episode_number ? 'episode' : 'movie');
-        const aType = activeItem.value?.type || (activeItem.value?.season_id || activeItem.value?.episode_number ? 'episode' : 'movie');
-        return String(p.id) === String(activeItem.value?.id) && pType === aType;
+        const pMediaId = String(p.id ?? p.watchable_id ?? '');
+        const pMediaType = getItemMediaType(p);
+        return pMediaId === activeMediaId && pMediaType === activeMediaType;
     });
 });
 
-const hasPrevious = computed(() => currentIndex.value > 0);
-const hasNext = computed(() => currentIndex.value >= 0 && currentIndex.value < currentPlaylist.value.length - 1);
+const hasPrevious = computed(() => {
+    if (!currentPlaylist.value || currentPlaylist.value.length <= 1) return false;
+    return currentIndex.value > 0;
+});
+
+const hasNext = computed(() => {
+    if (!currentPlaylist.value || currentPlaylist.value.length <= 1) return false;
+    return currentIndex.value >= 0 && currentIndex.value < currentPlaylist.value.length - 1;
+});
 
 // Subtitles State & Cue Engine
 const availableSubtitles = ref<SubtitleItem[]>([]);
@@ -319,7 +349,7 @@ const checkNeedsRemux = (item: any) => {
 };
 
 const isRemuxStream = ref(checkNeedsRemux(props.item));
-const remuxStartOffset = ref(isRemuxStream.value && initialSec > 0 ? initialSec : 0);
+const remuxStartOffset = ref(isRemuxStream.value && pendingInitialSeek.value > 0 ? pendingInitialSeek.value : 0);
 
 // Stable Stream URL: Direct Stream vs Server-Side Remux with Audio Delay Offset
 const streamUrl = computed(() => {
@@ -353,7 +383,7 @@ const streamUrl = computed(() => {
     return `/stream/movie/${activeItem.value.id}`;
 });
 
-const changeActiveItem = (newItem: any) => {
+const changeActiveItem = (newItem: any, initialProgress = 0) => {
     savePlaybackProgress();
     stopServerStreamingCache();
     activeItem.value = newItem;
@@ -364,13 +394,14 @@ const changeActiveItem = (newItem: any) => {
     }
     liveResolution.value = '';
     hasAppliedInitialSeek.value = false;
-    currentTime.value = 0;
+    pendingInitialSeek.value = Math.max(0, initialProgress);
+    currentTime.value = pendingInitialSeek.value;
     const exactDur = Number(newItem?.duration_seconds) || 0;
     const fallbackDur = Number(newItem?.runtime_minutes) ? Number(newItem.runtime_minutes) * 60 : 0;
     duration.value = exactDur > 0 ? exactDur : fallbackDur;
     isDurationLocked.value = exactDur > 0;
     isRemuxStream.value = checkNeedsRemux(newItem);
-    remuxStartOffset.value = 0;
+    remuxStartOffset.value = (isRemuxStream.value && pendingInitialSeek.value > 0) ? pendingInitialSeek.value : 0;
     audioDelayMs.value = getSavedAudioDelay();
     selectedSubtitleId.value = 'off';
     activeCueText.value = '';
@@ -392,28 +423,33 @@ const changeActiveItem = (newItem: any) => {
 const playNext = () => {
     if (!hasNext.value) return;
     const nextItem = currentPlaylist.value[currentIndex.value + 1];
-    if (nextItem) changeActiveItem(nextItem);
+    if (nextItem) changeActiveItem(nextItem, 0);
 };
 
 const playPrevious = () => {
     if (!hasPrevious.value) return;
     const prevItem = currentPlaylist.value[currentIndex.value - 1];
-    if (prevItem) changeActiveItem(prevItem);
+    if (prevItem) changeActiveItem(prevItem, 0);
 };
 
 const onVideoEnded = () => {
-    savePlaybackProgress();
+    savePlaybackProgress(true);
     if (hasNext.value) {
         showToast(isRTL.value ? 'جاري الانتقال للعنصر التالي تلقائياً...' : 'Autoplaying next in 2s...');
         setTimeout(() => {
-            playNext();
+            if (hasNext.value) {
+                playNext();
+            }
         }, 1800);
+    } else {
+        showToast(isRTL.value ? 'اكتملت المشاهدة' : 'Playback completed');
     }
 };
 
 watch(() => props.item, (newVal) => {
     if (newVal && newVal.id !== activeItem.value?.id) {
-        changeActiveItem(newVal);
+        const resumeSec = Number(props.initialProgress) || Number(newVal.progress_seconds) || Number(newVal.initial_progress) || 0;
+        changeActiveItem(newVal, resumeSec);
     }
 });
 
@@ -1101,11 +1137,14 @@ const onLoadedMetadata = () => {
         duration.value = d;
     }
 
-    // Direct stream seek to saved position once on load
+    // Direct stream seek to saved position once on load for this specific item
     if (!hasAppliedInitialSeek.value) {
         hasAppliedInitialSeek.value = true;
-        if (!isRemuxStream.value && initialSec > 0 && initialSec < duration.value - 5) {
-            videoRef.value.currentTime = initialSec;
+        const targetSeek = pendingInitialSeek.value;
+        pendingInitialSeek.value = 0; // Clear immediately so it never leaks
+        if (!isRemuxStream.value && targetSeek > 0 && targetSeek < duration.value - 5) {
+            videoRef.value.currentTime = targetSeek;
+            currentTime.value = targetSeek;
         }
     }
 
@@ -1175,10 +1214,13 @@ const formatTime = (seconds: number) => {
     return `${mins}:${s}`;
 };
 
-const savePlaybackProgress = async () => {
-    if (!currentTime.value || currentTime.value <= 3 || !activeItem.value) return;
+const savePlaybackProgress = async (forceCompleted = false) => {
+    if (!currentTime.value || !activeItem.value) return;
     const dur = Math.floor(duration.value);
     const current = Math.floor(currentTime.value);
+    if (current <= 3 && !forceCompleted) return;
+
+    const isCompleted = forceCompleted || (dur > 0 && current >= dur - 30);
 
     emit('update:progress', current);
     try {
@@ -1199,7 +1241,7 @@ const savePlaybackProgress = async () => {
                 media_item_id: isEpisode.value ? (activeItem.value.series_id || activeItem.value.series?.id) : activeItem.value.id,
                 progress_seconds: current,
                 duration_seconds: dur,
-                completed: dur > 0 && current >= dur - 30
+                completed: isCompleted,
             })
         });
     } catch (e) {}
@@ -1230,12 +1272,16 @@ const onKeyDown = (e: KeyboardEvent) => {
 
     if (e.shiftKey && (e.key === 'N' || e.key === 'n')) {
         e.preventDefault();
-        playNext();
+        if (hasNext.value) {
+            playNext();
+        }
         return;
     }
     if (e.shiftKey && (e.key === 'P' || e.key === 'p')) {
         e.preventDefault();
-        playPrevious();
+        if (hasPrevious.value) {
+            playPrevious();
+        }
         return;
     }
 
@@ -1568,11 +1614,12 @@ onBeforeUnmount(() => {
                     <div class="flex items-center gap-1.5 sm:gap-2.5">
                         <!-- Previous Episode / Item Button -->
                         <button
-                            v-if="currentPlaylist.length > 0"
+                            v-if="currentPlaylist.length > 1"
                             @click="playPrevious"
                             :disabled="!hasPrevious"
-                            class="w-9 h-9 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-90 disabled:opacity-30 disabled:cursor-not-allowed"
-                            :title="isRTL ? 'العنصر السابق (Shift+P)' : 'Previous (Shift+P)'"
+                            class="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
+                            :class="hasPrevious ? 'text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer active:scale-90' : 'opacity-20 cursor-not-allowed pointer-events-none text-slate-600'"
+                            :title="!hasPrevious ? (isRTL ? (isEpisode ? 'أول حلقة في المسلسل' : 'أول فيلم في المجموعة') : (isEpisode ? 'First episode in series' : 'First movie in collection')) : (isRTL ? 'العنصر السابق (Shift+P)' : 'Previous (Shift+P)')"
                         >
                             <SkipBack class="w-4 h-4 fill-current" />
                         </button>
@@ -1588,11 +1635,12 @@ onBeforeUnmount(() => {
 
                         <!-- Next Episode / Item Button -->
                         <button
-                            v-if="currentPlaylist.length > 0"
+                            v-if="currentPlaylist.length > 1"
                             @click="playNext"
                             :disabled="!hasNext"
-                            class="w-9 h-9 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-90 disabled:opacity-30 disabled:cursor-not-allowed"
-                            :title="isRTL ? 'العنصر التالي (Shift+N)' : 'Next (Shift+N)'"
+                            class="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
+                            :class="hasNext ? 'text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer active:scale-90' : 'opacity-20 cursor-not-allowed pointer-events-none text-slate-600'"
+                            :title="!hasNext ? (isRTL ? (isEpisode ? 'آخر حلقة في المسلسل' : 'آخر فيلم في المجموعة') : (isEpisode ? 'Last episode in series' : 'Last movie in collection')) : (isRTL ? 'العنصر التالي (Shift+N)' : 'Next (Shift+N)')"
                         >
                             <SkipForward class="w-4 h-4 fill-current" />
                         </button>

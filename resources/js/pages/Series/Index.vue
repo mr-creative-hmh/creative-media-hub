@@ -35,10 +35,35 @@ const handleDetails = (item: any) => {
 
 const handlePlaySeries = (seriesItem: any, playFn: (item: any, playlist?: any[]) => void) => {
     if (!seriesItem) return;
-    const firstSeason = seriesItem.seasons?.[0];
-    const firstEp = firstSeason?.episodes?.[0] || seriesItem.first_episode;
+    const seasons = (seriesItem.seasons || []).slice().sort((a: any, b: any) => (a.season_number || 0) - (b.season_number || 0));
+    const allEps: any[] = [];
+    seasons.forEach((s: any) => {
+        const sNum = s.season_number || 1;
+        const eps = (s.episodes || []).slice().sort((a: any, b: any) => (a.episode_number || 0) - (b.episode_number || 0));
+        eps.forEach((e: any) => {
+            allEps.push({
+                ...e,
+                id: e.id,
+                type: 'episode',
+                watchable_id: e.id,
+                watchable_type: 'episode',
+                series: seriesItem,
+                series_id: seriesItem.id,
+                series_title: seriesItem.title,
+                series_title_ar: seriesItem.title_ar,
+                season_number: sNum,
+                episode_number: e.episode_number || 1,
+                title: e.title,
+                title_ar: e.title_ar,
+                subtitles: e.subtitles || [],
+            });
+        });
+    });
+
+    const firstSeason = seasons[0];
+    const firstEp = allEps[0] || firstSeason?.episodes?.[0] || seriesItem.first_episode;
     if (firstEp) {
-        const playlist = (firstSeason?.episodes || []).map((e: any) => ({
+        const playlist = allEps.length > 0 ? allEps : (firstSeason?.episodes || []).map((e: any) => ({
             ...e,
             id: e.id,
             type: 'episode',
@@ -65,7 +90,7 @@ const handlePlaySeries = (seriesItem: any, playFn: (item: any, playlist?: any[])
             series_id: seriesItem.id,
             series_title: seriesItem.title,
             series_title_ar: seriesItem.title_ar,
-            season_number: firstSeason?.season_number || 1,
+            season_number: firstEp.season_number || firstSeason?.season_number || 1,
             episode_number: firstEp.episode_number || 1,
             title: firstEp.title,
             title_ar: firstEp.title_ar,

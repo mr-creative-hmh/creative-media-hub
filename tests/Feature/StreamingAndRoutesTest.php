@@ -269,7 +269,7 @@ class StreamingAndRoutesTest extends TestCase
 
         $this->assertDatabaseHas('watch_histories', ['id' => $history->id]);
 
-        $res = $this->deleteJson('/api/watch-history/' . $history->id);
+        $res = $this->deleteJson('/api/watch-history/'.$history->id);
         $res->assertStatus(200);
         $res->assertJson(['success' => true]);
 
@@ -304,6 +304,7 @@ class StreamingAndRoutesTest extends TestCase
         $response = $this->get('/watch-history');
         $response->assertStatus(200);
     }
+
     public function test_continue_watching_attaches_playlist_for_episodes_and_collections(): void
     {
         $series = Series::create([
@@ -398,29 +399,47 @@ class StreamingAndRoutesTest extends TestCase
             'release_year' => 2014,
         ]);
 
-        $season = Season::create([
+        $season1 = Season::create([
             'series_id' => $series->id,
             'season_number' => 1,
         ]);
 
+        $season2 = Season::create([
+            'series_id' => $series->id,
+            'season_number' => 2,
+        ]);
+
         $ep1 = Episode::create([
             'series_id' => $series->id,
-            'season_id' => $season->id,
+            'season_id' => $season1->id,
             'episode_number' => 1,
             'title' => 'The Crocodile\'s Dilemma',
         ]);
 
         $ep2 = Episode::create([
             'series_id' => $series->id,
-            'season_id' => $season->id,
+            'season_id' => $season1->id,
             'episode_number' => 2,
             'title' => 'The Rooster Prince',
         ]);
 
+        $ep3 = Episode::create([
+            'series_id' => $series->id,
+            'season_id' => $season2->id,
+            'episode_number' => 1,
+            'title' => 'Waiting for Dutch',
+        ]);
+
         $resEp = $this->getJson(route('api.stream.playlist', ['type' => 'episode', 'id' => $ep1->id]));
         $resEp->assertStatus(200);
-        $this->assertCount(2, $resEp->json('playlist'));
+        $this->assertCount(3, $resEp->json('playlist'));
         $this->assertEquals('Fargo', $resEp->json('series.title'));
+        $this->assertEquals(1, $resEp->json('playlist.0.season_number'));
+        $this->assertEquals(1, $resEp->json('playlist.0.episode_number'));
+        $this->assertEquals(1, $resEp->json('playlist.1.season_number'));
+        $this->assertEquals(2, $resEp->json('playlist.1.episode_number'));
+        $this->assertEquals(2, $resEp->json('playlist.2.season_number'));
+        $this->assertEquals(1, $resEp->json('playlist.2.episode_number'));
 
         $m1 = MediaItem::create([
             'title' => 'Alien',
