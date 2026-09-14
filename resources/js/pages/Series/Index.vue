@@ -7,7 +7,7 @@ import HeroBanner from '@/components/media/HeroBanner.vue';
 import WatchHistoryBar from '@/components/layout/WatchHistoryBar.vue';
 import FilterBar from '@/components/media/FilterBar.vue';
 import Pagination from '@/components/common/Pagination.vue';
-import { Tv, Star, Layers, ScanLine, Plus } from 'lucide-vue-next';
+import { Tv, Star, Layers, ScanLine, Plus, Heart } from 'lucide-vue-next';
 
 const props = defineProps<{
     seriesList: {
@@ -100,6 +100,24 @@ const handlePlaySeries = (seriesItem: any, playFn: (item: any, playlist?: any[])
         handleDetails(seriesItem);
     }
 };
+
+const handleToggleFavorite = async (s: any) => {
+    try {
+        const res = await fetch(`/series/${s.id}/favorite`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+        });
+        if (res.ok) {
+            const data = await res.json();
+            s.is_favorite = data.is_favorite;
+        }
+    } catch (e) {
+        console.error('Failed to toggle series favorite:', e);
+    }
+};
 </script>
 
 <template>
@@ -149,15 +167,25 @@ const handlePlaySeries = (seriesItem: any, playFn: (item: any, playlist?: any[])
                         />
                         <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-60"></div>
 
-                        <!-- Seasons Count Badge -->
-                        <div class="absolute top-2.5 inset-x-2.5 flex items-center justify-between">
-                            <span class="cinema-badge bg-black/70 text-cyan-300 border border-cyan-500/30 text-[10px] flex items-center gap-1">
+                        <!-- Seasons Count Badge & Favorite Toggle (z-30, strictly above hover overlay and blur) -->
+                        <div class="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-30 pointer-events-none">
+                            <span class="cinema-badge bg-black/70 text-cyan-300 border border-cyan-500/30 text-[10px] flex items-center gap-1 pointer-events-auto">
                                 <Layers class="w-3 h-3" />
                                 {{ s.seasons?.length || 1 }} {{ t('common.seasons') }}
                             </span>
-                            <div v-if="s.rating" class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/70 text-amber-300 text-[10px] font-bold">
-                                <Star class="w-3 h-3 fill-current" />
-                                <span>{{ s.rating }}</span>
+                            <div class="flex items-center gap-1.5 pointer-events-auto">
+                                <div v-if="s.rating" class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/70 text-amber-300 text-[10px] font-bold">
+                                    <Star class="w-3 h-3 fill-current" />
+                                    <span>{{ s.rating }}</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    @click.prevent.stop="handleToggleFavorite(s)"
+                                    class="w-7 h-7 rounded-full bg-black/70 hover:bg-black/90 flex items-center justify-center transition-all hover:scale-125 active:scale-90 z-40 cursor-pointer shadow-md backdrop-blur-xs border border-white/10"
+                                    :title="s.is_favorite ? 'Remove from favorites' : 'Add to favorites'"
+                                >
+                                    <Heart class="w-3.5 h-3.5 transition-colors" :class="s.is_favorite ? 'fill-red-500 text-red-500' : 'text-white hover:text-red-400'" />
+                                </button>
                             </div>
                         </div>
                     </div>

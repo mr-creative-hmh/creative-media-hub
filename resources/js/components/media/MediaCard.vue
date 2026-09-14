@@ -31,22 +31,23 @@ const hasEnSub = props.item.subtitles?.some((s: any) => s.language === 'en');
             <!-- Dark Overlay on Hover -->
             <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent opacity-60 group-hover:opacity-80 transition-opacity"></div>
 
-            <!-- Top Quality & Favorite Badges -->
-            <div class="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-10">
-                <span class="cinema-badge bg-black/70 text-cyan-400 border border-cyan-500/30 text-[10px]">
+            <!-- Top Quality & Favorite Badges (z-30, strictly above hover overlay and blur) -->
+            <div class="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-30 pointer-events-none">
+                <span class="cinema-badge bg-black/70 text-cyan-400 border border-cyan-500/30 text-[10px] pointer-events-auto">
                     {{ item.resolution || '1080p' }}
                 </span>
                 <button
                     @click.stop="emit('toggleFavorite', item)"
-                    class="w-7 h-7 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-transform hover:scale-110"
+                    class="w-7 h-7 rounded-full bg-black/70 hover:bg-black/90 flex items-center justify-center transition-all hover:scale-125 active:scale-90 pointer-events-auto z-40 cursor-pointer shadow-md backdrop-blur-xs border border-white/10"
+                    :title="item.is_favorite ? 'Remove from favorites' : 'Add to favorites'"
                 >
-                    <Heart class="w-3.5 h-3.5" :class="item.is_favorite ? 'fill-red-500 text-red-500' : 'text-white'" />
+                    <Heart class="w-3.5 h-3.5 transition-colors" :class="item.is_favorite ? 'fill-red-500 text-red-500' : 'text-white hover:text-red-400'" />
                 </button>
             </div>
 
-            <!-- Subtitle Badges on Poster -->
-            <div class="absolute bottom-2.5 inset-x-2.5 flex items-center justify-between z-10">
-                <div class="flex items-center gap-1">
+            <!-- Subtitle Badges on Poster (z-30, strictly above hover overlay) -->
+            <div class="absolute bottom-2.5 inset-x-2.5 flex items-center justify-between z-30 pointer-events-none">
+                <div class="flex items-center gap-1 pointer-events-auto">
                     <span
                         v-if="hasArSub"
                         class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/90 text-white shadow-sm"
@@ -64,7 +65,7 @@ const hasEnSub = props.item.subtitles?.some((s: any) => s.language === 'en');
                 </div>
 
                 <!-- Rating -->
-                <div v-if="item.rating" class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/70 text-amber-300 text-[10px] font-bold">
+                <div v-if="item.rating" class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/70 text-amber-300 text-[10px] font-bold pointer-events-auto">
                     <Star class="w-3 h-3 fill-current" />
                     <span>{{ item.rating }}</span>
                 </div>

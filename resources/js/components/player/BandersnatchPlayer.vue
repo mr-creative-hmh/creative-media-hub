@@ -757,11 +757,27 @@ const onVolumeChange = (newVal: number) => {
 
 const toggleFullscreen = () => {
     if (!containerRef.value) return;
-    if (!document.fullscreenElement) {
-        containerRef.value.requestFullscreen().then(() => { isFullscreen.value = true; }).catch(() => {});
+    const isCurrentlyFullscreen = Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
+    if (!isCurrentlyFullscreen) {
+        const el = containerRef.value;
+        if (el.requestFullscreen) {
+            el.requestFullscreen().then(() => { isFullscreen.value = true; }).catch(() => {});
+        } else if ((el as any).webkitRequestFullscreen) {
+            (el as any).webkitRequestFullscreen();
+            isFullscreen.value = true;
+        }
     } else {
-        document.exitFullscreen().then(() => { isFullscreen.value = false; }).catch(() => {});
+        if (document.exitFullscreen) {
+            document.exitFullscreen().then(() => { isFullscreen.value = false; }).catch(() => {});
+        } else if ((document as any).webkitExitFullscreen) {
+            (document as any).webkitExitFullscreen();
+            isFullscreen.value = false;
+        }
     }
+};
+
+const onFullscreenChange = () => {
+    isFullscreen.value = Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
 };
 
 const onMouseMove = () => {
@@ -979,10 +995,14 @@ const formatTime = (ms: number) => {
 onMounted(() => {
     initEngine();
     window.addEventListener('keydown', onKeyDown);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 });
 
 onBeforeUnmount(() => {
     window.removeEventListener('keydown', onKeyDown);
+    document.removeEventListener('fullscreenchange', onFullscreenChange);
+    document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
     if (timerId) clearTimeout(timerId);
     clearTimeout(controlsTimer);
     if (audioCtx) {
@@ -1286,6 +1306,7 @@ onBeforeUnmount(() => {
                 @playing="isBuffering = false"
                 @error="onVideoError"
                 @click="togglePlay"
+                @dblclick="toggleFullscreen"
                 crossorigin="anonymous"
                 playsinline
                 preload="auto"
@@ -1294,15 +1315,15 @@ onBeforeUnmount(() => {
             <!-- SUBTITLE OVERLAY (Dynamic WebVTT with selected Font and Size) -->
             <div
                 v-if="showSubtitles && selectedSubtitleId !== 'off' && activeCueText"
-                class="absolute inset-x-0 z-30 flex items-center justify-center px-4 sm:px-8 pointer-events-none transition-all duration-150 ease-out"
+                class="absolute inset-x-0 z-45 flex items-center justify-center px-4 sm:px-8 pointer-events-none transition-all duration-150 ease-out"
                 :style="{
                     bottom: currentChoiceMoment
-                        ? '9.5rem'
-                        : (showControls ? '5.5rem' : '2.5rem')
+                        ? '10.5rem'
+                        : (showControls ? '7.5rem' : '2.5rem')
                 }"
             >
                 <div
-                    class="subtitle-pill px-4 py-1.5 sm:px-6 sm:py-2.5 rounded-xl bg-black/85 text-white text-center font-bold tracking-normal shadow-2xl backdrop-blur-xs transition-all duration-100 max-w-4xl pointer-events-none border border-white/15"
+                    class="subtitle-pill px-3.5 py-1 sm:px-5 sm:py-1.5 rounded-xl bg-black/45 text-white text-center font-bold tracking-normal shadow-lg transition-all duration-100 max-w-4xl pointer-events-none border border-white/10"
                     dir="auto"
                     :class="{
                         'text-sm sm:text-base': subtitleFontSize === 'sm',
@@ -1527,5 +1548,16 @@ onBeforeUnmount(() => {
 .custom-scrollbar::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 4px;
+}
+
+.subtitle-pill {
+    transform: translateZ(0);
+    will-change: transform;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+}
+
+video::cue {
+    display: none;
 }
 </style>

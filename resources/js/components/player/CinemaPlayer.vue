@@ -1226,13 +1226,27 @@ const setPlaybackRate = (rate: number) => {
 
 const toggleFullscreen = () => {
     if (!playerContainerRef.value) return;
-    if (!document.fullscreenElement) {
-        playerContainerRef.value.requestFullscreen().catch(() => {});
+    const isCurrentlyFullscreen = Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
+    if (!isCurrentlyFullscreen) {
+        const el = playerContainerRef.value;
+        if (el.requestFullscreen) {
+            el.requestFullscreen().catch(() => {});
+        } else if ((el as any).webkitRequestFullscreen) {
+            (el as any).webkitRequestFullscreen();
+        }
         isFullscreen.value = true;
     } else {
-        document.exitFullscreen().catch(() => {});
+        if (document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+        } else if ((document as any).webkitExitFullscreen) {
+            (document as any).webkitExitFullscreen();
+        }
         isFullscreen.value = false;
     }
+};
+
+const onFullscreenChange = () => {
+    isFullscreen.value = Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
 };
 
 const selectSubtitle = async (subId: number | string, notify = true) => {
@@ -1502,6 +1516,8 @@ const handleClose = () => {
 
 onMounted(() => {
     window.addEventListener('keydown', onKeyDown);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
     audioDelayMs.value = getSavedAudioDelay();
     if (availableSubtitles.value.length > 0) {
         autoSelectAndLoadSubtitle(availableSubtitles.value);
@@ -1534,6 +1550,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     window.removeEventListener('keydown', onKeyDown);
+    document.removeEventListener('fullscreenchange', onFullscreenChange);
+    document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
     clearInterval(progressSaveInterval);
     clearInterval(bufferTrackInterval);
     clearInterval(serverCachePollInterval);
@@ -1685,6 +1703,7 @@ onBeforeUnmount(() => {
             @ended="onVideoEnded"
             @error="handleVideoError"
             @click="togglePlay"
+            @dblclick="toggleFullscreen"
             crossorigin="anonymous"
             playsinline
             class="w-full h-full object-contain cursor-pointer"
@@ -1693,11 +1712,11 @@ onBeforeUnmount(() => {
         <!-- Subtitle Overlay (Dynamic WebVTT Rendering with Crystal-Clear Arabic/English Typography) -->
         <div
             v-if="selectedSubtitleId !== 'off' && activeCueText"
-            class="absolute inset-x-0 z-30 flex items-center justify-center px-4 sm:px-8 pointer-events-none transition-all duration-200 ease-out"
-            :style="{ bottom: isControlsVisible ? '5.5rem' : '1.75rem' }"
+            class="absolute inset-x-0 z-45 flex items-center justify-center px-4 sm:px-8 pointer-events-none transition-all duration-200 ease-out"
+            :style="{ bottom: isControlsVisible ? '7.5rem' : '2.5rem' }"
         >
             <div
-                class="subtitle-pill px-4 py-1.5 sm:px-5 sm:py-2 rounded-xl bg-black/75 text-white text-center font-bold tracking-normal shadow-2xl backdrop-blur-xs transition-all duration-100 max-w-4xl pointer-events-none border border-white/10"
+                class="subtitle-pill px-3.5 py-1 sm:px-5 sm:py-1.5 rounded-xl bg-black/45 text-white text-center font-bold tracking-normal shadow-lg transition-all duration-100 max-w-4xl pointer-events-none border border-white/10"
                 dir="auto"
                 :class="{
                     'text-sm sm:text-base': subtitleFontSize === 'sm',
@@ -2398,5 +2417,16 @@ onBeforeUnmount(() => {
 .slide-up-leave-to {
     opacity: 0;
     transform: translateY(16px);
+}
+
+.subtitle-pill {
+    transform: translateZ(0);
+    will-change: transform;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+}
+
+video::cue {
+    display: none;
 }
 </style>
