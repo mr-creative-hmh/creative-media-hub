@@ -13,7 +13,7 @@ import LiveSearchDropdown from '@/components/common/LiveSearchDropdown.vue';
 import {
     Search, Globe, LayoutDashboard, History, Film, Layers, Clapperboard, FolderSync,
     Subtitles, BarChart3, DownloadCloud, Menu, X, Tv,
-    Settings, ScanLine, Sparkles, Activity, RefreshCw, Pause, BookOpen
+    Settings, ScanLine, Sparkles, Activity, RefreshCw, Pause, BookOpen, Compass
 } from 'lucide-vue-next';
 
 const { t, locale, setLocale, isRTL } = useI18n();
@@ -42,6 +42,7 @@ const mobileNavItems = [
     { nameKey: 'nav.movies', href: '/movies', icon: Film },
     { nameKey: 'nav.collections', href: '/collections', icon: Layers },
     { nameKey: 'nav.series', href: '/series', icon: Tv },
+    { nameKey: 'nav.scout', href: '/scout', icon: Compass },
     { nameKey: 'nav.watch_history', href: '/watch-history', icon: History },
     { nameKey: 'nav.metadata', href: '/metadata', icon: Sparkles },
     { nameKey: 'nav.scanner', href: '/scanner', icon: ScanLine },

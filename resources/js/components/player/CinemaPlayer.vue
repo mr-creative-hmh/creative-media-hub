@@ -1129,6 +1129,53 @@ const seekRelative = (seconds: number) => {
     showControlsTemporarily();
 };
 
+// Touch Gestures for Mobile Cinema Experience
+const touchFeedback = ref<{ side: 'left' | 'right'; show: boolean }>({ side: 'left', show: false });
+let lastTapTime = 0;
+let lastTapX = 0;
+let touchFeedbackTimeout: any = null;
+
+const handlePlayerTouchEnd = (e: TouchEvent) => {
+    const target = e.target as HTMLElement;
+    if (target && target.closest('button, input, select, a, .controls-panel, .drawer-panel')) {
+        return;
+    }
+
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    const now = Date.now();
+    const rect = playerContainerRef.value?.getBoundingClientRect();
+    if (!rect) return;
+
+    const x = touch.clientX - rect.left;
+    const isDoubleTap = (now - lastTapTime < 340) && Math.abs(x - lastTapX) < 90;
+
+    if (isDoubleTap) {
+        e.preventDefault();
+        const isLeft = x < rect.width / 2;
+        if (isLeft) {
+            seekRelative(-10);
+            touchFeedback.value = { side: 'left', show: true };
+        } else {
+            seekRelative(10);
+            touchFeedback.value = { side: 'right', show: true };
+        }
+        clearTimeout(touchFeedbackTimeout);
+        touchFeedbackTimeout = setTimeout(() => {
+            touchFeedback.value.show = false;
+        }, 700);
+        lastTapTime = 0;
+    } else {
+        lastTapTime = now;
+        lastTapX = x;
+        if (isControlsVisible.value && isPlaying.value) {
+            isControlsVisible.value = false;
+        } else {
+            showControlsTemporarily();
+        }
+    }
+};
+
 const onScrubberInput = (e: Event) => {
     const val = parseFloat((e.target as HTMLInputElement).value);
     if (duration.value > 0) {
@@ -1507,9 +1554,31 @@ onBeforeUnmount(() => {
         dir="ltr"
         @mousemove="showControlsTemporarily"
         @click="showControlsTemporarily"
+        @touchend="handlePlayerTouchEnd"
         class="fixed inset-0 z-50 bg-black flex items-center justify-center select-none overflow-hidden font-sans group"
         :class="{ 'cursor-none': !isControlsVisible && isPlaying }"
     >
+        <!-- Double Tap Mobile Seek Feedback (10s Left/Right) -->
+        <transition name="fade">
+            <div
+                v-if="touchFeedback.show && touchFeedback.side === 'left'"
+                class="absolute left-8 sm:left-16 top-1/2 -translate-y-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none bg-black/80 backdrop-blur-xl px-6 py-4 rounded-3xl border border-cyan-500/40 text-cyan-400 shadow-2xl animate-pulse"
+            >
+                <RotateCcw class="w-8 h-8 animate-spin" />
+                <span class="font-mono font-black text-base">-10s</span>
+            </div>
+        </transition>
+
+        <transition name="fade">
+            <div
+                v-if="touchFeedback.show && touchFeedback.side === 'right'"
+                class="absolute right-8 sm:right-16 top-1/2 -translate-y-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none bg-black/80 backdrop-blur-xl px-6 py-4 rounded-3xl border border-cyan-500/40 text-cyan-400 shadow-2xl animate-pulse"
+            >
+                <RotateCw class="w-8 h-8 animate-spin" />
+                <span class="font-mono font-black text-base">+10s</span>
+            </div>
+        </transition>
+
         <!-- Toast Notification -->
         <transition name="fade">
             <div

@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import Navbar from './Navbar.vue';
 import Sidebar from './Sidebar.vue';
+import MobileBottomNav from './MobileBottomNav.vue';
 import CinemaPlayer from '@/components/player/CinemaPlayer.vue';
 import BandersnatchPlayer from '@/components/player/BandersnatchPlayer.vue';
 import UnifiedJobCenterModal from '@/components/activity/UnifiedJobCenterModal.vue';
@@ -78,10 +79,13 @@ onUnmounted(() => {
                 <!-- Main Body Wrapper -->
         <div class="flex-1 flex w-full">
             <Sidebar />
-            <main class="flex-1 p-4 lg:p-8 max-w-7xl mx-auto w-full overflow-x-hidden relative z-10">
+            <main class="flex-1 p-4 lg:p-8 pb-24 lg:pb-8 max-w-7xl mx-auto w-full overflow-x-hidden relative z-10">
                 <slot :play="handlePlay" :play-bandersnatch="handlePlayBandersnatch" />
             </main>
         </div>
+
+        <!-- Mobile Bottom Navigation Bar (Thumb Friendly) -->
+        <MobileBottomNav />
 
         <!-- Global Premium App Footer -->
         <footer class="border-t border-slate-800/80 bg-[#07090E]/90 backdrop-blur-md py-6 px-4 lg:px-8 mt-auto relative z-10">
