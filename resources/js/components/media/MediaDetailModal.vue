@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
-import { X, Play, Star, Film, Clock, Heart, Users, Subtitles, Download, Check, HardDrive, Cpu, Video, Sparkles, SlidersHorizontal, Layers } from 'lucide-vue-next';
+import { X, Play, Star, Sparkles, SlidersHorizontal, Layers } from 'lucide-vue-next';
 import FixMatchModal from './FixMatchModal.vue';
 
 const props = withDefaults(defineProps<{
@@ -25,37 +25,6 @@ const fixMatchInitialTab = ref<'search' | 'direct_id' | 'collection' | 'manual'>
 const openFixMatchWithTab = (tab: 'search' | 'direct_id' | 'collection' | 'manual' = 'search') => {
     fixMatchInitialTab.value = tab;
     showFixMatch.value = true;
-};
-const isDownloadingAr = ref(false);
-const isDownloadingEn = ref(false);
-
-const handleDownloadSub = async (lang: string) => {
-    if (lang === 'ar') isDownloadingAr.value = true;
-    if (lang === 'en') isDownloadingEn.value = true;
-
-    try {
-        const res = await fetch('/api/subtitles/download', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
-            },
-            body: JSON.stringify({
-                media_id: props.item.id,
-                media_type: props.item.type || 'movie',
-                language: lang,
-            }),
-        });
-
-        if (res.ok) {
-            const data = await res.json();
-            if (!props.item.subtitles) props.item.subtitles = [];
-            props.item.subtitles.push(data.subtitle);
-        }
-    } finally {
-        if (lang === 'ar') isDownloadingAr.value = false;
-        if (lang === 'en') isDownloadingEn.value = false;
-    }
 };
 
 const handleMetadataUpdated = (updatedItem: any) => {
@@ -152,8 +121,8 @@ const handleMetadataUpdated = (updatedItem: any) => {
                     </p>
                 </div>
 
-                                <!-- Collection Saga Banner -->
-                <div v-if="item.collection_name" class="p-3.5 rounded-2xl bg-gradient-to-r from-cyan-950/40 to-purple-950/30 border border-cyan-500/30 flex items-center justify-between gap-4">
+                <!-- Collection Saga Banner -->
+                <div v-if="item.collection_name" class="p-3.5 rounded-2xl bg-gradient-to-r from-cyan-950/40 via-purple-950/30 to-indigo-950/40 border border-cyan-500/30 flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
                     <div class="flex items-center gap-2.5 min-w-0">
                         <Layers class="w-4 h-4 text-cyan-400 shrink-0" />
                         <div class="min-w-0">
@@ -165,12 +134,40 @@ const handleMetadataUpdated = (updatedItem: any) => {
                             </span>
                         </div>
                     </div>
-                    <a
-                        :href="`/collections/${item.collection_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`"
-                        class="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-xs font-bold transition-all border border-cyan-500/30 shrink-0"
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button
+                            @click="openFixMatchWithTab('collection')"
+                            class="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all border border-white/10 flex items-center gap-1.5 cursor-pointer"
+                            :title="isRTL ? 'تعديل السلسلة أو فك الارتباط' : 'Edit Collection or Detach'"
+                        >
+                            <SlidersHorizontal class="w-3.5 h-3.5 text-cyan-400" />
+                            <span>{{ isRTL ? 'إدارة السلسلة' : 'Edit Saga' }}</span>
+                        </button>
+                        <a
+                            :href="`/collections/${item.collection_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`"
+                            class="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-xs font-bold transition-all border border-cyan-500/30"
+                        >
+                            {{ isRTL ? 'عرض جميع أجزاء السلسلة' : 'View Full Saga' }}
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Standalone Movie Link to Franchise Helper -->
+                <div v-else class="p-3 rounded-2xl bg-slate-100/80 dark:bg-white/5 border border-dashed border-slate-300 dark:border-white/10 flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <Layers class="w-4 h-4 text-slate-400 shrink-0" />
+                        <div class="min-w-0 text-xs text-slate-600 dark:text-slate-400">
+                            <span class="font-semibold block">{{ isRTL ? 'فيلم مستقل (غير مربوط بسلسلة)' : 'Standalone Movie (Not part of a franchise)' }}</span>
+                            <span class="text-[11px] text-slate-500 dark:text-slate-500">{{ isRTL ? 'يمكنك ربطه بسلسلة حالية أو إنشاء سلسلة جديدة بنقرة واحدة.' : 'You can link this movie to an existing franchise or create a new one.' }}</span>
+                        </div>
+                    </div>
+                    <button
+                        @click="openFixMatchWithTab('collection')"
+                        class="px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 hover:text-cyan-300 text-xs font-bold transition-all border border-cyan-500/20 shrink-0 flex items-center gap-1.5 cursor-pointer"
                     >
-                        {{ isRTL ? 'عرض جميع أجزاء السلسلة' : 'View Full Saga' }}
-                    </a>
+                        <Layers class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'ربط بسلسلة' : 'Link to Saga' }}</span>
+                    </button>
                 </div>
 
                 <!-- Technical Specs Box -->
@@ -199,6 +196,7 @@ const handleMetadataUpdated = (updatedItem: any) => {
         <FixMatchModal
             :show="showFixMatch"
             :item="item"
+            :initial-tab="fixMatchInitialTab"
             type="movie"
             @close="showFixMatch = false"
             @updated="handleMetadataUpdated"

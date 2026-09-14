@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -25,14 +25,29 @@ const props = defineProps<{
     heroItem?: any;
     heroItems?: any[];
     filters: Record<string, any>;
+    activeMovie?: any;
+    autoPlay?: boolean;
 }>();
 
 const { t, isRTL } = useI18n();
 
-const selectedDetailItem = ref<any | null>(null);
+const selectedDetailItem = ref<any | null>(props.activeMovie || null);
+
+watch(() => props.activeMovie, (newMovie) => {
+    if (newMovie) {
+        selectedDetailItem.value = newMovie;
+    }
+}, { immediate: true });
 
 const handleDetails = (item: any) => {
     selectedDetailItem.value = item;
+};
+
+const handleCloseModal = () => {
+    selectedDetailItem.value = null;
+    if (window.location.pathname.startsWith('/movies/') || window.location.pathname.startsWith('/movie/')) {
+        window.history.replaceState({}, '', '/movies' + (window.location.search || ''));
+    }
 };
 
 const handleToggleFavorite = async (item: any) => {
@@ -136,8 +151,8 @@ const handleToggleFavorite = async (item: any) => {
             :item="selectedDetailItem"
             type="movie"
             :is-open="!!selectedDetailItem"
-            @close="selectedDetailItem = null"
-            @play="(item) => { selectedDetailItem = null; play(item); }"
+            @close="handleCloseModal"
+            @play="(item) => { handleCloseModal(); play(item); }"
         />
     </AppLayout>
 </template>

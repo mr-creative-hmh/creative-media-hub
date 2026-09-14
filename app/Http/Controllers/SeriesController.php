@@ -9,9 +9,10 @@ use App\Services\Metadata\ArtworkDownloadService;
 use App\Services\Metadata\MetadataAggregator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
-use Illuminate\Support\Facades\Cache;
 
 class SeriesController extends Controller
 {
@@ -46,8 +47,12 @@ class SeriesController extends Controller
             match ($origin) {
                 'arabic' => $query->where(function ($q) {
                     $q->where('original_language', 'ar')
-                        ->orWhereIn('origin_country', ['EG', 'SA', 'SY', 'LB', 'AE', 'KW', 'JO', 'MA', 'IQ', 'TN', 'DZ', 'SD', 'YE', 'OM', 'QA', 'BH'])
-                        ->orWhereNotNull('title_ar')
+                        ->orWhere('folder_path', 'like', '%/Arabic/%')
+                        ->orWhere('folder_path', 'like', '%\Arabic\%')
+                        ->orWhere(function ($sub) {
+                            $sub->whereIn('origin_country', ['EG', 'SA', 'SY', 'LB', 'AE', 'KW', 'JO', 'MA', 'IQ', 'TN', 'DZ', 'SD', 'YE', 'OM', 'QA', 'BH', 'PS', 'LY', 'MR', 'SO', 'DJ', 'KM'])
+                                ->where('original_language', '!=', 'en');
+                        })
                         ->orWhere('title', 'like', '%مسلسل%');
                 }),
                 'indian' => $query->where(function ($q) {
@@ -108,6 +113,7 @@ class SeriesController extends Controller
                     ->limit(6)
                     ->get();
             }
+
             return $list->toArray();
         });
 
@@ -118,7 +124,7 @@ class SeriesController extends Controller
             'genres' => $genres,
             'heroSeries' => $heroSeries,
             'heroItems' => $heroSeriesList,
-            'filters' => $request->only(['search', 'genre', 'sort', 'direction', 'favorite_only']),
+            'filters' => $request->only(['search', 'genre', 'origin', 'vibe', 'sort', 'direction', 'favorite_only']),
         ]);
     }
 
@@ -234,12 +240,12 @@ class SeriesController extends Controller
 
         if ($tmdbId) {
             try {
-                \Illuminate\Support\Facades\Artisan::call('media:enrich-episodes', [
+                Artisan::call('media:enrich-episodes', [
                     '--series' => $series->id,
                     '--force' => true,
                 ]);
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning("Enrichment after fixMatch failed for series {$series->id}: " . $e->getMessage());
+                Log::warning("Enrichment after fixMatch failed for series {$series->id}: ".$e->getMessage());
             }
         }
 

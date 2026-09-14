@@ -43,6 +43,7 @@ interface SubtitleItem {
     format: string;
     is_embedded?: boolean;
     file_path?: string;
+    is_default?: boolean | number;
 }
 
 interface CueItem {
@@ -177,8 +178,15 @@ const hasNext = computed(() => {
     return currentIndex.value >= 0 && currentIndex.value < currentPlaylist.value.length - 1;
 });
 
+const getInitialSubtitles = (mediaItem: any): SubtitleItem[] => {
+    if (mediaItem?.subtitles && Array.isArray(mediaItem.subtitles)) {
+        return mediaItem.subtitles;
+    }
+    return [];
+};
+
 // Subtitles State & Cue Engine
-const availableSubtitles = ref<SubtitleItem[]>([]);
+const availableSubtitles = ref<SubtitleItem[]>(getInitialSubtitles(props.item));
 const selectedSubtitleId = ref<number | string>('off');
 const subtitleDelay = ref<number>(0);
 const subtitleFontSize = ref<'sm' | 'md' | 'lg' | 'xl'>('md');
@@ -403,10 +411,15 @@ const changeActiveItem = (newItem: any, initialProgress = 0) => {
     isRemuxStream.value = checkNeedsRemux(newItem);
     remuxStartOffset.value = (isRemuxStream.value && pendingInitialSeek.value > 0) ? pendingInitialSeek.value : 0;
     audioDelayMs.value = getSavedAudioDelay();
-    selectedSubtitleId.value = 'off';
-    activeCueText.value = '';
-    parsedCues.value = [];
-    availableSubtitles.value = [];
+    const nextSubs = getInitialSubtitles(newItem);
+    availableSubtitles.value = nextSubs;
+    if (nextSubs.length > 0) {
+        autoSelectAndLoadSubtitle(nextSubs);
+    } else {
+        selectedSubtitleId.value = 'off';
+        activeCueText.value = '';
+        parsedCues.value = [];
+    }
 
     setTimeout(() => {
         fetchSubtitles();
@@ -652,6 +665,82 @@ const loadSubtitleTrack = async (subId: number | string) => {
     }
 };
 
+const findBestSubtitle = (tracks: SubtitleItem[]): SubtitleItem | null => {
+    if (!tracks || tracks.length === 0) return null;
+
+    let savedPref: string | null = null;
+    try {
+        savedPref = localStorage.getItem('cinema_subtitle_pref');
+    } catch {}
+
+    if (savedPref === 'off') {
+        return null;
+    }
+
+    // 1. If user previously selected a specific language preference (e.g. 'ar', 'en')
+    if (savedPref && savedPref !== 'auto') {
+        const prefLower = savedPref.toLowerCase();
+        const prefTrack = tracks.find(s => {
+            const lang = (s.language || '').toLowerCase();
+            const langName = (s.language_name || '').toLowerCase();
+            return lang === prefLower ||
+                (prefLower === 'ar' && (lang === 'ara' || langName.includes('arab') || langName.includes('عرب'))) ||
+                (prefLower === 'en' && (lang === 'eng' || langName.includes('eng')));
+        });
+        if (prefTrack) return prefTrack;
+    }
+
+    // 2. In RTL mode (Arabic interface), prioritize Arabic track
+    if (isRTL.value) {
+        const arTrack = tracks.find(s => {
+            const lang = (s.language || '').toLowerCase();
+            const langName = (s.language_name || '').toLowerCase();
+            return lang === 'ar' || lang === 'ara' || langName.includes('arab') || langName.includes('عرب');
+        });
+        if (arTrack) return arTrack;
+    }
+
+    // 3. Subtitle track marked as default
+    const defaultTrack = tracks.find(s => Boolean(s.is_default));
+    if (defaultTrack) return defaultTrack;
+
+    // 4. English track fallback
+    const enTrack = tracks.find(s => {
+        const lang = (s.language || '').toLowerCase();
+        const langName = (s.language_name || '').toLowerCase();
+        return lang === 'en' || lang === 'eng' || langName.includes('eng');
+    });
+    if (enTrack) return enTrack;
+
+    // 5. First available track
+    return tracks[0] || null;
+};
+
+const autoSelectAndLoadSubtitle = async (tracks: SubtitleItem[]) => {
+    if (!tracks || tracks.length === 0) {
+        selectedSubtitleId.value = 'off';
+        parsedCues.value = [];
+        activeCueText.value = '';
+        return;
+    }
+
+    // If a subtitle track is already selected and active, retain it if still valid
+    if (selectedSubtitleId.value !== 'off') {
+        const stillExists = tracks.some(s => String(s.id) === String(selectedSubtitleId.value));
+        if (stillExists) return;
+    }
+
+    const bestTrack = findBestSubtitle(tracks);
+    if (bestTrack) {
+        selectedSubtitleId.value = bestTrack.id;
+        await loadSubtitleTrack(bestTrack.id);
+    } else {
+        selectedSubtitleId.value = 'off';
+        parsedCues.value = [];
+        activeCueText.value = '';
+    }
+};
+
 const updateActiveCue = (timeSec: number) => {
     if (selectedSubtitleId.value === 'off' || !parsedCues.value.length) {
         activeCueText.value = '';
@@ -732,14 +821,29 @@ const fetchSubtitles = async () => {
         const type = isEpisode.value ? 'episode' : 'movie';
         const res = await fetch(`/api/subtitles/for-media?type=${type}&id=${activeItem.value?.watchable_id || activeItem.value?.id}`);
         const data = await res.json();
-        if (data.subtitles) {
+        if (data.subtitles && Array.isArray(data.subtitles)) {
             availableSubtitles.value = data.subtitles;
-            // Subtitles default to OFF as requested by user
-            selectedSubtitleId.value = 'off';
-            parsedCues.value = [];
-            activeCueText.value = '';
+
+            // If already playing with an active track, preserve it if still present in data
+            if (selectedSubtitleId.value !== 'off') {
+                const stillExists = data.subtitles.some((s: SubtitleItem) => String(s.id) === String(selectedSubtitleId.value));
+                if (!stillExists) {
+                    await autoSelectAndLoadSubtitle(data.subtitles);
+                }
+            } else {
+                // If currently 'off', check if user explicitly requested 'off'
+                let savedPref: string | null = null;
+                try {
+                    savedPref = localStorage.getItem('cinema_subtitle_pref');
+                } catch {}
+                if (savedPref !== 'off') {
+                    await autoSelectAndLoadSubtitle(data.subtitles);
+                }
+            }
         }
-    } catch (e) {}
+    } catch (e) {
+        console.warn('Failed to fetch subtitles:', e);
+    }
 };
 
 // In-Player Subtitle Search & Download Actions
@@ -1086,10 +1190,22 @@ const toggleFullscreen = () => {
 
 const selectSubtitle = async (subId: number | string, notify = true) => {
     selectedSubtitleId.value = subId;
+    if (subId === 'off') {
+        try {
+            localStorage.setItem('cinema_subtitle_pref', 'off');
+        } catch {}
+    } else {
+        const found = availableSubtitles.value.find(s => String(s.id) === String(subId));
+        if (found?.language) {
+            try {
+                localStorage.setItem('cinema_subtitle_pref', found.language);
+            } catch {}
+        }
+    }
     await loadSubtitleTrack(subId);
     showSubtitlesMenu.value = false;
     if (notify) {
-        const found = availableSubtitles.value.find(s => s.id === subId);
+        const found = availableSubtitles.value.find(s => String(s.id) === String(subId));
         showToast(subId === 'off' ? (isRTL.value ? 'الترجمة: معطلة' : 'Subtitles: Off') : (isRTL.value ? `تم اختيار: ${found?.language_name}` : `Selected: ${found?.language_name}`));
     }
 };
@@ -1340,6 +1456,9 @@ const handleClose = () => {
 onMounted(() => {
     window.addEventListener('keydown', onKeyDown);
     audioDelayMs.value = getSavedAudioDelay();
+    if (availableSubtitles.value.length > 0) {
+        autoSelectAndLoadSubtitle(availableSubtitles.value);
+    }
     fetchSubtitles();
     fetchMediaDuration();
     if (!currentPlaylist.value || currentPlaylist.value.length === 0) {

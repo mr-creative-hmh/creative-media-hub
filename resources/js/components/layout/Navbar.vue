@@ -9,6 +9,7 @@ import { useSubtitleJob } from '@/composables/useSubtitleJob';
 import { useActivityCenter } from '@/composables/useActivityCenter';
 import AppLogo from '@/components/common/AppLogo.vue';
 import AccentColorPicker from '@/components/common/AccentColorPicker.vue';
+import LiveSearchDropdown from '@/components/common/LiveSearchDropdown.vue';
 import {
     Search, Globe, LayoutDashboard, History, Film, Layers, Clapperboard, FolderSync,
     Subtitles, BarChart3, DownloadCloud, Menu, X, Tv,
@@ -25,9 +26,10 @@ const { isAnyRunning, isAnyPaused, activeJobsCount, openActivityCenter } = useAc
 const searchQuery = ref('');
 const isMobileMenuOpen = ref(false);
 
-const handleSearch = () => {
-    if (searchQuery.value.trim()) {
-        router.get('/movies', { search: searchQuery.value }, { preserveState: true });
+const handleSearch = (q?: string) => {
+    const term = (typeof q === 'string' ? q : searchQuery.value).trim();
+    if (term) {
+        router.get('/movies', { search: term });
     }
 };
 
@@ -65,17 +67,15 @@ const mobileNavItems = [
             </Link>
         </div>
 
-        <!-- Universal Search Bar -->
+        <!-- Universal Instant Search Bar (YTS-Style Live Flyout) -->
         <div class="flex-1 max-w-xl mx-2 sm:mx-6">
-            <form @submit.prevent="handleSearch" class="relative w-full">
-                <Search class="absolute top-1/2 -translate-y-1/2 left-3.5 w-4 h-4 text-slate-400" />
-                <input
-                    type="text"
-                    v-model="searchQuery"
-                    :placeholder="t('common.search_placeholder')"
-                    class="w-full h-10 rounded-2xl bg-white/[0.04] border border-white/10 pl-10 pr-4 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 transition-all font-sans shadow-sm"
-                />
-            </form>
+            <LiveSearchDropdown
+                v-model="searchQuery"
+                :placeholder="t('common.search_placeholder')"
+                variant="navbar"
+                :auto-navigate="false"
+                @submit="handleSearch"
+            />
         </div>
 
         <!-- Right Action Controls -->

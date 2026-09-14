@@ -9,6 +9,7 @@ use App\Services\Metadata\ArtworkDownloadService;
 use App\Services\Metadata\MetadataAggregator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
@@ -32,6 +33,7 @@ class MediaController extends Controller
             $query->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
                     ->orWhere('title_ar', 'like', "%{$search}%")
+                    ->orWhere('collection_name', 'like', "%{$search}%")
                     ->orWhere('overview', 'like', "%{$search}%")
                     ->orWhereHas('people', fn ($p) => $p->where('name', 'like', "%{$search}%"));
             });
@@ -62,8 +64,12 @@ class MediaController extends Controller
             match ($origin) {
                 'arabic' => $query->where(function ($q) {
                     $q->where('original_language', 'ar')
-                        ->orWhereIn('origin_country', ['EG', 'SA', 'SY', 'LB', 'AE', 'KW', 'JO', 'MA', 'IQ', 'TN', 'DZ', 'SD', 'YE', 'OM', 'QA', 'BH'])
-                        ->orWhereNotNull('title_ar')
+                        ->orWhere('file_path', 'like', '%/Arabic/%')
+                        ->orWhere('file_path', 'like', '%\Arabic\%')
+                        ->orWhere(function ($sub) {
+                            $sub->whereIn('origin_country', ['EG', 'SA', 'SY', 'LB', 'AE', 'KW', 'JO', 'MA', 'IQ', 'TN', 'DZ', 'SD', 'YE', 'OM', 'QA', 'BH', 'PS', 'LY', 'MR', 'SO', 'DJ', 'KM'])
+                                ->where('original_language', '!=', 'en');
+                        })
                         ->orWhere('title', 'like', '%فيلم%')
                         ->orWhere('title', 'like', '%مسلسل%');
                 }),
@@ -108,36 +114,40 @@ class MediaController extends Controller
         $movies = $query->paginate(24)->withQueryString();
         $genres = Genre::orderBy('name_en')->get();
 
-        // Spotlight / Hero items (Latest added & top rated movies for slides carousel)
-        $heroItems = MediaItem::with(['genres', 'directors', 'actors', 'subtitles'])
-            ->where(function ($q) {
-                $q->whereNotNull('backdrop_path')->orWhereNotNull('poster_path');
-            })
-            ->orderByDesc('created_at')
-            ->limit(6)
-            ->get();
-
-        if ($heroItems->isEmpty()) {
-            $heroItems = MediaItem::with(['genres', 'directors', 'actors', 'subtitles'])
-                ->orderByDesc('rating')
+        // Spotlight / Hero items (Latest added & top rated movies for slides carousel cached for 30m as plain array)
+        $heroItems = Cache::remember('movies.hero_items.v4', 1800, function () {
+            $items = MediaItem::with(['genres', 'directors', 'actors', 'subtitles'])
+                ->where(function ($q) {
+                    $q->whereNotNull('backdrop_path')->orWhereNotNull('poster_path');
+                })
+                ->orderByDesc('created_at')
                 ->limit(6)
                 ->get();
-        }
 
-        $heroItem = $heroItems->first();
+            if ($items->isEmpty()) {
+                $items = MediaItem::with(['genres', 'directors', 'actors', 'subtitles'])
+                    ->orderByDesc('rating')
+                    ->limit(6)
+                    ->get();
+            }
+
+            return $items->toArray();
+        });
+
+        $heroItem = $heroItems[0] ?? null;
 
         return Inertia::render('Movies/Index', [
             'movies' => $movies,
             'genres' => $genres,
             'heroItem' => $heroItem,
             'heroItems' => $heroItems,
-            'filters' => $request->only(['search', 'genre', 'resolution', 'from_year', 'to_year', 'sort', 'direction', 'favorite_only', 'vibe']),
+            'filters' => $request->only(['search', 'genre', 'origin', 'resolution', 'from_year', 'to_year', 'sort', 'direction', 'favorite_only', 'vibe']),
         ]);
     }
 
     public function show(Request $request, MediaItem $mediaItem)
     {
-        $mediaItem->load(['genres', 'people', 'subtitles', 'watchHistories']);
+        $mediaItem->load(['genres', 'people', 'directors', 'actors', 'subtitles', 'watchHistories']);
 
         if ($request->wantsJson()) {
             return response()->json($mediaItem);

@@ -114,12 +114,15 @@ class SceneNameParserService
         // Check if parent or grandparent indicates a Movie Collection / Boxset
         $isCollectionFolder = false;
         $detectedCollectionName = null;
-        if (preg_match('/^(.*?)(?:\s+(?:Collection|Trilogy|Anthology|Saga|Boxset|سلسلة|أفلام|سلسلة أفلام))$/ui', trim($parentFolder), $cMatch)) {
+        $collectionFolderPattern = '/^(.*?)(?:\s+(?:Collection|Trilogy|Anthology|Saga|Boxset|Pentalogy|Hexalogy|Heptalogy|Octalogy|Duology|Tetralogy|Franchise|سلسلة|أفلام|سلسلة أفلام))(?:\s+.*)?$/ui';
+        if (preg_match($collectionFolderPattern, trim($parentFolder), $cMatch)) {
             $isCollectionFolder = true;
-            $detectedCollectionName = trim($parentFolder);
-        } elseif ($grandparentFolder && preg_match('/^(.*?)(?:\s+(?:Collection|Trilogy|Anthology|Saga|Boxset|سلسلة|أفلام|سلسلة أفلام))$/ui', trim($grandparentFolder), $gcMatch)) {
+            $cleanPrefix = preg_replace('/(?:\s+\d+\s*[-–]\s*\d+|\s+[IVXLCDM]+\s*[-–]\s*[IVXLCDM]+|\s+19\d\d\s*[-–]\s*20\d\d)$/i', '', trim($cMatch[1]));
+            $detectedCollectionName = trim($cleanPrefix);
+        } elseif ($grandparentFolder && preg_match($collectionFolderPattern, trim($grandparentFolder), $gcMatch)) {
             $isCollectionFolder = true;
-            $detectedCollectionName = trim($grandparentFolder);
+            $cleanPrefix = preg_replace('/(?:\s+\d+\s*[-–]\s*\d+|\s+[IVXLCDM]+\s*[-–]\s*[IVXLCDM]+|\s+19\d\d\s*[-–]\s*20\d\d)$/i', '', trim($gcMatch[1]));
+            $detectedCollectionName = trim($cleanPrefix);
         }
 
         // Deep Franchise & Collection Knowledge Base Lookup
@@ -676,6 +679,22 @@ class SceneNameParserService
         'kung fu panda' => 'Kung Fu Panda',
         'how to train your dragon' => 'How to Train Your Dragon',
         'cars' => 'Cars',
+
+        'final destination' => 'Final Destination',
+        'the addams family' => 'The Addams Family',
+        'addams family' => 'The Addams Family',
+        'lethal weapon' => 'Lethal Weapon',
+        'a nightmare on elm street' => 'A Nightmare on Elm Street',
+        'nightmare on elm street' => 'A Nightmare on Elm Street',
+        'friday the 13th' => 'Friday the 13th',
+        'halloween' => 'Halloween',
+        'child\'s play' => "Child's Play",
+        'chucky' => "Child's Play",
+        'underworld' => 'Underworld',
+        'resident evil' => 'Resident Evil',
+        'the purge' => 'The Purge',
+        'purge' => 'The Purge',
+        'عمر وسلمى' => 'عمر وسلمى',
     ];
 
     /**
@@ -698,11 +717,16 @@ class SceneNameParserService
         }
 
         // 2. Check explicit Collection/Trilogy/Saga in folder names
-        if (preg_match('/^(.*?)(?:\s+(?:Collection|Trilogy|Anthology|Saga|Boxset|Series|مجموعة|سلسلة))$/ui', $checkParent, $m)) {
-            return trim($m[1]);
+        $colRegex = '/^(.*?)(?:\s+(?:Collection|Trilogy|Anthology|Saga|Boxset|Pentalogy|Hexalogy|Heptalogy|Octalogy|Duology|Tetralogy|Franchise|Series|مجموعة|سلسلة))(?:\s+.*)?$/ui';
+        if (preg_match($colRegex, $checkParent, $m)) {
+            $cleaned = preg_replace('/(?:\s+\d+\s*-\s*\d+|\s+[IVXLCDM]+\s*-\s*[IVXLCDM]+|\s+19\d\d\s*-\s*20\d\d)$/i', '', trim($m[1]));
+
+            return trim($cleaned);
         }
-        if ($checkGrandparent && preg_match('/^(.*?)(?:\s+(?:Collection|Trilogy|Anthology|Saga|Boxset|Series|مجموعة|سلسلة))$/ui', $checkGrandparent, $gm)) {
-            return trim($gm[1]);
+        if ($checkGrandparent && preg_match($colRegex, $checkGrandparent, $gm)) {
+            $cleaned = preg_replace('/(?:\s+\d+\s*-\s*\d+|\s+[IVXLCDM]+\s*-\s*[IVXLCDM]+|\s+19\d\d\s*-\s*20\d\d)$/i', '', trim($gm[1]));
+
+            return trim($cleaned);
         }
 
         // 3. Match against canonical franchise database

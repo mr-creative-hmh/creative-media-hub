@@ -56,6 +56,48 @@ class WikipediaProvider implements MetadataProviderInterface
         return null;
     }
 
+    public function searchFranchise(string $title): ?string
+    {
+        $clean = trim($title);
+        if (strlen($clean) < 3) {
+            return null;
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'User-Agent' => 'CreativeMediaHub/1.0 (contact@creativemediahub.local)',
+            ])->timeout(2.5)->get('https://en.wikipedia.org/w/api.php', [
+                'action' => 'query',
+                'list' => 'search',
+                'srsearch' => "\"{$clean}\" franchise OR \"film series\"",
+                'format' => 'json',
+                'utf8' => 1,
+            ]);
+
+            if ($response->successful()) {
+                $items = $response->json('query.search', []);
+                $cleanLower = strtolower($clean);
+
+                foreach ($items as $item) {
+                    $itemTitle = $item['title'] ?? '';
+                    if (preg_match('/^([a-zA-Z0-9\s\':\-\.]+?)\s+\((?:film series|franchise)\)$/i', $itemTitle, $m)) {
+                        $candidate = trim($m[1]);
+                        $candLower = strtolower($candidate);
+
+                        // Strict verification: Candidate must match the query title/stem
+                        if ($candLower === $cleanLower || str_contains($candLower, $cleanLower) || str_contains($cleanLower, $candLower)) {
+                            return $candidate.' Collection';
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Wikipedia searchFranchise failed: '.$e->getMessage());
+        }
+
+        return null;
+    }
+
     protected function searchWiki(string $title, string $tag, string $lang): array
     {
         $domain = $lang === 'ar' ? 'ar.wikipedia.org' : 'en.wikipedia.org';

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Genre;
 use App\Models\MediaItem;
 use App\Services\Metadata\LibraryMasterIndexService;
 use App\Services\Scout\LibraryGapService;
@@ -17,11 +18,24 @@ class CollectionController extends Controller
     {
         Cache::forget('collections.index.data.v5');
         Cache::forget('collections.index.data.v6');
+        Cache::forget('collections.index.data.v7');
+        Cache::forget('collections.index.data.v8');
+        Cache::forget('collections.index.data.v9');
+        Cache::forget('collections.index.data.v10');
     }
 
     public function index(Request $request, LibraryMasterIndexService $masterService, LibraryGapService $gapService): Response
     {
         $search = $request->input('search');
+        $sort = $request->input('sort', 'name');
+        $direction = strtolower($request->input('direction', ''));
+        $status = $request->input('status', 'all');
+        $genre = $request->input('genre');
+
+        // Sensible default direction based on sort key
+        if (empty($direction)) {
+            $direction = in_array($sort, ['rating', 'movies_count', 'count', 'year', 'release_year', 'completion']) ? 'desc' : 'asc';
+        }
 
         if ($request->boolean('refresh')) {
             self::clearCache();
@@ -44,7 +58,7 @@ class CollectionController extends Controller
         }
 
         if (empty($search) && ! app()->environment('testing')) {
-            $raw = Cache::remember('collections.index.data.v6', 3600, function () use ($masterService, $gapService) {
+            $raw = Cache::remember('collections.index.data.v10', 3600, function () use ($masterService, $gapService) {
                 $allMovies = MediaItem::query()
                     ->whereNotNull('collection_name')
                     ->where('collection_name', '!=', '')
@@ -62,10 +76,78 @@ class CollectionController extends Controller
             $totalFranchiseMovies = $collections->sum('movies_count');
         }
 
+        // Extract all distinct genres across all compiled collections
+        $allGenres = $collections->flatMap(fn ($col) => $col['genres'] ?? [])
+            ->unique('id')
+            ->values()
+            ->sortBy('name_en')
+            ->values()
+            ->all();
+
+        if (empty($allGenres)) {
+            $allGenres = Genre::orderBy('name_en')->get()->map(fn ($g) => [
+                'id' => $g->id,
+                'name' => $g->name_en,
+                'name_en' => $g->name_en,
+                'name_ar' => $g->name_ar,
+                'slug' => $g->slug,
+            ])->values()->all();
+        }
+
+        // Optional server-side genre filtering
+        if (! empty($genre)) {
+            $genreLower = strtolower($genre);
+            $collections = $collections->filter(function ($col) use ($genre, $genreLower) {
+                $colGenres = collect($col['genres'] ?? []);
+
+                return $colGenres->contains(function ($g) use ($genre, $genreLower) {
+                    return (string) ($g['id'] ?? '') === (string) $genre ||
+                        strtolower($g['slug'] ?? '') === $genreLower ||
+                        strtolower($g['name_en'] ?? '') === $genreLower ||
+                        strtolower($g['name'] ?? '') === $genreLower;
+                });
+            })->values();
+        }
+
+        // Optional server-side status filtering
+        if ($status === 'complete') {
+            $collections = $collections->filter(fn ($col) => ! empty($col['is_complete']))->values();
+        } elseif ($status === 'in_progress') {
+            $collections = $collections->filter(fn ($col) => empty($col['is_complete']))->values();
+        } elseif ($status === 'top_rated') {
+            $collections = $collections->filter(fn ($col) => ($col['avg_rating'] ?? 0) >= 8.0)->values();
+        } elseif ($status === 'large') {
+            $collections = $collections->filter(fn ($col) => ($col['movies_count'] ?? 0) >= 4)->values();
+        }
+
+        // Server-side sorting
+        $collections = match ($sort) {
+            'rating' => $direction === 'asc'
+                ? $collections->sortBy('avg_rating')->values()
+                : $collections->sortByDesc('avg_rating')->values(),
+            'movies_count', 'count' => $direction === 'asc'
+                ? $collections->sortBy('movies_count')->values()
+                : $collections->sortByDesc('movies_count')->values(),
+            'year', 'release_year' => $direction === 'asc'
+                ? $collections->sortBy('latest_year')->values()
+                : $collections->sortByDesc('latest_year')->values(),
+            'completion' => $direction === 'asc'
+                ? $collections->sortBy('completion_percentage')->values()
+                : $collections->sortByDesc('completion_percentage')->values(),
+            default => $direction === 'desc'
+                ? $collections->sortByDesc('name', SORT_NATURAL | SORT_FLAG_CASE)->values()
+                : $collections->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->values(),
+        };
+
         return Inertia::render('Collections/Index', [
             'collections' => $collections,
+            'all_genres' => $allGenres,
             'filters' => [
                 'search' => $search,
+                'sort' => $sort,
+                'direction' => $direction,
+                'status' => $status,
+                'genre' => $genre,
             ],
             'total_collections' => $collections->count(),
             'total_franchise_movies' => $totalFranchiseMovies,
@@ -92,7 +174,7 @@ class CollectionController extends Controller
             ->with(['genres', 'subtitles', 'people', 'directors', 'actors', 'watchHistories'])
             ->orderBy('release_year')
             ->get()
-            ->unique(fn ($m) => $m->tmdb_id ?: strtolower(trim($m->title)))
+            ->unique(fn ($m) => $m->tmdb_id ? ($m->tmdb_id.'_'.strtolower(trim($m->title))) : strtolower(trim($m->title)))
             ->values();
 
         if ($movies->count() < 2) {
@@ -296,6 +378,31 @@ class CollectionController extends Controller
 
                 $status = $this->resolveCollectionStatus($name, $movies, $masterService, $gapsByColId, $gapsBySlug);
 
+                $genres = $movies->flatMap(function ($m) {
+                    return is_array($m) ? ($m['genres'] ?? []) : $m->genres;
+                })->filter()->unique('id')->values()->map(function ($g) {
+                    $nameEn = is_array($g)
+                        ? ($g['name_en'] ?? $g['name'] ?? '')
+                        : ($g->name_en ?? $g->name ?? '');
+                    $nameAr = is_array($g)
+                        ? ($g['name_ar'] ?? null)
+                        : $g->name_ar;
+                    $slug = is_array($g)
+                        ? ($g['slug'] ?? '')
+                        : ($g->slug ?? '');
+                    $id = is_array($g)
+                        ? ($g['id'] ?? 0)
+                        : $g->id;
+
+                    return [
+                        'id' => (int) $id,
+                        'name' => $nameEn,
+                        'name_en' => $nameEn,
+                        'name_ar' => $nameAr,
+                        'slug' => $slug,
+                    ];
+                })->all();
+
                 return [
                     'name' => $name,
                     'slug' => $slug,
@@ -305,10 +412,13 @@ class CollectionController extends Controller
                     'completion_percentage' => $status['completion_percentage'],
                     'missing_parts' => $status['missing_parts'],
                     'year_span' => $yearSpan,
+                    'earliest_year' => $years->first() ?: 0,
+                    'latest_year' => $years->last() ?: 0,
                     'avg_rating' => $avgRating,
                     'poster_path' => $poster,
                     'backdrop_path' => $backdrop,
-                    'movies' => array_values($movies->unique(fn ($m) => (is_array($m) ? ($m['tmdb_id'] ?? null) : $m->tmdb_id) ?: strtolower(trim(is_array($m) ? ($m['title'] ?? '') : $m->title)))->map(fn ($m) => [
+                    'genres' => $genres,
+                    'movies' => array_values($movies->unique(fn ($m) => ((is_array($m) ? ($m['tmdb_id'] ?? null) : $m->tmdb_id) ? ((is_array($m) ? $m['tmdb_id'] : $m->tmdb_id).'_'.strtolower(trim(is_array($m) ? ($m['title'] ?? '') : $m->title))) : strtolower(trim(is_array($m) ? ($m['title'] ?? '') : $m->title))))->map(fn ($m) => [
                         'id' => is_array($m) ? $m['id'] : $m->id,
                         'title' => is_array($m) ? $m['title'] : $m->title,
                         'title_ar' => is_array($m) ? ($m['title_ar'] ?? null) : $m->title_ar,
@@ -321,6 +431,6 @@ class CollectionController extends Controller
                         'runtime_minutes' => is_array($m) ? ($m['runtime_minutes'] ?? null) : $m->runtime_minutes,
                     ])->values()->all()),
                 ];
-            })->values()->sortByDesc('movies_count')->values();
+            })->values()->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->values();
     }
 }

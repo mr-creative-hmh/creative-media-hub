@@ -9,6 +9,7 @@ use App\Models\Season;
 use App\Models\Series;
 use App\Models\Subtitle;
 use App\Services\Metadata\LibraryMasterIndexService;
+use App\Services\Metadata\MediaCollectionResolverService;
 use App\Services\Metadata\MetadataAggregator;
 use App\Services\Metadata\TmdbProvider;
 use App\Services\Metadata\WebArtworkSearchService;
@@ -34,6 +35,8 @@ class VirtualLibraryScannerService
 
     protected LibraryMasterIndexService $masterIndex;
 
+    protected MediaCollectionResolverService $collectionResolver;
+
     protected array $tmdbSeasonCache = [];
 
     public function __construct(
@@ -43,7 +46,8 @@ class VirtualLibraryScannerService
         WebArtworkSearchService $webArtwork,
         EmbeddedSubtitleDetectorService $embeddedSubDetector,
         MediaProbeService $mediaProbe,
-        ?LibraryMasterIndexService $masterIndex = null
+        ?LibraryMasterIndexService $masterIndex = null,
+        ?MediaCollectionResolverService $collectionResolver = null
     ) {
         $this->fsScanner = $fsScanner;
         $this->nameParser = $nameParser;
@@ -52,6 +56,7 @@ class VirtualLibraryScannerService
         $this->embeddedSubDetector = $embeddedSubDetector;
         $this->mediaProbe = $mediaProbe;
         $this->masterIndex = $masterIndex ?: app(LibraryMasterIndexService::class);
+        $this->collectionResolver = $collectionResolver ?: app(MediaCollectionResolverService::class);
     }
 
     public function getScanStatus(): array
@@ -513,8 +518,27 @@ class VirtualLibraryScannerService
         } catch (\Throwable $e) {
         }
 
-        $movie = retry(4, function () use ($cleanTitle, $year, $meta, $file, $posterUrl, $backdropUrl, $resolution, $videoCodec, $audioCodec, $runtimeMinutes, $probeData) {
-            $colName = $meta['collection_name'] ?? TmdbProvider::inferCollectionFromTitle($meta['title'] ?? $cleanTitle);
+        $movie = retry(4, function () use ($cleanTitle, $year, $meta, $file, $posterUrl, $backdropUrl, $resolution, $videoCodec, $audioCodec, $runtimeMinutes, $probeData, $parsed) {
+            $colName = $meta['collection_name'] ?? null;
+            $colId = $meta['collection_id'] ?? null;
+            $colPoster = $meta['collection_poster'] ?? null;
+
+            if (empty($colName)) {
+                $colRes = $this->collectionResolver->resolveCollection(
+                    filePath: $file['path'] ?? '',
+                    parsed: $parsed,
+                    explicitColl: null,
+                    allowOnline: true
+                );
+                if ($colRes && ! empty($colRes['name'])) {
+                    $colName = $colRes['name'];
+                    $colId = $colRes['id'] ?? null;
+                    $colPoster = $colRes['poster'] ?? null;
+                } else {
+                    $colName = TmdbProvider::inferCollectionFromTitle($meta['title'] ?? $cleanTitle);
+                }
+            }
+
             $origLang = $meta['original_language'] ?? (preg_match('/\p{Arabic}/u', $cleanTitle) ? 'ar' : 'en');
             $origCountry = $meta['origin_country'] ?? (preg_match('/\p{Arabic}/u', $cleanTitle) ? 'EG' : null);
 
@@ -526,8 +550,8 @@ class VirtualLibraryScannerService
                 'overview' => $meta['overview'] ?? "Enjoy watching {$cleanTitle}.",
                 'overview_ar' => $meta['overview_ar'] ?? null,
                 'collection_name' => $colName,
-                'collection_id' => $meta['collection_id'] ?? null,
-                'collection_poster' => $meta['collection_poster'] ?? null,
+                'collection_id' => $colId,
+                'collection_poster' => $colPoster,
                 'original_language' => $origLang,
                 'origin_country' => $origCountry,
                 'tmdb_id' => $meta['tmdb_id'] ?? null,

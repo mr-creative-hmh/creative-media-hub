@@ -3,11 +3,12 @@ import { ref } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import MediaDetailModal from '@/components/media/MediaDetailModal.vue';
+import CollectionManagementModal from '@/components/collections/CollectionManagementModal.vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
     Layers, Film, Star, Calendar, Clock, Play,
     ArrowLeft, ArrowRight, ShieldCheck, Sparkles, Tv, CheckCircle2,
-    Info, Check, Search
+    Info, Check, Search, Unlink, SlidersHorizontal, Plus
 } from 'lucide-vue-next';
 
 interface MovieDetail {
@@ -66,9 +67,34 @@ const { t, isRTL } = useI18n();
 
 // Detail Modal state
 const selectedDetailMovie = ref<any | null>(null);
+const showManagementModal = ref(false);
 
 const openMovieDetails = (movie: MovieDetail) => {
     selectedDetailMovie.value = movie;
+};
+
+const quickDetachMovie = async (movie: any) => {
+    if (!confirm(isRTL.value ? `هل أنت متأكد من إزالة فيلم "${movie.title}" من هذه السلسلة؟` : `Remove "${movie.title}" from this collection?`)) {
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/collections/management/detach-movie', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+            body: JSON.stringify({ media_item_id: movie.id }),
+        });
+
+        if (res.ok) {
+            props.collection.movies = props.collection.movies.filter((m: any) => m.id !== movie.id);
+            props.collection.movies_count = props.collection.movies.length;
+        }
+    } catch (e) {
+        console.error('Failed to detach movie', e);
+    }
 };
 
 const playCollectionMovie = (movie: any, playFn: (item: any, playlist?: any[]) => void) => {
@@ -185,7 +211,7 @@ const handleToggleFavorite = async (item: any) => {
                         </div>
                     </div>
 
-                    <!-- Quick Play First Movie CTA -->
+                    <!-- Quick Play First Movie CTA & Manage Button -->
                     <div class="shrink-0 flex items-center gap-3">
                         <button
                             v-if="collection.movies.length > 0"
@@ -194,6 +220,14 @@ const handleToggleFavorite = async (item: any) => {
                         >
                             <Play class="w-4 h-4 fill-slate-950" />
                             <span>{{ isRTL ? 'بدء تشغيل السلسلة من الجزء الأول' : 'Play Franchise From Part 1' }}</span>
+                        </button>
+                        <button
+                            @click="showManagementModal = true"
+                            class="px-4 py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs sm:text-sm flex items-center gap-2 border border-white/15 transition-all cursor-pointer"
+                            :title="isRTL ? 'إدارة السلسلة وإضافة/إزالة أفلام' : 'Manage Franchise & Movies'"
+                        >
+                            <SlidersHorizontal class="w-4 h-4 text-cyan-400" />
+                            <span>{{ isRTL ? 'إدارة السلسلة' : 'Manage Saga' }}</span>
                         </button>
                     </div>
                 </div>
@@ -210,6 +244,13 @@ const handleToggleFavorite = async (item: any) => {
                             {{ isRTL ? 'مرتبة بالتسلسل الزمني للإنتاج' : 'Organized chronologically by release year' }}
                         </p>
                     </div>
+                    <button
+                        @click="showManagementModal = true"
+                        class="px-3.5 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                        <Plus class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'إضافة فيلم للسلسلة' : 'Add Movie' }}</span>
+                    </button>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
@@ -243,20 +284,27 @@ const handleToggleFavorite = async (item: any) => {
                             </div>
 
                             <!-- Hover Quick Play Overlay -->
-                            <div class="absolute inset-0 bg-black/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                            <div class="absolute inset-0 bg-black/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2.5">
                                 <button
                                     @click.stop="playCollectionMovie(movie, play)"
-                                    class="w-12 h-12 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center shadow-xl shadow-cyan-500/30 transform hover:scale-110 transition-all cursor-pointer"
+                                    class="w-11 h-11 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center shadow-xl shadow-cyan-500/30 transform hover:scale-110 transition-all cursor-pointer"
                                     :title="isRTL ? 'تشغيل' : 'Play Now'"
                                 >
                                     <Play class="w-5 h-5 fill-slate-950 ml-0.5" />
                                 </button>
                                 <button
                                     @click.stop="openMovieDetails(movie)"
-                                    class="w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center border border-white/20 transform hover:scale-110 transition-all cursor-pointer"
+                                    class="w-9 h-9 rounded-2xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center border border-white/20 transform hover:scale-110 transition-all cursor-pointer"
                                     :title="isRTL ? 'تفاصيل' : 'Details'"
                                 >
                                     <Info class="w-4 h-4" />
+                                </button>
+                                <button
+                                    @click.stop="quickDetachMovie(movie)"
+                                    class="w-9 h-9 rounded-2xl bg-red-500/20 hover:bg-red-500/40 text-red-300 flex items-center justify-center border border-red-500/30 transform hover:scale-110 transition-all cursor-pointer"
+                                    :title="isRTL ? 'إزالة الفيلم من هذه السلسلة' : 'Remove from collection'"
+                                >
+                                    <Unlink class="w-4 h-4" />
                                 </button>
                             </div>
                         </div>
@@ -356,6 +404,14 @@ const handleToggleFavorite = async (item: any) => {
                 @close="selectedDetailMovie = null"
                 @play="(m: any) => playCollectionMovie(m, play)"
                 @toggle-favorite="handleToggleFavorite"
+            />
+
+            <!-- Collection Management Studio Modal -->
+            <CollectionManagementModal
+                :show="showManagementModal"
+                :initial-collection-slug="collection.slug"
+                @close="showManagementModal = false"
+                @changed="() => window.location.reload()"
             />
         </div>
     </AppLayout>

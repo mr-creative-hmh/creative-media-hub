@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
-import { Play, Clock, X, Tv, Film, Layers, Gamepad2 } from 'lucide-vue-next';
+import { Play, Clock, X, Tv, Film, Layers, Gamepad2, Subtitles } from 'lucide-vue-next';
 import { getCleanEpisodeTitle } from '@/lib/mediaTitle';
 
 export interface WatchHistoryItem {
@@ -33,6 +33,7 @@ export interface WatchHistoryItem {
     backdrop_path?: string;
     poster_path?: string;
     playlist?: any[];
+    subtitles?: any[];
 }
 
 const props = defineProps<{
@@ -151,6 +152,11 @@ const progressGradient = computed(() => {
         return 'from-amber-400 to-orange-500';
     }
     return 'from-cyan-400 to-blue-500';
+});
+
+// Subtitle count badge
+const subtitlesCount = computed(() => {
+    return Array.isArray(props.item.subtitles) ? props.item.subtitles.length : 0;
 });
 </script>
 
@@ -276,12 +282,22 @@ const progressGradient = computed(() => {
                 >
                     {{ mainTitle }}
                 </h4>
-                <span
-                    v-if="item.resolution"
-                    class="px-1.5 py-0.2 rounded bg-slate-100 dark:bg-white/5 text-[9px] font-mono text-cyan-600 dark:text-cyan-300 border border-slate-200 dark:border-white/10 shrink-0"
-                >
-                    {{ item.resolution }}
-                </span>
+                <div class="flex items-center gap-1 shrink-0">
+                    <span
+                        v-if="subtitlesCount > 0"
+                        class="px-1.5 py-0.5 rounded bg-emerald-500/10 text-[9px] font-mono font-bold text-emerald-400 border border-emerald-500/30 flex items-center gap-1"
+                        :title="isRTL ? `يتوفر ${subtitlesCount} ملفات ترجمة` : `${subtitlesCount} subtitle tracks available`"
+                    >
+                        <Subtitles class="w-2.5 h-2.5" />
+                        <span>{{ subtitlesCount }} CC</span>
+                    </span>
+                    <span
+                        v-if="item.resolution"
+                        class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/5 text-[9px] font-mono text-cyan-600 dark:text-cyan-300 border border-slate-200 dark:border-white/10 shrink-0"
+                    >
+                        {{ item.resolution }}
+                    </span>
+                </div>
             </div>
 
             <!-- Line 2: Dedicated Subtitle (Episode info or Collection info) -->

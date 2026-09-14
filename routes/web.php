@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\CollectionController;
+use App\Http\Controllers\CollectionManagementController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseBackupController;
 use App\Http\Controllers\DiskOrganizerController;
@@ -11,12 +12,16 @@ use App\Http\Controllers\MediaController;
 use App\Http\Controllers\MediaScoutController;
 use App\Http\Controllers\MetadataManagementController;
 use App\Http\Controllers\ScannerController;
+use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SeriesController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\StreamController;
 use App\Http\Controllers\SubtitleController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+
+// Global Instant Live Search (YTS Style)
+Route::get('/api/search/instant', [SearchController::class, 'instantSearch'])->name('api.search.instant');
 
 // Home & Media Discovery Dashboard
 Route::get('/', [DashboardController::class, 'index'])->name('home');
@@ -39,6 +44,12 @@ Route::get('/api/person/{person}', [MediaController::class, 'getCastExplorer'])-
 // Movie Collections & Boxsets (Harry Potter, MCU, Lord of the Rings, etc.)
 Route::get('/collections', [CollectionController::class, 'index'])->name('collections.index');
 Route::get('/collections/{slug}', [CollectionController::class, 'show'])->name('collections.show');
+Route::get('/api/collections/management/overview', [CollectionManagementController::class, 'overview'])->name('api.collections.management.overview');
+Route::post('/api/collections/management/sync-tmdb', [CollectionManagementController::class, 'syncTmdb'])->name('api.collections.management.sync-tmdb');
+Route::post('/api/collections/management/detach-movie', [CollectionManagementController::class, 'detachMovie'])->name('api.collections.management.detach-movie');
+Route::post('/api/collections/management/assign-movie', [CollectionManagementController::class, 'assignMovie'])->name('api.collections.management.assign-movie');
+Route::post('/api/collections/management/update-collection', [CollectionManagementController::class, 'updateCollection'])->name('api.collections.management.update-collection');
+Route::get('/api/collections/management/search-movies', [CollectionManagementController::class, 'searchMovies'])->name('api.collections.management.search-movies');
 
 // Virtual TV Series Hub & Metadata Management (Supports ID, Slug, and Season/Episode deep links)
 Route::get('/series', [SeriesController::class, 'index'])->name('series.index');

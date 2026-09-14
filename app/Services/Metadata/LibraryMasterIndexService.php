@@ -272,6 +272,72 @@ class LibraryMasterIndexService
         $this->saveJson('collections_extended.json', $this->collectionsIndex);
     }
 
+    /**
+     * Enrich movies in database that are missing collection metadata,
+     * using the MediaCollectionResolverService and TMDb.
+     */
+    public function enrichMissingCollections(?callable $logger = null): array
+    {
+        $log = $logger ?: fn ($msg) => null;
+        $stats = [
+            'total_checked' => 0,
+            'collections_assigned' => 0,
+        ];
+
+        $resolver = app(MediaCollectionResolverService::class);
+        $moviesNoColl = MediaItem::where(function ($q) {
+            $q->whereNull('collection_name')->orWhere('collection_name', '');
+        })->get();
+
+        $stats['total_checked'] = $moviesNoColl->count();
+        $log("Checking {$stats['total_checked']} movies for collection membership...");
+
+        foreach ($moviesNoColl as $m) {
+            $parsed = [
+                'clean_title' => $m->title,
+                'title' => $m->title,
+                'year' => $m->release_year,
+                'tmdb_id' => $m->tmdb_id,
+                'type' => 'movie',
+            ];
+
+            $res = $resolver->resolveCollection(
+                filePath: $m->file_path ?? '',
+                parsed: $parsed,
+                explicitColl: null,
+                allowOnline: true
+            );
+
+            if ($res && ! empty($res['name'])) {
+                $m->collection_name = $res['name'];
+                $m->collection_id = $res['id'] ?? null;
+                $m->collection_poster = $res['poster'] ?? null;
+                $m->save();
+
+                $stats['collections_assigned']++;
+                $log("  ✓ [ID {$m->id}] {$m->title} -> {$res['name']}");
+
+                // Update master index entry
+                if ($m->tmdb_id) {
+                    $this->loadMoviesIndex();
+                    if (isset($this->moviesIndex['by_tmdb'][$m->tmdb_id])) {
+                        $this->moviesIndex['by_tmdb'][$m->tmdb_id]['collection_name'] = $res['name'];
+                        $this->moviesIndex['by_tmdb'][$m->tmdb_id]['collection_id'] = $res['id'] ?? null;
+                    }
+                }
+            }
+        }
+
+        if ($stats['collections_assigned'] > 0) {
+            $this->loadMoviesIndex();
+            $this->saveJson('movies_master_index.json', $this->moviesIndex);
+        }
+
+        $log("Completed collection enrichment: {$stats['collections_assigned']} movies updated.");
+
+        return $stats;
+    }
+
     // =========================================================================
     // ENRICHMENT OF DATABASE NULLS & GENERIC TITLES
     // =========================================================================

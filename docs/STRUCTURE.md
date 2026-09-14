@@ -86,6 +86,8 @@ creative-media-hub/
 | `SubtitleController` | Handles SubDL and OpenSubtitles v3 search, on-the-fly archive decompression, WebVTT serving, and health checks. |
 | `SettingsController` | Manages media library directories, scanner state, API keys, and transcode cache clearing. |
 | `AnalyticsController` | Provides storage usage metrics, resolution distributions, codec breakdowns, and library counts. |
+| `SearchController` | Serves real-time instant live search with cross-domain aggregation (movies, series, episodes, collections, cast) and bilingual query matching. |
+| `CollectionManagementController` | Powers the Collection Management Studio modal for searching, creating, and reassigning movies across franchise collections. |
 
 ---
 
@@ -98,6 +100,7 @@ creative-media-hub/
 | `Scout/LibraryGapService` | Audits movie sagas and TV seasons against TMDb, calculates missing parts/episodes, completion percentages, and gap severity. |
 | `Scout/LibraryAcquisitionService` | Scrapes verified torrents, initiates batch downloads, and handles post-download pipeline (folder flattening, canonical renaming, companion subtitle movement). |
 | `Metadata/MetadataAggregator` | Cascades metadata queries across TMDb, OMDb, AniList, and TVMaze with automated Arabic translation. |
+| `Metadata/MediaCollectionResolverService` | Automatically resolves and links movie collections against TMDb franchises with Wikipedia fallback waterfall indexing. |
 | `Streaming/FfmpegLocatorService` | Auto-detects FFmpeg/FFprobe binaries across Windows, Linux, and macOS environments. |
 | `Subtitles/SubtitleHealthCheckService` | Inspects subtitle cue text, detects true dialogue language, strips corrupt stubs, and standardizes file extensions. |
 | `Subtitles/SubtitleManagerService` | Manages subtitle extraction, cloud search, archive decompression, and database association. |

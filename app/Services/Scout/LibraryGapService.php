@@ -218,6 +218,7 @@ class LibraryGapService
     {
         if ($forceRefresh) {
             Cache::forget('scout_grouped_collections');
+            Cache::forget('scout_missing_collections');
         }
 
         return Cache::remember('scout_grouped_collections', self::CACHE_TTL, function () {
@@ -232,6 +233,31 @@ class LibraryGapService
                 ->pluck('cnt', 'collection_id');
 
             $collectionIds = $collectionCounts->keys()->toArray();
+
+            // Also check for movies with collection_name where collection_id is null/0 and try to inherit from siblings
+            $namedWithoutId = MediaItem::whereNotNull('collection_name')
+                ->where('collection_name', '!=', '')
+                ->where(function ($q) {
+                    $q->whereNull('collection_id')->orWhere('collection_id', 0);
+                })
+                ->get(['id', 'collection_name', 'title']);
+
+            foreach ($namedWithoutId as $item) {
+                $sibling = MediaItem::where('collection_name', $item->collection_name)
+                    ->whereNotNull('collection_id')
+                    ->where('collection_id', '>', 0)
+                    ->first();
+                if ($sibling && $sibling->collection_id) {
+                    $item->update([
+                        'collection_id' => $sibling->collection_id,
+                        'collection_id_source' => $sibling->collection_id_source ?: 'tmdb',
+                    ]);
+                    if (! in_array($sibling->collection_id, $collectionIds, true)) {
+                        $collectionIds[] = (int) $sibling->collection_id;
+                    }
+                }
+            }
+
             $apiKey = AppSetting::get('tmdb_api_key') ?? config('services.tmdb.key') ?? env('TMDB_API_KEY');
 
             // Parallel batch fetch missing cache in chunks of 25

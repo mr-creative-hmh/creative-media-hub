@@ -256,6 +256,22 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 - **Synchronized Icon Asset Suite**:
   - Crisp vector brand assets (`public/favicon.svg`, `public/logo.svg`), high-resolution mobile app icons (`public/apple-touch-icon.png`, 512×512), and multi-resolution Windows desktop icons (`public/favicon.ico`, 16px to 256px).
 
+### 26. 🔍 Universal Instant Live Search & Command Center (`LiveSearchDropdown.vue`, `SearchController.php`)
+- **Global Instant Discovery**: Docked directly in the main navigation bar (`Navbar.vue`) for rapid, keyboard-friendly search across the entire personal cinema server without leaving the current view.
+- **Unified Cross-Domain Aggregation**: Searches and categorizes results across **Movies**, **TV Series**, **Episodes**, **Collections**, and **Cast** simultaneously.
+- **Bilingual Arabization & Transliteration**: Full dual-language matching supporting English titles, Arabic localized names, and transliterated search queries.
+- **Keyboard Navigation & Quick Access**: Complete arrow key navigation (`↑`, `↓`), `Enter` to jump, `Escape` to dismiss, with live poster thumbnails, release years, and rating badges.
+
+### 27. 🚩 Vector Flag Badges & Regional Cinema Hubs (`SvgFlag.vue`, `FilterBar.vue`)
+- **Crisp Custom Vector Flags**: Lightweight, scalable SVG flags designed specifically for dark cinema aesthetics without external asset dependencies.
+- **Comprehensive Territory Coverage**: Dedicated badges for **Egypt** (`eg`), **Saudi Arabia** (`sa`), **UAE** (`ae`), **Lebanon** (`lb`), **Syria** (`sy`), **Jordan** (`jo`), **Palestine** (`ps`), **Morocco** (`ma`), **Hollywood/USA** (`us`), **Bollywood/India** (`in`), **UK** (`gb`), **Japan** (`jp`), **Korea** (`kr`), **France** (`fr`), **Germany** (`de`), **Italy** (`it`), **Spain** (`es`), and **Turkey** (`tr`).
+- **Interactive Regional Segmented Filters**: Quick filter pill bar in Movies and Series catalogs with active territory highlighting and live count badges.
+
+### 28. 🎬 Collection Management Studio & Franchise Sync
+- **Interactive Management Studio (`CollectionManagementModal.vue`, `CollectionManagementController.php`)**: Dedicated modal for reviewing, searching, creating, and reassigning movies across franchise collections with real-time UI updates.
+- **Automated Metadata Waterfall Linkage (`MediaCollectionResolverService.php`)**: Automatically synchronizes movie collections with TMDb franchise parts and Wikipedia fallback indexing (`php artisan sync:movie-collections`, `php artisan backfill:movie-collections`).
+- **Normalized Multilingual Genre Navigation**: Standardized genre extraction and filtering across `Collections/Index.vue` with seamless Arabic/English (`name_en`, `name_ar`, `slug`) fallbacks.
+
 ---
 
 ## 🚀 Quick Start & Installation

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import { router } from '@inertiajs/vue3';
 import {
@@ -7,6 +7,8 @@ import {
     Layers, Check, RotateCcw, Heart, Film, ArrowUpDown, Tv, Globe,
     Search, X
 } from 'lucide-vue-next';
+import SvgFlag from '@/components/common/SvgFlag.vue';
+import LiveSearchDropdown from '@/components/common/LiveSearchDropdown.vue';
 
 const props = defineProps<{
     genres: any[];
@@ -23,6 +25,16 @@ const selectedResolution = ref(props.filters.resolution || '');
 const selectedSort = ref(props.filters.sort || 'rating');
 const selectedVibe = ref(props.filters.vibe || '');
 const favoriteOnly = ref(props.filters.favorite_only === '1' || props.filters.favorite_only === 1 || props.filters.favorite_only === true);
+
+watch(() => props.filters, (newFilters) => {
+    searchQuery.value = newFilters.search || '';
+    selectedGenre.value = newFilters.genre || '';
+    selectedOrigin.value = newFilters.origin || '';
+    selectedResolution.value = newFilters.resolution || '';
+    selectedSort.value = newFilters.sort || 'rating';
+    selectedVibe.value = newFilters.vibe || '';
+    favoriteOnly.value = newFilters.favorite_only === '1' || newFilters.favorite_only === 1 || newFilters.favorite_only === true;
+}, { deep: true });
 
 const hasActiveFilters = computed(() => {
     return !!(searchQuery.value.trim() || selectedGenre.value || selectedOrigin.value || selectedResolution.value || (selectedSort.value && selectedSort.value !== 'rating') || selectedVibe.value || favoriteOnly.value);
@@ -41,8 +53,26 @@ const applyFilters = () => {
     }, { preserveState: true, preserveScroll: true });
 };
 
+const handleFilterBarSearch = (q?: string) => {
+    const term = (typeof q === 'string' ? q : searchQuery.value).trim();
+    searchQuery.value = term;
+
+    // Submitting a new text search resets restrictive regional, genre, and vibe filters
+    // so the entire catalog is queried and the user immediately gets their matching titles.
+    selectedOrigin.value = '';
+    selectedGenre.value = '';
+    selectedVibe.value = '';
+
+    router.get(window.location.pathname, {
+        search: term || undefined,
+        sort: selectedSort.value || undefined,
+        resolution: selectedResolution.value || undefined,
+        favorite_only: favoriteOnly.value ? 1 : undefined,
+    }, { preserveState: false, preserveScroll: true });
+};
+
 const handleSearch = () => {
-    applyFilters();
+    handleFilterBarSearch();
 };
 
 const clearSearch = () => {
@@ -112,41 +142,15 @@ const curatedVibes = [
 
 <template>
     <div class="glass-panel rounded-3xl p-5 mb-8 border border-slate-200 dark:border-white/10 space-y-5 shadow-sm relative overflow-hidden">
-        <!-- Collections-Style Prominent Search Input Bar -->
+        <!-- Collections-Style Prominent Search Input Bar with Live Flyout -->
         <div class="relative w-full max-w-xl">
-            <div class="relative">
-                <Search
-                    class="absolute top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400"
-                    :class="isRTL ? 'right-4' : 'left-4'"
-                />
-                <input
-                    v-model="searchQuery"
-                    @keyup.enter="handleSearch"
-                    type="text"
-                    :placeholder="isRTL ? 'ابحث بالاسم، الممثل، المخرج أو سنة الإنتاج...' : 'Search by title, cast, director, or release year...'"
-                    class="w-full py-3 rounded-2xl bg-black/30 dark:bg-black/40 border border-slate-200 dark:border-white/15 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-all shadow-inner"
-                    :class="isRTL ? 'pr-11 pl-28' : 'pl-11 pr-28'"
-                />
-                <div
-                    class="absolute top-1/2 -translate-y-1/2 flex items-center gap-1.5"
-                    :class="isRTL ? 'left-2' : 'right-2'"
-                >
-                    <button
-                        v-if="searchQuery"
-                        @click="clearSearch"
-                        class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
-                        title="Clear"
-                    >
-                        <X class="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                        @click="handleSearch"
-                        class="px-3.5 py-1.5 rounded-xl bg-cyan-500 text-slate-950 text-xs font-black hover:bg-cyan-400 transition-all cursor-pointer shadow-md shadow-cyan-500/20"
-                    >
-                        {{ isRTL ? 'بحث' : 'Search' }}
-                    </button>
-                </div>
-            </div>
+            <LiveSearchDropdown
+                v-model="searchQuery"
+                variant="large"
+                :placeholder="isRTL ? 'ابحث بالاسم، الممثل، المخرج أو سنة الإنتاج...' : 'Search by title, cast, director, or release year...'"
+                :auto-navigate="false"
+                @submit="handleFilterBarSearch"
+            />
         </div>
 
         <!-- 0. Regional Origin Carousel (Arabic, Indian/Bollywood, Anime/Asian, Turkish, Hollywood, European) -->
@@ -172,12 +176,12 @@ const curatedVibes = [
                     v-for="orig in regionalOrigins"
                     :key="orig.id"
                     @click="selectOrigin(orig.id)"
-                    class="px-3.5 py-1.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
+                    class="px-3.5 py-1.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-2"
                     :class="selectedOrigin === orig.id
                         ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 font-black shadow-cyan-500/20'
                         : 'bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10'"
                 >
-                    <span class="text-sm">{{ orig.flag }}</span>
+                    <SvgFlag :origin="orig.id" size="sm" />
                     <span>{{ isRTL ? orig.label_ar : orig.label_en }}</span>
                     <Check v-if="selectedOrigin === orig.id" class="w-3.5 h-3.5 stroke-[3]" />
                 </button>

@@ -100,6 +100,20 @@ class TmdbProvider implements MetadataProviderInterface
             'glass onion' => 'Knives Out Collection',
             'venom' => 'Venom Collection',
             'ghostbusters' => 'Ghostbusters Collection',
+            'addams family' => 'The Addams Family Collection',
+            'lethal weapon' => 'Lethal Weapon Collection',
+            'beverly hills cop' => 'Beverly Hills Cop Collection',
+            'nightmare on elm street' => 'A Nightmare on Elm Street Collection',
+            'friday the 13th' => 'Friday the 13th Collection',
+            'halloween' => 'Halloween Collection',
+            'child\'s play' => 'Child\'s Play Collection',
+            'chucky' => 'Child\'s Play Collection',
+            'underworld' => 'Underworld Collection',
+            'resident evil' => 'Resident Evil Collection',
+            'the purge' => 'The Purge Collection',
+            'annabelle' => 'The Conjuring Universe',
+            'omar & salma' => 'Omar & Salma Collection',
+            'عمر وسلمى' => 'Omar & Salma Collection',
         ];
 
         foreach ($knownCollections as $pattern => $colName) {
@@ -182,6 +196,42 @@ class TmdbProvider implements MetadataProviderInterface
             }
         } catch (\Exception $e) {
             Log::warning('TMDb searchSeries failed: '.$e->getMessage());
+        }
+
+        return [];
+    }
+
+    public function searchCollection(string $query, string $lang = 'en'): array
+    {
+        $key = $this->getApiKey();
+        if (! $key || empty(trim($query))) {
+            return [];
+        }
+
+        try {
+            $response = Http::timeout(8)->get("{$this->baseUrl}/search/collection", [
+                'api_key' => $key,
+                'query' => trim($query),
+                'language' => $lang === 'ar' ? 'ar-SA' : 'en-US',
+            ]);
+
+            if ($response->successful()) {
+                $results = $response->json('results', []);
+
+                return array_map(function ($item) {
+                    return [
+                        'provider' => 'TMDb',
+                        'id' => (string) $item['id'],
+                        'collection_id' => $item['id'],
+                        'name' => $item['name'] ?? '',
+                        'poster_path' => ! empty($item['poster_path']) ? "https://image.tmdb.org/t/p/w780{$item['poster_path']}" : null,
+                        'backdrop_path' => ! empty($item['backdrop_path']) ? "https://image.tmdb.org/t/p/original{$item['backdrop_path']}" : null,
+                        'overview' => $item['overview'] ?? '',
+                    ];
+                }, $results);
+            }
+        } catch (\Exception $e) {
+            Log::warning('TMDb searchCollection failed: '.$e->getMessage());
         }
 
         return [];
@@ -397,7 +447,7 @@ class TmdbProvider implements MetadataProviderInterface
         return null;
     }
 
-        public function getSeasonEpisodes(string|int $seriesId, int $seasonNumber, string $lang = 'en'): array
+    public function getSeasonEpisodes(string|int $seriesId, int $seasonNumber, string $lang = 'en'): array
     {
         $key = $this->getApiKey();
         if (! $key) {
@@ -512,7 +562,7 @@ class TmdbProvider implements MetadataProviderInterface
         }
 
         try {
-            $response = \Illuminate\Support\Facades\Http::timeout(10)->get("{$this->baseUrl}/collection/{$collectionId}", [
+            $response = Http::timeout(10)->get("{$this->baseUrl}/collection/{$collectionId}", [
                 'api_key' => $key,
                 'language' => $lang === 'ar' ? 'ar-SA' : 'en-US',
             ]);
@@ -545,7 +595,7 @@ class TmdbProvider implements MetadataProviderInterface
                 ];
             }
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning("TMDb getCollectionDetails failed for {$collectionId}: " . $e->getMessage());
+            Log::warning("TMDb getCollectionDetails failed for {$collectionId}: ".$e->getMessage());
         }
 
         return null;

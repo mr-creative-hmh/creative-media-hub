@@ -2,8 +2,11 @@
 
 namespace App\Services\Organizer;
 
+use App\Services\Media\FfmpegLocatorService;
+use App\Services\Metadata\MediaCollectionResolverService;
 use App\Services\Subtitles\EmbeddedSubtitleDetectorService;
-use Illuminate\Support\Facades\File;
+use Illuminate\Foundation\Application;
+use Symfony\Component\Finder\Finder;
 
 class FilesystemScannerService
 {
@@ -15,9 +18,18 @@ class FilesystemScannerService
 
     protected SceneNameParserService $parser;
 
-    public function __construct(SceneNameParserService $parser)
-    {
+    protected ?MediaCollectionResolverService $collectionResolver = null;
+
+    public function __construct(
+        SceneNameParserService $parser,
+        ?MediaCollectionResolverService $collectionResolver = null
+    ) {
         $this->parser = $parser;
+        if ($collectionResolver) {
+            $this->collectionResolver = $collectionResolver;
+        } elseif (function_exists('app') && app() instanceof Application && app()->bound(MediaCollectionResolverService::class)) {
+            $this->collectionResolver = app(MediaCollectionResolverService::class);
+        }
     }
 
     public function scanDirectory(string $path, bool $recursive = true): array
@@ -37,7 +49,7 @@ class FilesystemScannerService
         ];
 
         try {
-            $finder = \Symfony\Component\Finder\Finder::create()
+            $finder = Finder::create()
                 ->in($targetDir)
                 ->ignoreUnreadableDirs()
                 ->exclude($excludedDirs)
@@ -97,12 +109,10 @@ class FilesystemScannerService
                 $parsed = $this->parser->parse($filePath);
                 if (($parsed['type'] ?? '') === 'series') {
                     $parsed['collection_name'] = null;
-                } elseif (empty($parsed['collection_name'])) {
-                    $dirName = basename(dirname($filePath));
-                    if (preg_match('/^([a-zA-Z0-9\s\':\-\.]+?)\s+(?:Collection|Boxset|Trilogy|Quadrilogy|Anthology|Saga)\b/i', $dirName, $m)) {
-                        $parsed['collection_name'] = trim($m[1]) . ' Collection';
-                    } elseif (preg_match('/^([a-zA-Z0-9\s\':\-\.]+?)\s+Collection$/i', $dirName, $m)) {
-                        $parsed['collection_name'] = trim($m[1]) . ' Collection';
+                } elseif (empty($parsed['collection_name']) && $this->collectionResolver) {
+                    $pathColl = $this->collectionResolver->detectCollectionFromPath($filePath);
+                    if ($pathColl) {
+                        $parsed['collection_name'] = $pathColl;
                     }
                 }
                 $videoFiles[] = [
@@ -217,26 +227,48 @@ class FilesystemScannerService
             }
         }
 
+        // Multi-tier Collection Resolution (including flat folder sibling batch co-occurrence)
+        if ($this->collectionResolver) {
+            foreach ($videoFiles as &$vf) {
+                if (($vf['parsed']['type'] ?? '') !== 'series' && empty($vf['parsed']['collection_name'])) {
+                    $resolved = $this->collectionResolver->resolveCollection(
+                        $vf['path'],
+                        $vf['parsed'],
+                        null,
+                        true,
+                        $videoFiles
+                    );
+                    if (! empty($resolved['collection_name'])) {
+                        $vf['parsed']['collection_name'] = $resolved['collection_name'];
+                        $vf['collection_name'] = $resolved['collection_name'];
+                        $vf['collection_id'] = $resolved['collection_id'] ?? null;
+                        $vf['collection_poster'] = $resolved['collection_poster'] ?? null;
+                    }
+                }
+            }
+            unset($vf);
+        }
+
         return $videoFiles;
     }
 
-    
     /**
      * Probe video stream resolution via FFprobe when filename does not contain it.
      */
     public function probeResolution(string $filePath): ?string
     {
-        $ffprobe = \App\Services\Media\FfmpegLocatorService::getFfprobePath();
+        $ffprobe = FfmpegLocatorService::getFfprobePath();
         if (! $ffprobe || ! file_exists($ffprobe)) {
             return null;
         }
 
         try {
-            $cmd = escapeshellarg($ffprobe) . ' -nostdin -loglevel error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 ' . escapeshellarg($filePath) . ' 2>nul';
+            $cmd = escapeshellarg($ffprobe).' -nostdin -loglevel error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 '.escapeshellarg($filePath).' 2>nul';
             $output = @shell_exec($cmd);
             if (! empty($output) && preg_match('/^(\d{3,4})x(\d{3,4})/', trim($output), $m)) {
                 $w = (int) $m[1];
                 $h = (int) $m[2];
+
                 return $this->parser->calculateResolutionFromDimensions($w, $h);
             }
         } catch (\Throwable $e) {
@@ -357,7 +389,7 @@ class FilesystemScannerService
         $excluded = [
             '$recycle.bin', 'system volume information', 'recovery',
             'node_modules', '.git', 'vendor', '$windows.~bt',
-            'windows', 'program files', 'program files (x86)'
+            'windows', 'program files', 'program files (x86)',
         ];
 
         $directories = [];
@@ -370,7 +402,7 @@ class FilesystemScannerService
                 if (in_array(strtolower($item), $excluded)) {
                     continue;
                 }
-                $fullPath = rtrim($normalized, '/') . '/' . $item;
+                $fullPath = rtrim($normalized, '/').'/'.$item;
                 if (@is_dir($fullPath)) {
                     $hasChildren = false;
                     $sub = @scandir($fullPath);

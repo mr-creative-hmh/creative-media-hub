@@ -94,8 +94,39 @@ class MediaScoutController extends Controller
             $collectionGaps = array_values(array_filter($collectionGaps, function ($c) use ($query) {
                 $searchable = strtolower($c['collection_name'] ?? '');
                 foreach ($c['parts'] as $part) {
-                    $searchable .= ' '.strtolower($part['movie_title'] ?? '');
+                    $searchable .= ' '.strtolower(($part['movie_title'] ?? '').' '.($part['original_title'] ?? ''));
                 }
+
+                return str_contains($searchable, $query);
+            }));
+
+            $collections = array_values(array_filter($collections, function ($item) use ($query) {
+                $searchable = strtolower(
+                    ($item['collection_name'] ?? '').' '.
+                    ($item['movie_title'] ?? '').' '.
+                    ($item['original_title'] ?? '')
+                );
+
+                return str_contains($searchable, $query);
+            }));
+
+            $episodes = array_values(array_filter($episodes, function ($item) use ($query) {
+                $searchable = strtolower(
+                    ($item['series_title'] ?? '').' '.
+                    ($item['series_title_ar'] ?? '').' '.
+                    ($item['episode_title'] ?? '').' '.
+                    ($item['episode_code'] ?? '')
+                );
+
+                return str_contains($searchable, $query);
+            }));
+
+            $seasons = array_values(array_filter($seasons, function ($item) use ($query) {
+                $searchable = strtolower(
+                    ($item['series_title'] ?? '').' '.
+                    ($item['series_title_ar'] ?? '').' '.
+                    ($item['season_title'] ?? '')
+                );
 
                 return str_contains($searchable, $query);
             }));

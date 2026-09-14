@@ -8,7 +8,7 @@ use App\Models\Genre;
 use App\Models\MediaItem;
 use App\Models\Series;
 use App\Models\Subtitle;
-use App\Services\Metadata\LibraryMasterIndexService;
+use App\Services\Metadata\MediaCollectionResolverService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -18,6 +18,8 @@ class PhysicalOrganizerService
     protected array $claimedDestinations = [];
 
     protected SceneNameParserService $parser;
+
+    protected MediaCollectionResolverService $collectionResolver;
 
     protected static ?array $seriesCache = null;
 
@@ -31,9 +33,12 @@ class PhysicalOrganizerService
 
     protected const PLAN_CACHE_KEY = 'organizer_plan_state';
 
-    public function __construct(SceneNameParserService $parser)
-    {
+    public function __construct(
+        SceneNameParserService $parser,
+        ?MediaCollectionResolverService $collectionResolver = null
+    ) {
         $this->parser = $parser;
+        $this->collectionResolver = $collectionResolver ?: app(MediaCollectionResolverService::class);
     }
 
     public function generateDryRun(array $scannedFiles, string $targetRoot, ?string $moviePattern = null, ?string $seriesPattern = null): array
@@ -45,7 +50,7 @@ class PhysicalOrganizerService
         $plan = [];
 
         foreach ($scannedFiles as $file) {
-            $plan[] = $this->generatePlanItem($file, $targetRoot, $moviePattern, $seriesPattern);
+            $plan[] = $this->generatePlanItem($file, $targetRoot, $moviePattern, $seriesPattern, $scannedFiles);
         }
 
         return $plan;
@@ -167,165 +172,52 @@ class PhysicalOrganizerService
     }
 
     /**
-     * Multi-tier collection detection:
-     * Tier 1: Explicitly passed or pre-parsed collection_name
-     * Tier 2: Existing MediaItem in local database
-     * Tier 3: Parent/ancestor directory name containing Collection/Boxset/etc.
-     * Tier 4: Known franchise pattern dictionary
+     * Multi-tier collection detection delegated to MediaCollectionResolverService:
+     * Tier 1: Local Master Index & Database Sibling Stem Match (<0.1ms)
+     * Tier 2: Sibling Batch Co-Occurrence Detection (for flat folders e.g. Downloads/)
+     * Tier 3: Multi-Source Online Waterfall (TMDb, Wikipedia, OMDb)
+     * Tier 4: Directory / Path Analysis & Known Franchise Dictionary
      */
-    public function resolveCollectionName(string $filePath, array $parsed, ?string $explicitColl = null): ?string
-    {
-        $isSeries = ($parsed['type'] ?? 'movie') === 'series';
-        if ($isSeries) {
-            return null;
-        }
+    public function resolveCollectionName(
+        string $filePath,
+        array $parsed,
+        ?string $explicitColl = null,
+        bool $allowOnline = true,
+        array $siblingBatch = []
+    ): ?string {
+        $data = $this->resolveCollectionData($filePath, $parsed, $explicitColl, $allowOnline, $siblingBatch);
 
-        $cleanTitle = $parsed['clean_title'] ?? ($parsed['title'] ?? '');
-
-        // The Lord of the Rings: The Rings of Power is a TV series, never match movie collections
-        if (stripos($cleanTitle, 'Rings of Power') !== false || stripos($filePath, 'Rings of Power') !== false) {
-            return null;
-        }
-
-        if (! empty($explicitColl)) {
-            return $this->formatCollectionName($explicitColl);
-        }
-
-        if (! empty($parsed['collection_name'])) {
-            return $this->formatCollectionName($parsed['collection_name']);
-        }
-
-        // Tier 1: Local Master Metadata Index (<0.1ms offline lookup)
-        try {
-            $masterService = app(LibraryMasterIndexService::class);
-            $year = ! empty($parsed['year']) ? (int) $parsed['year'] : null;
-            $masterMovie = $masterService->lookupMovie($cleanTitle, $year);
-            if ($masterMovie && ! empty($masterMovie['collection_name'])) {
-                return $this->formatCollectionName($masterMovie['collection_name']);
-            }
-        } catch (\Throwable $e) {
-            // Master index service unavailable
-        }
-
-        // Tier 2: Local Database MediaItem check
-        if (! $isSeries && ! empty($cleanTitle)) {
-            try {
-                $normalizedSearch = preg_replace('/[^a-z0-9]/i', '', $cleanTitle);
-                $dbMovie = MediaItem::where('title', 'like', "%{$cleanTitle}%")
-                    ->orWhere('original_title', 'like', "%{$cleanTitle}%")
-                    ->first();
-
-                if ($dbMovie && ! empty($dbMovie->collection_name)) {
-                    return $this->formatCollectionName($dbMovie->collection_name);
-                }
-
-                // Fallback normalized search for titles with colons/hyphens (e.g. Deathly Hallows: Part 1)
-                if (strlen($normalizedSearch) >= 6) {
-                    $candidate = MediaItem::whereNotNull('collection_name')
-                        ->where('collection_name', '!=', '')
-                        ->get()
-                        ->first(function ($m) use ($normalizedSearch) {
-                            $mNorm = preg_replace('/[^a-z0-9]/i', '', $m->title);
-
-                            return str_contains($mNorm, $normalizedSearch) || str_contains($normalizedSearch, $mNorm);
-                        });
-                    if ($candidate && ! empty($candidate->collection_name)) {
-                        return $this->formatCollectionName($candidate->collection_name);
-                    }
-                }
-            } catch (\Throwable $e) {
-                // Table might not exist or be unmigrated in isolated environments
-            }
-        }
-
-        // Tier 3: Directory / Path Analysis (parent folder or up to 3 parent levels)
-        $normalizedPath = str_replace(['\\', '/'], '/', $filePath);
-        $pathParts = explode('/', $normalizedPath);
-        $parentDirs = array_slice($pathParts, max(0, count($pathParts) - 4), -1);
-        foreach (array_reverse($parentDirs) as $dir) {
-            if (preg_match('/^([a-zA-Z0-9\s\':\-\.]+?)\s+(?:Collection|Boxset|Trilogy|Quadrilogy|Anthology|Saga|Franchise)\b/i', $dir, $m)) {
-                return $this->formatCollectionName(trim($m[1]).' Collection');
-            }
-            if (preg_match('/\b([a-zA-Z0-9\s\':\-\.]+?)\s+Collection\b/i', $dir, $m)) {
-                return $this->formatCollectionName(trim($m[1]).' Collection');
-            }
-        }
-
-        // Tier 4: Known Franchise Pattern Dictionary
-        $knownFranchises = [
-            'Harry Potter' => 'Harry Potter Collection',
-            'Lord of the Rings' => 'The Lord of the Rings Collection',
-            'The Hobbit' => 'The Hobbit Collection',
-            'Fantastic Beasts' => 'Fantastic Beasts Collection',
-            'Fast & Furious' => 'Fast & Furious Collection',
-            'Fast and Furious' => 'Fast & Furious Collection',
-            'The Dark Knight' => 'The Dark Knight Collection',
-            'Dark Knight' => 'The Dark Knight Collection',
-            'Batman' => 'Batman Collection',
-            'Star Wars' => 'Star Wars Collection',
-            'Transformers' => 'Transformers Collection',
-            'Pirates of the Caribbean' => 'Pirates of the Caribbean Collection',
-            'Mission: Impossible' => 'Mission: Impossible Collection',
-            'Mission Impossible' => 'Mission: Impossible Collection',
-            'John Wick' => 'John Wick Collection',
-            'Bad Boys' => 'Bad Boys Collection',
-            'The Godfather' => 'The Godfather Collection',
-            'Godfather' => 'The Godfather Collection',
-            'The Hunger Games' => 'The Hunger Games Collection',
-            'Hunger Games' => 'The Hunger Games Collection',
-            'The Twilight Saga' => 'The Twilight Saga Collection',
-            'Twilight' => 'The Twilight Saga Collection',
-            'The Matrix' => 'The Matrix Collection',
-            'Matrix' => 'The Matrix Collection',
-            'Spider-Man' => 'Spider-Man Collection',
-            'Spider Man' => 'Spider-Man Collection',
-            'Jurassic Park' => 'Jurassic Park Collection',
-            'Jurassic World' => 'Jurassic Park Collection',
-            'Toy Story' => 'Toy Story Collection',
-            'Shrek' => 'Shrek Collection',
-            'Ice Age' => 'Ice Age Collection',
-            'Minions' => 'Minions Collection',
-            'Despicable Me' => 'Despicable Me Collection',
-            'Omar & Salma' => 'Omar & Salma Collection',
-            'عمر وسلمى' => 'Omar & Salma Collection',
-            'Kung Fu Panda' => 'Kung Fu Panda Collection',
-            'How to Train Your Dragon' => 'How to Train Your Dragon Collection',
-            'Mad Max' => 'Mad Max Collection',
-            'Bourne' => 'Bourne Collection',
-            'Indiana Jones' => 'Indiana Jones Collection',
-            'Die Hard' => 'Die Hard Collection',
-            'James Bond' => 'James Bond 007 Collection',
-            '007' => 'James Bond 007 Collection',
-            'Planet of the Apes' => 'Planet of the Apes Collection',
-            'Alien' => 'Alien Collection',
-            'Predator' => 'Predator Collection',
-            'Terminator' => 'The Terminator Collection',
-            'Saw' => 'Saw Collection',
-            'The Conjuring' => 'The Conjuring Universe Collection',
-            'Insidious' => 'Insidious Collection',
-        ];
-
-        foreach ($knownFranchises as $frag => $fullColl) {
-            if (stripos($cleanTitle, $frag) !== false || stripos($filePath, $frag) !== false) {
-                return $fullColl;
-            }
-        }
-
-        return null;
+        return $data['collection_name'] ?? null;
     }
 
-    private function formatCollectionName(string $name): string
-    {
-        $name = trim($name);
-        if (! preg_match('/collection$/i', $name)) {
-            $name .= ' Collection';
-        }
-
-        return $name;
+    public function resolveCollectionData(
+        string $filePath,
+        array $parsed,
+        ?string $explicitColl = null,
+        bool $allowOnline = true,
+        array $siblingBatch = []
+    ): ?array {
+        return $this->collectionResolver->resolveCollection(
+            $filePath,
+            $parsed,
+            $explicitColl,
+            $allowOnline,
+            $siblingBatch
+        );
     }
 
-    public function generatePlanItem(array $file, string $targetRoot, ?string $moviePattern = null, ?string $seriesPattern = null): array
+    public function formatCollectionName(string $name): string
     {
+        return $this->collectionResolver->formatCollectionName($name);
+    }
+
+    public function generatePlanItem(
+        array $file,
+        string $targetRoot,
+        ?string $moviePattern = null,
+        ?string $seriesPattern = null,
+        array $siblingBatchFiles = []
+    ): array {
         $moviePattern = $moviePattern ?: AppSetting::get('movie_naming_template', '{Type}/{Genre}/{Collection}/{Title} ({Year})/{Title} ({Year}) [{CleanResolution}].{ext}');
         $seriesPattern = $seriesPattern ?: AppSetting::get('series_naming_template', '{Type}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} - {EpisodeTitle} [{CleanResolution}].{ext}');
         $targetRoot = rtrim(str_replace('\\', '/', $targetRoot), '/');
@@ -366,7 +258,6 @@ class PhysicalOrganizerService
 
         if ($isSeries) {
             $dbSeries = $this->resolveCachedSeries($cleanTitle, $filePath);
-
             // Strict Arabic Series Structure Preservation
             $normFilePath = str_replace('\\', '/', $filePath);
             $isArabicSeries = false;
@@ -374,9 +265,13 @@ class PhysicalOrganizerService
                 $isArabicSeries = true;
             } elseif ($dbSeries) {
                 $seriesFolder = str_replace('\\', '/', $dbSeries->folder_path ?? '');
-                if (stripos($seriesFolder, 'Arabic Series') !== false || ($dbSeries->original_language ?? '') === 'ar') {
+                if (stripos($seriesFolder, 'Arabic Series') !== false || ($dbSeries->original_language ?? '') === 'ar' || in_array($dbSeries->origin_country ?? '', ['EG', 'SY'])) {
                     $isArabicSeries = true;
                 } elseif (preg_match('/\p{Arabic}/u', $dbSeries->title ?? '') || preg_match('/\p{Arabic}/u', $cleanTitle)) {
+                    $isArabicSeries = true;
+                }
+            } else {
+                if (preg_match('/\p{Arabic}/u', $cleanTitle) || preg_match('/\b(مسلسل|رمضان|دراما)\b/ui', $cleanTitle)) {
                     $isArabicSeries = true;
                 }
             }
@@ -434,9 +329,13 @@ class PhysicalOrganizerService
         $firstLetter = preg_match('/^[A-Z0-9]$/i', $firstChar) ? $firstChar : '#';
 
         // Multi-tier Collection Resolution (Movies only)
-        $collName = ! $isSeries ? $this->resolveCollectionName($filePath, $parsed, $file['collection_name'] ?? null) : null;
+        $collData = ! $isSeries ? $this->resolveCollectionData($filePath, $parsed, $file['collection_name'] ?? null, true, $siblingBatchFiles) : null;
+        $collName = $collData['collection_name'] ?? null;
         if ($collName) {
             $parsed['collection_name'] = $collName;
+            $file['collection_name'] = $collName;
+            $file['collection_id'] = $collData['collection_id'] ?? null;
+            $file['collection_poster'] = $collData['collection_poster'] ?? null;
         }
 
         // Resolve genres for {Genre} and {Genres} tokens
@@ -449,20 +348,20 @@ class PhysicalOrganizerService
             }
         }
 
-        if (! empty($collName)) {
+        if (! empty($genresList)) {
+            $primaryGenre = ! empty($genresList[0]) ? $this->sanitizePathSegment($genresList[0]) : 'Action & Adventure';
+            $joinedGenres = ! empty($genresList) ? $this->sanitizePathSegment(implode(' & ', array_slice($genresList, 0, 2))) : $primaryGenre;
+        } elseif (! empty($collName)) {
             // Unify franchise collections under a single consistent primary genre
             $classifier = app(ZeroKeyGenreClassifierService::class);
             $resolved = $classifier->resolveGenres($cleanTitle, $collName);
             $primaryGenre = $this->sanitizePathSegment($resolved['primary']);
             $joinedGenres = $this->sanitizePathSegment($resolved['joined']);
-        } elseif (empty($genresList)) {
+        } else {
             $classifier = app(ZeroKeyGenreClassifierService::class);
             $resolved = $classifier->resolveGenres($cleanTitle, null);
             $primaryGenre = $this->sanitizePathSegment($resolved['primary']);
             $joinedGenres = $this->sanitizePathSegment($resolved['joined']);
-        } else {
-            $primaryGenre = ! empty($genresList[0]) ? $this->sanitizePathSegment($genresList[0]) : 'Action & Adventure';
-            $joinedGenres = ! empty($genresList) ? $this->sanitizePathSegment(implode(' & ', array_slice($genresList, 0, 2))) : $primaryGenre;
         }
         $cleanRes = $this->cleanResolutionTag($resTag);
 
@@ -567,6 +466,8 @@ class PhysicalOrganizerService
             'filename' => $file['filename'] ?? basename($filePath),
             'clean_title' => $cleanTitle,
             'collection_name' => $collName ?: null,
+            'collection_id' => $collData['collection_id'] ?? null,
+            'collection_poster' => $collData['collection_poster'] ?? null,
             'genre' => $primaryGenre,
             'type' => $parsed['type'] ?? ($isSeries ? 'series' : 'movie'),
             'year' => $year ?: ($parsed['year'] ?? null),

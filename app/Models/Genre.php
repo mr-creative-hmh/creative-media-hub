@@ -21,6 +21,12 @@ class Genre extends Model
     {
         return $this->morphedByMany(Series::class, 'genreable');
     }
+
+    public function getNameAttribute(): ?string
+    {
+        return $this->name_en;
+    }
+
     public function getNameArAttribute($value): ?string
     {
         if (! empty($value) && $value !== $this->name_en) {
@@ -55,6 +61,7 @@ class Genre extends Model
         ];
 
         $slug = strtolower($this->slug ?? '');
+
         return $arabicMap[$slug] ?? ($arabicMap[strtolower($this->name_en ?? '')] ?? ($value ?: $this->name_en));
     }
 }

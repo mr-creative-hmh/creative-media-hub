@@ -421,4 +421,60 @@ class MetadataRenameAndCollectionTest extends TestCase
             $movieDest
         );
     }
+
+    public function test_collection_index_supports_sorting_and_filtering(): void
+    {
+        MediaItem::create([
+            'title' => 'Avatar',
+            'collection_name' => 'Avatar Collection',
+            'release_year' => 2009,
+            'rating' => 7.9,
+            'file_path' => 'C:/test/avatar.mkv',
+        ]);
+        MediaItem::create([
+            'title' => 'Avatar: The Way of Water',
+            'collection_name' => 'Avatar Collection',
+            'release_year' => 2022,
+            'rating' => 7.7,
+            'file_path' => 'C:/test/avatar2.mkv',
+        ]);
+
+        MediaItem::create([
+            'title' => 'Batman Begins',
+            'collection_name' => 'The Dark Knight Collection',
+            'release_year' => 2005,
+            'rating' => 8.2,
+            'file_path' => 'C:/test/batman.mkv',
+        ]);
+        MediaItem::create([
+            'title' => 'The Dark Knight',
+            'collection_name' => 'The Dark Knight Collection',
+            'release_year' => 2008,
+            'rating' => 9.0,
+            'file_path' => 'C:/test/tdk.mkv',
+        ]);
+
+        // 1. Default alphabetical sort (A-Z)
+        $resAlpha = $this->get('/collections?sort=name&direction=asc');
+        $resAlpha->assertStatus(200);
+        $resAlpha->assertInertia(fn ($page) => $page->component('Collections/Index')
+            ->where('collections.0.name', 'Avatar Collection')
+            ->where('collections.1.name', 'The Dark Knight Collection')
+        );
+
+        // 2. Alphabetical descending sort (Z-A)
+        $resDesc = $this->get('/collections?sort=name&direction=desc');
+        $resDesc->assertStatus(200);
+        $resDesc->assertInertia(fn ($page) => $page->component('Collections/Index')
+            ->where('collections.0.name', 'The Dark Knight Collection')
+            ->where('collections.1.name', 'Avatar Collection')
+        );
+
+        // 3. Rating descending sort
+        $resRating = $this->get('/collections?sort=rating&direction=desc');
+        $resRating->assertStatus(200);
+        $resRating->assertInertia(fn ($page) => $page->component('Collections/Index')
+            ->where('collections.0.name', 'The Dark Knight Collection')
+        );
+    }
 }
