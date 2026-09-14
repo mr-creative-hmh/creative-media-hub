@@ -128,6 +128,13 @@ class DownloadManagerController extends Controller
         return response()->json(['success' => $success]);
     }
 
+    public function stop(int $id): JsonResponse
+    {
+        $success = $this->downloadService->stop($id);
+
+        return response()->json(['success' => $success]);
+    }
+
     public function resume(int $id): JsonResponse
     {
         $success = $this->downloadService->resume($id);
@@ -140,6 +147,13 @@ class DownloadManagerController extends Controller
         $success = $this->downloadService->retry($id);
 
         return response()->json(['success' => $success]);
+    }
+
+    public function organize(int $id): JsonResponse
+    {
+        $result = $this->downloadService->organize($id);
+
+        return response()->json($result);
     }
 
     public function destroy(int $id): JsonResponse

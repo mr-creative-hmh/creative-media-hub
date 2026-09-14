@@ -2,6 +2,7 @@
 
 namespace App\Services\Scanner;
 
+use App\Http\Controllers\CollectionController;
 use App\Models\Episode;
 use App\Models\Genre;
 use App\Models\MediaItem;
@@ -16,6 +17,7 @@ use App\Services\Metadata\WebArtworkSearchService;
 use App\Services\Organizer\FilesystemScannerService;
 use App\Services\Organizer\SceneNameParserService;
 use App\Services\Subtitles\EmbeddedSubtitleDetectorService;
+use App\Services\Subtitles\SubtitleLanguageDetectorService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
@@ -358,6 +360,74 @@ class VirtualLibraryScannerService
         Cache::put('virtual_scanner_job_status', $job, now()->addHours(6));
     }
 
+    /**
+     * Process and index a single media file into the virtual library.
+     */
+    public function processSingleFile(string $filePath, ?string $typeHint = null): mixed
+    {
+        $cleanPath = str_replace('\\', '/', $filePath);
+        if (! file_exists($cleanPath)) {
+            return null;
+        }
+
+        $parsed = $this->nameParser->parse($cleanPath);
+        if (($parsed['type'] ?? '') === 'series') {
+            $parsed['collection_name'] = null;
+        } elseif (empty($parsed['collection_name']) && $this->collectionResolver) {
+            $pathColl = $this->collectionResolver->detectCollectionFromPath($cleanPath);
+            if ($pathColl) {
+                $parsed['collection_name'] = $pathColl;
+            }
+        }
+
+        // Detect companion subtitles in the same directory and Subs/ / Subtitles/ subfolders
+        $dir = dirname($cleanPath);
+        $baseName = pathinfo($cleanPath, PATHINFO_FILENAME);
+        $cleanBase = strtolower(preg_replace('/[^a-z0-9]/i', '', $baseName));
+        $subs = [];
+        $candidates = glob("{$dir}/*.{srt,vtt,ass,ssa,sub}", GLOB_BRACE) ?: [];
+        foreach (['Subs', 'Subtitles', 'sub'] as $subFolder) {
+            if (is_dir("{$dir}/{$subFolder}")) {
+                $candidates = array_merge($candidates, glob("{$dir}/{$subFolder}/*.{srt,vtt,ass,ssa,sub}", GLOB_BRACE) ?: []);
+            }
+        }
+        $subDetector = app(SubtitleLanguageDetectorService::class);
+
+        foreach ($candidates as $subFile) {
+            $subFilename = basename($subFile);
+            $cleanSubBase = strtolower(preg_replace('/[^a-z0-9]/i', '', pathinfo($subFilename, PATHINFO_FILENAME)));
+            $normSubPath = str_replace('\\', '/', $subFile);
+            if (str_starts_with($cleanSubBase, $cleanBase) || str_starts_with($cleanBase, $cleanSubBase) || str_contains($normSubPath, '/Subs/') || str_contains($normSubPath, '/Subtitles/')) {
+                $subExt = strtolower(pathinfo($subFilename, PATHINFO_EXTENSION));
+                $detection = $subDetector->detectLanguage($subFile, $subFilename);
+                $lang = $detection['language'] ?? 'und';
+                if ($lang === 'und') {
+                    $lang = (bool) preg_match('/(\.ar|\.arabic)\b/i', $subFilename) ? 'ar' : 'en';
+                }
+                $subs[] = [
+                    'path' => $normSubPath,
+                    'filename' => $subFilename,
+                    'extension' => $subExt,
+                    'language' => $lang,
+                    'language_name' => $detection['name_en'] ?? $subDetector->getLanguageName($lang),
+                    'format' => $subExt,
+                ];
+            }
+        }
+
+        $fileItem = [
+            'path' => $cleanPath,
+            'filename' => basename($cleanPath),
+            'size_bytes' => filesize($cleanPath),
+            'extension' => strtolower(pathinfo($cleanPath, PATHINFO_EXTENSION)),
+            'type_hint' => $typeHint ?: ($parsed['type'] ?? 'mixed'),
+            'parsed' => $parsed,
+            'subtitles' => $subs,
+        ];
+
+        return $this->processFileItem($fileItem);
+    }
+
     public function processFileItem(array $file): mixed
     {
         $parsed = $file['parsed'] ?? $this->nameParser->parse($file['path']);
@@ -478,9 +548,10 @@ class VirtualLibraryScannerService
         // Probe actual file for accurate technical metadata
         $probeData = $this->mediaProbe->probe($file['path']);
 
-        $resolution = (! empty($probeData['resolution']) && $probeData['resolution'] !== 'Unknown')
-            ? $probeData['resolution']
-            : ($parsed['resolution'] ?? 'Unknown');
+        $resolution = $this->mediaProbe->resolveBestResolution(
+            $probeData['resolution'] ?? null,
+            $parsed['resolution'] ?? null
+        );
         $videoCodec = (! empty($probeData['video_codec']) && $probeData['video_codec'] !== 'Unknown')
             ? $probeData['video_codec']
             : ($parsed['codec'] ?? 'Unknown');
@@ -597,6 +668,10 @@ class VirtualLibraryScannerService
         }, 150);
 
         $this->attachAllSubtitles($movie, $file);
+
+        if (! empty($movie->collection_name)) {
+            CollectionController::clearCache();
+        }
 
         return $movie;
     }
@@ -735,9 +810,10 @@ class VirtualLibraryScannerService
 
         // Probe actual file for accurate technical metadata
         $probeData = $this->mediaProbe->probe($file['path']);
-        $resolution = (! empty($probeData['resolution']) && $probeData['resolution'] !== 'Unknown')
-            ? $probeData['resolution']
-            : ($parsed['resolution'] ?? 'Unknown');
+        $resolution = $this->mediaProbe->resolveBestResolution(
+            $probeData['resolution'] ?? null,
+            $parsed['resolution'] ?? null
+        );
         $videoCodec = (! empty($probeData['video_codec']) && $probeData['video_codec'] !== 'Unknown')
             ? $probeData['video_codec']
             : ($parsed['codec'] ?? 'Unknown');
@@ -912,11 +988,17 @@ class VirtualLibraryScannerService
                 $lang = $sub['language'] ?? 'und';
                 $langName = $sub['language_name'] ?? 'Unknown';
 
-                if ($lang === 'und') {
-                    $detected = $this->embeddedSubDetector->resolveLanguageFromContext($lang, '', $subPath, 0);
-                    if ($detected !== 'und') {
-                        $lang = $detected;
-                        $langName = $this->embeddedSubDetector->getLanguageName($lang);
+                if ($lang === 'und' || empty($lang)) {
+                    $detection = app(SubtitleLanguageDetectorService::class)->detectLanguage($subPath, basename($subPath));
+                    if (($detection['language'] ?? 'und') !== 'und') {
+                        $lang = $detection['language'];
+                        $langName = $detection['name_en'] ?? $this->embeddedSubDetector->getLanguageName($lang);
+                    } else {
+                        $detected = $this->embeddedSubDetector->resolveLanguageFromContext($lang, '', $subPath, 0);
+                        if ($detected !== 'und') {
+                            $lang = $detected;
+                            $langName = $this->embeddedSubDetector->getLanguageName($lang);
+                        }
                     }
                 }
 

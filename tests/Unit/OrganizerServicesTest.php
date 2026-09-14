@@ -58,7 +58,7 @@ class OrganizerServicesTest extends TestCase
 
         $this->assertCount(1, $plan);
         $this->assertEquals('C:/Downloads/Inception.2010.1080p.BluRay.x264.mkv', $plan[0]['source_path']);
-        $this->assertEquals('C:/Media/Movies/Sci-Fi/Inception (2010)/Inception (2010) [1080p].mkv', $plan[0]['destination_path']);
+        $this->assertEquals('C:/Media/Movies/Science Fiction/Inception (2010)/Inception (2010) [1080p].mkv', $plan[0]['destination_path']);
     }
 
     public function test_physical_organizer_handles_movie_collections(): void
@@ -121,7 +121,7 @@ class OrganizerServicesTest extends TestCase
         $plan = $organizer->generateDryRun($scanned, 'C:/Media', $template);
 
         $this->assertCount(2, $plan);
-        $this->assertStringContainsString('Movies/Drama & History/Oppenheimer (2023)', $plan[0]['destination_path']);
+        $this->assertStringContainsString('Movies/History/Oppenheimer (2023)', $plan[0]['destination_path']);
         $this->assertStringContainsString('Movies/Animation/Shrek (2001)', $plan[1]['destination_path']);
     }
 

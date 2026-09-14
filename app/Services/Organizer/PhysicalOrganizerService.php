@@ -8,7 +8,10 @@ use App\Models\Genre;
 use App\Models\MediaItem;
 use App\Models\Series;
 use App\Models\Subtitle;
+use App\Services\Metadata\LibraryMasterIndexService;
 use App\Services\Metadata\MediaCollectionResolverService;
+use App\Services\Metadata\TmdbProvider;
+use App\Services\Subtitles\SubtitleLanguageDetectorService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -29,6 +32,10 @@ class PhysicalOrganizerService
 
     protected static array $movieCache = [];
 
+    protected static array $onlineSeriesCache = [];
+
+    protected static array $onlineSeasonCache = [];
+
     protected const CACHE_KEY = 'organizer_execution_state';
 
     protected const PLAN_CACHE_KEY = 'organizer_plan_state';
@@ -41,7 +48,17 @@ class PhysicalOrganizerService
         $this->collectionResolver = $collectionResolver ?: app(MediaCollectionResolverService::class);
     }
 
-    public function generateDryRun(array $scannedFiles, string $targetRoot, ?string $moviePattern = null, ?string $seriesPattern = null): array
+    public static function resetStaticCaches(): void
+    {
+        self::$seriesCache = null;
+        self::$seriesYearCache = [];
+        self::$episodesBySeries = [];
+        self::$movieCache = [];
+        self::$onlineSeriesCache = [];
+        self::$onlineSeasonCache = [];
+    }
+
+    public function generateDryRun(array $scannedFiles, string $targetRoot, ?string $moviePattern = null, ?string $seriesPattern = null, string $titleLanguage = 'english'): array
     {
         $moviePattern = $moviePattern ?: AppSetting::get('movie_naming_template', '{Type}/{Genre}/{Collection}/{Title} ({Year})/{Title} ({Year}) [{CleanResolution}].{ext}');
         $seriesPattern = $seriesPattern ?: AppSetting::get('series_naming_template', '{Type}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} - {EpisodeTitle} [{CleanResolution}].{ext}');
@@ -50,7 +67,7 @@ class PhysicalOrganizerService
         $plan = [];
 
         foreach ($scannedFiles as $file) {
-            $plan[] = $this->generatePlanItem($file, $targetRoot, $moviePattern, $seriesPattern, $scannedFiles);
+            $plan[] = $this->generatePlanItem($file, $targetRoot, $moviePattern, $seriesPattern, $scannedFiles, $titleLanguage);
         }
 
         return $plan;
@@ -172,6 +189,94 @@ class PhysicalOrganizerService
     }
 
     /**
+     * Resolve episode title for a TV series from:
+     * 1. Local Database cached episode
+     * 2. LibraryMasterIndexService
+     * 3. Online Metadata (TMDb bilingual season episodes)
+     * If title is generic (e.g. "Episode 1") or unavailable, returns null (fallback "as usual").
+     */
+    public function resolveSeriesEpisodeTitle(
+        string $cleanTitle,
+        int $seasonNum,
+        int $episodeNum,
+        ?string $year = null,
+        string $titleLanguage = 'english',
+        ?string $arabicTitle = null
+    ): ?string {
+        // 1. Check local DB series & episode
+        $dbSeries = $this->resolveCachedSeries($cleanTitle, '');
+        if ($dbSeries) {
+            $dbEp = $this->resolveCachedEpisode($dbSeries->id, $seasonNum, $episodeNum, '');
+            if ($dbEp) {
+                if ($titleLanguage === 'arabic' && ! empty($dbEp->clean_episode_title_ar)) {
+                    return $dbEp->clean_episode_title_ar;
+                }
+                if (! empty($dbEp->clean_episode_title) && ! preg_match('/^(?:Episode|الحلقة|Ep|Part)\s*\d+$/i', $dbEp->clean_episode_title)) {
+                    return $dbEp->clean_episode_title;
+                }
+            }
+        }
+
+        // 2. Check Master Index
+        try {
+            $masterIndex = app(LibraryMasterIndexService::class);
+            $masterEp = $masterIndex->lookupEpisode($dbSeries?->tmdb_id ?: $cleanTitle, $seasonNum, $episodeNum);
+            if ($masterEp) {
+                if ($titleLanguage === 'arabic' && ! empty($masterEp['title_ar'])) {
+                    return $masterEp['title_ar'];
+                }
+                if (! empty($masterEp['title']) && ! preg_match('/^(?:Episode|الحلقة|Ep|Part)\s*\d+$/i', $masterEp['title'])) {
+                    return $masterEp['title'];
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        // 3. Online TMDb lookup (cached per series & season)
+        try {
+            $tmdb = app(TmdbProvider::class);
+            if (! $tmdb->isConfigured()) {
+                return null;
+            }
+
+            $cacheKeySeries = strtolower(preg_replace('/[^a-z0-9]/i', '', $cleanTitle)).'_'.($year ?: '');
+            if (! array_key_exists($cacheKeySeries, self::$onlineSeriesCache)) {
+                $searchYear = $year ? (int) substr($year, 0, 4) : null;
+                $results = $tmdb->searchSeries($cleanTitle, $searchYear);
+                if (empty($results) && ! empty($arabicTitle)) {
+                    $results = $tmdb->searchSeries($arabicTitle, $searchYear);
+                }
+                self::$onlineSeriesCache[$cacheKeySeries] = ! empty($results[0]['id']) ? (int) $results[0]['id'] : null;
+            }
+
+            $tmdbSeriesId = self::$onlineSeriesCache[$cacheKeySeries];
+            if (! $tmdbSeriesId) {
+                return null;
+            }
+
+            $cacheKeySeason = "{$tmdbSeriesId}_S{$seasonNum}";
+            if (! array_key_exists($cacheKeySeason, self::$onlineSeasonCache)) {
+                self::$onlineSeasonCache[$cacheKeySeason] = $tmdb->getSeasonEpisodesBilingual($tmdbSeriesId, $seasonNum);
+            }
+
+            $seasonEps = self::$onlineSeasonCache[$cacheKeySeason];
+            if (! empty($seasonEps[$episodeNum])) {
+                $ep = $seasonEps[$episodeNum];
+                if ($titleLanguage === 'arabic' && ! empty($ep['title_ar']) && ! preg_match('/^(?:Episode|الحلقة|Ep|Part)\s*\d+$/i', $ep['title_ar'])) {
+                    return $ep['title_ar'];
+                }
+                if (! empty($ep['title']) && ! preg_match('/^(?:Episode|الحلقة|Ep|Part)\s*\d+$/i', $ep['title'])) {
+                    return $ep['title'];
+                }
+            }
+        } catch (\Throwable $e) {
+            // Fallback: "do as usual"
+        }
+
+        return null;
+    }
+
+    /**
      * Multi-tier collection detection delegated to MediaCollectionResolverService:
      * Tier 1: Local Master Index & Database Sibling Stem Match (<0.1ms)
      * Tier 2: Sibling Batch Co-Occurrence Detection (for flat folders e.g. Downloads/)
@@ -216,7 +321,8 @@ class PhysicalOrganizerService
         string $targetRoot,
         ?string $moviePattern = null,
         ?string $seriesPattern = null,
-        array $siblingBatchFiles = []
+        array $siblingBatchFiles = [],
+        string $titleLanguage = 'original'
     ): array {
         $moviePattern = $moviePattern ?: AppSetting::get('movie_naming_template', '{Type}/{Genre}/{Collection}/{Title} ({Year})/{Title} ({Year}) [{CleanResolution}].{ext}');
         $seriesPattern = $seriesPattern ?: AppSetting::get('series_naming_template', '{Type}/{Title} ({Year})/Season {Season:02}/{Title} - S{Season:02}E{Episode:02} - {EpisodeTitle} [{CleanResolution}].{ext}');
@@ -229,7 +335,19 @@ class PhysicalOrganizerService
         $pattern = $isSeries ? $seriesPattern : $moviePattern;
         $typeDir = $isSeries ? 'TV Shows' : 'Movies';
 
-        $cleanTitle = $this->sanitizePathSegment($parsed['clean_title'] ?? ($parsed['title'] ?? ($parsed['series_title'] ?? 'Unknown')));
+        $langPref = $file['title_language'] ?? ($file['language_preference'] ?? $titleLanguage);
+        if ($isSeries) {
+            if ($langPref === 'english' && ! empty($parsed['series_title_en'])) {
+                $cleanTitle = $this->sanitizePathSegment($parsed['series_title_en']);
+            } elseif ($langPref === 'arabic' && ! empty($parsed['series_title_ar'])) {
+                $cleanTitle = $this->sanitizePathSegment($parsed['series_title_ar']);
+            } else {
+                $cleanTitle = $this->sanitizePathSegment($parsed['clean_title'] ?? ($parsed['title'] ?? ($parsed['series_title'] ?? 'Unknown')));
+            }
+        } else {
+            $cleanTitle = $this->sanitizePathSegment($parsed['clean_title'] ?? ($parsed['title'] ?? 'Unknown'));
+        }
+
         $year = ! empty($parsed['year']) ? (string) $parsed['year'] : '';
         $seasonNum = isset($parsed['season']) ? (int) $parsed['season'] : 1;
         $episodeNum = isset($parsed['episode']) ? (int) $parsed['episode'] : null;
@@ -248,8 +366,40 @@ class PhysicalOrganizerService
             $episodeNum = 1;
         }
         $epTitle = ! empty($parsed['episode_title']) ? $this->sanitizePathSegment($parsed['episode_title']) : '';
-        if (preg_match('/^(episode|ep|part)\s*\d+$/i', $epTitle)) {
+        if (preg_match('/^(?:episode|ep|part|حلقة|ح)\s*\d*$/ui', $epTitle)) {
             $epTitle = '';
+        }
+        if (! empty($epTitle)) {
+            $seriesNamesToCheck = array_filter([
+                $cleanTitle,
+                $parsed['series_title_en'] ?? null,
+                $parsed['series_title_ar'] ?? null,
+                $parsed['clean_title'] ?? null,
+                $parsed['title'] ?? null,
+            ]);
+
+            $stripArticle = fn ($s) => preg_replace('/^(?:al|el|the)/i', '', $s);
+
+            $normEpAlnum = strtolower(preg_replace('/[^a-z0-9]/i', '', $epTitle));
+            $rootEpAlnum = $stripArticle($normEpAlnum);
+            $normEpAr = trim(preg_replace('/[^\p{Arabic}\p{N}]/u', '', $epTitle));
+
+            foreach ($seriesNamesToCheck as $sName) {
+                $normAlnum = strtolower(preg_replace('/[^a-z0-9]/i', '', (string) $sName));
+                $rootAlnum = $stripArticle($normAlnum);
+                if ($normAlnum !== '' && (
+                    preg_match('/^'.preg_quote($normAlnum, '/').'(?:ep|episode|part|e)?\d*$/i', $normEpAlnum) ||
+                    ($rootAlnum !== '' && $rootEpAlnum !== '' && ($rootEpAlnum === $rootAlnum || preg_match('/^'.preg_quote($rootAlnum, '/').'(?:ep|episode|part|e)?\d*$/i', $rootEpAlnum)))
+                )) {
+                    $epTitle = '';
+                    break;
+                }
+                $normAr = trim(preg_replace('/[^\p{Arabic}\p{N}]/u', '', (string) $sName));
+                if ($normAr !== '' && preg_match('/^'.preg_quote($normAr, '/').'(?:حلقة|ح|جزء)?\d*$/ui', $normEpAr)) {
+                    $epTitle = '';
+                    break;
+                }
+            }
         }
 
         $dbSeries = null;
@@ -258,6 +408,13 @@ class PhysicalOrganizerService
 
         if ($isSeries) {
             $dbSeries = $this->resolveCachedSeries($cleanTitle, $filePath);
+            if (! $dbSeries && ! empty($parsed['series_title_ar'])) {
+                $dbSeries = $this->resolveCachedSeries($parsed['series_title_ar'], $filePath);
+            }
+            if (! $dbSeries && ! empty($parsed['clean_title']) && $parsed['clean_title'] !== $cleanTitle) {
+                $dbSeries = $this->resolveCachedSeries($parsed['clean_title'], $filePath);
+            }
+
             // Strict Arabic Series Structure Preservation
             $normFilePath = str_replace('\\', '/', $filePath);
             $isArabicSeries = false;
@@ -267,11 +424,17 @@ class PhysicalOrganizerService
                 $seriesFolder = str_replace('\\', '/', $dbSeries->folder_path ?? '');
                 if (stripos($seriesFolder, 'Arabic Series') !== false || ($dbSeries->original_language ?? '') === 'ar' || in_array($dbSeries->origin_country ?? '', ['EG', 'SY'])) {
                     $isArabicSeries = true;
-                } elseif (preg_match('/\p{Arabic}/u', $dbSeries->title ?? '') || preg_match('/\p{Arabic}/u', $cleanTitle)) {
+                } elseif (preg_match('/\p{Arabic}/u', $dbSeries->title ?? '') || preg_match('/\p{Arabic}/u', $cleanTitle) || preg_match('/\p{Arabic}/u', $parsed['series_title_ar'] ?? '')) {
                     $isArabicSeries = true;
                 }
             } else {
-                if (preg_match('/\p{Arabic}/u', $cleanTitle) || preg_match('/\b(مسلسل|رمضان|دراما)\b/ui', $cleanTitle)) {
+                if (preg_match('/\p{Arabic}/u', $cleanTitle)
+                    || preg_match('/\p{Arabic}/u', $parsed['clean_title'] ?? '')
+                    || preg_match('/\p{Arabic}/u', $parsed['series_title_ar'] ?? '')
+                    || preg_match('/\p{Arabic}/u', $filePath)
+                    || preg_match('/\b(مسلسل|رمضان|دراما)\b/ui', $filePath)
+                    || ! empty($parsed['series_title_ar'])
+                ) {
                     $isArabicSeries = true;
                 }
             }
@@ -286,8 +449,27 @@ class PhysicalOrganizerService
                 }
 
                 $dbEp = $this->resolveCachedEpisode($dbSeries->id, $seasonNum, $episodeNum, $filePath);
-                if ($dbEp && empty($epTitle) && $dbEp->clean_episode_title) {
-                    $epTitle = $this->sanitizePathSegment($dbEp->clean_episode_title);
+                if ($dbEp && empty($epTitle)) {
+                    if ($langPref === 'arabic' && ! empty($dbEp->clean_episode_title_ar)) {
+                        $epTitle = $this->sanitizePathSegment($dbEp->clean_episode_title_ar);
+                    } elseif ($dbEp->clean_episode_title) {
+                        $epTitle = $this->sanitizePathSegment($dbEp->clean_episode_title);
+                    }
+                }
+            }
+
+            // If episode title is still empty, and fetch_episode_titles is enabled (default true):
+            if (empty($epTitle) && ($file['fetch_episode_titles'] ?? true)) {
+                $resolvedTitle = $this->resolveSeriesEpisodeTitle(
+                    $cleanTitle,
+                    $seasonNum,
+                    $episodeNum,
+                    $year,
+                    $langPref,
+                    $parsed['series_title_ar'] ?? null
+                );
+                if (! empty($resolvedTitle)) {
+                    $epTitle = $this->sanitizePathSegment($resolvedTitle);
                 }
             }
         } else {
@@ -348,21 +530,9 @@ class PhysicalOrganizerService
             }
         }
 
-        if (! empty($genresList)) {
-            $primaryGenre = ! empty($genresList[0]) ? $this->sanitizePathSegment($genresList[0]) : 'Action & Adventure';
-            $joinedGenres = ! empty($genresList) ? $this->sanitizePathSegment(implode(' & ', array_slice($genresList, 0, 2))) : $primaryGenre;
-        } elseif (! empty($collName)) {
-            // Unify franchise collections under a single consistent primary genre
-            $classifier = app(ZeroKeyGenreClassifierService::class);
-            $resolved = $classifier->resolveGenres($cleanTitle, $collName);
-            $primaryGenre = $this->sanitizePathSegment($resolved['primary']);
-            $joinedGenres = $this->sanitizePathSegment($resolved['joined']);
-        } else {
-            $classifier = app(ZeroKeyGenreClassifierService::class);
-            $resolved = $classifier->resolveGenres($cleanTitle, null);
-            $primaryGenre = $this->sanitizePathSegment($resolved['primary']);
-            $joinedGenres = $this->sanitizePathSegment($resolved['joined']);
-        }
+        $classifier = app(ZeroKeyGenreClassifierService::class);
+        $primaryGenre = $this->sanitizePathSegment($classifier->resolveDominantGenre($cleanTitle, $collName, $genresList, $parsed));
+        $joinedGenres = ! empty($genresList) ? $this->sanitizePathSegment(implode(' & ', array_slice($genresList, 0, 2))) : $primaryGenre;
         $cleanRes = $this->cleanResolutionTag($resTag);
 
         $tokens = [
@@ -499,6 +669,11 @@ class PhysicalOrganizerService
                         $lang = 'ar';
                     } elseif (preg_match('/(\.en|\benglish\b|\beng\b|_en\.)/i', $subFilenameLower)) {
                         $lang = 'en';
+                    } elseif (! empty($subPath) && File::exists($subPath)) {
+                        $det = app(SubtitleLanguageDetectorService::class)->detectLanguage($subPath, basename($subPath));
+                        if (($det['language'] ?? 'und') !== 'und') {
+                            $lang = $det['language'];
+                        }
                     }
                 }
 
@@ -644,6 +819,8 @@ class PhysicalOrganizerService
             'target_root' => $targetRoot,
             'movie_pattern' => $moviePattern,
             'series_pattern' => $seriesPattern,
+            'title_language' => $options['title_language'] ?? 'original',
+            'fetch_episode_titles' => $options['fetch_episode_titles'] ?? true,
             'pending_queue' => $files,
             'plan_items' => [],
             'logs' => [
@@ -747,14 +924,16 @@ class PhysicalOrganizerService
         $targetRoot = $state['target_root'];
         $moviePattern = $state['movie_pattern'];
         $seriesPattern = $state['series_pattern'];
+        $titleLanguage = $state['title_language'] ?? 'original';
 
         foreach ($batch as $file) {
+            $file['fetch_episode_titles'] = $state['fetch_episode_titles'] ?? true;
             $filename = $file['filename'] ?? basename($file['path'] ?? '');
             $state['current_file'] = $filename;
             $state['current_action'] = "Analyzing {$filename}...";
 
             try {
-                $item = $this->generatePlanItem($file, $targetRoot, $moviePattern, $seriesPattern);
+                $item = $this->generatePlanItem($file, $targetRoot, $moviePattern, $seriesPattern, [], $titleLanguage);
                 $state['plan_items'][] = $item;
                 $state['processed_count']++;
 

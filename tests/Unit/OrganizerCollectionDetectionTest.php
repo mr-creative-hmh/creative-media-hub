@@ -2,17 +2,21 @@
 
 namespace Tests\Unit;
 
-use Tests\TestCase;
-use App\Services\Organizer\PhysicalOrganizerService;
-use App\Services\Organizer\FilesystemScannerService;
+use App\Models\Episode;
 use App\Models\MediaItem;
+use App\Models\Season;
+use App\Models\Series;
+use App\Services\Organizer\FilesystemScannerService;
+use App\Services\Organizer\PhysicalOrganizerService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
 class OrganizerCollectionDetectionTest extends TestCase
 {
     use RefreshDatabase;
 
     protected PhysicalOrganizerService $organizerService;
+
     protected FilesystemScannerService $scannerService;
 
     protected function setUp(): void
@@ -112,7 +116,7 @@ class OrganizerCollectionDetectionTest extends TestCase
         // Verify no double slashes or empty {Collection} in path
         $this->assertStringNotContainsString('//', $destPath);
         $this->assertStringNotContainsString('{Collection}', $destPath);
-        $this->assertStringContainsString('Movies/Sci-Fi/Inception (2010)/Inception (2010) [1080p].mkv', $destPath);
+        $this->assertStringContainsString('Movies/Science Fiction/Inception (2010)/Inception (2010) [1080p].mkv', $destPath);
     }
 
     public function test_pairs_companion_subtitles(): void
@@ -151,21 +155,21 @@ class OrganizerCollectionDetectionTest extends TestCase
         $this->assertCount(2, $planItem['subtitles']);
         $sub1Dest = str_replace('\\', '/', $planItem['subtitles'][0]['destination']);
         $this->assertStringEndsWith('.ar.srt', $sub1Dest);
-        $this->assertStringContainsString('Movies/Sci-Fi/Interstellar (2014)', $sub1Dest);
+        $this->assertStringContainsString('Movies/Science Fiction/Interstellar (2014)', $sub1Dest);
     }
 
     public function test_tv_show_year_formats_correctly_with_range_or_single_year_or_omitted(): void
     {
-        $series1 = \App\Models\Series::create([
+        $series1 = Series::create([
             'title' => 'Test Show A',
             'release_year' => 2004,
             'end_year' => 2006,
         ]);
-        $season1 = \App\Models\Season::create([
+        $season1 = Season::create([
             'series_id' => $series1->id,
             'season_number' => 1,
         ]);
-        \App\Models\Episode::create([
+        Episode::create([
             'series_id' => $series1->id,
             'season_id' => $season1->id,
             'episode_number' => 1,
@@ -174,15 +178,15 @@ class OrganizerCollectionDetectionTest extends TestCase
             'file_path' => 'D:/Media/Test Show A/Season 01/Test.Show.A.S01E01.avi',
         ]);
 
-        $series2 = \App\Models\Series::create([
+        $series2 = Series::create([
             'title' => 'Test Show B',
             'release_year' => 2022,
         ]);
-        $season2 = \App\Models\Season::create([
+        $season2 = Season::create([
             'series_id' => $series2->id,
             'season_number' => 1,
         ]);
-        \App\Models\Episode::create([
+        Episode::create([
             'series_id' => $series2->id,
             'season_id' => $season2->id,
             'episode_number' => 1,

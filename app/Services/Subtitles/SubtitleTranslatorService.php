@@ -379,6 +379,23 @@ class SubtitleTranslatorService
         $baseName = $media->file_path ? pathinfo($media->file_path, PATHINFO_FILENAME) : "media_{$media->id}";
         $arabicPath = "{$destDir}/{$baseName}.ar.srt";
 
+        // Clean up numbered duplicate Arabic files on disk (e.g. *.ar (1).srt, *.ar (2).srt)
+        $pattern = "{$destDir}/{$baseName}*ar*.srt";
+        foreach (glob($pattern) ?: [] as $existingFile) {
+            $norm = str_replace('\\', '/', $existingFile);
+            if ($norm !== str_replace('\\', '/', $arabicPath)) {
+                @File::delete($existingFile);
+            }
+        }
+
+        // Clean up duplicate non-embedded Arabic records in DB
+        Subtitle::where('subtitlable_id', $media->id)
+            ->where('subtitlable_type', get_class($media))
+            ->where('language', 'ar')
+            ->where('is_embedded', false)
+            ->where('file_path', '!=', $arabicPath)
+            ->delete();
+
         File::put($arabicPath, $arabicContent);
 
         // 7. Store / Update Subtitle in database

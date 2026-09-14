@@ -103,6 +103,7 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 
 ### 5. 🍿 Movie Boxsets & Franchise Sagas (Strict `owned >= 2`)
 - **Strict Franchise Verification**: Eliminates solitary 1-movie false positives from `/collections` by enforcing a strict `owned >= 2` rule.
+- **Real-Time Dynamic Collection Cache Invalidation**: Automatic event-driven cache invalidation (`CollectionController::clearCache()`) triggered on every media acquisition and library scan. When a sequel is added (e.g., advancing from 1 film to 2+), the franchise is immediately promoted and synchronized across `/collections` and Franchise Management with zero stale cache delay.
 - **Real-Time Saga Completion & Media Scout Integration**: Displays true completion percentages, release spans, and "In Progress" badges calculated against complete TMDb franchise parts.
 - **Missing Film Identification**: Pinpoints missing franchise installments with 1-click search and acquisition triggers.
 - **CLI Collection Auditor**: Built-in `php artisan library:audit-collections {--fix} {--align-physical}` command to detect unlinked franchise movies, fix database collection associations, and physically align folder structures.
@@ -170,7 +171,8 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 ### 15. 🏛️ Consolidated Master Schema & Zero-Demo Seeders
 - **Consolidated 2-Migration Architecture**: All legacy migration fragments merged into two canonical definitions:
   - `0001_01_01_000000_create_system_tables.php` (sessions, cache, queue jobs).
-  - `2026_09_01_000000_create_media_hub_tables.php` (clean consolidated schema for media items, series, seasons, episodes, genres, credits, subtitles, watch history, downloads, and app settings).
+  - `2026_09_01_000000_create_media_hub_tables.php` (clean consolidated master schema for media items, series, seasons, episodes, genres, credits, subtitles, watch history, download items with workflow states & diagnostics telemetry, and app settings).
+- **Single-Pass Master Migration Guarantee**: Consolidates all lifecycle workflow columns (`workflow_stage`, `organize_status`, `organized_path`, `indexed_id`, `error_details`) and network performance metrics (`num_seeders`, `connections`, `upload_speed_bytes_sec`) into the authoritative master migration, eliminating migration drift and fragmentation.
 - **Pure Local-First Cinema (Zero Auth Overhead)**: Unnecessary user accounts, password authentication, and session barriers removed for a streamlined home theatre appliance experience.
 - **Production-Only Clean Seeder**: `MediaLibrarySeeder` seeds pure essential system defaults (15 official TMDb genres with Arabic/English names and core application settings) with zero mock movies, fake series, or dummy subtitle records.
 
@@ -209,7 +211,11 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 ### 20. 📡 Media Scout & Smart Library Acquisition
 - **Real-Time Gap Tracking (`LibraryGapService`)**: Automatically audits movie sagas and TV series seasons against official TMDb parts, calculating exact missing counts and saga completion percentages.
 - **Automated Season Torrent Acquisition (`LibraryAcquisitionService`)**: Automatically searches, scrapes, filters, and triggers batch downloads for missing episodes or seasons.
-- **Post-Download Processing Pipeline**: Recursively flattens downloaded archives, standardizes video files to canonical naming conventions (`Show - S01E01 - Title [1080p].ext`), relocates companion subtitle files (`.ar.srt`, `.en.srt`), and cleans up empty download folders.
+- **Deep Companion Subtitle Extraction & Lexical Content Classification**:
+  - Traverses incoming torrent directory trees including subfolders (`Subs/`, `Subtitles/`, `Sub/`).
+  - Leverages `SubtitleLanguageDetectorService` to analyze actual dialogue text via Unicode Arabic script blocks (`\p{Arabic}`) vs Latin stop-words, reliably classifying generic subtitle filenames (e.g. `track1.srt`, `Movie.srt`) into `.ar.srt` or `.en.srt` without blind guessing or overwrites.
+  - Converts ASS/SSA format subtitles into clean SRT, eliminates collision clutter (`(1).srt`), preserves multi-language tracks, and removes empty leftover subtitle folders.
+- **Post-Download Processing Pipeline**: Recursively flattens downloaded archives, standardizes video files to canonical naming conventions (`Show - S01E01 - Title [1080p].ext`), relocates companion subtitles, triggers automatic collection cache invalidation, and cleans up empty download folders.
 
 ### 21. 🎞️ Multi-Episode Scene Parsing & Database Multiplication
 - **Canonical Multi-Episode Scene Formats**: Fully parses combined episode naming schemes (`S01E01-E02`, `S01E01E02`, `S01E01-02`, `S01E01.E02`) without misidentifying resolution tags (such as `.1080p`) as episode numbers.
@@ -270,6 +276,7 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 ### 28. 🎬 Collection Management Studio & Franchise Sync
 - **Interactive Management Studio (`CollectionManagementModal.vue`, `CollectionManagementController.php`)**: Dedicated modal for reviewing, searching, creating, and reassigning movies across franchise collections with real-time UI updates.
 - **Automated Metadata Waterfall Linkage (`MediaCollectionResolverService.php`)**: Automatically synchronizes movie collections with TMDb franchise parts and Wikipedia fallback indexing (`php artisan sync:movie-collections`, `php artisan backfill:movie-collections`).
+- **Synchronous Cache Invalidation Across Operations**: Any collection mutation—whether via manual studio reassignment, automated acquisition, or library scanner indexing—instantly flushes cached views (`CollectionController::clearCache()`), ensuring that the `/collections` catalog and Franchise Management stay 100% in sync without waiting for cache TTL expiration.
 - **Normalized Multilingual Genre Navigation**: Standardized genre extraction and filtering across `Collections/Index.vue` with seamless Arabic/English (`name_en`, `name_ar`, `slug`) fallbacks.
 
 ---

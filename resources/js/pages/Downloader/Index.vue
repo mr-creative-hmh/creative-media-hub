@@ -13,7 +13,8 @@ import {
     Info, HardDrive, ShieldCheck, Film, Tv, Radio, Clock,
     RotateCcw, AlertTriangle, ExternalLink, Settings, Check,
     Folder, FolderOpen, FolderTree, ListFilter, Magnet, Zap,
-    FileText, File, FileUp, CheckSquare, MinusSquare, Square
+    FileText, File, FileUp, CheckSquare, MinusSquare, Square,
+    ChevronDown, ChevronUp, Copy, Eye, Layers, Activity, PlayCircle, FolderCheck
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -50,8 +51,10 @@ const {
     saveSettings,
     addDownload,
     pauseDownload,
+    stopDownload,
     resumeDownload,
     retryDownload,
+    organizeDownload,
     deleteDownload,
     daemonStatus,
     fetchDaemonStatus,
@@ -118,6 +121,191 @@ const effectiveFolder = computed(() => {
     }
     return defaultTargetFolder.value;
 });
+
+// Expandable Details State & Diagnostics Actions
+const expandedDetails = ref<Record<number, boolean>>({});
+const copiedHash = ref<string | null>(null);
+
+function toggleDetails(id: number) {
+    expandedDetails.value[id] = !expandedDetails.value[id];
+}
+
+async function copyInfoHash(hash: string) {
+    try {
+        await navigator.clipboard.writeText(hash);
+        copiedHash.value = hash;
+        setTimeout(() => {
+            if (copiedHash.value === hash) copiedHash.value = null;
+        }, 2500);
+        toast.success(isRTL.value ? 'تم نسخ InfoHash بنجاح' : 'InfoHash copied to clipboard');
+    } catch {
+        // fallback
+    }
+}
+
+const STAGES = ['downloading', 'verifying', 'organizing', 'scanning', 'ready'] as const;
+
+function getStageIndex(stage?: string | null): number {
+    if (!stage) return 0;
+    const idx = STAGES.indexOf(stage as any);
+    return idx >= 0 ? idx : 0;
+}
+
+function getStageState(item: DownloadItem, stage: typeof STAGES[number]): 'completed' | 'active' | 'pending' | 'failed' {
+    if (item.status === 'failed') {
+        return item.workflow_stage === stage ? 'failed' : (getStageIndex(item.workflow_stage) > getStageIndex(stage) ? 'completed' : 'pending');
+    }
+
+    if (item.workflow_stage === 'ready' || (item.status === 'completed' && !item.workflow_stage)) {
+        return 'completed';
+    }
+
+    const currentIdx = getStageIndex(item.workflow_stage || 'downloading');
+    const stageIdx = getStageIndex(stage);
+
+    if (stageIdx < currentIdx) return 'completed';
+    if (stageIdx === currentIdx) return (item.status === 'downloading' || item.status === 'completed') ? 'active' : 'pending';
+    return 'pending';
+}
+
+function getItemWatchUrl(item: DownloadItem): string | null {
+    if (!item.indexed_id) return null;
+    return item.media_type === 'series' ? `/series/${item.indexed_id}` : `/movies/${item.indexed_id}`;
+}
+
+const organizingIds = ref<Record<number, boolean>>({});
+
+const handleOrganize = async (item: DownloadItem) => {
+    organizingIds.value[item.id] = true;
+    try {
+        const res = await organizeDownload(item.id);
+        if (res && (res.success || res.workflow_stage === 'ready' || res.organize_status === 'completed')) {
+            toast.success(isRTL.value ? 'تم تنظيم وفهرسة الملف في المكتبة بنجاح!' : 'Successfully organized and indexed into library!');
+        } else {
+            toast.error(res?.error || (isRTL.value ? 'تعذر تنظيم الملف' : 'Could not organize media'));
+        }
+    } catch (e: any) {
+        toast.error(e.message || 'Organize error');
+    } finally {
+        organizingIds.value[item.id] = false;
+        await fetchDownloads();
+    }
+};
+
+const handleStop = async (item: DownloadItem) => {
+    await stopDownload(item.id);
+    await fetchDownloads();
+    toast.info(isRTL.value ? 'تم إيقاف التنزيل' : 'Download stopped');
+};
+
+const getItemFiles = (item: DownloadItem) => {
+    const tf = item.torrent_files;
+    let rawFiles: any[] = [];
+    if (tf && Array.isArray(tf.detailed_files) && tf.detailed_files.length > 0) {
+        rawFiles = tf.detailed_files;
+    } else if (tf && Array.isArray(tf.files) && tf.files.length > 0) {
+        rawFiles = tf.files;
+    } else if (Array.isArray(tf) && tf.length > 0) {
+        rawFiles = tf;
+    }
+
+    if (rawFiles.length === 0) {
+        const total = item.total_bytes || 0;
+        const downloaded = item.status === 'completed' ? total : (item.downloaded_bytes || 0);
+        const pct = item.status === 'completed' ? 100 : (total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : 0);
+        const fileName = item.destination_path ? item.destination_path.split(/[\\/]/).pop() : (item.title || 'Media File');
+
+        return [{
+            index: 1,
+            path: fileName || 'Media File',
+            name: fileName || 'Media File',
+            length: total,
+            completedLength: downloaded,
+            percent: pct,
+            selected: true,
+        }];
+    }
+
+    return rawFiles.map((f: any, idx: number) => {
+        const length = Number(f.length ?? f.size ?? 0);
+        let completedLength = Number(f.completedLength ?? f.completed_length ?? 0);
+        if (item.status === 'completed' && completedLength === 0 && length > 0) {
+            completedLength = length;
+        }
+        let percent = f.percent ?? f.progress_percent;
+        if (percent === undefined || percent === null) {
+            percent = length > 0 ? Math.min(100, Math.round((completedLength / length) * 100)) : (item.status === 'completed' ? 100 : 0);
+        }
+        const filePath = f.path || f.name || f.filename || `File ${idx + 1}`;
+        const fileName = f.name || f.filename || filePath.split(/[\\/]/).pop() || `File ${idx + 1}`;
+
+        return {
+            index: f.index ?? (idx + 1),
+            path: filePath,
+            name: fileName,
+            length,
+            completedLength,
+            percent: Math.min(100, Math.max(0, Number(percent) || 0)),
+            selected: f.selected !== false,
+        };
+    });
+};
+
+const getItemLogs = (item: DownloadItem) => {
+    const tfLogs = item.torrent_files?.logs;
+    if (Array.isArray(tfLogs) && tfLogs.length > 0) {
+        return tfLogs;
+    }
+    const synthetic: any[] = [];
+    if (item.created_at) {
+        synthetic.push({
+            time: new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            stage: 'download',
+            message: 'Task created and queued for downloading.',
+            level: 'info',
+        });
+    }
+    if (item.downloaded_bytes > 0) {
+        synthetic.push({
+            time: item.updated_at ? new Date(item.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--',
+            stage: 'download',
+            message: item.status === 'completed' ? `Download payload finished (${formatBytes(item.total_bytes || item.downloaded_bytes)}).` : `Downloading (${formatBytes(item.downloaded_bytes)} / ${formatBytes(item.total_bytes)}).`,
+            level: item.status === 'completed' ? 'success' : 'info',
+        });
+    }
+    if (item.organized_path) {
+        synthetic.push({
+            time: '--:--',
+            stage: 'organize',
+            message: `Organized and moved to: ${item.organized_path}`,
+            level: 'success',
+        });
+    }
+    if (item.indexed_id) {
+        synthetic.push({
+            time: '--:--',
+            stage: 'scan',
+            message: `Scanned & indexed into Virtual Library (MediaItem #${item.indexed_id}).`,
+            level: 'success',
+        });
+    }
+    if (item.workflow_stage === 'ready') {
+        synthetic.push({
+            time: '--:--',
+            stage: 'ready',
+            message: 'Media item is ready to stream!',
+            level: 'success',
+        });
+    } else if (item.error_details) {
+        synthetic.push({
+            time: '--:--',
+            stage: 'error',
+            message: item.error_details,
+            level: 'error',
+        });
+    }
+    return synthetic;
+};
 
 // Auto or Manual URL Inspect
 const handleInspectUrl = async () => {
@@ -427,101 +615,366 @@ const handleSaveSettings = async () => {
             </p>
         </div>
 
-        <div v-else class="space-y-3">
+        <div v-else class="space-y-4">
             <div
                 v-for="item in filteredItems"
                 :key="item.id"
-                class="glass-panel rounded-2xl p-4 border border-white/10 hover:border-cyan-500/40 transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group bg-white/[0.02]"
+                class="glass-panel rounded-2xl p-5 border border-white/10 hover:border-cyan-500/40 transition-all space-y-4 group bg-white/[0.02] relative overflow-hidden"
             >
-                <div class="flex items-center gap-3.5 flex-1 min-w-0">
-                    <div
-                        class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border"
-                        :class="item.media_type === 'series' ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'"
-                    >
-                        <Magnet v-if="item.download_type === 'torrent'" class="w-5 h-5 text-purple-400" />
-                        <Tv v-else-if="item.media_type === 'series'" class="w-5 h-5" />
-                        <Film v-else class="w-5 h-5" />
-                    </div>
-
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-2 mb-1 flex-wrap">
-                            <h4 class="font-extrabold text-sm text-white truncate max-w-md" :title="item.title">
-                                {{ item.title }}
-                            </h4>
-                            <span
-                                class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider"
-                                :class="{
-                                    'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30': item.status === 'downloading',
-                                    'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30': item.status === 'completed',
-                                    'bg-amber-500/20 text-amber-300 border border-amber-500/30': item.status === 'paused',
-                                    'bg-blue-500/20 text-blue-300 border border-blue-500/30': item.status === 'queued',
-                                    'bg-rose-500/20 text-rose-300 border border-rose-500/30': item.status === 'failed',
-                                }"
-                            >
-                                {{ item.status }}
-                            </span>
-                            <span v-if="item.download_type === 'torrent'" class="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px] font-mono font-bold">
-                                🧲 Torrent
-                            </span>
+                <!-- Top Row: Icon, Title, Status Badges & Action Buttons -->
+                <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div class="flex items-center gap-3.5 flex-1 min-w-0">
+                        <div
+                            class="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border shadow-inner"
+                            :class="item.media_type === 'series' ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'"
+                        >
+                            <Magnet v-if="item.download_type === 'torrent'" class="w-5 h-5 text-purple-400" />
+                            <Tv v-else-if="item.media_type === 'series'" class="w-5 h-5" />
+                            <Film v-else class="w-5 h-5" />
                         </div>
 
-                        <!-- Progress Bar & Specs -->
-                        <div class="space-y-1.5 max-w-xl">
-                            <div class="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
-                                <div
-                                    class="h-full rounded-full transition-all duration-300"
-                                    :class="item.status === 'completed' ? 'bg-emerald-400' : 'bg-gradient-to-r from-cyan-400 to-blue-500'"
-                                    :style="{ width: `${getProgressPercent(item)}%` }"
-                                ></div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 mb-1 flex-wrap">
+                                <h4 class="font-extrabold text-sm sm:text-base text-white truncate max-w-lg" :title="item.title">
+                                    {{ item.title }}
+                                </h4>
+                                <span
+                                    class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider"
+                                    :class="{
+                                        'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30': item.status === 'downloading',
+                                        'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30': item.status === 'completed',
+                                        'bg-amber-500/20 text-amber-300 border border-amber-500/30': item.status === 'paused',
+                                        'bg-blue-500/20 text-blue-300 border border-blue-500/30': item.status === 'queued',
+                                        'bg-rose-500/20 text-rose-300 border border-rose-500/30': item.status === 'failed',
+                                    }"
+                                >
+                                    {{ item.status }}
+                                </span>
+                                <span v-if="item.download_type === 'torrent'" class="px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-mono font-bold">
+                                    🧲 Torrent
+                                </span>
+
+                                <!-- Live Seeder / Peer Pills -->
+                                <span v-if="item.download_type === 'torrent' && (item.status === 'downloading' || item.status === 'paused')"
+                                    class="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold flex items-center gap-1 border"
+                                    :class="(item.num_seeders || 0) > 0 ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'"
+                                >
+                                    <span class="w-1.5 h-1.5 rounded-full" :class="(item.num_seeders || 0) > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'"></span>
+                                    <span>{{ item.num_seeders || 0 }} {{ isRTL ? 'موزع (Seeds)' : 'seeds' }}</span>
+                                </span>
+
+                                <span v-if="item.download_type === 'torrent' && (item.status === 'downloading' || item.status === 'paused')"
+                                    class="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold flex items-center gap-1 border"
+                                    :class="(item.connections || 0) > 0 ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'"
+                                >
+                                    <span class="w-1.5 h-1.5 rounded-full" :class="(item.connections || 0) > 0 ? 'bg-cyan-400' : 'bg-slate-500'"></span>
+                                    <span>{{ item.connections || 0 }} {{ isRTL ? 'متصل (Peers)' : 'peers' }}</span>
+                                </span>
                             </div>
 
-                            <div class="flex items-center gap-3 text-[11px] text-slate-400 font-mono">
-                                <span>{{ formatBytes(item.downloaded_bytes) }} / {{ formatBytes(item.total_bytes) }} ({{ getProgressPercent(item) }}%)</span>
-                                <span>•</span>
-                                <span v-if="item.status === 'downloading'" class="text-cyan-300">⚡ {{ (item.speed_bytes_sec / (1024 * 1024)).toFixed(1) }} MB/s</span>
-                                <span v-if="item.status === 'downloading'">ETA: {{ getETA(item) }}</span>
-                                <span v-if="item.destination_folder || item.destination_path" class="text-slate-500 text-[10px] truncate max-w-xs" :title="item.destination_folder || item.destination_path">
-                                    📁 {{ item.destination_folder || item.destination_path }}
+                            <!-- Progress Bar & Specs -->
+                            <div class="space-y-1.5 max-w-2xl">
+                                <div class="w-full h-2 rounded-full bg-white/10 overflow-hidden shadow-inner">
+                                    <div
+                                        class="h-full rounded-full transition-all duration-300 relative"
+                                        :class="item.status === 'completed' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500'"
+                                        :style="{ width: `${getProgressPercent(item)}%` }"
+                                    ></div>
+                                </div>
+
+                                <div class="flex items-center gap-3 text-[11px] text-slate-400 font-mono flex-wrap">
+                                    <span>{{ formatBytes(item.status === 'completed' ? (item.downloaded_bytes || item.total_bytes) : item.downloaded_bytes) }} / {{ formatBytes(item.total_bytes) }} ({{ getProgressPercent(item) }}%)</span>
+                                    <span>•</span>
+                                    <span v-if="item.status === 'downloading'" class="text-cyan-300 font-bold">
+                                        ⚡ ⬇ {{ (item.speed_bytes_sec / (1024 * 1024)).toFixed(1) }} MB/s
+                                    </span>
+                                    <span v-if="item.status === 'downloading' && (item.upload_speed_bytes_sec || 0) > 0" class="text-indigo-300">
+                                        ⬆ {{ ((item.upload_speed_bytes_sec || 0) / (1024 * 1024)).toFixed(1) }} MB/s
+                                    </span>
+                                    <span v-if="item.status === 'downloading'" class="text-slate-300">ETA: {{ getETA(item) }}</span>
+                                    <span v-if="item.destination_folder || item.destination_path" class="text-slate-500 text-[10px] truncate max-w-xs" :title="item.destination_folder || item.destination_path">
+                                        📁 {{ item.destination_folder || item.destination_path }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons & Drawer Toggle -->
+                    <div class="flex items-center gap-2 shrink-0 self-end md:self-center">
+                        <Link
+                            v-if="(item.workflow_stage === 'ready' || item.status === 'completed') && getItemWatchUrl(item)"
+                            :href="getItemWatchUrl(item)!"
+                            class="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                            <PlayCircle class="w-4 h-4" />
+                            <span>{{ isRTL ? 'شاهد الآن' : 'Watch Now' }}</span>
+                        </Link>
+
+                        <button
+                            v-if="(item.status === 'completed' || item.workflow_stage === 'failed' || (!item.organized_path && item.downloaded_bytes > 0)) && !getItemWatchUrl(item)"
+                            @click="handleOrganize(item)"
+                            :disabled="organizingIds[item.id]"
+                            class="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                            :title="isRTL ? 'تنظيم وفهرسة في المكتبة الآن' : 'Organize and Scan into Library Now'"
+                        >
+                            <FolderCheck class="w-4 h-4" :class="{ 'animate-spin': organizingIds[item.id] }" />
+                            <span>{{ organizingIds[item.id] ? (isRTL ? 'جاري التنظيم...' : 'Organizing...') : (isRTL ? 'تنظيم وفهرسة' : 'Organize & Scan') }}</span>
+                        </button>
+
+                        <button
+                            v-if="item.status === 'downloading'"
+                            @click="pauseDownload(item.id)"
+                            class="p-2 rounded-xl bg-white/5 hover:bg-amber-500/20 border border-white/10 hover:border-amber-500/40 text-slate-300 hover:text-amber-300 transition-all cursor-pointer"
+                            title="Pause"
+                        >
+                            <Pause class="w-4 h-4" />
+                        </button>
+
+                        <button
+                            v-if="item.status === 'downloading' || item.status === 'paused'"
+                            @click="handleStop(item)"
+                            class="p-2 rounded-xl bg-white/5 hover:bg-rose-500/20 border border-white/10 hover:border-rose-500/40 text-slate-300 hover:text-rose-300 transition-all cursor-pointer"
+                            title="Stop"
+                        >
+                            <Square class="w-4 h-4" />
+                        </button>
+
+                        <button
+                            v-if="item.status === 'paused'"
+                            @click="resumeDownload(item.id)"
+                            class="p-2 rounded-xl bg-white/5 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-500/40 text-slate-300 hover:text-cyan-300 transition-all cursor-pointer"
+                            title="Resume"
+                        >
+                            <Play class="w-4 h-4" />
+                        </button>
+
+                        <button
+                            v-if="item.status === 'failed'"
+                            @click="retryDownload(item.id)"
+                            class="p-2 rounded-xl bg-white/5 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-500/40 text-slate-300 hover:text-cyan-300 transition-all cursor-pointer"
+                            title="Retry"
+                        >
+                            <RotateCcw class="w-4 h-4" />
+                        </button>
+
+                        <!-- Details Drawer Toggle -->
+                        <button
+                            @click="toggleDetails(item.id)"
+                            class="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
+                            :title="isRTL ? 'عرض تفاصيل التورنت والملفات' : 'Toggle Torrent Details & Files'"
+                        >
+                            <Layers class="w-3.5 h-3.5 text-cyan-400" />
+                            <span class="hidden sm:inline">{{ isRTL ? 'التفاصيل' : 'Details' }}</span>
+                            <ChevronDown v-if="!expandedDetails[item.id]" class="w-3.5 h-3.5 text-slate-400" />
+                            <ChevronUp v-else class="w-3.5 h-3.5 text-cyan-400" />
+                        </button>
+
+                        <button
+                            @click="deleteDownload(item.id)"
+                            class="p-2 rounded-xl bg-white/5 hover:bg-rose-500/20 border border-white/10 hover:border-rose-500/40 text-slate-400 hover:text-rose-400 transition-all cursor-pointer"
+                            title="Delete"
+                        >
+                            <Trash2 class="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 5-Stage Post-Download Workflow Stepper -->
+                <div class="pt-2 border-t border-white/5">
+                    <div class="flex items-center justify-between gap-1 sm:gap-2 overflow-x-auto py-1">
+                        <div
+                            v-for="(stageKey, idx) in STAGES"
+                            :key="stageKey"
+                            class="flex items-center gap-1.5 flex-1 min-w-[90px] sm:min-w-[110px]"
+                        >
+                            <div class="flex items-center gap-1.5 flex-1">
+                                <!-- Stage Badge -->
+                                <div
+                                    class="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold font-mono transition-all"
+                                    :class="{
+                                        'bg-emerald-500 text-slate-950 ring-2 ring-emerald-500/30': getStageState(item, stageKey) === 'completed',
+                                        'bg-cyan-500 text-slate-950 animate-pulse ring-2 ring-cyan-500/40': getStageState(item, stageKey) === 'active',
+                                        'bg-slate-800 text-slate-500 border border-slate-700': getStageState(item, stageKey) === 'pending',
+                                        'bg-rose-500 text-white': getStageState(item, stageKey) === 'failed',
+                                    }"
+                                >
+                                    <Check v-if="getStageState(item, stageKey) === 'completed'" class="w-3.5 h-3.5 stroke-[3]" />
+                                    <span v-else>{{ idx + 1 }}</span>
+                                </div>
+
+                                <div class="min-w-0 flex-1">
+                                    <span
+                                        class="text-[11px] font-bold block truncate capitalize"
+                                        :class="{
+                                            'text-emerald-300': getStageState(item, stageKey) === 'completed',
+                                            'text-cyan-300 font-black': getStageState(item, stageKey) === 'active',
+                                            'text-slate-500': getStageState(item, stageKey) === 'pending',
+                                            'text-rose-400': getStageState(item, stageKey) === 'failed',
+                                        }"
+                                    >
+                                        {{ stageKey }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Connector Line (except for last step) -->
+                            <div
+                                v-if="idx < STAGES.length - 1"
+                                class="h-0.5 w-3 sm:w-6 shrink-0 transition-all rounded-full"
+                                :class="getStageState(item, STAGES[idx + 1]) === 'completed' || getStageState(item, STAGES[idx]) === 'completed' ? 'bg-emerald-500/50' : 'bg-slate-800'"
+                            ></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stalled / Error Warning Banner -->
+                <div
+                    v-if="item.error_details && item.error_details.includes('Stalled')"
+                    class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-3 flex-wrap"
+                >
+                    <div class="flex items-center gap-2">
+                        <AlertTriangle class="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>{{ item.error_details }}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button
+                            @click="retryDownload(item.id)"
+                            class="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 text-[11px] font-bold transition-all cursor-pointer"
+                        >
+                            {{ isRTL ? 'إعادة الفحص والاتصال' : 'Force Re-check' }}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Expandable Torrent Details Drawer -->
+                <transition name="fade">
+                    <div
+                        v-if="expandedDetails[item.id]"
+                        class="p-4 rounded-xl glass-panel border border-cyan-500/20 bg-slate-950/60 space-y-4 text-xs font-mono"
+                    >
+                        <!-- Metadata Grid -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div v-if="item.info_hash" class="p-2.5 rounded-lg bg-white/5 border border-white/10">
+                                <span class="text-[10px] text-slate-400 block uppercase font-sans font-bold mb-1">InfoHash</span>
+                                <div class="flex items-center justify-between gap-1">
+                                    <span class="truncate text-slate-300 text-[11px]" :title="item.info_hash">{{ item.info_hash }}</span>
+                                    <button
+                                        @click="copyInfoHash(item.info_hash)"
+                                        class="p-1 rounded bg-white/10 hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-300 shrink-0 cursor-pointer"
+                                        :title="isRTL ? 'نسخ Hash' : 'Copy Hash'"
+                                    >
+                                        <Check v-if="copiedHash === item.info_hash" class="w-3.5 h-3.5 text-emerald-400" />
+                                        <Copy v-else class="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div v-if="item.aria2_gid" class="p-2.5 rounded-lg bg-white/5 border border-white/10">
+                                <span class="text-[10px] text-slate-400 block uppercase font-sans font-bold mb-1">Aria2 GID</span>
+                                <span class="text-cyan-300 text-[11px]">{{ item.aria2_gid }}</span>
+                            </div>
+
+                            <div v-if="item.torrent_files?.piece_length" class="p-2.5 rounded-lg bg-white/5 border border-white/10">
+                                <span class="text-[10px] text-slate-400 block uppercase font-sans font-bold mb-1">{{ isRTL ? 'حجم القطع (Pieces)' : 'Piece Size' }}</span>
+                                <span class="text-slate-300 text-[11px]">
+                                    {{ formatBytes(item.torrent_files.piece_length) }} • {{ item.torrent_files.num_pieces || 0 }} {{ isRTL ? 'قطعة' : 'pieces' }}
+                                </span>
+                            </div>
+
+                            <div v-if="item.organized_path" class="p-2.5 rounded-lg bg-white/5 border border-white/10">
+                                <span class="text-[10px] text-slate-400 block uppercase font-sans font-bold mb-1">{{ isRTL ? 'المسار المنظم النهائي' : 'Organized Library Path' }}</span>
+                                <span class="text-emerald-300 text-[11px] truncate block" :title="item.organized_path">
+                                    {{ item.organized_path }}
                                 </span>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                <!-- Action Buttons -->
-                <div class="flex items-center gap-2 shrink-0 self-end md:self-center">
-                    <button
-                        v-if="item.status === 'downloading'"
-                        @click="pauseDownload(item.id)"
-                        class="p-2 rounded-xl bg-white/5 hover:bg-amber-500/20 border border-white/10 hover:border-amber-500/40 text-slate-300 hover:text-amber-300 transition-all cursor-pointer"
-                        title="Pause"
-                    >
-                        <Pause class="w-4 h-4" />
-                    </button>
-                    <button
-                        v-if="item.status === 'paused'"
-                        @click="resumeDownload(item.id)"
-                        class="p-2 rounded-xl bg-white/5 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-500/40 text-slate-300 hover:text-cyan-300 transition-all cursor-pointer"
-                        title="Resume"
-                    >
-                        <Play class="w-4 h-4" />
-                    </button>
-                    <button
-                        v-if="item.status === 'failed'"
-                        @click="retryDownload(item.id)"
-                        class="p-2 rounded-xl bg-white/5 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-500/40 text-slate-300 hover:text-cyan-300 transition-all cursor-pointer"
-                        title="Retry"
-                    >
-                        <RotateCcw class="w-4 h-4" />
-                    </button>
-                    <button
-                        @click="deleteDownload(item.id)"
-                        class="p-2 rounded-xl bg-white/5 hover:bg-rose-500/20 border border-white/10 hover:border-rose-500/40 text-slate-400 hover:text-rose-400 transition-all cursor-pointer"
-                        title="Delete"
-                    >
-                        <Trash2 class="w-4 h-4" />
-                    </button>
-                </div>
+                        <!-- Per-File Breakdown List -->
+                        <div v-if="getItemFiles(item).length > 0" class="space-y-2">
+                            <span class="text-[11px] font-sans font-bold text-slate-300 flex items-center gap-1.5">
+                                <FileText class="w-3.5 h-3.5 text-cyan-400" />
+                                <span>{{ isRTL ? 'ملفات التنزيل ونسب الإنجاز' : 'Download Payload Files Progress' }} ({{ getItemFiles(item).length }})</span>
+                            </span>
+
+                            <div class="max-h-56 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
+                                <div
+                                    v-for="file in getItemFiles(item)"
+                                    :key="file.index"
+                                    class="p-2 rounded-lg bg-white/[0.03] border border-white/5 flex items-center justify-between gap-3 text-[11px]"
+                                >
+                                    <div class="min-w-0 flex-1">
+                                        <span class="text-slate-300 truncate block font-mono" :title="file.path">{{ file.name || file.path }}</span>
+                                        <div class="flex items-center gap-2 mt-1">
+                                            <div class="w-28 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                                                <div
+                                                    class="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full transition-all duration-300"
+                                                    :style="{ width: `${file.percent}%` }"
+                                                ></div>
+                                            </div>
+                                            <span class="text-[10px] text-cyan-400 font-mono font-bold">{{ file.percent }}%</span>
+                                        </div>
+                                    </div>
+                                    <div class="text-right shrink-0 font-mono">
+                                        <span class="text-slate-300 font-semibold">{{ formatBytes(file.completedLength) }}</span>
+                                        <span class="text-slate-500"> / </span>
+                                        <span class="text-slate-400">{{ formatBytes(file.length) }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Ongoing Pipeline Operations & Event Log -->
+                        <div class="space-y-2 pt-3 border-t border-white/5">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[11px] font-sans font-bold text-slate-300 flex items-center gap-1.5">
+                                    <Activity class="w-3.5 h-3.5 text-emerald-400" />
+                                    <span>{{ isRTL ? 'سجل العمليات والمراحل النشطة' : 'Ongoing Pipeline Operations Log' }}</span>
+                                </span>
+                                <span v-if="getItemLogs(item).length > 0" class="text-[10px] text-slate-500 font-mono">
+                                    {{ getItemLogs(item).length }} {{ isRTL ? 'حدث' : 'events' }}
+                                </span>
+                            </div>
+
+                            <div v-if="getItemLogs(item).length > 0" class="max-h-40 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar bg-black/40 rounded-xl p-3 border border-white/5 font-mono text-[11px]">
+                                <div
+                                    v-for="(log, lIdx) in getItemLogs(item)"
+                                    :key="lIdx"
+                                    class="flex items-start gap-2 py-0.5 leading-relaxed"
+                                >
+                                    <span class="text-slate-500 shrink-0 text-[10px] mt-0.5">{{ log.time }}</span>
+                                    <span
+                                        class="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase shrink-0"
+                                        :class="{
+                                            'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30': log.stage === 'download',
+                                            'bg-purple-500/20 text-purple-300 border border-purple-500/30': log.stage === 'verify',
+                                            'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30': log.stage === 'organize',
+                                            'bg-amber-500/20 text-amber-300 border border-amber-500/30': log.stage === 'scan',
+                                            'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30': log.stage === 'ready',
+                                            'bg-rose-500/20 text-rose-300 border border-rose-500/30': log.stage === 'error',
+                                        }"
+                                    >
+                                        {{ log.stage }}
+                                    </span>
+                                    <span
+                                        class="min-w-0 flex-1 break-words"
+                                        :class="{
+                                            'text-emerald-300': log.level === 'success',
+                                            'text-rose-400': log.level === 'error',
+                                            'text-amber-300': log.level === 'warning',
+                                            'text-slate-300': !log.level || log.level === 'info',
+                                        }"
+                                    >
+                                        {{ log.message }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div v-else class="text-[11px] text-slate-500 italic p-2.5 bg-black/20 rounded-lg">
+                                {{ isRTL ? 'لا توجد سجلات بعد لهذه العملية' : 'No recorded operations yet for this task.' }}
+                            </div>
+                        </div>
+                    </div>
+                </transition>
             </div>
         </div>
 

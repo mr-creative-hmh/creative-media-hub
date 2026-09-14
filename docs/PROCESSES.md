@@ -83,6 +83,15 @@ Creative Media Hub is powered by 14 interconnected pipelines designed for maximu
 - **Rules & Capabilities**:
   - Aggregates movies having `collection_name` or TMDb `belongs_to_collection`.
   - **Strict `count >= 2` Threshold**: Guarantees that single standalone movies never create solitary false-positive collections on `/collections`.
+  - **Cache Architecture & Versioning**: `CollectionController::index` caches aggregated collection collections under `collections.index.data.v10` (1-hour TTL) for sub-millisecond catalog rendering.
+  - **Event-Driven Cache Invalidation Lifecycle**:
+    - *The Synchronization Problem*: Singletons (e.g. owning only *RED 2*) are excluded from the cached array. When the missing predecessor (*RED 1*) was acquired, the database immediately held 2 movies, and live queries (such as Franchise Management Studio) showed both, but `/collections` continued serving the cached singleton-filtered array.
+    - *The Solution*: `CollectionController::clearCache()` purges all versioned cache keys and resets `LibraryGapService` cached franchise stats.
+    - *Automatic Triggers*:
+      1. `VirtualLibraryScannerService::indexMovie()` calls `clearCache()` whenever a movie with a `collection_name` is created or updated.
+      2. `LibraryAcquisitionService::organizeAndScanFile()` calls `clearCache()` immediately after moving and indexing an acquired movie.
+      3. `CollectionManagementController` calls `clearCache()` on any manual movie reassignment or collection creation.
+    - *Outcome*: As soon as a movie is scanned or downloaded, the collection is instantly promoted into the active `/collections` view in real time.
   - **Real-Time Saga Completion**: Integrates with `LibraryGapService` to compute true saga completion percentages against total released franchise parts, highlighting missing titles and displaying "In Progress" badges.
   - **Automated Collection Audit CLI**: Supported by `php artisan library:audit-collections {--fix} {--align-physical}` to fix unlinked sequels and align physical directory hierarchies.
   - Renders chronological timeline views showing release span (e.g. *Harry Potter: 2001 - 2022 (9 films)*) and total boxset duration.
@@ -176,11 +185,15 @@ Creative Media Hub is powered by 14 interconnected pipelines designed for maximu
   2. **Gap Calculation**: Compares TMDb parts with local media items to identify missing movies or missing episodes, calculating real completion percentage.
   3. **Automated Torrent Search**: When acquisition is initiated, `LibraryAcquisitionService` queries torrent providers for healthy torrents matching the missing content.
   4. **Batch Downloader Ingestion**: Enqueues verified magnet links into the download manager.
-  5. **Post-Download Flattening & Canonical Renaming**:
+  5. **Post-Download Flattening, Subtitle Extraction & Canonical Renaming**:
      - Recursively flattens nested folder trees created by torrent clients.
      - Renames video files to canonical pattern: `Show - S01E01 - Title [1080p].ext` or `Genre/Collection/Movie (Year)/Movie (Year).ext`.
-     - Moves companion subtitles (`.ar.srt`, `.en.srt`) alongside the renamed video file.
-     - Removes leftover empty directories and triggers scanner refresh.
+     - **Deep Companion Subtitle Extraction & Content-Based Classification**:
+       - Scans download root and nested folders (`Subs/`, `Subtitles/`, `Sub/`) for subtitle formats (`.srt`, `.vtt`, `.ass`, `.ssa`, `.sub`).
+       - Analyzes dialogue text with `SubtitleLanguageDetectorService` using Unicode Arabic blocks (`\x0600-\x06FF`) vs Latin stop-word matrices. Generic names like `track1.srt` or `Movie.srt` are accurately classified as `.ar.srt` or `.en.srt` rather than guessed.
+       - Preserves dual-language tracks alongside the media file, normalizes ASS/SSA into clean UTF-8 SRT, and prunes empty subtitle directories.
+     - **Automatic Collection Invalidation**: Calls `CollectionController::clearCache()` to ensure newly acquired franchise installments appear instantly on `/collections`.
+     - Removes leftover empty directories and triggers library scanner refresh.
 
 ---
 

@@ -345,21 +345,79 @@ class DownloadManagerService
 
         $aria2Gid = null;
 
+        if (empty($infoHash) && $sourceUrl) {
+            $infoHash = $this->aria2Service->extractInfoHashFromUri($sourceUrl);
+        }
+
+        // Deduplication: prevent duplicate active or queued tasks for the same infoHash
+        if ($infoHash) {
+            $existingActive = DownloadItem::where('info_hash', $infoHash)
+                ->whereIn('status', ['downloading', 'queued', 'paused'])
+                ->first();
+
+            if ($existingActive) {
+                return $existingActive;
+            }
+
+            $existingFailed = DownloadItem::where('info_hash', $infoHash)
+                ->where('status', 'failed')
+                ->first();
+
+            if ($existingFailed) {
+                if ($this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
+                    $activeGid = $this->aria2Service->findGidByInfoHash($infoHash);
+                    if ($activeGid) {
+                        $existingFailed->aria2_gid = $activeGid;
+                    } elseif ($sourceUrl && str_starts_with($sourceUrl, 'magnet:')) {
+                        $existingFailed->aria2_gid = $this->aria2Service->addUri($sourceUrl, $targetFolder, $selectedFiles ?: []);
+                    }
+                }
+                $existingFailed->status = 'downloading';
+                $existingFailed->error_message = null;
+                $existingFailed->save();
+
+                return $existingFailed;
+            }
+        }
+
         // Try dispatching to aria2 if available
         if ($this->aria2Service->isAvailable()) {
             if ($downloadType === 'torrent') {
-                $cachedTorrent = $infoHash ? storage_path("app/torrents/{$infoHash}.torrent") : null;
-                if ($cachedTorrent && file_exists($cachedTorrent)) {
-                    $aria2Gid = $this->aria2Service->addTorrent($cachedTorrent, $targetFolder, $selectedFiles ?: []);
-                } elseif ($sourceUrl && str_starts_with($sourceUrl, 'magnet:')) {
-                    $aria2Gid = $this->aria2Service->addUri($sourceUrl, $targetFolder, $selectedFiles ?: []);
-                } elseif ($sourceUrl && file_exists($sourceUrl)) {
-                    $aria2Gid = $this->aria2Service->addTorrent($sourceUrl, $targetFolder, $selectedFiles ?: []);
+                if ($infoHash) {
+                    $aria2Gid = $this->aria2Service->findGidByInfoHash($infoHash);
+                }
+                if (! $aria2Gid) {
+                    $cachedTorrent = $infoHash ? storage_path("app/torrents/{$infoHash}.torrent") : null;
+                    if ($cachedTorrent && file_exists($cachedTorrent)) {
+                        $aria2Gid = $this->aria2Service->addTorrent($cachedTorrent, $targetFolder, $selectedFiles ?: []);
+                    } elseif ($sourceUrl && str_starts_with($sourceUrl, 'magnet:')) {
+                        $aria2Gid = $this->aria2Service->addUri($sourceUrl, $targetFolder, $selectedFiles ?: []);
+                    } elseif ($sourceUrl && file_exists($sourceUrl)) {
+                        $aria2Gid = $this->aria2Service->addTorrent($sourceUrl, $targetFolder, $selectedFiles ?: []);
+                    }
                 }
             } elseif ($sourceUrl && $this->isRealHttpUrl($sourceUrl)) {
                 $aria2Gid = $this->aria2Service->addUri($sourceUrl, $targetFolder);
             }
         }
+
+        $initialStatus = 'downloading';
+        $errorMessage = null;
+
+        if ($downloadType === 'torrent' && empty($aria2Gid) && ! app()->runningUnitTests()) {
+            $initialStatus = 'paused';
+            $errorMessage = 'Aria2 daemon not connected. Use magnet link or open desktop client.';
+        }
+
+        $initialTf = $torrentFiles ?: [];
+        $initialTf['logs'] = [
+            [
+                'time' => now()->format('H:i:s'),
+                'stage' => 'download',
+                'message' => 'Task initialized and registered in Download Manager.',
+                'level' => 'info',
+            ],
+        ];
 
         return DownloadItem::create([
             'title' => $cleanTitle,
@@ -368,14 +426,15 @@ class DownloadManagerService
             'download_type' => $downloadType,
             'destination_folder' => $targetFolder,
             'destination_path' => $destinationPath,
-            'torrent_files' => $torrentFiles,
+            'torrent_files' => $initialTf,
             'selected_files' => $selectedFiles,
             'info_hash' => $infoHash,
             'aria2_gid' => $aria2Gid,
             'total_bytes' => $totalBytes,
             'downloaded_bytes' => 0,
-            'status' => 'downloading',
+            'status' => $initialStatus,
             'speed_bytes_sec' => 0,
+            'error_message' => $errorMessage,
         ]);
     }
 
@@ -394,67 +453,148 @@ class DownloadManagerService
             }
 
             // 1. If managed by aria2, poll genuine real-time progress
-            if ($item->aria2_gid && $this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
-                $status = $this->aria2Service->tellStatus($item->aria2_gid);
-                if ($status) {
-                    // Synchronize child GID if transitioned from metadata to video payload
-                    if (! empty($status['gid']) && $status['gid'] !== $item->aria2_gid) {
-                        $item->aria2_gid = $status['gid'];
+            if ($this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
+                // If GID is missing or errored, try to find active GID by info_hash
+                if (empty($item->aria2_gid) && $item->info_hash) {
+                    $recoveredGid = $this->aria2Service->findGidByInfoHash($item->info_hash);
+                    if ($recoveredGid) {
+                        $item->aria2_gid = $recoveredGid;
+                        $item->save();
                     }
+                }
 
-                    // Extract actual payload file path from aria2 files list
-                    if (! empty($status['files'])) {
-                        foreach ($status['files'] as $f) {
-                            $fPath = str_replace('\\', '/', $f['path'] ?? '');
-                            if (! empty($fPath) && ! str_starts_with(basename($fPath), '[METADATA]')) {
-                                $fExt = strtolower(pathinfo($fPath, PATHINFO_EXTENSION));
-                                if (in_array($fExt, ['mp4', 'mkv', 'avi', 'mov', 'webm'])) {
-                                    $item->destination_path = $fPath;
-                                    break;
+                if ($item->aria2_gid) {
+                    $status = $this->aria2Service->tellStatus($item->aria2_gid);
+                    if ($status) {
+                        // Synchronize child GID if transitioned from metadata to video payload
+                        if (! empty($status['gid']) && $status['gid'] !== $item->aria2_gid) {
+                            $item->aria2_gid = $status['gid'];
+                        }
+
+                        // Extract actual payload file path from aria2 files list
+                        if (! empty($status['files'])) {
+                            foreach ($status['files'] as $f) {
+                                $fPath = str_replace('\\', '/', $f['path'] ?? '');
+                                if (! empty($fPath) && ! str_starts_with(basename($fPath), '[METADATA]')) {
+                                    $fExt = strtolower(pathinfo($fPath, PATHINFO_EXTENSION));
+                                    if (in_array($fExt, ['mp4', 'mkv', 'avi', 'mov', 'webm'])) {
+                                        $item->destination_path = $fPath;
+                                        break;
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    $item->downloaded_bytes = $status['downloaded_bytes'];
-                    if ($status['total_bytes'] > 0) {
-                        $item->total_bytes = $status['total_bytes'];
-                    }
-                    $item->speed_bytes_sec = $status['speed_bytes_sec'];
+                        $item->downloaded_bytes = $status['downloaded_bytes'];
+                        if ($status['total_bytes'] > 0) {
+                            $item->total_bytes = $status['total_bytes'];
+                        }
+                        $item->speed_bytes_sec = $status['speed_bytes_sec'];
+                        $item->upload_speed_bytes_sec = $status['upload_speed_bytes_sec'] ?? 0;
+                        $item->num_seeders = $status['num_seeders'] ?? 0;
+                        $item->connections = $status['connections'] ?? 0;
 
-                    if ($status['status'] === 'completed') {
-                        // Prevent premature completion on tiny metadata (~20KB-40KB)
-                        if ($status['total_bytes'] > 1000000 || empty($status['following'])) {
-                            $item->status = 'completed';
+                        if (! empty($status['files'])) {
+                            $existingTf = $item->torrent_files ?? [];
+                            $existingTf['detailed_files'] = $status['files'];
+                            $existingTf['piece_length'] = $status['piece_length'] ?? 0;
+                            $existingTf['num_pieces'] = $status['num_pieces'] ?? 0;
+                            $item->torrent_files = $existingTf;
+                        }
+
+                        if ($status['status'] === 'downloading') {
+                            if (empty($item->workflow_stage) || $item->workflow_stage === 'downloading') {
+                                $item->workflow_stage = 'downloading';
+                            }
+                            if ($item->speed_bytes_sec === 0 && $item->num_seeders === 0 && $item->connections === 0) {
+                                $item->error_details = 'Stalled: 0 seeders / peers connected. Waiting for DHT/PEX peers or tracker response.';
+                            } else {
+                                $item->error_details = null;
+                            }
+                        }
+
+                        if ($status['status'] === 'completed') {
+                            $firstFile = $status['files'][0]['path'] ?? '';
+                            $isMetadataOnly = str_contains(basename(str_replace('\\', '/', $firstFile)), '[METADATA]');
+
+                            // Prevent premature completion on metadata (~20KB-40KB)
+                            if (! $isMetadataOnly && ($status['total_bytes'] > 1000000 || empty($status['following']))) {
+                                $item->status = 'completed';
+                                $item->speed_bytes_sec = 0;
+                                $item->save();
+                                $this->executePostDownloadWorkflow($item);
+                            } else {
+                                $item->status = 'downloading';
+                                $item->save();
+                            }
+                        } elseif ($status['status'] === 'failed') {
+                            // Check if failed because of 'already registered'
+                            if (str_contains(strtolower($status['error_message'] ?? ''), 'already registered') && $item->info_hash) {
+                                $activeGid = $this->aria2Service->findGidByInfoHash($item->info_hash);
+                                if ($activeGid && $activeGid !== $item->aria2_gid) {
+                                    $item->aria2_gid = $activeGid;
+                                    $item->status = 'downloading';
+                                    $item->error_message = null;
+                                    $item->save();
+                                    $processed++;
+
+                                    continue;
+                                }
+                            }
+
+                            $item->status = 'failed';
+                            $item->workflow_stage = 'failed';
+                            $item->error_message = $status['error_message'] ?: 'Download failed in aria2';
                             $item->speed_bytes_sec = 0;
                             $item->save();
-                            $this->finalizeDownloadedFile($item);
-                            $this->autoIndexMedia($item);
                         } else {
-                            $item->status = 'downloading';
+                            $item->status = $status['status'];
                             $item->save();
                         }
-                    } elseif ($status['status'] === 'failed') {
-                        $item->status = 'failed';
-                        $item->error_message = $status['error_message'] ?: 'Download failed in aria2';
-                        $item->speed_bytes_sec = 0;
-                        $item->save();
-                    } else {
-                        $item->status = $status['status'];
-                        $item->save();
-                    }
-                    $processed++;
+                        $processed++;
 
-                    continue;
+                        continue;
+                    }
                 }
             }
 
             // 2. Direct HTTP chunked streamer (pure PHP)
             if ($item->download_type === 'direct' && $item->source_url && $this->isRealHttpUrl($item->source_url)) {
                 $this->processRealDownload($item, $chunkBytes);
+            } elseif ($item->download_type === 'torrent') {
+                // Try attaching to aria2 if it wasn't attached yet
+                if ($this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
+                    $cachedTorrent = $item->info_hash ? storage_path("app/torrents/{$item->info_hash}.torrent") : null;
+                    $gid = null;
+                    if ($cachedTorrent && file_exists($cachedTorrent)) {
+                        $gid = $this->aria2Service->addTorrent($cachedTorrent, $item->destination_folder, $item->selected_files ?: []);
+                    } elseif ($item->source_url && str_starts_with($item->source_url, 'magnet:')) {
+                        $gid = $this->aria2Service->addUri($item->source_url, $item->destination_folder, $item->selected_files ?: []);
+                    }
+                    if ($gid) {
+                        $item->aria2_gid = $gid;
+                        $item->status = 'downloading';
+                        $item->error_message = null;
+                        $item->save();
+                        $processed++;
+
+                        continue;
+                    }
+                }
+
+                // If not in aria2 and not in unit tests: DO NOT simulate fake torrent downloads!
+                if (! app()->runningUnitTests()) {
+                    $item->status = 'paused';
+                    $item->speed_bytes_sec = 0;
+                    $item->error_message = 'Aria2 daemon not connected. Use magnet link or launch desktop torrent client.';
+                    $item->save();
+                } else {
+                    $this->processSimulatedDownload($item);
+                }
             } else {
-                // If neither aria2 nor real HTTP is connected (e.g. test or offline), gracefully simulate
-                $this->processSimulatedDownload($item);
+                if (app()->runningUnitTests()) {
+                    $this->processSimulatedDownload($item);
+                }
             }
 
             $processed++;
@@ -508,8 +648,7 @@ class DownloadManagerService
                     $item->status = 'completed';
                     $item->speed_bytes_sec = 0;
                     $item->save();
-                    $this->finalizeDownloadedFile($item);
-                    $this->autoIndexMedia($item);
+                    $this->executePostDownloadWorkflow($item);
 
                     return;
                 }
@@ -561,8 +700,7 @@ class DownloadManagerService
                     $item->status = 'completed';
                     $item->speed_bytes_sec = 0;
                     $item->save();
-                    $this->finalizeDownloadedFile($item);
-                    $this->autoIndexMedia($item);
+                    $this->executePostDownloadWorkflow($item);
                 } else {
                     $item->downloaded_bytes = $newDownloaded;
                     $item->speed_bytes_sec = $speed;
@@ -592,8 +730,7 @@ class DownloadManagerService
             $item->speed_bytes_sec = 0;
             $item->save();
 
-            $this->finalizeDownloadedFile($item);
-            $this->autoIndexMedia($item);
+            $this->executePostDownloadWorkflow($item);
         } else {
             $item->downloaded_bytes = $newDownloaded;
             $item->speed_bytes_sec = $speed;
@@ -625,10 +762,18 @@ class DownloadManagerService
     {
         $item = DownloadItem::find($id);
         if ($item && in_array($item->status, ['paused', 'queued', 'failed'])) {
-            if ($item->aria2_gid && $this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
-                $this->aria2Service->unpause($item->aria2_gid);
+            if ($this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
+                if ($item->info_hash) {
+                    $foundGid = $this->aria2Service->findGidByInfoHash($item->info_hash);
+                    if ($foundGid) {
+                        $item->aria2_gid = $foundGid;
+                    }
+                }
+                if ($item->aria2_gid) {
+                    $this->aria2Service->unpause($item->aria2_gid);
+                }
             }
-            $item->update(['status' => 'downloading']);
+            $item->update(['status' => 'downloading', 'error_message' => null]);
 
             return true;
         }
@@ -640,8 +785,16 @@ class DownloadManagerService
     {
         $item = DownloadItem::find($id);
         if ($item) {
-            if ($item->aria2_gid && $this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
-                $this->aria2Service->unpause($item->aria2_gid);
+            if ($this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
+                if ($item->info_hash) {
+                    $foundGid = $this->aria2Service->findGidByInfoHash($item->info_hash);
+                    if ($foundGid) {
+                        $item->aria2_gid = $foundGid;
+                    }
+                }
+                if ($item->aria2_gid) {
+                    $this->aria2Service->unpause($item->aria2_gid);
+                }
             }
             $item->update([
                 'downloaded_bytes' => 0,
@@ -702,28 +855,149 @@ class DownloadManagerService
         }
     }
 
-    protected function autoIndexMedia(DownloadItem $item): void
+    /**
+     * Coordinate the 5-stage post-download pipeline:
+     * downloading -> verifying -> organizing -> scanning -> ready (or failed)
+     */
+    public function addWorkflowLog(DownloadItem $item, string $stage, string $message, string $level = 'info'): void
     {
-        $autoIndex = (bool) AppSetting::get('download_auto_index', true);
-        if (! $autoIndex) {
-            return;
+        $tf = $item->torrent_files ?? [];
+        $logs = $tf['logs'] ?? [];
+        $logs[] = [
+            'time' => now()->format('H:i:s'),
+            'stage' => $stage,
+            'message' => $message,
+            'level' => $level,
+        ];
+        if (count($logs) > 25) {
+            $logs = array_slice($logs, -25);
         }
+        $tf['logs'] = $logs;
+        $item->torrent_files = $tf;
+        $item->save();
+    }
 
+    /**
+     * Coordinate the 5-stage post-download pipeline:
+     * downloading -> verifying -> organizing -> scanning -> ready (or failed)
+     */
+    public function executePostDownloadWorkflow(DownloadItem $item): void
+    {
         try {
-            // If item has auto_organize flag, hand over to LibraryAcquisitionService for canonical H:\Entertainment placement
-            if (! empty($item->torrent_files['auto_organize'])) {
-                app(LibraryAcquisitionService::class)->handleCompletedDownload($item);
+            // Stage 1: Verifying
+            $item->workflow_stage = 'verifying';
+            $item->save();
+            $this->addWorkflowLog($item, 'verify', 'Download finished. Verifying file payload on disk.');
+            $this->finalizeDownloadedFile($item);
+            $this->addWorkflowLog($item, 'verify', 'Payload verification successful.', 'success');
 
-                return;
+            // Stage 2: Organizing & Moving
+            $item->workflow_stage = 'organizing';
+            $item->organize_status = 'in_progress';
+            $item->save();
+            $this->addWorkflowLog($item, 'organize', 'Applying canonical taxonomy & resolving destination.');
+
+            $autoOrganize = ! empty($item->torrent_files['auto_organize']) || (bool) AppSetting::get('download_auto_index', true);
+            $organizedPath = null;
+            $indexedMediaId = null;
+
+            if ($autoOrganize) {
+                $acqResult = app(LibraryAcquisitionService::class)->handleCompletedDownload($item);
+                if (($acqResult['success'] ?? false) && ! empty($acqResult['files'])) {
+                    $firstFile = $acqResult['files'][0] ?? [];
+                    $organizedPath = $firstFile['destination_path'] ?? ($firstFile['target_path'] ?? null);
+                    $item->organized_path = $organizedPath;
+                    $item->organize_status = 'completed';
+                    if (! empty($firstFile['indexed_id'])) {
+                        $item->indexed_id = $firstFile['indexed_id'];
+                    }
+                    $this->addWorkflowLog($item, 'organize', "Moved to: {$organizedPath}", 'success');
+                } else {
+                    $item->organize_status = 'failed';
+                    $item->error_details = $acqResult['error'] ?? 'Auto-organize could not place media files';
+                    $this->addWorkflowLog($item, 'organize', "Organize failed: {$item->error_details}", 'error');
+                }
+            } else {
+                $this->addWorkflowLog($item, 'organize', 'Auto-organize skipped as requested.', 'info');
             }
 
-            $dest = $item->destination_path;
-            if ($dest && File::exists($dest)) {
-                $this->scannerService->processSingleFile($dest, $item->media_type);
+            // Stage 3: Scanning to Library
+            $item->workflow_stage = 'scanning';
+            $item->save();
+
+            if (empty($item->indexed_id)) {
+                $scanTarget = $item->organized_path ?: $item->destination_path;
+                if ($scanTarget && File::exists($scanTarget)) {
+                    $this->addWorkflowLog($item, 'scan', 'Probing technical streams and matching TMDB metadata.');
+                    $media = $this->scannerService->processSingleFile($scanTarget, $item->media_type);
+                    if ($media) {
+                        $indexedMediaId = $media->id;
+                        $item->indexed_id = $indexedMediaId;
+                        $this->addWorkflowLog($item, 'scan', "Indexed into Virtual Library as MediaItem #{$indexedMediaId}.", 'success');
+                    }
+                }
+            } else {
+                $this->addWorkflowLog($item, 'scan', "Indexed into Virtual Library as MediaItem #{$item->indexed_id}.", 'success');
             }
+
+            // Stage 4: Ready in Library
+            $item->workflow_stage = 'ready';
+            $item->status = 'completed';
+            $item->speed_bytes_sec = 0;
+            $item->error_details = null;
+            $item->save();
+            $this->addWorkflowLog($item, 'ready', 'Media item is fully organized, indexed, and ready to watch!', 'success');
         } catch (\Throwable $e) {
-            Log::warning("Auto-indexing failed for download {$item->title}: ".$e->getMessage());
+            Log::error("Workflow failed for {$item->title}: ".$e->getMessage());
+            $item->workflow_stage = 'failed';
+            $item->error_details = $e->getMessage();
+            $item->status = 'completed';
+            $item->save();
+            $this->addWorkflowLog($item, 'error', "Workflow encountered error: {$e->getMessage()}", 'error');
         }
+    }
+
+    public function stop(int $id): bool
+    {
+        $item = DownloadItem::find($id);
+        if ($item && in_array($item->status, ['downloading', 'queued'])) {
+            if ($item->aria2_gid && $this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
+                $this->aria2Service->pause($item->aria2_gid);
+            }
+            $item->update([
+                'status' => 'paused',
+                'speed_bytes_sec' => 0,
+            ]);
+
+            $hasActive = DownloadItem::where('status', 'downloading')->exists();
+            if (! $hasActive && $this->aria2Service->isAvailable() && ! app()->runningUnitTests()) {
+                $this->aria2Service->stopDaemonIfIdle();
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    public function organize(int $id): array
+    {
+        $item = DownloadItem::find($id);
+        if (! $item) {
+            return ['success' => false, 'error' => 'Download item not found'];
+        }
+
+        $this->executePostDownloadWorkflow($item);
+        $item->refresh();
+
+        return [
+            'success' => $item->workflow_stage === 'ready' || $item->organize_status === 'completed',
+            'workflow_stage' => $item->workflow_stage,
+            'organize_status' => $item->organize_status,
+            'organized_path' => $item->organized_path,
+            'error' => $item->error_details,
+            'item' => $item,
+        ];
     }
 
     public function getDaemonStatus(): array

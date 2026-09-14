@@ -141,7 +141,8 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
 - **Consolidated 2-Migration Master Schema**:
   - All legacy incremental migration fragments have been consolidated into two authoritative files:
     1. `database/migrations/0001_01_01_000000_create_system_tables.php`: Foundation system tables (`sessions`, `cache`, `cache_locks`, `jobs`, `job_batches`, `failed_jobs`).
-    2. `database/migrations/2026_09_01_000000_create_media_hub_tables.php`: Complete cinema domain schema (`media_items`, `series`, `seasons`, `episodes`, `genres`, `media_genre`, `series_genre`, `people`, `media_person`, `series_person`, `subtitles`, `watch_history`, `downloads`, `app_settings`).
+    2. `database/migrations/2026_09_01_000000_create_media_hub_tables.php`: Complete cinema domain schema (`media_items`, `series`, `seasons`, `episodes`, `genres`, `media_genre`, `series_genre`, `people`, `media_person`, `series_person`, `subtitles`, `watch_history`, `download_items`, `app_settings`).
+  - **Single-Pass Master Migration Guarantee**: Incorporates all download workflow state fields (`workflow_stage`, `organize_status`, `organized_path`, `indexed_id`, `error_details`) and real-time network diagnostics (`num_seeders`, `connections`, `upload_speed_bytes_sec`) directly into the master migration, completely eliminating migration drift, fragmented delta scripts, or schema synchronization mismatch.
 - **Local-First Single-User Cinema Model**:
   - Eliminates multi-tenant authentication overhead, login screens, and token management for a high-performance local appliance experience.
   - `WatchHistory` uses polymorphic relations (`watchable_type = 'media_item' | 'episode'`) with null-safe queries, guaranteeing accurate resume state across all sessions.
@@ -160,7 +161,12 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
 - **Smart Acquisition (`LibraryAcquisitionService`)**:
   - Scrapes and verifies season packs or individual episode torrents with automated health rating.
   - Initiates batch downloads through the download manager.
-  - Post-download automation: recursively unpacks/flattens nested torrent subfolders, applies canonical renaming (`Show - S01E01 - Title [1080p].ext`), relocates matching subtitle files (`.ar.srt`, `.en.srt`), and updates library catalog records without manual user intervention.
+  - Post-download automation: recursively unpacks/flattens nested torrent subfolders, applies canonical renaming (`Show - S01E01 - Title [1080p].ext` or `Genre/Collection/Movie (Year)/Movie (Year).ext`), and updates library catalog records.
+  - **Deep Companion Subtitle Extraction & Lexical Language Detection**:
+    - Recursively scans incoming download trees including subfolders (`Subs/`, `Subtitles/`, `Sub/`).
+    - Uses `SubtitleLanguageDetectorService` to evaluate spoken dialogue using Unicode Arabic code-point frequency vs Latin stop-word distributions, converting generic filenames (`track1.srt`) to canonical tags (`.ar.srt`, `.en.srt`).
+    - Converts ASS/SSA styling into clean UTF-8 SRT and prunes empty subtitle directories.
+  - **Automated Collection Cache Invalidation**: Triggers `CollectionController::clearCache()` on completion so new movies immediately appear in `/collections`.
 
 ### 3.7. Multi-Episode Scene Ingestion & Database Architecture
 - **Parser Canonical Formats**: `SceneNameParserService` parses combined episodes (`S01E01-E02`, `S01E01E02`, `S01E01-02`, `S01E01.E02`) through Pattern A, extracting `episode` and `episode_end`.
@@ -168,13 +174,17 @@ Creative Media Hub is architected following **Clean Layered Architecture** and *
 - **Subtitle Link Replication**: Subtitle tracks associated with the multi-episode file are linked to all constituent episode database entities so that playback from any episode in the range displays full subtitles.
 - **Physical Organizer Integration**: The `{Episode:02}` token detects `episode_end` and formats the segment as `01-E02`. During reorganization, `updateDatabasePath()` synchronizes all sibling episode records pointing to that file path in one atomic database query.
 
-### 3.8. Strict Multi-Movie Collections (`owned >= 2`) & FixMatch Studio
+### 3.8. Strict Multi-Movie Collections (`owned >= 2`) & Real-Time Sync Invalidation
 - **Strict Franchise Threshold**: The Collections catalog (`/collections`) strictly enforces `count >= 2` to eliminate solitary single-movie collections.
+- **Event-Driven Real-Time Cache Invalidation**:
+  - When a user previously possessed 1 film of a franchise (e.g. *RED 2*), it is excluded from the `/collections` page cache (`collections.index.data.v10`).
+  - When the user downloads or scans a companion film (*RED 1*), the database live record count reaches 2.
+  - `CollectionController::clearCache()` is immediately triggered by `VirtualLibraryScannerService` and `LibraryAcquisitionService`, invalidating all versioned collection cache keys and ensuring that `/collections` and Franchise Management are 100% in sync with zero latency.
 - **Media Scout Completion Badges**: Displays dynamic progress badges (`In Progress` vs `Complete`) based on total parts in the franchise.
 - **FixMatch Collection Studio (`FixMatchCollectionController`)**:
   - Dedicated Collection tab in `FixMatchModal.vue`.
   - Enables instant 1-click assignment of a movie to an existing collection or creation of a new custom franchise.
-  - Automatically queries and links TMDb collection ID metadata and updates the movie's physical folder hierarchy on disk.
+  - Automatically queries and links TMDb collection ID metadata, updates the movie's physical folder hierarchy on disk, and purges the collection cache.
 - **CLI Collection Auditor**: `php artisan library:audit-collections {--fix} {--align-physical}` scans the entire library for unlinked sequels, auto-assigns collection metadata, and reorganizes movie folders.
 
 ---

@@ -59,6 +59,7 @@ php artisan test --filter=MetadataDirectIdLookupTest
 php artisan test --filter=OrganizerServicesTest
 php artisan test --filter=StreamingAndRoutesTest
 php artisan test --filter=DashboardTest
+php artisan test --filter=TorrentSubtitleAcquisitionTest
 
 # Static Type Checking (Vue 3 + TypeScript)
 npm run types:check

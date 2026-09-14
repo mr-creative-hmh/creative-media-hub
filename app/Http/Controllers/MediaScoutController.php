@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\Downloader\DownloadManagerService;
+use App\Services\Organizer\SceneNameParserService;
 use App\Services\Scout\LibraryAcquisitionService;
 use App\Services\Scout\LibraryGapService;
 use App\Services\Scout\TorrentDiscoveryService;
@@ -18,7 +19,8 @@ class MediaScoutController extends Controller
         protected LibraryGapService $gapService,
         protected TorrentDiscoveryService $torrentService,
         protected LibraryAcquisitionService $acquisitionService,
-        protected DownloadManagerService $downloadManager
+        protected DownloadManagerService $downloadManager,
+        protected SceneNameParserService $parserService
     ) {}
 
     /**
@@ -258,7 +260,9 @@ class MediaScoutController extends Controller
         $metadata = $request->input('metadata', []);
 
         if (! empty($filePath)) {
-            $res = $this->acquisitionService->organizeAndScanFile($filePath, $mediaType, $metadata);
+            $parsed = $this->parserService->parse($filePath);
+            $detectedType = $request->input('media_type') ?: ($parsed['type'] === 'series' ? 'series' : 'movie');
+            $res = $this->acquisitionService->organizeAndScanFile($filePath, $detectedType, $metadata);
 
             return response()->json($res);
         }
@@ -281,7 +285,9 @@ class MediaScoutController extends Controller
             foreach ($files as $file) {
                 $ext = strtolower($file->getExtension());
                 if (in_array($ext, ['mp4', 'mkv', 'avi', 'mov', 'webm'])) {
-                    $res = $this->acquisitionService->organizeAndScanFile($file->getPathname(), $mediaType, $metadata);
+                    $parsed = $this->parserService->parse($file->getPathname());
+                    $detectedType = ($parsed['type'] === 'series') ? 'series' : 'movie';
+                    $res = $this->acquisitionService->organizeAndScanFile($file->getPathname(), $detectedType, $metadata);
                     if ($res['success']) {
                         $processed[] = $res;
                     }

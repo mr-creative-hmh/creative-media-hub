@@ -6,8 +6,8 @@ use App\Models\AppSetting;
 use App\Models\Episode;
 use App\Models\MediaItem;
 use App\Services\Organizer\FilesystemScannerService;
-use App\Services\Organizer\PhysicalOrganizerService;
 use App\Services\Organizer\OrganizerWatcherService;
+use App\Services\Organizer\PhysicalOrganizerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -116,13 +116,23 @@ class DiskOrganizerController extends Controller
             'target_root' => 'required|string',
             'movie_template' => 'nullable|string',
             'series_template' => 'nullable|string',
+            'title_language' => 'nullable|string|in:english,arabic,original',
+            'fetch_episode_titles' => 'nullable|boolean',
         ]);
 
+        $fetchEpisodeTitles = $validated['fetch_episode_titles'] ?? true;
+        $files = array_map(function ($f) use ($fetchEpisodeTitles) {
+            $f['fetch_episode_titles'] = $fetchEpisodeTitles;
+
+            return $f;
+        }, $validated['files']);
+
         $plan = $this->organizer->generateDryRun(
-            $validated['files'],
+            $files,
             $validated['target_root'],
             $validated['movie_template'] ?? null,
-            $validated['series_template'] ?? null
+            $validated['series_template'] ?? null,
+            $validated['title_language'] ?? 'original'
         );
 
         return response()->json([
@@ -173,7 +183,6 @@ class DiskOrganizerController extends Controller
         return response()->json($this->organizer->getExecutionStatus());
     }
 
-    
     public function pauseExecution(): JsonResponse
     {
         return response()->json($this->organizer->pauseExecution());
@@ -263,6 +272,8 @@ class DiskOrganizerController extends Controller
             'source_mode' => 'nullable|string|in:virtual,folder',
             'recursive' => 'nullable|boolean',
             'files' => 'nullable|array',
+            'title_language' => 'nullable|string|in:english,arabic,original',
+            'fetch_episode_titles' => 'nullable|boolean',
         ]);
 
         $result = $this->organizer->startPlanJob(
@@ -272,7 +283,11 @@ class DiskOrganizerController extends Controller
             $validated['series_template'] ?? null,
             $validated['source_mode'] ?? 'folder',
             $validated['recursive'] ?? true,
-            ['files' => $validated['files'] ?? null]
+            [
+                'files' => $validated['files'] ?? null,
+                'title_language' => $validated['title_language'] ?? 'original',
+                'fetch_episode_titles' => $validated['fetch_episode_titles'] ?? true,
+            ]
         );
 
         return response()->json($result, ($result['success'] ?? true) ? 200 : 422);

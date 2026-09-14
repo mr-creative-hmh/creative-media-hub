@@ -5,6 +5,7 @@ namespace App\Services\Organizer;
 use App\Services\Media\FfmpegLocatorService;
 use App\Services\Metadata\MediaCollectionResolverService;
 use App\Services\Subtitles\EmbeddedSubtitleDetectorService;
+use App\Services\Subtitles\SubtitleLanguageDetectorService;
 use Illuminate\Foundation\Application;
 use Symfony\Component\Finder\Finder;
 
@@ -125,7 +126,7 @@ class FilesystemScannerService
                     'parsed' => $parsed,
                 ];
             } elseif (in_array($ext, $this->subtitleExtensions)) {
-                $subInfo = $this->parseSubtitleMetadata($filename);
+                $subInfo = $this->parseSubtitleMetadata($filename, $filePath);
                 $subtitleFiles[] = [
                     'path' => $filePath,
 
@@ -277,7 +278,7 @@ class FilesystemScannerService
         return null;
     }
 
-    public function parseSubtitleMetadata(string $filename): array
+    public function parseSubtitleMetadata(string $filename, ?string $filePath = null): array
     {
         $clean = preg_replace('/[._\-\[\]\(\)]+/', ' ', strtolower($filename));
         $clean = ' '.trim($clean).' ';
@@ -287,7 +288,15 @@ class FilesystemScannerService
         $isCommentary = (bool) preg_match('/\b(commentary|director)\b/i', $clean);
 
         $detector = app(EmbeddedSubtitleDetectorService::class);
-        $lang = $detector->resolveLanguageFromContext('und', '', $filename);
+        $lang = $detector->resolveLanguageFromContext('und', '', $filePath ?: $filename);
+
+        if ($lang === 'und' && $filePath && file_exists($filePath)) {
+            $det = app(SubtitleLanguageDetectorService::class)->detectLanguage($filePath, $filename);
+            if (($det['language'] ?? 'und') !== 'und') {
+                $lang = $det['language'];
+            }
+        }
+
         $langName = $detector->getLanguageName($lang);
 
         if ($lang === 'und') {

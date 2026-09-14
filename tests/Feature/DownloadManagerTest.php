@@ -108,4 +108,37 @@ class DownloadManagerTest extends TestCase
         $delRes->assertStatus(200);
         $this->assertDatabaseMissing('download_items', ['id' => $item->id]);
     }
+
+    public function test_creating_duplicate_download_by_info_hash_returns_existing_item(): void
+    {
+        $hash = '1122334455667788990011223344556677889900';
+
+        $firstRes = $this->postJson('/api/downloads', [
+            'title' => 'Interstellar (2014)',
+            'media_type' => 'movie',
+            'download_type' => 'torrent',
+            'source_url' => "magnet:?xt=urn:btih:{$hash}&dn=Interstellar.2014",
+            'destination_folder' => 'D:/Media/CustomMovies',
+            'info_hash' => $hash,
+        ]);
+
+        $firstRes->assertStatus(200);
+        $firstId = $firstRes->json('download_id');
+
+        // Create duplicate with same info_hash
+        $secondRes = $this->postJson('/api/downloads', [
+            'title' => 'Interstellar (2014)',
+            'media_type' => 'movie',
+            'download_type' => 'torrent',
+            'source_url' => "magnet:?xt=urn:btih:{$hash}&dn=Interstellar.2014",
+            'destination_folder' => 'D:/Media/CustomMovies',
+            'info_hash' => $hash,
+        ]);
+
+        $secondRes->assertStatus(200);
+        $secondId = $secondRes->json('download_id');
+
+        $this->assertEquals($firstId, $secondId);
+        $this->assertEquals(1, DownloadItem::where('info_hash', $hash)->count());
+    }
 }

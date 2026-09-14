@@ -177,8 +177,10 @@ Route::get('/api/downloads/settings', [DownloadManagerController::class, 'getSet
 Route::post('/api/downloads/settings', [DownloadManagerController::class, 'saveSettings'])->name('api.downloads.settings.save');
 Route::post('/api/downloads/process-batch', [DownloadManagerController::class, 'processBatch'])->name('api.downloads.process-batch');
 Route::post('/api/downloads/{id}/pause', [DownloadManagerController::class, 'pause'])->name('api.downloads.pause');
+Route::post('/api/downloads/{id}/stop', [DownloadManagerController::class, 'stop'])->name('api.downloads.stop');
 Route::post('/api/downloads/{id}/resume', [DownloadManagerController::class, 'resume'])->name('api.downloads.resume');
 Route::post('/api/downloads/{id}/retry', [DownloadManagerController::class, 'retry'])->name('api.downloads.retry');
+Route::post('/api/downloads/{id}/organize', [DownloadManagerController::class, 'organize'])->name('api.downloads.organize');
 Route::delete('/api/downloads/{id}', [DownloadManagerController::class, 'destroy'])->name('api.downloads.destroy');
 
 // Documentation Hub

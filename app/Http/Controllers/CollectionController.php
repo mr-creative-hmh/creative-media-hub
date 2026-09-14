@@ -16,12 +16,15 @@ class CollectionController extends Controller
 {
     public static function clearCache(): void
     {
-        Cache::forget('collections.index.data.v5');
-        Cache::forget('collections.index.data.v6');
-        Cache::forget('collections.index.data.v7');
-        Cache::forget('collections.index.data.v8');
-        Cache::forget('collections.index.data.v9');
-        Cache::forget('collections.index.data.v10');
+        for ($i = 1; $i <= 25; $i++) {
+            Cache::forget("collections.index.data.v{$i}");
+        }
+        Cache::forget('collections.index.data');
+
+        try {
+            app(LibraryGapService::class)->clearCache();
+        } catch (\Throwable $e) {
+        }
     }
 
     public function index(Request $request, LibraryMasterIndexService $masterService, LibraryGapService $gapService): Response

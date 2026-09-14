@@ -2,16 +2,21 @@
 
 namespace App\Services\Scout;
 
+use App\Http\Controllers\CollectionController;
 use App\Models\AppSetting;
 use App\Models\DownloadItem;
 use App\Models\Episode;
 use App\Models\MediaItem;
 use App\Models\Series;
+use App\Services\Downloader\Aria2Service;
 use App\Services\Metadata\LibraryMasterIndexService;
 use App\Services\Metadata\TmdbProvider;
 use App\Services\Organizer\PhysicalOrganizerService;
 use App\Services\Organizer\SceneNameParserService;
+use App\Services\Organizer\ZeroKeyGenreClassifierService;
 use App\Services\Scanner\VirtualLibraryScannerService;
+use App\Services\Subtitles\SubtitleLanguageDetectorService;
+use App\Services\Subtitles\SubtitleManagerService;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 
@@ -75,8 +80,9 @@ class LibraryAcquisitionService
             // Immediately scan and index the single file into the virtual library
             $scannedModel = $this->scannerService->processSingleFile($destPath, $mediaType);
 
-            // Invalidate scout cache so gaps clear immediately
+            // Invalidate scout cache and collection cache so gaps and collections update immediately
             $this->gapService->clearCache();
+            CollectionController::clearCache();
 
             return [
                 'success' => true,
@@ -111,40 +117,71 @@ class LibraryAcquisitionService
         $mediaFiles = [];
         $sourceDir = null;
 
-        // 1. Check if item has a direct destination_path to a file
-        if ($item->destination_path && File::isFile($item->destination_path)) {
-            $mediaFiles[] = $item->destination_path;
-        }
+        // 1. Gather all active downloading paths from other tasks to protect them
+        $activeDownloadingPaths = DownloadItem::where('status', 'downloading')
+            ->where('id', '!=', $item->id)
+            ->pluck('destination_path')
+            ->filter()
+            ->map(fn ($p) => str_replace('\\', '/', $p))
+            ->toArray();
 
-        // 2. Discover files in destination_folder or directory destination_path
-        $candidateFolders = array_filter([
-            $item->destination_folder,
-            $item->destination_path && File::isDirectory($item->destination_path) ? $item->destination_path : null,
-        ]);
-
-        foreach ($candidateFolders as $folder) {
-            if (File::isDirectory($folder)) {
-                $sourceDir = $folder;
-                $discovered = File::allFiles($folder);
-                foreach ($discovered as $f) {
-                    if (in_array(strtolower($f->getExtension()), $validExts)) {
-                        $filename = strtolower($f->getFilename());
-                        // Exclude small sample files (< 50MB)
-                        if (str_contains($filename, 'sample') && $f->getSize() < 50 * 1024 * 1024) {
-                            continue;
-                        }
-                        $mediaFiles[] = $f->getPathname();
+        // 2. Discover exact files belonging ONLY to this specific completed item
+        // A) If Aria2 GID is present, query Aria2 for exact files
+        if ($item->aria2_gid && app(Aria2Service::class)->isAvailable()) {
+            $status = app(Aria2Service::class)->tellStatus($item->aria2_gid);
+            if (! empty($status['files'])) {
+                foreach ($status['files'] as $f) {
+                    $p = str_replace('\\', '/', $f['path'] ?? '');
+                    if ($p && File::isFile($p) && in_array(strtolower(pathinfo($p, PATHINFO_EXTENSION)), $validExts)) {
+                        $mediaFiles[] = $p;
                     }
                 }
             }
         }
 
-        $mediaFiles = array_values(array_unique($mediaFiles));
+        // B) If item has direct destination_path to a file
+        if (empty($mediaFiles) && $item->destination_path && File::isFile($item->destination_path)) {
+            $mediaFiles[] = str_replace('\\', '/', $item->destination_path);
+        }
+
+        // C) If destination_path is a dedicated subdirectory (NEVER scan parent destination_folder D:/Media/Movies!)
+        if (empty($mediaFiles) && $item->destination_path && File::isDirectory($item->destination_path)) {
+            $subFolder = str_replace('\\', '/', $item->destination_path);
+            $destFolder = str_replace('\\', '/', $item->destination_folder);
+            // Ensure destination_path is a sub-folder and not the shared root movies folder itself
+            if (rtrim($subFolder, '/') !== rtrim($destFolder, '/')) {
+                $sourceDir = $subFolder;
+                $discovered = File::allFiles($subFolder);
+                foreach ($discovered as $f) {
+                    if (in_array(strtolower($f->getExtension()), $validExts)) {
+                        $filename = strtolower($f->getFilename());
+                        if (str_contains($filename, 'sample') && $f->getSize() < 50 * 1024 * 1024) {
+                            continue;
+                        }
+                        $mediaFiles[] = str_replace('\\', '/', $f->getPathname());
+                    }
+                }
+            }
+        }
+
+        // Filter out any file that belongs to another active downloading item
+        $mediaFiles = array_values(array_filter(array_unique($mediaFiles), function ($path) use ($activeDownloadingPaths) {
+            $norm = str_replace('\\', '/', $path);
+            foreach ($activeDownloadingPaths as $active) {
+                if ($norm === $active || str_starts_with($norm, rtrim($active, '/').'/')) {
+                    Log::warning("LibraryAcquisitionService: Skipping {$norm} because it belongs to an active downloading task.");
+
+                    return false;
+                }
+            }
+
+            return true;
+        }));
 
         if (empty($mediaFiles)) {
             return [
                 'success' => false,
-                'error' => 'No media files found for completed download',
+                'error' => 'No isolated media files found for completed download task',
             ];
         }
 
@@ -153,9 +190,14 @@ class LibraryAcquisitionService
 
         foreach ($mediaFiles as $filePath) {
             $parsed = $this->parserService->parse($filePath);
-            $mediaType = $item->media_type ?: ($parsed['type'] === 'series' ? 'series' : 'movie');
+
+            // Check if this specific file is an episode or a movie
+            $fileType = $parsed['type'] ?? 'movie';
+            $isExplicitSeries = ($item->media_type === 'series' && (($item->torrent_files['season_number'] ?? null) !== null || ($parsed['season'] ?? null) !== null));
+            $mediaType = ($fileType === 'series' || $isExplicitSeries) ? 'series' : 'movie';
 
             $meta = array_merge($item->torrent_files ?? [], [
+                'movie_title' => $parsed['title'] ?? ($parsed['clean_title'] ?? null),
                 'series_title' => ! empty($parsed['series_title']) ? $parsed['series_title'] : ($item->torrent_files['series_title'] ?? $item->title),
                 'season_number' => $parsed['season'] ?? ($item->torrent_files['season_number'] ?? null),
                 'episode_number' => $parsed['episode'] ?? ($item->torrent_files['episode_number'] ?? null),
@@ -168,6 +210,14 @@ class LibraryAcquisitionService
             $results[] = $res;
             if (! ($res['success'] ?? false)) {
                 $hasErrors = true;
+            }
+        }
+
+        if (empty($sourceDir) && ! empty($mediaFiles)) {
+            $firstDir = dirname($mediaFiles[0]);
+            $destFolder = str_replace('\\', '/', $item->destination_folder ?: 'D:/Media/Movies');
+            if ($firstDir && rtrim(str_replace('\\', '/', $firstDir), '/') !== rtrim($destFolder, '/') && File::isDirectory($firstDir)) {
+                $sourceDir = $firstDir;
             }
         }
 
@@ -202,6 +252,31 @@ class LibraryAcquisitionService
     ): string {
         $sourcePath = str_replace('\\', '/', $sourceFilePath);
         $targetRoot = rtrim(str_replace('\\', '/', $targetRoot), '/');
+
+        // Extract base library root (e.g. H:/Entertainment from H:/Entertainment/Movies)
+        $organizerRoot = $targetRoot;
+        if (str_ends_with(strtolower($organizerRoot), '/movies') || str_ends_with(strtolower($organizerRoot), '/tv shows')) {
+            $organizerRoot = dirname($organizerRoot);
+        }
+
+        $parsed = $this->parserService->parse($sourcePath);
+        if ($mediaType === 'series') {
+            $parsed['type'] = 'series';
+        }
+        $fileItem = [
+            'path' => $sourcePath,
+            'filename' => basename($sourcePath),
+            'size' => file_exists($sourcePath) ? filesize($sourcePath) : 0,
+            'parsed' => $parsed,
+            'subtitles' => [],
+        ];
+
+        $planItem = $this->organizerService->generatePlanItem($fileItem, $organizerRoot);
+
+        if (! empty($planItem['destination_path'])) {
+            return str_replace('\\', '/', $planItem['destination_path']);
+        }
+
         $ext = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION));
 
         if ($mediaType === 'series') {
@@ -340,6 +415,10 @@ class LibraryAcquisitionService
 
         // If collectionName is empty, attempt inference
         if (empty($collectionName)) {
+            $parsed = $this->parserService->parse($sourcePath);
+            $collectionName = $this->organizerService->resolveCollectionName($sourcePath, $parsed) ?? '';
+        }
+        if (empty($collectionName)) {
             $collectionName = TmdbProvider::inferCollectionFromTitle($movieTitle) ?? '';
         }
         if (empty($collectionName)) {
@@ -349,36 +428,28 @@ class LibraryAcquisitionService
             }
         }
 
-        // Determine genre if missing
-        if (empty($genre)) {
-            $existing = MediaItem::where('title', $movieTitle)->with('genres')->first();
-            if ($existing && $existing->genres->isNotEmpty()) {
-                $genre = $existing->genres->first()->name;
-            } elseif (! empty($masterMovie['genres'][0])) {
-                $genre = $masterMovie['genres'][0];
-            } else {
-                $genre = 'Action';
-            }
+        // Determine dominant canonical genre (Arabic > Indian > Animation > Canonical TMDB Genre)
+        $classifier = app(ZeroKeyGenreClassifierService::class);
+        $existingGenres = [];
+        $existing = MediaItem::where('title', $movieTitle)->with('genres')->first();
+        if ($existing && $existing->genres->isNotEmpty()) {
+            $existingGenres = $existing->genres->pluck('name_en')->toArray();
+        } elseif (! empty($masterMovie['genres'])) {
+            $existingGenres = $masterMovie['genres'];
+        } elseif (! empty($genre)) {
+            $existingGenres = [$genre];
         }
 
-        // If collection exists, ensure canonical folder naming '{Collection Name} Collection' or existing folder
+        $genre = $classifier->resolveDominantGenre($movieTitle, $collectionName, $existingGenres, $metadata);
+
+        // If collection exists, place it under the dominant canonical genre folder
         $collectionFolder = '';
         if (! empty($collectionName)) {
-            // Find existing movies in this collection
-            $existing = MediaItem::where('collection_name', $collectionName)->whereNotNull('file_path')->first();
-            if ($existing && $existing->file_path) {
-                $normExisting = str_replace('\\', '/', $existing->file_path);
-                // Parent of parent is collection folder
-                $collectionFolder = dirname(dirname($normExisting));
+            $cleanCol = $this->organizerService->sanitizePathSegment($collectionName);
+            if (! str_ends_with(strtolower($cleanCol), 'collection') && ! str_ends_with(strtolower($cleanCol), 'trilogy') && ! str_ends_with(strtolower($cleanCol), 'saga')) {
+                $cleanCol .= ' Collection';
             }
-
-            if (empty($collectionFolder)) {
-                $cleanCol = $this->organizerService->sanitizePathSegment($collectionName);
-                if (! str_ends_with(strtolower($cleanCol), 'collection') && ! str_ends_with(strtolower($cleanCol), 'trilogy') && ! str_ends_with(strtolower($cleanCol), 'saga')) {
-                    $cleanCol .= ' Collection';
-                }
-                $collectionFolder = "{$targetRoot}/{$genre}/{$cleanCol}";
-            }
+            $collectionFolder = "{$targetRoot}/{$genre}/{$cleanCol}";
         }
 
         $cleanTitle = $this->organizerService->sanitizePathSegment($movieTitle);
@@ -397,7 +468,9 @@ class LibraryAcquisitionService
     }
 
     /**
-     * Move companion subtitles (e.g. `.ar.srt`, `.en.srt`) alongside video.
+     * Move companion subtitles (e.g. `.ar.srt`, `.en.srt`) alongside video without (1)/(2) duplication.
+     * Supports subtitles in the same directory or within Subs/ / Subtitles/ subfolders.
+     * Accurately detects language from filename or content analysis via SubtitleLanguageDetectorService.
      */
     protected function moveCompanionSubtitles(string $sourceVideoPath, string $destVideoPath): void
     {
@@ -406,15 +479,131 @@ class LibraryAcquisitionService
         $destDir = dirname($destVideoPath);
         $destBase = pathinfo($destVideoPath, PATHINFO_FILENAME);
 
-        $files = glob("{$dir}/{$baseName}*.srt");
-        foreach ($files ?: [] as $subFile) {
+        $subtitleDetector = app(SubtitleLanguageDetectorService::class);
+        $validSubExts = ['srt', 'vtt', 'ass', 'ssa', 'sub'];
+
+        // 1. Collect all candidate subtitle files from immediate folder and Subs/ / Subtitles/ subfolders
+        $candidateFiles = [];
+        if (File::isDirectory($dir)) {
+            // Direct folder
+            foreach (File::files($dir) as $f) {
+                if (in_array(strtolower($f->getExtension()), $validSubExts, true)) {
+                    $candidateFiles[] = str_replace('\\', '/', $f->getPathname());
+                }
+            }
+
+            // Common subfolders like Subs, Subtitles, Sub
+            foreach (File::directories($dir) as $subDir) {
+                $subDirName = strtolower(basename($subDir));
+                if (in_array($subDirName, ['subs', 'subtitles', 'sub'], true)) {
+                    foreach (File::allFiles($subDir) as $f) {
+                        if (in_array(strtolower($f->getExtension()), $validSubExts, true)) {
+                            $candidateFiles[] = str_replace('\\', '/', $f->getPathname());
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Count video files in source directory to know if this is a single movie or multi-episode torrent
+        $videoExts = ['mp4', 'mkv', 'avi', 'mov', 'webm', 'm4v', 'ts'];
+        $videoCount = 0;
+        if (File::isDirectory($dir)) {
+            foreach (File::files($dir) as $f) {
+                if (in_array(strtolower($f->getExtension()), $videoExts, true)) {
+                    $videoCount++;
+                }
+            }
+        }
+
+        // 3. Filter candidate subtitles that belong to this specific video file
+        $matchedSubtitles = [];
+        $cleanVideoBase = strtolower(preg_replace('/[^a-z0-9]/i', '', $baseName));
+        preg_match('/[sS](\d{1,2})[eE](\d{1,2})|\b(\d{1,2})x(\d{1,2})\b/i', $baseName, $epMatch);
+        $epCode = ! empty($epMatch[0]) ? strtolower($epMatch[0]) : null;
+
+        foreach ($candidateFiles as $subFile) {
+            $subBase = pathinfo($subFile, PATHINFO_FILENAME);
+            $cleanSubBase = strtolower(preg_replace('/[^a-z0-9]/i', '', $subBase));
+
+            $matches = false;
+
+            if ($epCode) {
+                // For TV episodes, match by episode code (e.g. S01E02)
+                if (str_contains(strtolower($subBase), $epCode)) {
+                    $matches = true;
+                }
+            } elseif ($videoCount <= 1) {
+                // For single video releases (movies), any subtitle in the release or Subs/ belongs to it
+                $matches = true;
+            } else {
+                // Multi-video: stem match
+                if (str_starts_with($cleanSubBase, $cleanVideoBase) || str_starts_with($cleanVideoBase, $cleanSubBase)) {
+                    $matches = true;
+                }
+            }
+
+            if ($matches) {
+                $matchedSubtitles[] = $subFile;
+            }
+        }
+
+        $seenLangs = [];
+
+        foreach ($matchedSubtitles as $subFile) {
             $subFilename = basename($subFile);
-            $suffix = substr($subFilename, strlen($baseName)); // e.g. .ar.srt or .srt
-            $destSubPath = "{$destDir}/{$destBase}{$suffix}";
+            $subExt = strtolower(pathinfo($subFile, PATHINFO_EXTENSION));
+
+            // Detect language accurately using SubtitleLanguageDetectorService (content + filename analysis)
+            $detection = $subtitleDetector->detectLanguage($subFile, $subFilename);
+            $langCode = $detection['language'] ?? 'und';
+
+            if ($langCode === 'und') {
+                $langCode = 'en';
+            }
+
+            // Standardize format to .srt unless it's vtt
+            $targetExt = in_array($subExt, ['vtt', 'srt'], true) ? $subExt : 'srt';
+            $destSubPath = "{$destDir}/{$destBase}.{$langCode}.{$targetExt}";
+
+            // If we already moved a subtitle for this language, avoid duplicate clutter
+            if (isset($seenLangs[$langCode])) {
+                @unlink($subFile);
+
+                continue;
+            }
+
             try {
-                $this->crossDriveMove($subFile, $destSubPath);
+                if (File::exists($destSubPath)) {
+                    @File::delete($destSubPath);
+                }
+
+                // If ASS / SSA format, convert to standard SRT
+                if (in_array($subExt, ['ass', 'ssa'], true)) {
+                    $raw = File::get($subFile);
+                    $converted = app(SubtitleManagerService::class)->convertAssOrSsaToSrt($raw);
+                    File::put($destSubPath, $converted);
+                    @unlink($subFile);
+                } else {
+                    $this->crossDriveMove($subFile, $destSubPath);
+                }
+
+                $seenLangs[$langCode] = true;
+                Log::info("LibraryAcquisitionService: Moved companion subtitle [{$langCode}] {$subFilename} -> {$destSubPath}");
             } catch (\Throwable $e) {
                 Log::warning("Could not move subtitle {$subFile}: ".$e->getMessage());
+            }
+        }
+
+        // Clean up empty Subs/ directories if any were used
+        if (File::isDirectory($dir)) {
+            foreach (File::directories($dir) as $subDir) {
+                $subDirName = strtolower(basename($subDir));
+                if (in_array($subDirName, ['subs', 'subtitles', 'sub'], true)) {
+                    if (empty(File::allFiles($subDir))) {
+                        @File::deleteDirectory($subDir);
+                    }
+                }
             }
         }
     }

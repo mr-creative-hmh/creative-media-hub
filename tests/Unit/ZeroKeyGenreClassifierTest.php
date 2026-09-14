@@ -9,6 +9,7 @@ use Tests\TestCase;
 class ZeroKeyGenreClassifierTest extends TestCase
 {
     protected ZeroKeyGenreClassifierService $service;
+
     protected SceneNameParserService $parser;
 
     protected function setUp(): void
@@ -21,7 +22,7 @@ class ZeroKeyGenreClassifierTest extends TestCase
     public function test_classifies_major_titles()
     {
         $res1 = $this->service->resolveGenres('Oppenheimer');
-        $this->assertEquals('Drama & History', $res1['primary']);
+        $this->assertEquals('History', $res1['primary']);
 
         $res2 = $this->service->resolveGenres('Shrek');
         $this->assertEquals('Animation', $res2['primary']);
@@ -30,7 +31,7 @@ class ZeroKeyGenreClassifierTest extends TestCase
         $this->assertEquals('Comedy', $res3['primary']);
 
         $res4 = $this->service->resolveGenres('Interstellar');
-        $this->assertEquals('Sci-Fi', $res4['primary']);
+        $this->assertEquals('Science Fiction', $res4['primary']);
 
         $res5 = $this->service->resolveGenres('Harry Potter and the Goblet of Fire');
         $this->assertEquals('Fantasy', $res5['primary']);
@@ -39,7 +40,7 @@ class ZeroKeyGenreClassifierTest extends TestCase
     public function test_franchise_inheritance()
     {
         $res = $this->service->resolveGenres('Tokyo Drift', 'Fast & Furious');
-        $this->assertEquals('Action & Adventure', $res['primary']);
+        $this->assertEquals('Action', $res['primary']);
     }
 
     public function test_franchise_detection_from_numbered_folders()

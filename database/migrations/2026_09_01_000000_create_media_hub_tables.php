@@ -240,8 +240,16 @@ return new class extends Migration
                 $table->unsignedBigInteger('total_bytes')->default(0);
                 $table->unsignedBigInteger('downloaded_bytes')->default(0);
                 $table->string('status')->default('queued')->index();
+                $table->string('workflow_stage', 32)->nullable()->default('downloading');
+                $table->string('organize_status', 32)->nullable()->default('pending');
+                $table->string('organized_path', 1024)->nullable();
+                $table->unsignedBigInteger('indexed_id')->nullable();
                 $table->unsignedBigInteger('speed_bytes_sec')->default(0);
+                $table->unsignedInteger('num_seeders')->default(0);
+                $table->unsignedInteger('connections')->default(0);
+                $table->unsignedBigInteger('upload_speed_bytes_sec')->default(0);
                 $table->text('error_message')->nullable();
+                $table->text('error_details')->nullable();
                 $table->string('download_type')->default('direct');
                 $table->string('destination_folder')->nullable();
                 $table->text('torrent_files')->nullable();

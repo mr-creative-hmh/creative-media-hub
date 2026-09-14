@@ -226,30 +226,79 @@ class MediaProbeService
     }
 
     /**
-     * Calculate human-readable resolution from dimensions.
+     * Calculate human-readable resolution from dimensions, accounting for letterbox-cropped cinema widescreen.
      */
-    protected function calculateResolution(int $width, int $height): string
+    public function calculateResolution(int $width, int $height): string
     {
-        // Use height for standard naming (1080, 720, etc.)
-        $resolutions = [
-            4320 => '8K UHD',
-            2160 => '4K UHD',
-            1440 => '1440p 2K',
-            1080 => '1080p FHD',
-            720 => '720p HD',
-            576 => '576p SD',
-            480 => '480p SD',
-            360 => '360p',
-            240 => '240p',
-        ];
+        $maxDim = max($width, $height);
+        $minDim = min($width, $height);
 
-        foreach ($resolutions as $minHeight => $label) {
-            if ($height >= $minHeight) {
-                return $label;
-            }
+        if ($maxDim >= 7000 || $minDim >= 4000) {
+            return '8K UHD';
+        }
+        if ($maxDim >= 3600 || $minDim >= 2000) {
+            return '4K UHD';
+        }
+        if ($maxDim >= 2400 || $minDim >= 1350) {
+            return '1440p 2K';
+        }
+        if ($maxDim >= 1800 || $minDim >= 950) {
+            return '1080p FHD';
+        }
+        if ($maxDim >= 1200 || $minDim >= 650) {
+            return '720p HD';
+        }
+        if ($maxDim >= 900 || $minDim >= 540) {
+            return '576p SD';
+        }
+        if ($maxDim >= 700 || $minDim >= 440) {
+            return '480p SD';
+        }
+        if ($maxDim >= 480 || $minDim >= 320) {
+            return '360p';
+        }
+        if ($maxDim >= 320 || $minDim >= 200) {
+            return '240p';
         }
 
         return "{$width}x{$height}";
+    }
+
+    /**
+     * Determine best resolution combining probed data and parsed filename tag.
+     */
+    public function resolveBestResolution(?string $probedResolution, ?string $parsedResolution): string
+    {
+        $qualityRank = [
+            '8K UHD' => 90,
+            '4K UHD' => 80,
+            '1440p 2K' => 70,
+            '1080p FHD' => 60,
+            '720p HD' => 50,
+            '576p SD' => 40,
+            '480p SD' => 30,
+            '360p' => 20,
+            '240p' => 10,
+        ];
+
+        $probedNorm = ! empty($probedResolution) && $probedResolution !== 'Unknown' ? $probedResolution : null;
+        $parsedNorm = ! empty($parsedResolution) && $parsedResolution !== 'Unknown' ? $parsedResolution : null;
+
+        if ($probedNorm && $parsedNorm) {
+            $probedRank = $qualityRank[$probedNorm] ?? 0;
+            $parsedRank = $qualityRank[$parsedNorm] ?? 0;
+
+            // If probed is within 1 tier below parsed (e.g. 576p probed vs 720p tagged)
+            // or if parsed has explicit HD/FHD/UHD tag while probe got SD due to heavy crop,
+            // parsed quality tag in filename takes precedence.
+            if ($parsedRank > $probedRank && ($parsedRank - $probedRank) <= 20) {
+                return $parsedNorm;
+            }
+
+            return $probedNorm;
+        }
+
+        return $probedNorm ?? $parsedNorm ?? 'Unknown';
     }
 
     /**

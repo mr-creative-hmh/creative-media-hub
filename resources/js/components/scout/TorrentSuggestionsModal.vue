@@ -4,7 +4,8 @@ import { useI18n } from '@/i18n/useI18n';
 import {
     X, Download, Check, AlertCircle, Loader2, Sparkles,
     HardDrive, FolderSync, ShieldCheck, ArrowUpRight, Film, Tv,
-    Zap, AlertTriangle, CheckCircle2, ShieldAlert, ArrowDownUp
+    Zap, AlertTriangle, CheckCircle2, ShieldAlert, ArrowDownUp,
+    Copy, ExternalLink
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -28,6 +29,22 @@ const downloadingHash = ref<string | null>(null);
 const downloadedHashes = ref<Record<string, boolean>>({});
 const errorMessage = ref<string | null>(null);
 const zeroSeedWarningTorrent = ref<any | null>(null);
+const copiedHash = ref<string | null>(null);
+
+const copyMagnet = async (torrent: any) => {
+    if (!torrent.magnet_url) return;
+    try {
+        await navigator.clipboard.writeText(torrent.magnet_url);
+        copiedHash.value = torrent.info_hash;
+        setTimeout(() => {
+            if (copiedHash.value === torrent.info_hash) {
+                copiedHash.value = null;
+            }
+        }, 2500);
+    } catch (err) {
+        console.error('Failed to copy magnet:', err);
+    }
+};
 
 const qualities = ['all', '4K', '1080p', '720p'];
 
@@ -175,6 +192,9 @@ const startDownload = async (torrent: any) => {
         const data = await res.json();
         if (data.success) {
             downloadedHashes.value[torrent.info_hash] = true;
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('downloads:refresh'));
+            }
             emit('downloadStarted', {
                 gapItem: props.gapItem,
                 downloadId: data.download_id,
@@ -444,8 +464,30 @@ const startDownload = async (torrent: any) => {
                         </div>
                     </div>
 
-                    <!-- Action Button -->
-                    <div class="shrink-0 flex items-center gap-2">
+                    <!-- Action Buttons -->
+                    <div class="shrink-0 flex items-center gap-1.5">
+                        <!-- Direct Magnet Client Launcher -->
+                        <a
+                            v-if="torrent.magnet_url"
+                            :href="torrent.magnet_url"
+                            class="p-2 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-slate-300 hover:text-cyan-300 border border-white/10 transition-colors flex items-center justify-center cursor-pointer"
+                            :title="isRTL ? 'فتح مباشرة في تطبيق التورنت (مثل qBittorrent)' : 'Open in Torrent Client (e.g. qBittorrent)'"
+                        >
+                            <ExternalLink class="w-4 h-4" />
+                        </a>
+
+                        <!-- Copy Magnet Link Button -->
+                        <button
+                            v-if="torrent.magnet_url"
+                            type="button"
+                            @click="copyMagnet(torrent)"
+                            class="p-2 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-slate-300 hover:text-cyan-300 border border-white/10 transition-colors flex items-center justify-center cursor-pointer"
+                            :title="copiedHash === torrent.info_hash ? (isRTL ? 'تم نسخ الرابط!' : 'Magnet Copied!') : (isRTL ? 'نسخ رابط Magnet' : 'Copy Magnet Link')"
+                        >
+                            <Check v-if="copiedHash === torrent.info_hash" class="w-4 h-4 text-emerald-400" />
+                            <Copy v-else class="w-4 h-4" />
+                        </button>
+
                         <button
                             v-if="downloadedHashes[torrent.info_hash]"
                             disabled

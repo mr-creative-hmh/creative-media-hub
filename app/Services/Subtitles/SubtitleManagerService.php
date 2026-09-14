@@ -323,6 +323,23 @@ class SubtitleManagerService
         $baseName = $media->file_path ? pathinfo($media->file_path, PATHINFO_FILENAME) : "media_{$media->id}";
         $srtPath = "{$destDir}/{$baseName}.{$langCode}.srt";
 
+        // Clean up numbered duplicate files on disk (e.g. *.ar (1).srt, *.ar (2).srt)
+        $pattern = "{$destDir}/{$baseName}*{$langCode}*.srt";
+        foreach (glob($pattern) ?: [] as $existingFile) {
+            $norm = str_replace('\\', '/', $existingFile);
+            if ($norm !== str_replace('\\', '/', $srtPath)) {
+                @File::delete($existingFile);
+            }
+        }
+
+        // Clean up duplicate non-embedded database records for this media & language
+        Subtitle::where('subtitlable_id', $media->id)
+            ->where('subtitlable_type', get_class($media))
+            ->where('language', $langCode)
+            ->where('is_embedded', false)
+            ->where('file_path', '!=', $srtPath)
+            ->delete();
+
         File::put($srtPath, $content);
 
         return Subtitle::updateOrCreate([

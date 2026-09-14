@@ -148,6 +148,8 @@ export function useOrganizerPlan() {
         series_template?: string;
         source_mode?: 'virtual' | 'folder';
         recursive?: boolean;
+        title_language?: 'english' | 'arabic' | 'original';
+        fetch_episode_titles?: boolean;
     }) => {
         isExplicitlyCancelled.value = false;
         isExplicitlyPaused.value = false;

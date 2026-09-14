@@ -186,12 +186,13 @@ class Aria2Service
 
                 // Launch daemon in background
                 try {
+                    $rpcFlags = '--enable-rpc=true --rpc-listen-all=true --rpc-listen-port=6800 --enable-dht=true --enable-peer-exchange=true --bt-enable-lpd=true --seed-time=0 --follow-torrent=mem --quiet=true';
                     if (PHP_OS_FAMILY === 'Windows') {
                         $escapedBin = escapeshellarg($bin);
-                        pclose(popen("start /B \"\" {$escapedBin} --enable-rpc=true --rpc-listen-all=true --rpc-listen-port=6800 --quiet=true", 'r'));
+                        pclose(popen("start /B \"\" {$escapedBin} {$rpcFlags}", 'r'));
                     } else {
                         $escapedBin = escapeshellarg($bin);
-                        exec("{$escapedBin} --enable-rpc=true --rpc-listen-all=true --rpc-listen-port=6800 --quiet=true > /dev/null 2>&1 &");
+                        exec("{$escapedBin} {$rpcFlags} > /dev/null 2>&1 &");
                     }
 
                     // Wait up to 1.5 seconds for socket bind
@@ -396,10 +397,96 @@ class Aria2Service
     }
 
     /**
+     * Extract a 40-character hex infoHash from a magnet URI or hash string.
+     */
+    public function extractInfoHashFromUri(string $uri): ?string
+    {
+        $trimmed = trim($uri);
+        if (preg_match('/xt=urn:btih:([0-9a-fA-F]{40})/i', $trimmed, $matches)) {
+            return strtolower($matches[1]);
+        }
+
+        if (preg_match('/xt=urn:btih:([2-7a-zA-Z]{32})/i', $trimmed, $matches)) {
+            return strtolower($matches[1]);
+        }
+
+        if (preg_match('/^[0-9a-fA-F]{40}$/', $trimmed)) {
+            return strtolower($trimmed);
+        }
+
+        return null;
+    }
+
+    /**
+     * Locate an active or queued Aria2 task GID by its torrent InfoHash.
+     */
+    public function findGidByInfoHash(string $infoHash): ?string
+    {
+        $targetHash = strtolower(trim($infoHash));
+        if (empty($targetHash)) {
+            return null;
+        }
+
+        // 1. Check active downloads first
+        $active = $this->call('aria2.tellActive');
+        if (is_array($active)) {
+            foreach ($active as $task) {
+                if (strtolower($task['infoHash'] ?? '') === $targetHash) {
+                    return $task['gid'] ?? null;
+                }
+            }
+        }
+
+        // 2. Check waiting downloads
+        $waiting = $this->call('aria2.tellWaiting', [0, 100]);
+        if (is_array($waiting)) {
+            foreach ($waiting as $task) {
+                if (strtolower($task['infoHash'] ?? '') === $targetHash) {
+                    return $task['gid'] ?? null;
+                }
+            }
+        }
+
+        // 3. Check stopped downloads (e.g. completed metadata task that followed into payload)
+        $stopped = $this->call('aria2.tellStopped', [0, 50]);
+        if (is_array($stopped)) {
+            foreach ($stopped as $task) {
+                if (strtolower($task['infoHash'] ?? '') === $targetHash) {
+                    // If this task followed into a child (e.g. metadata -> payload)
+                    if (! empty($task['followedBy']) && is_array($task['followedBy'])) {
+                        $childGid = $task['followedBy'][0];
+                        $childStatus = $this->call('aria2.tellStatus', [$childGid]);
+                        if (is_array($childStatus) && in_array($childStatus['status'] ?? '', ['active', 'waiting', 'complete'])) {
+                            return $childGid;
+                        }
+                    }
+
+                    if (($task['status'] ?? '') === 'complete') {
+                        return $task['gid'] ?? null;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Add a magnet link or HTTP/HTTPS direct URL to aria2.
      */
     public function addUri(string $uri, string $destFolder, array $selectFiles = [], array $options = []): ?string
     {
+        // 1. Check if this magnet infoHash already has an active or queued task in Aria2
+        $infoHash = $this->extractInfoHashFromUri($uri);
+        if ($infoHash) {
+            $existingGid = $this->findGidByInfoHash($infoHash);
+            if ($existingGid) {
+                Log::info("Aria2Service::addUri: infoHash {$infoHash} is already registered with GID {$existingGid}, re-attaching.");
+
+                return $existingGid;
+            }
+        }
+
         $cleanDest = str_replace('\\', '/', $destFolder);
 
         $opts = array_merge([
@@ -420,7 +507,33 @@ class Aria2Service
 
         $result = $this->call('aria2.addUri', [[$uri], $opts]);
 
-        return is_string($result) ? $result : null;
+        // If returned a GID, verify it didn't immediately fail with "already registered"
+        if (is_string($result)) {
+            $status = $this->call('aria2.tellStatus', [$result]);
+            if (is_array($status) && ($status['status'] ?? '') === 'error') {
+                $errMsg = strtolower((string) ($status['errorMessage'] ?? ''));
+                if (str_contains($errMsg, 'already registered') && $infoHash) {
+                    $activeGid = $this->findGidByInfoHash($infoHash);
+                    if ($activeGid && $activeGid !== $result) {
+                        $this->call('aria2.removeDownloadResult', [$result]);
+
+                        return $activeGid;
+                    }
+                }
+            }
+
+            return $result;
+        }
+
+        // If RPC returned null (e.g. race condition), fallback check
+        if ($infoHash) {
+            $existingGid = $this->findGidByInfoHash($infoHash);
+            if ($existingGid) {
+                return $existingGid;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -434,6 +547,25 @@ class Aria2Service
             return null;
         }
 
+        // If this task failed because InfoHash is already registered, automatically resolve to active payload
+        $errorMessage = (string) ($res['errorMessage'] ?? '');
+        if (($res['status'] ?? '') === 'error' && str_contains(strtolower($errorMessage), 'already registered')) {
+            $infoHash = $res['infoHash'] ?? null;
+            if (! $infoHash && preg_match('/InfoHash\s+([0-9a-fA-F]{40})/i', $errorMessage, $m)) {
+                $infoHash = $m[1];
+            }
+
+            if ($infoHash) {
+                $activeGid = $this->findGidByInfoHash($infoHash);
+                if ($activeGid && $activeGid !== $gid) {
+                    Log::info("Aria2Service::tellStatus: resolving duplicate registered error GID {$gid} to active {$activeGid}");
+                    $this->call('aria2.removeDownloadResult', [$gid]);
+
+                    return $this->tellStatus($activeGid);
+                }
+            }
+        }
+
         // If this task spawned a child task (magnet metadata download -> actual payload download)
         if (! empty($res['followedBy']) && is_array($res['followedBy'])) {
             $childGid = $res['followedBy'][0];
@@ -445,11 +577,34 @@ class Aria2Service
             }
         }
 
+        // If this is a metadata download task with no followedBy yet, check if child is already in active
+        $firstPath = $res['files'][0]['path'] ?? '';
+        if (str_starts_with(basename(str_replace('\\', '/', $firstPath)), '[METADATA]')) {
+            $infoHash = $res['infoHash'] ?? null;
+            if ($infoHash) {
+                $activeGid = $this->findGidByInfoHash($infoHash);
+                if ($activeGid && $activeGid !== $gid) {
+                    $activeStatus = $this->tellStatus($activeGid);
+                    if ($activeStatus) {
+                        $activeStatus['parent_gid'] = $gid;
+
+                        return $activeStatus;
+                    }
+                }
+            }
+        }
+
         $totalLength = (int) ($res['totalLength'] ?? 0);
         $completedLength = (int) ($res['completedLength'] ?? 0);
         $downloadSpeed = (int) ($res['downloadSpeed'] ?? 0);
+        $uploadSpeed = (int) ($res['uploadSpeed'] ?? 0);
+        $uploadLength = (int) ($res['uploadLength'] ?? 0);
         $status = (string) ($res['status'] ?? 'unknown');
         $numSeeders = (int) ($res['numSeeders'] ?? 0);
+        $connections = (int) ($res['connections'] ?? 0);
+        $pieceLength = (int) ($res['pieceLength'] ?? 0);
+        $numPieces = (int) ($res['numPieces'] ?? 0);
+        $bitfield = (string) ($res['bitfield'] ?? '');
 
         // Map status: active -> downloading, waiting -> queued, complete -> completed
         $mappedStatus = match ($status) {
@@ -462,6 +617,25 @@ class Aria2Service
             default => $status,
         };
 
+        $rawFiles = $res['files'] ?? [];
+        $formattedFiles = [];
+        foreach ($rawFiles as $idx => $f) {
+            $fLen = (int) ($f['length'] ?? 0);
+            $fComp = (int) ($f['completedLength'] ?? 0);
+            $percent = $fLen > 0 ? round(($fComp / $fLen) * 100, 1) : 0;
+            $formattedFiles[] = [
+                'index' => (int) ($f['index'] ?? ($idx + 1)),
+                'path' => $f['path'] ?? '',
+                'name' => basename(str_replace('\\', '/', $f['path'] ?? '')),
+                'length' => $fLen,
+                'completed_length' => $fComp,
+                'completedLength' => $fComp,
+                'progress_percent' => $percent,
+                'percent' => $percent,
+                'selected' => ($f['selected'] ?? 'true') === 'true',
+            ];
+        }
+
         return [
             'gid' => $gid,
             'raw_status' => $status,
@@ -469,12 +643,19 @@ class Aria2Service
             'total_bytes' => $totalLength,
             'downloaded_bytes' => $completedLength,
             'speed_bytes_sec' => $downloadSpeed,
+            'upload_speed_bytes_sec' => $uploadSpeed,
+            'upload_total_bytes' => $uploadLength,
             'num_seeders' => $numSeeders,
-            'files' => $res['files'] ?? [],
+            'connections' => $connections,
+            'piece_length' => $pieceLength,
+            'num_pieces' => $numPieces,
+            'bitfield' => $bitfield,
+            'files' => $formattedFiles,
             'error_code' => $res['errorCode'] ?? null,
             'error_message' => $res['errorMessage'] ?? null,
             'parent_gid' => null,
             'following' => $res['following'] ?? null,
+            'info_hash' => $res['infoHash'] ?? null,
         ];
     }
 

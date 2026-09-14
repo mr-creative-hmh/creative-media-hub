@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import MediaDetailModal from '@/components/media/MediaDetailModal.vue';
 import CollectionManagementModal from '@/components/collections/CollectionManagementModal.vue';
@@ -68,6 +68,10 @@ const { t, isRTL } = useI18n();
 // Detail Modal state
 const selectedDetailMovie = ref<any | null>(null);
 const showManagementModal = ref(false);
+
+const handleCollectionChanged = () => {
+    router.reload();
+};
 
 const openMovieDetails = (movie: MovieDetail) => {
     selectedDetailMovie.value = movie;
@@ -411,7 +415,7 @@ const handleToggleFavorite = async (item: any) => {
                 :show="showManagementModal"
                 :initial-collection-slug="collection.slug"
                 @close="showManagementModal = false"
-                @changed="() => window.location.reload()"
+                @changed="handleCollectionChanged"
             />
         </div>
     </AppLayout>

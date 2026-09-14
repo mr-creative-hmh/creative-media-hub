@@ -8,26 +8,87 @@ class SceneNameParserService
      * Map of Arabic ordinal words to integer values.
      */
     protected array $arabicNumerals = [
-        'الاولى' => 1, 'الاول' => 1, 'الأولى' => 1, 'الأول' => 1,
-        'الثانية' => 2, 'الثاني' => 2,
-        'الثالثة' => 3, 'الثالث' => 3,
-        'الرابعة' => 4, 'الرابع' => 4,
-        'الخامسة' => 5, 'الخامس' => 5,
-        'السادسة' => 6, 'السادس' => 6,
-        'السابعة' => 7, 'السابع' => 7,
-        'الثامنة' => 8, 'الثامن' => 8,
-        'التاسعة' => 9, 'التاسع' => 9,
-        'العاشرة' => 10, 'العاشر' => 10,
-        'الحادية عشرة' => 11, 'الحادي عشر' => 11,
-        'الثانية عشرة' => 12, 'الثاني عشر' => 12,
-        'الثالثة عشرة' => 13, 'الثالث عشر' => 13,
-        'الرابعة عشرة' => 14, 'الرابع عشر' => 14,
-        'الخامسة عشرة' => 15, 'الخامس عشر' => 15,
-        'السادسة عشرة' => 16, 'السادس عشر' => 16,
-        'السابعة عشرة' => 17, 'السابع عشر' => 17,
-        'الثامنة عشرة' => 18, 'الثامن عشر' => 18,
-        'التاسعة عشرة' => 19, 'التاسع عشر' => 19,
-        'العشرون' => 20, 'العشرين' => 20,
+        'الاولى' => 1, 'الاول' => 1, 'الأولى' => 1, 'الأول' => 1, 'الاولي' => 1, 'الأولي' => 1,
+        'واحد' => 1, 'واحدة' => 1,
+        'الثانية' => 2, 'الثاني' => 2, 'اثنين' => 2, 'إثنين' => 2, 'اثنان' => 2, 'إثنان' => 2,
+        'الثالثة' => 3, 'الثالث' => 3, 'ثلاثة' => 3, 'ثلاث' => 3,
+        'الرابعة' => 4, 'الرابع' => 4, 'اربعة' => 4, 'أربعة' => 4, 'اربع' => 4, 'أربع' => 4,
+        'الخامسة' => 5, 'الخامس' => 5, 'خمسة' => 5, 'خمس' => 5,
+        'السادسة' => 6, 'السادس' => 6, 'ستة' => 6, 'ست' => 6,
+        'السابعة' => 7, 'السابع' => 7, 'سبعة' => 7, 'سبع' => 7,
+        'الثامنة' => 8, 'الثامن' => 8, 'ثمانية' => 8, 'ثماني' => 8, 'ثمان' => 8,
+        'التاسعة' => 9, 'التاسع' => 9, 'تسعة' => 9, 'تسع' => 9,
+        'العاشرة' => 10, 'العاشر' => 10, 'عشرة' => 10, 'عشر' => 10,
+
+        // 11-19
+        'الحادي عشر' => 11, 'الحادية عشر' => 11, 'الحادي عشرة' => 11, 'الحادية عشرة' => 11, 'إحدى عشر' => 11, 'أحد عشر' => 11, 'احدى عشر' => 11,
+        'الثاني عشر' => 12, 'الثانية عشر' => 12, 'الثاني عشرة' => 12, 'الثانية عشرة' => 12, 'اثنا عشر' => 12, 'اثني عشر' => 12, 'اثنتا عشر' => 12, 'اثنتي عشر' => 12,
+        'الثالث عشر' => 13, 'الثالثة عشر' => 13, 'الثالث عشرة' => 13, 'الثالثة عشرة' => 13, 'ثلاثة عشر' => 13, 'ثلاث عشر' => 13,
+        'الرابع عشر' => 14, 'الرابعة عشر' => 14, 'الرابع عشرة' => 14, 'الرابعة عشرة' => 14, 'اربعة عشر' => 14, 'أربعة عشر' => 14,
+        'الخامس عشر' => 15, 'الخامسة عشر' => 15, 'الخامس عشرة' => 15, 'الخامسة عشرة' => 15, 'خمسة عشر' => 15, 'خمس عشر' => 15,
+        'السادس عشر' => 16, 'السادسة عشر' => 16, 'السادس عشرة' => 16, 'السادسة عشرة' => 16, 'ستة عشر' => 16, 'ست عشر' => 16,
+        'السابع عشر' => 17, 'السابعة عشر' => 17, 'السابع عشرة' => 17, 'السابعة عشرة' => 17, 'سبعة عشر' => 17, 'سبع عشر' => 17,
+        'الثامن عشر' => 18, 'الثامنة عشر' => 18, 'الثامن عشرة' => 18, 'الثامنة عشرة' => 18, 'ثمانية عشر' => 18, 'ثماني عشر' => 18,
+        'التاسع عشر' => 19, 'التاسعة عشر' => 19, 'التاسع عشرة' => 19, 'التاسعة عشرة' => 19, 'تسعة عشر' => 19, 'تسع عشر' => 19,
+
+        // 20
+        'العشرون' => 20, 'العشرين' => 20, 'عشرون' => 20, 'عشرين' => 20,
+
+        // 21-29 (both with and without 'ال' after 'و')
+        'الحادي والعشرون' => 21, 'الحادية والعشرون' => 21, 'الحادي والعشرين' => 21, 'الحادية والعشرين' => 21,
+        'الحادية وعشرون' => 21, 'الحادية وعشرين' => 21, 'الحادي وعشرون' => 21, 'الحادي وعشرين' => 21,
+        'الواحد والعشرون' => 21, 'الواحدة والعشرون' => 21, 'الواحد والعشرين' => 21, 'الواحدة والعشرين' => 21,
+
+        'الثاني والعشرون' => 22, 'الثانية والعشرون' => 22, 'الثاني والعشرين' => 22, 'الثانية والعشرين' => 22,
+        'الثانية وعشرون' => 22, 'الثانية وعشرين' => 22, 'الثاني وعشرون' => 22, 'الثاني وعشرين' => 22,
+
+        'الثالث والعشرون' => 23, 'الثالثة والعشرون' => 23, 'الثالث والعشرين' => 23, 'الثانية والعشرين' => 22, 'الثالثة والعشرين' => 23,
+        'الثالثة وعشرون' => 23, 'الثالثة وعشرين' => 23, 'الثالث وعشرون' => 23, 'الثالث وعشرين' => 23,
+
+        'الرابع والعشرون' => 24, 'الرابعة والعشرون' => 24, 'الرابع والعشرين' => 24, 'الرابعة والعشرين' => 24,
+        'الرابعة وعشرون' => 24, 'الرابعة وعشرين' => 24, 'الرابع وعشرون' => 24, 'الرابع وعشرين' => 24,
+
+        'الخامس والعشرون' => 25, 'الخامسة والعشرون' => 25, 'الخامس والعشرين' => 25, 'الخامسة والعشرين' => 25,
+        'الخامسة وعشرون' => 25, 'الخامسة وعشرين' => 25, 'الخامس وعشرون' => 25, 'الخامس وعشرين' => 25,
+
+        'السادس والعشرون' => 26, 'السادسة والعشرون' => 26, 'السادس والعشرين' => 26, 'السادسة والعشرين' => 26,
+        'السادسة وعشرون' => 26, 'السادسة وعشرين' => 26, 'السادس وعشرون' => 26, 'السادس وعشرين' => 26,
+
+        'السابع والعشرون' => 27, 'السابعة والعشرون' => 27, 'السابع والعشرين' => 27, 'السابعة والعشرين' => 27,
+        'السابعة وعشرون' => 27, 'السابعة وعشرين' => 27, 'السابع وعشرون' => 27, 'السابع وعشرين' => 27,
+
+        'الثامن والعشرون' => 28, 'الثامنة والعشرون' => 28, 'الثامن والعشرين' => 28, 'الثامنة والعشرين' => 28,
+        'الثامنة وعشرون' => 28, 'الثامنة وعشرين' => 28, 'الثامن وعشرون' => 28, 'الثامن وعشرين' => 28,
+
+        'التاسع والعشرون' => 29, 'التاسعة والعشرون' => 29, 'التاسع والعشرين' => 29, 'التاسعة والعشرين' => 29,
+        'التاسعة وعشرون' => 29, 'التاسعة وعشرين' => 29, 'التاسع وعشرون' => 29, 'التاسع وعشرين' => 29,
+
+        // 30 & Finale variants
+        'الثلاثون' => 30, 'الثلاثين' => 30, 'ثلاثون' => 30, 'ثلاثين' => 30,
+        'الثلاثون والاخيرة' => 30, 'الثلاثون والأخيرة' => 30, 'الثلاثون والآخيرة' => 30,
+        'الثلاثون و الاخيرة' => 30, 'الثلاثون و الأخيرة' => 30, 'الثلاثون و الآخيرة' => 30,
+        'الثلاثين والاخيرة' => 30, 'الثلاثين والأخيرة' => 30, 'الثلاثين و الاخيرة' => 30, 'الثلاثين و الأخيرة' => 30,
+        'الاخيرة' => 30, 'الأخيرة' => 30, 'الآخيرة' => 30,
+
+        // 31-39
+        'الحادي والثلاثون' => 31, 'الحادية والثلاثون' => 31, 'الحادي والثلاثين' => 31, 'الحادية والثلاثين' => 31,
+        'الثاني والثلاثون' => 32, 'الثانية والثلاثون' => 32, 'الثاني والثلاثين' => 32, 'الثانية والثلاثين' => 32,
+        'الثالث والثلاثون' => 33, 'الثالثة والثلاثون' => 33, 'الثالث والثلاثين' => 33, 'الثالثة والثلاثين' => 33,
+        'الرابع والثلاثون' => 34, 'الرابعة والثلاثون' => 34, 'الرابع والثلاثين' => 34, 'الرابعة والثلاثين' => 34,
+        'الخامس والثلاثون' => 35, 'الخامسة والثلاثون' => 35, 'الخامس والثلاثين' => 35, 'الخامسة والثلاثين' => 35,
+        'السادس والثلاثون' => 36, 'السادسة والثلاثون' => 36, 'السادس والثلاثين' => 36, 'السادسة والثلاثين' => 36,
+        'السابع والثلاثون' => 37, 'السابعة والثلاثون' => 37, 'السابع والثلاثين' => 37, 'السابعة والثلاثين' => 37,
+        'الثامن والثلاثون' => 38, 'الثامنة والثلاثون' => 38, 'الثامن والثلاثين' => 38, 'الثامنة والثلاثين' => 38,
+        'التاسع والثلاثون' => 39, 'التاسعة والثلاثون' => 39, 'التاسع والثلاثين' => 39, 'التاسعة والثلاثين' => 39,
+
+        // Decades up to 100
+        'الاربعون' => 40, 'الأربعون' => 40, 'الاربعين' => 40, 'الأربعين' => 40,
+        'الخمسون' => 50, 'الخمسين' => 50,
+        'الستون' => 60, 'الستين' => 60,
+        'السبعون' => 70, 'السبعين' => 70,
+        'الثمانون' => 80, 'الثمانين' => 80,
+        'التسعون' => 90, 'التسعين' => 90,
+        'المائة' => 100, 'المئة' => 100,
     ];
 
     /**
@@ -89,10 +150,13 @@ class SceneNameParserService
         $isParentSeasonFolder = false;
 
         // Remove soft hyphens, zero-width spaces, and normalize typographical quotes/pipes
-        $filename = str_replace(["\xad", "\xe2\x80\x8b", '¦'], ['', '', '-'], $filename);
+        $filename = str_replace(["\xC2\xAD", "\xE2\x80\x8B", '¦'], ['', '', '-'], $filename);
         $filename = str_replace('الحزء', 'الجزء', $filename);
         // Strip common YouTube channel and production promotional prefixes
-        $filename = preg_replace('/^(?:Future Cinema & TV Productions|المستقبل للإنتاج|قناة .*? الرسمية)[\s\-–¦|]+(?:مسلسل\s+)?/ui', '', $filename);
+        $cleanedPrefix = preg_replace('/^(?:Future Cinema & TV Productions|المستقبل للإنتاج|قناة .*? الرسمية)[\s\-–¦|]+(?:مسلسل\s+)?/ui', '', $filename);
+        if ($cleanedPrefix !== null) {
+            $filename = $cleanedPrefix;
+        }
 
         $working = $baseName;
         $working = preg_replace('/\b(nine)-(nine)\b/i', 'Nine###Nine', $working);
@@ -159,7 +223,7 @@ class SceneNameParserService
         }
 
         // 2.5 Sequence numbering prefix on Collection Movies (e.g. "1.Ip.Man.2008.mp4", "2.Fast.2.Furious.2003", "1.Batman Begins (2005)")
-        if (preg_match('/^(?:E)?(\d{1,3})[.\-\s_]+(.*?)$/i', trim($working), $numPrefixMatch)) {
+        if (preg_match('/^(?:E)?(\d{1,2})[.\-\s_]+(.*?)$/i', trim($working), $numPrefixMatch)) {
             $restOfName = trim($numPrefixMatch[2]);
             $hasYearInRest = preg_match('/(19\d\d|20\d\d)/', $restOfName);
             if (($isInsideMovieTree || $isCollectionFolder || $hasYearInRest) && ! $isInsideSeriesTree && ! $isParentSeasonFolder) {
@@ -291,21 +355,35 @@ class SceneNameParserService
             $rawAfterPart = $tvMatch[4];
         }
         // Pattern D: Arabic Season & Episode in filename (e.g. مسلسل الاختيار الموسم 1 الحلقة 05)
-        elseif (preg_match('/^(.*?)(?:[._\-\s]+|^)(?:الموسم|موسم|الجزء|جزء)\s*(\d+|[\p{Arabic}]+)[._\-\s]+(?:الحلقة|حلقة|ح)\s*(\d+|[\p{Arabic}]+)[._\-\s]*(.*?)$/ui', $working, $tvMatch)) {
+        elseif (preg_match('/^(.*?)(?:[._\-\s]+|^)(?:الموسم|موسم|الجزء|جزء)\s*(\d+|[\p{Arabic}\s]+?)[._\-\s]+(?:الحلقة|حلقة|ح)\s*(\d+|[\p{Arabic}\s]+?)(?:\s*[-–—_.]|\s*(?=[a-zA-Z0-9])|\s*$)(.*?)$/ui', $working, $tvMatch)) {
             $type = 'series';
             $isSeriesDetected = true;
             $rawSeriesPart = $tvMatch[1];
             $season = $this->resolveNumber($tvMatch[2]);
-            $episode = $this->resolveNumber($tvMatch[3]);
+            $candidateEp = $this->resolveNumber($tvMatch[3]);
+            if (preg_match('/\b(?:ep|episode)\s*(\d{1,3})\b/i', $working, $explicitEpMatch)) {
+                $num = (int) $explicitEpMatch[1];
+                if ($candidateEp === 1 && $num > 1) {
+                    $candidateEp = $num;
+                }
+            }
+            $episode = $candidateEp;
             $rawAfterPart = $tvMatch[4];
         }
         // Pattern E: Arabic Episode in filename (e.g. مسلسل الاختيار الحلقة 01 or الحلقة 05 or حلقة 12)
-        elseif (preg_match('/^(.*?)(?:[._\-\s]+|^)(?:الحلقة|حلقة|ح)\s*(\d+|[\p{Arabic}]+)[._\-\s]*(.*?)$/ui', $working, $tvMatch)) {
+        elseif (preg_match('/^(.*?)(?:[._\-\s]+|^)(?:الحلقة|حلقة|ح)\s*(\d+|[\p{Arabic}\s]+?)(?:\s*[-–—_.]|\s*(?=[a-zA-Z0-9])|\s*$)(.*?)$/ui', $working, $tvMatch)) {
             $type = 'series';
             $isSeriesDetected = true;
             $rawSeriesPart = $tvMatch[1];
             $season = $season ?? 1;
-            $episode = $this->resolveNumber($tvMatch[2]);
+            $candidateEp = $this->resolveNumber($tvMatch[2]);
+            if (preg_match('/\b(?:ep|episode)\s*(\d{1,3})\b/i', $working, $explicitEpMatch)) {
+                $num = (int) $explicitEpMatch[1];
+                if ($candidateEp === 1 && $num > 1) {
+                    $candidateEp = $num;
+                }
+            }
+            $episode = $candidateEp;
             $rawAfterPart = $tvMatch[3];
         }
         // Pattern F: English Season & Episode text (e.g. Show Name Season 1 Episode 2)
@@ -376,11 +454,61 @@ class SceneNameParserService
                 }
             }
 
+            // Extract dual Arabic and English series titles if available
+            $seriesTitleAr = null;
+            $seriesTitleEn = null;
+            if ($seriesTitle && preg_match('/\p{Arabic}/u', $seriesTitle)) {
+                $seriesTitleAr = $seriesTitle;
+                $seriesTitleEn = $this->extractEnglishSeriesTitle($parentFolder, $filename, $seriesTitle);
+            } elseif ($seriesTitle) {
+                $seriesTitleEn = $seriesTitle;
+            } else {
+                $seriesTitleEn = $this->extractEnglishSeriesTitle($parentFolder, $filename);
+            }
+
             // Episode Title from remaining string
             if ($rawAfterPart && ! $episodeTitle) {
-                $cleanEp = $this->cleanTitleString($rawAfterPart);
-                if (! empty($cleanEp) && ! is_numeric($cleanEp) && ! preg_match($qualityTokensRegex, $cleanEp)) {
-                    $episodeTitle = $cleanEp;
+                // If rawAfterPart is merely a secondary Latin series title + Ep number (e.g. "- Elnadam Ep 1"),
+                // extract any secondary Latin series title and don't treat the show name as an episode title!
+                if (preg_match('/^\s*[-–—_.]*\s*([a-zA-Z0-9\s\']+?)\s*(?:Ep|Episode|E|Part|P)\s*(\d{1,3})\b(?:\s*[-–—_.]*\s*(.*))?$/i', $rawAfterPart, $bilingualMatch)) {
+                    if (empty($seriesTitleEn)) {
+                        $seriesTitleEn = trim($bilingualMatch[1]);
+                    }
+                    $afterBilingual = trim($bilingualMatch[3] ?? '');
+                    if (! empty($afterBilingual)) {
+                        $cleanEp = $this->cleanTitleString($afterBilingual);
+                        if (! empty($cleanEp) && ! is_numeric($cleanEp) && ! preg_match($qualityTokensRegex, $cleanEp)) {
+                            $episodeTitle = $cleanEp;
+                        }
+                    }
+                } else {
+                    $cleanEp = $this->cleanTitleString($rawAfterPart);
+                    if (! empty($cleanEp) && ! is_numeric($cleanEp) && ! preg_match($qualityTokensRegex, $cleanEp)) {
+                        $episodeTitle = $cleanEp;
+                    }
+                }
+            }
+
+            // If episode title merely repeats the series title (Arabic or English) or is generic, clear it
+            if ($episodeTitle) {
+                $normEp = strtolower(trim(preg_replace('/[^a-z0-9]/i', '', $episodeTitle)));
+                $normEn = strtolower(trim(preg_replace('/[^a-z0-9]/i', '', (string) $seriesTitleEn)));
+                $normAr = trim(preg_replace('/[^\p{Arabic}\p{N}]/u', '', (string) $seriesTitleAr));
+                $normEpAr = trim(preg_replace('/[^\p{Arabic}\p{N}]/u', '', $episodeTitle));
+
+                $stripArticle = fn ($s) => preg_replace('/^(?:al|el|the)/i', '', $s);
+                $rootEp = $stripArticle($normEp);
+                $rootEn = $stripArticle($normEn);
+
+                if (
+                    preg_match('/^(?:episode|ep|part|حلقة|ح)\s*\d*$/ui', $episodeTitle) ||
+                    ($normEn !== '' && preg_match('/^'.preg_quote($normEn, '/').'(?:ep|episode|part|e)?\d*$/i', $normEp)) ||
+                    ($rootEn !== '' && $rootEp !== '' && ($rootEp === $rootEn || preg_match('/^'.preg_quote($rootEn, '/').'(?:ep|episode|part|e)?\d*$/i', $rootEp))) ||
+                    ($normAr !== '' && preg_match('/^'.preg_quote($normAr, '/').'(?:حلقة|ح|جزء)?\d*$/ui', $normEpAr)) ||
+                    $episodeTitle === $seriesTitleAr ||
+                    $episodeTitle === $seriesTitle
+                ) {
+                    $episodeTitle = null;
                 }
             }
 
@@ -504,6 +632,8 @@ class SceneNameParserService
             'title' => $cleanTitle,
             'clean_title' => $cleanTitle,
             'series_title' => $type === 'series' ? $cleanTitle : null,
+            'series_title_ar' => $type === 'series' ? ($seriesTitleAr ?? $cleanTitle) : null,
+            'series_title_en' => $type === 'series' ? $seriesTitleEn : null,
             'collection_name' => $type === 'series' ? null : ($collectionName ?? $detectedCollectionName ?? null),
             'type' => $type,
             'season' => $season ?? ($type === 'series' ? 1 : null),
@@ -536,9 +666,15 @@ class SceneNameParserService
             return (int) $val;
         }
 
-        $trimmed = trim($val);
+        $trimmed = trim(preg_replace('/\s+/u', ' ', (string) $val));
         if (isset($this->arabicNumerals[$trimmed])) {
             return $this->arabicNumerals[$trimmed];
+        }
+
+        // Normalize conjunction 'و' not followed by 'ال' (e.g. 'التاسعة وعشرون' -> 'التاسعة والعشرون')
+        $withAl = preg_replace('/(\s+و)(?!ال)/u', '$1ال', $trimmed);
+        if (isset($this->arabicNumerals[$withAl])) {
+            return $this->arabicNumerals[$withAl];
         }
 
         // Try stripping 'ال' if present
@@ -547,7 +683,57 @@ class SceneNameParserService
             return $this->arabicNumerals[$withoutAl];
         }
 
+        $norm = str_replace(['أ', 'إ', 'آ'], 'ا', $trimmed);
+        $norm = preg_replace('/ي$/u', 'ى', $norm);
+        foreach ($this->arabicNumerals as $k => $v) {
+            $kNorm = str_replace(['أ', 'إ', 'آ'], 'ا', $k);
+            $kNorm = preg_replace('/ي$/u', 'ى', $kNorm);
+            if ($kNorm === $norm) {
+                return $v;
+            }
+        }
+
         return 1;
+    }
+
+    /**
+     * Extract Latin / English series title from dual-language parent folders or filenames.
+     * E.g. 'FLARE Arts & Media - مسلسل الندم كامل 2016 - Al Nadam Full Series HD' -> 'Al Nadam'
+     * E.g. 'مسلسل الندم الحلقة 1 - Elnadam Ep 1.mp4' -> 'Elnadam'
+     */
+    public function extractEnglishSeriesTitle(?string $parentFolder = '', ?string $filename = '', ?string $arabicTitle = null): ?string
+    {
+        $parentFolder = $parentFolder ?: '';
+        $filename = $filename ?: '';
+        // 1. Check parent folder segments
+        if (! empty($parentFolder)) {
+            $segments = preg_split('/\s*[-–—|¦]\s*/u', $parentFolder);
+            foreach ($segments as $seg) {
+                $seg = trim($seg);
+                if (preg_match('/\p{Arabic}/u', $seg)) {
+                    continue;
+                }
+                if (preg_match('/\b(?:Arts & Media|Media|Productions|Films|Pictures|Studios|FLARE|Official|Channel)\b/i', $seg) &&
+                    ! preg_match('/\b(?:Series|Show)\b/i', $seg) && strlen($seg) < 25 && stripos($seg, 'Media') !== false) {
+                    continue;
+                }
+                $cleaned = preg_replace('/\b(?:Full\s*Series|Complete\s*Series|Full|Complete|HD|FHD|UHD|720p|1080p|4k|TV|Series|Season\s*\d+)\b/i', ' ', $seg);
+                $cleaned = trim(preg_replace('/\s+/', ' ', $cleaned));
+                if (! empty($cleaned) && strlen($cleaned) >= 2 && ! is_numeric($cleaned) && ! in_array(strtolower($cleaned), $this->genericFolderNames)) {
+                    return $cleaned;
+                }
+            }
+        }
+
+        // 2. Fallback: check filename for Latin title before Ep / Episode
+        if (preg_match('/(?:^|[-–—])\s*([a-zA-Z\s\']+?)\s*(?:Ep|Episode|E\d|S\d)\b/i', $filename, $m)) {
+            $title = trim($m[1]);
+            if (strlen($title) >= 2 && ! in_array(strtolower($title), $this->genericFolderNames)) {
+                return $title;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -763,9 +949,11 @@ class SceneNameParserService
         $s = preg_replace('/^(?:مسلسل|فيلم|فلم|برنامج)\s+/ui', '', trim($s));
 
         // Strip season and episode markers
-        $s = preg_replace('/\b(?:Season|Series|Staffel|Saison|الموسم|موسم|الجزء|جزء)\s*(\d+|[\p{Arabic}]+)?\b/ui', ' ', $s);
-        $s = preg_replace('/\b(?:الحلقة|حلقة|ح)\s*(\d+|[\p{Arabic}]+)?\b/ui', ' ', $s);
+        $s = preg_replace('/\b(?:Season|Series|Staffel|Saison|الموسم|موسم|الجزء|جزء)\s*(\d+|[\p{Arabic}\s]+?)?\b/ui', ' ', $s);
+        $s = preg_replace('/\b(?:الحلقة|حلقة|ح)\s*(\d+|[\p{Arabic}\s]+?)?\b/ui', ' ', $s);
+        $s = preg_replace('/\b(?:Ep|Episode|E)\s*(\d+)\b/i', ' ', $s);
         $s = preg_replace('/\bS\d{1,2}\b/i', ' ', $s);
+        $s = preg_replace('/\b(?:عشر|عشرة|وعشرون|وعشرين|والثلاثون|والثلاثين|والاخيرة|والأخيرة|و الأخيرة|و الاخيرة)\b/ui', ' ', $s);
         $s = preg_replace('/\b(?:2160p|1440p|1080p|1080i|720p|576p|540p|480p|360p|240p|4k|2k|bluray|remux|web-dl|webdl|webrip|hdtv|dvdrip|dvd|x264|x265|hevc|aac|dts|ac3|atmos|hdr|10bit|8bit|ddp5\.1|ddp)\b/i', ' ', $s);
 
         // Strip Arabic release tags

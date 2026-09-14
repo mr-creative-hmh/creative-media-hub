@@ -84,12 +84,15 @@ const mobileNavItems = [
             <Link
                 v-if="activeDownloads.length > 0"
                 href="/downloads"
-                class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 text-xs font-bold transition-all hover:bg-indigo-500/30 cursor-pointer shadow-sm"
+                class="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-xs font-bold transition-all hover:bg-cyan-500/30 cursor-pointer shadow-sm hover:shadow-cyan-500/20 active:scale-95 animate-fade-in"
                 :title="isRTL ? 'التنزيلات النشطة' : 'Active Downloads'"
             >
-                <DownloadCloud class="w-3.5 h-3.5 animate-bounce text-indigo-400" />
-                <span class="font-mono text-[11px]">{{ totalSpeedDownFormatted }}</span>
-                <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping"></span>
+                <DownloadCloud class="w-4 h-4 animate-bounce text-cyan-400 shrink-0" />
+                <span class="px-1.5 py-0.2 rounded-md bg-cyan-500/30 text-[10px] font-mono font-black text-cyan-200">
+                    {{ activeDownloads.length }}
+                </span>
+                <span class="font-mono text-[11px] text-slate-200 hidden sm:inline">{{ totalSpeedDownFormatted }}</span>
+                <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping shrink-0"></span>
             </Link>
 
             <!-- Universal Activity & Job Center Navbar Pill -->

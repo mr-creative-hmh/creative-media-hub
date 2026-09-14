@@ -38,7 +38,7 @@ export interface DownloadItem {
     source_url?: string;
     destination_path?: string;
     destination_folder?: string;
-    torrent_files?: TorrentFileItem[] | null;
+    torrent_files?: any | null;
     selected_files?: any[] | null;
     info_hash?: string | null;
     aria2_gid?: string | null;
@@ -46,7 +46,15 @@ export interface DownloadItem {
     downloaded_bytes: number;
     status: 'queued' | 'downloading' | 'paused' | 'completed' | 'failed';
     speed_bytes_sec: number;
+    upload_speed_bytes_sec?: number;
+    num_seeders?: number;
+    connections?: number;
+    workflow_stage?: 'downloading' | 'verifying' | 'organizing' | 'scanning' | 'ready' | 'failed' | null;
+    organize_status?: 'pending' | 'in_progress' | 'success' | 'failed' | 'completed' | null;
+    organized_path?: string | null;
+    indexed_id?: number | null;
     error_message?: string;
+    error_details?: string | null;
     created_at?: string;
     updated_at?: string;
 }
@@ -78,7 +86,12 @@ export function useDownloader() {
     const { isRTL } = useI18n();
 
     const activeDownloads = computed(() =>
-        downloads.value.filter(d => d.status === 'downloading' || d.status === 'queued')
+        downloads.value.filter(d =>
+            d.status === 'downloading' ||
+            d.status === 'queued' ||
+            (d.workflow_stage && d.workflow_stage !== 'ready' && d.workflow_stage !== 'failed') ||
+            d.organize_status === 'in_progress'
+        )
     );
 
     const completedDownloads = computed(() =>
@@ -207,8 +220,6 @@ export function useDownloader() {
     };
 
     const processNextChunk = async () => {
-        if (activeDownloads.value.length === 0) return;
-
         try {
             const res = await fetch('/api/downloads/process-batch', {
                 method: 'POST',
@@ -226,7 +237,7 @@ export function useDownloader() {
         } catch (e) {}
     };
 
-        const fetchDaemonStatus = async () => {
+    const fetchDaemonStatus = async () => {
         try {
             const res = await fetch('/api/downloads/daemon/status');
             if (res.ok) {
@@ -253,16 +264,27 @@ export function useDownloader() {
         return false;
     };
 
+    let idleTick = 0;
     const startBackgroundWorker = () => {
         if (isWorkerRunning.value) return;
         isWorkerRunning.value = true;
         fetchDownloads();
 
         workerInterval = setInterval(() => {
+            idleTick++;
             if (activeDownloads.value.length > 0) {
                 processNextChunk();
+            } else if (idleTick % 3 === 0) {
+                fetchDownloads();
             }
         }, 1200);
+
+        if (typeof window !== 'undefined') {
+            window.addEventListener('downloads:refresh', () => {
+                fetchDownloads();
+                processNextChunk();
+            });
+        }
     };
 
     const addDownload = async (
@@ -325,6 +347,20 @@ export function useDownloader() {
         });
     };
 
+    const stopDownload = async (id: number) => {
+        const item = downloads.value.find(d => d.id === id);
+        if (item) {
+            item.status = 'paused';
+            item.speed_bytes_sec = 0;
+        }
+        await fetch(`/api/downloads/${id}/stop`, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+            },
+        });
+    };
+
     const resumeDownload = async (id: number) => {
         const item = downloads.value.find(d => d.id === id);
         if (item) {
@@ -350,6 +386,33 @@ export function useDownloader() {
                 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
             },
         });
+    };
+
+    const organizeDownload = async (id: number) => {
+        const item = downloads.value.find(d => d.id === id);
+        if (item) {
+            item.workflow_stage = 'organizing';
+            item.organize_status = 'in_progress';
+        }
+        try {
+            const res = await fetch(`/api/downloads/${id}/organize`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                },
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.item && item) {
+                    Object.assign(item, data.item);
+                }
+                return data;
+            }
+        } catch (e) {
+            console.error('Failed to organize download:', e);
+        }
+        return null;
     };
 
     const deleteDownload = async (id: number) => {
@@ -379,8 +442,10 @@ export function useDownloader() {
         startBackgroundWorker,
         addDownload,
         pauseDownload,
+        stopDownload,
         resumeDownload,
         retryDownload,
+        organizeDownload,
         deleteDownload,
         daemonStatus,
         fetchDaemonStatus,

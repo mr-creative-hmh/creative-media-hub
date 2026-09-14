@@ -96,6 +96,8 @@ const isTogglingWatcher = ref(false);
 const isRunningWatcher = ref(false);
 const newWatchFolder = ref('');
 const omitEpisodeTitle = ref(false);
+const fetchEpisodeTitles = ref(true);
+const titleLanguage = ref<'original' | 'english' | 'arabic'>('original');
 
 const toggleOmitEpisodeTitle = () => {
     omitEpisodeTitle.value = !omitEpisodeTitle.value;
@@ -409,6 +411,8 @@ const handleStartPlanGeneration = async () => {
         series_template: seriesTemplate.value,
         source_mode: sourceMode.value,
         recursive: true,
+        title_language: titleLanguage.value,
+        fetch_episode_titles: fetchEpisodeTitles.value,
     });
 };
 
@@ -468,6 +472,8 @@ const generateDryRun = async () => {
                 target_root: targetRoot.value,
                 movie_template: movieTemplate.value,
                 series_template: seriesTemplate.value,
+                title_language: titleLanguage.value,
+                fetch_episode_titles: fetchEpisodeTitles.value,
             }),
         });
         const data = await res.json();
@@ -1044,6 +1050,72 @@ onUnmounted(() => {
                             {{ isRTL ? 'إلغاء اسم الحلقة من المسلسلات (رقم الحلقة فقط مثل S01E01)' : 'Omit Episode Title (Clean Show - S01E01 format)' }}
                         </span>
                     </label>
+
+                    <!-- Auto-Fetch Episode Titles Online (TMDb) -->
+                    <label
+                        class="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-300 hover:text-white transition-colors"
+                        :class="{ 'opacity-40 pointer-events-none': omitEpisodeTitle }"
+                    >
+                        <input
+                            type="checkbox"
+                            v-model="fetchEpisodeTitles"
+                            :disabled="omitEpisodeTitle"
+                            class="rounded border-white/20 bg-slate-900 text-cyan-500 focus:ring-cyan-400 cursor-pointer"
+                        />
+                        <span class="font-medium flex items-center gap-1.5">
+                            <span>🏷️</span>
+                            <span>{{ isRTL ? 'جلب أسماء الحلقات أونلاين تلقائياً (TMDb / Online)' : 'Auto-Fetch Episode Titles (TMDb / Online)' }}</span>
+                        </span>
+                    </label>
+
+                    <!-- Series Title Language Selector -->
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="text-slate-400 font-medium flex items-center gap-1.5">
+                            <span>🌐</span>
+                            <span>{{ isRTL ? 'لغة اسم المسلسل:' : 'Series Title Language:' }}</span>
+                        </span>
+                        <div class="inline-flex rounded-xl bg-slate-950 p-0.5 border border-white/10">
+                            <button
+                                type="button"
+                                @click="titleLanguage = 'original'"
+                                :class="[
+                                    'px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer',
+                                    titleLanguage === 'original'
+                                        ? 'bg-cyan-500 text-slate-950 shadow-sm font-bold'
+                                        : 'text-slate-400 hover:text-white'
+                                ]"
+                                :title="isRTL ? 'الاسم الأصلي كما هو في الملف (افتراضي)' : 'Original name as in file (Default)'"
+                            >
+                                {{ isRTL ? 'الأصلي (افتراضي)' : 'Original (Default)' }}
+                            </button>
+                            <button
+                                type="button"
+                                @click="titleLanguage = 'arabic'"
+                                :class="[
+                                    'px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer',
+                                    titleLanguage === 'arabic'
+                                        ? 'bg-cyan-500 text-slate-950 shadow-sm font-bold'
+                                        : 'text-slate-400 hover:text-white'
+                                ]"
+                                :title="isRTL ? 'تسمية باللغة العربية (مثال: الندم)' : 'Arabic naming (e.g. الندم)'"
+                            >
+                                {{ isRTL ? 'العربية' : 'Arabic' }}
+                            </button>
+                            <button
+                                type="button"
+                                @click="titleLanguage = 'english'"
+                                :class="[
+                                    'px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer',
+                                    titleLanguage === 'english'
+                                        ? 'bg-cyan-500 text-slate-950 shadow-sm font-bold'
+                                        : 'text-slate-400 hover:text-white'
+                                ]"
+                                :title="isRTL ? 'تسمية باللغة الإنجليزية (مثال: Al Nadam)' : 'English naming (e.g. Al Nadam)'"
+                            >
+                                {{ isRTL ? 'الإنجليزية' : 'English' }}
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Directory Watcher & Auto-Organize Panel (Collapsible) -->
