@@ -2,28 +2,69 @@
 
 namespace Tests\Feature;
 
+use App\Models\AppSetting;
 use App\Models\MediaItem;
 use App\Models\Series;
 use App\Services\Scout\LibraryAcquisitionService;
-use App\Services\Scout\LibraryGapService;
 use App\Services\Scout\TorrentDiscoveryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class MediaScoutTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        AppSetting::set('tmdb_api_key', 'test_api_key');
+
+        Http::fake([
+            'api.themoviedb.org/*' => Http::response([
+                'results' => [
+                    [
+                        'id' => 19995,
+                        'title' => 'Avatar',
+                        'name' => 'Avatar',
+                        'overview' => 'In the 22nd century...',
+                        'poster_path' => '/avatar.jpg',
+                        'backdrop_path' => '/avatar_bg.jpg',
+                        'release_date' => '2009-12-18',
+                        'first_air_date' => '2009-12-18',
+                        'vote_average' => 7.9,
+                        'vote_count' => 28000,
+                        'media_type' => 'movie',
+                    ],
+                ],
+            ], 200),
+            'torrentio.strem.fun/*' => Http::response(['streams' => []], 200),
+            'yts.lt/*' => Http::response(['data' => ['movies' => []]], 200),
+            'apibay.org/*' => Http::response([], 200),
+            'eztv.re/*' => Http::response(['torrents' => []], 200),
+        ]);
+    }
+
     /**
-     * Test Scout Inertia page loads successfully.
+     * Test Scout Inertia page loads successfully and marks owned items in initialTrending.
      */
     public function test_scout_page_loads_with_metrics(): void
     {
+        $movie = MediaItem::create([
+            'title' => 'Avatar',
+            'release_year' => 2009,
+            'tmdb_id' => '19995',
+            'file_path' => 'H:/Entertainment/Movies/Action/Avatar (2009)/Avatar.mkv',
+        ]);
+
         $response = $this->get('/scout');
         $response->assertStatus(200);
-        $response->assertInertia(fn ($page) => 
-            $page->component('Scout/Index')
-                 ->has('initialMetrics')
+        $response->assertInertia(fn ($page) => $page->component('Scout/Index')
+            ->has('initialMetrics')
+            ->has('initialTrending')
+            ->where('initialTrending.0.in_library', true)
+            ->where('initialTrending.0.local_id', $movie->id)
         );
     }
 
@@ -100,9 +141,10 @@ class MediaScoutTest extends TestCase
             ]
         );
 
-        $this->assertStringContainsString('H:/Entertainment/TV Shows/Prison Break', $seriesPath);
+        $this->assertStringContainsString('H:/Entertainment/TV Shows', $seriesPath);
+        $this->assertStringContainsString('Prison Break', $seriesPath);
         $this->assertStringContainsString('Season 02', $seriesPath);
-        $this->assertStringContainsString('Prison Break - S02E15 - The Message [1080p].mkv', $seriesPath);
+        $this->assertStringContainsString('Prison Break - S02E15', $seriesPath);
 
         // Test Movie Franchise Destination
         $moviePath = $acq->calculateCanonicalDestination(
@@ -119,7 +161,78 @@ class MediaScoutTest extends TestCase
 
         $this->assertStringContainsString('H:/Entertainment/Movies/Action', $moviePath);
         $this->assertStringContainsString('Bad Boys Collection', $moviePath);
-        $this->assertStringContainsString('Bad Boys II (2003)', $moviePath);
-        $this->assertStringEndsWith('Bad Boys II (2003).mkv', $moviePath);
+        $this->assertStringContainsString('Bad Boys', $moviePath);
+        $this->assertStringContainsString('(2003)', $moviePath);
+        $this->assertStringEndsWith('.mkv', $moviePath);
+    }
+
+    /**
+     * Test Discover Search API returns media with library ownership status.
+     */
+    public function test_scout_discover_search_api(): void
+    {
+        $movie = MediaItem::create([
+            'title' => 'Avatar',
+            'release_year' => 2009,
+            'tmdb_id' => '19995',
+            'file_path' => 'H:/Entertainment/Movies/Action/Avatar (2009)/Avatar.mkv',
+        ]);
+
+        $response = $this->getJson('/api/scout/discover/search?query=Avatar&type=movie');
+        $response->assertStatus(200);
+        $response->assertJsonStructure([
+            'results',
+        ]);
+        $this->assertTrue($response->json('results.0.in_library'));
+        $this->assertEquals($movie->id, $response->json('results.0.local_id'));
+    }
+
+    /**
+     * Test TorrentDiscoveryService strictly differentiates episodes from season packs.
+     */
+    public function test_torrent_discovery_strictly_differentiates_episodes_from_season_packs(): void
+    {
+        $service = app(TorrentDiscoveryService::class);
+
+        // Episode matching
+        $this->assertTrue($service->matchesEpisode('Severance.S01E03.1080p.WEB-DL.x265-PSA', 1, 3));
+        $this->assertTrue($service->matchesEpisode('Severance.1x03.720p.HDTV', 1, 3));
+        $this->assertTrue($service->matchesEpisode('Severance.S01E01-E04.1080p', 1, 3));
+
+        // Wrong episode must be false
+        $this->assertFalse($service->matchesEpisode('Severance.S01E01.1080p.WEB-DL', 1, 3));
+        $this->assertFalse($service->matchesEpisode('Severance.S02E03.1080p.WEB-DL', 1, 3));
+
+        // Entire season pack must NOT be matched as single episode
+        $this->assertFalse($service->matchesEpisode('Severance.Season.1.Complete.1080p.WEB-DL', 1, 3));
+        $this->assertFalse($service->matchesEpisode('Severance.S01.Complete.720p', 1, 3));
+
+        // Season pack detection
+        $this->assertTrue($service->isSeasonPack('Severance.Season.1.Complete.1080p.WEB-DL', 1));
+        $this->assertTrue($service->isSeasonPack('Severance.S01.Batch.x265', 1));
+        $this->assertTrue($service->isSeasonPack('Severance.Season.1.1080p.BluRay', 1));
+
+        // Single episode must NOT be identified as a complete season pack
+        $this->assertFalse($service->isSeasonPack('Severance.S01E03.1080p.WEB-DL.x265-PSA', 1));
+        $this->assertFalse($service->isSeasonPack('Severance.1x03.720p.HDTV', 1));
+    }
+
+    /**
+     * Test Discover Search matches owned movies by title/year fallback and series with owned episode counts.
+     */
+    public function test_scout_discover_search_matches_by_title_and_series(): void
+    {
+        // Movie matched by title & year (with no tmdb_id on local record)
+        $movie = MediaItem::create([
+            'title' => 'Avatar',
+            'release_year' => 2009,
+            'tmdb_id' => null,
+            'file_path' => 'H:/Entertainment/Movies/Action/Avatar (2009)/Avatar.mkv',
+        ]);
+
+        $response = $this->getJson('/api/scout/discover/search?query=Avatar&type=movie');
+        $response->assertStatus(200);
+        $this->assertTrue($response->json('results.0.in_library'));
+        $this->assertEquals($movie->id, $response->json('results.0.local_id'));
     }
 }

@@ -299,11 +299,26 @@
 - **`POST /api/scout/refresh`**  
   Forces a fresh audit across TMDb and local catalog tables, clearing out-of-date cache entries.
 
-### 9.2. Automated Torrent Search & Acquisition
-- **`GET /api/scout/torrents?query={title}&type={movie|series}&season={season_num}`**  
-  Searches verified P2P torrent trackers for healthy releases with seeders and audio/video quality tags.
+### 9.2. Discover & Search New Media
+- **`GET /api/scout/discover/search?query={title}&type={all|movie|tv}`**  
+  Performs live global search against TMDb (or retrieves weekly trending media when query is empty) enriched with real-time library ownership matching (`in_library: true/false`), release years, and animated vs live-action style classification (`is_animated`).
+- **`GET /api/scout/discover/series-details?tmdb_id={tmdb_id}`**  
+  Fetches full season breakdown for any discovered TV series with episode counts, air dates, and local library ownership status for each season.
+
+### 9.3. Automated Torrent Search & Technical Specs Breakdown
+- **`GET /api/scout/torrents?query={title}&type={movie|series|season|episode}&season={num}&episode={num}&year={year}&is_animated={bool}&tmdb_id={id}`**  
+  Searches verified P2P torrent sources (Apibay/TPB, YTS, TorrentGalaxy) with strict category isolation (`cat=201,207` for movies; `cat=205,208` for TV shows) and strict release year matching (`abs(year - release_year) <= 1`). Returns rich technical specs:
+  - `resolution`: `2160p 4K`, `1080p FHD`, `720p HD`.
+  - `source_type`: `REMUX`, `BluRay`, `WEB-DL`, `WEBRip`, `HDTV`.
+  - `video_codec`: `HEVC / x265 (10-bit)`, `AVC / x264`, `AV1 (10-bit)`.
+  - `audio_codec` & `audio_channels`: `Dolby Atmos (7.1)`, `TrueHD (7.1)`, `DTS-HD MA (5.1)`, `Dolby Digital Plus (5.1)`, `AAC (2.0)`.
+  - `hdr`: `Dolby Vision + HDR10`, `Dolby Vision`, `HDR10+`, `HDR10`, `SDR`.
+  - `audio_languages`: `Dual-Audio`, `Multi-Audio`, `Arabic`, `Hindi`, `Japanese`, `Tamil`, `Telugu`.
+  - `subtitles`: `Multi-Subs`, `Arabic Subs`, `English Subs`.
+  - `release_group`: `PSA`, `QxR`, `YTS`, `GalaxyRG`, `FLUX`, `Framestor`, etc.
+  - `seed_health`: `excellent` (15+ seeds), `good` (5-14 seeds), `fair` (2-4 seeds), `poor` (0-1 seeds).
 - **`POST /api/scout/download`**  
-  Queues a missing franchise movie or season pack into the download manager.
+  Queues a missing franchise movie, discovered media, or season pack into the download manager with automatic destination routing into `H:\Entertainment\Movies\...` or `H:\Entertainment\TV Shows\...`.
 - **`POST /api/scout/organize-and-scan`**  
   Initiates the post-download automation pipeline: flattens nested torrent subfolders, renames video files to canonical naming patterns, moves companion subtitle files, and rescans the library.
 

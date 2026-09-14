@@ -163,6 +163,8 @@ Route::get('/scout', [MediaScoutController::class, 'index'])->name('scout.index'
 Route::get('/api/scout/gaps', [MediaScoutController::class, 'getGaps'])->name('api.scout.gaps');
 Route::post('/api/scout/refresh', [MediaScoutController::class, 'refresh'])->name('api.scout.refresh');
 Route::get('/api/scout/torrents', [MediaScoutController::class, 'getTorrents'])->name('api.scout.torrents');
+Route::get('/api/scout/discover/search', [MediaScoutController::class, 'discoverSearch'])->name('api.scout.discover.search');
+Route::get('/api/scout/discover/series-details', [MediaScoutController::class, 'discoverSeriesDetails'])->name('api.scout.discover.series-details');
 Route::post('/api/scout/download', [MediaScoutController::class, 'download'])->name('api.scout.download');
 Route::post('/api/scout/organize-and-scan', [MediaScoutController::class, 'organizeAndScan'])->name('api.scout.organize-and-scan');
 

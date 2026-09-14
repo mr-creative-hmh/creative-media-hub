@@ -12,7 +12,8 @@
 [![Vue 3](https://img.shields.io/badge/Vue.js-3.5-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white)](https://vuejs.org)
 [![Inertia.js](https://img.shields.io/badge/Inertia.js-3.0-9553E9?style=for-the-badge&logo=inertia&logoColor=white)](https://inertiajs.com)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
-[![Electron](https://img.shields.io/badge/Electron-34-47848F?style=for-the-badge&logo=electron&logoColor=white)](https://www.electronjs.org)
+[![PWA Ready](https://img.shields.io/badge/PWA-Ready-5A0FC8?style=for-the-badge&logo=pwa&logoColor=white)](https://web.dev/progressive-web-apps/)
+[![LAN Server](https://img.shields.io/badge/LAN_Streaming-Zero_Config-06B6D4?style=for-the-badge&logo=wifi&logoColor=white)](http://localhost:8088)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
 </div>
@@ -208,9 +209,35 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 - **Live Connectivity Testing**: Re-order provider priority and test API connectivity in real time directly from Settings.
 - **Fix Match Studio Enhancements**: Direct ID resolution (TMDb, IMDb, TVMaze), automatic Arabic title/synopsis fetch, multi-format poster detection (`.jpg`, `.png`, `.webp`), and season/episode artwork synchronization.
 
-### 20. 📡 Media Scout & Smart Library Acquisition
-- **Real-Time Gap Tracking (`LibraryGapService`)**: Automatically audits movie sagas and TV series seasons against official TMDb parts, calculating exact missing counts and saga completion percentages.
-- **Automated Season Torrent Acquisition (`LibraryAcquisitionService`)**: Automatically searches, scrapes, filters, and triggers batch downloads for missing episodes or seasons.
+### 20. 📡 Media Scout, Global Media Discovery & High-Fidelity Torrent Radar
+- **Comprehensive Library Gap Auditing (`LibraryGapService`)**:
+  - Automatically analyzes multi-film movie sagas against official TMDb collections to detect missing sequels and prequels.
+  - Inspects all TV series in the library to identify missing seasons and missing individual episodes.
+  - Calculates real completion percentages, release spans, and gap severity ratings with instant 1-click acquisition triggers.
+- **Global Discover & Search New Media (`MediaScoutController`)**:
+  - **Universal TMDb Search**: Search any movie or TV series globally across TMDb, or explore the hottest weekly trending media directly from the Discover tab.
+  - **Live Library Ownership Matching**: Seamlessly correlates TMDb items against local database records with strict year discrimination (`abs(release_year - year) <= 1`).
+  - **Strict Animated vs Live-Action Discrimination**:
+    - Leverages TMDb genre ID 16 ("Animation") and keywords to classify media as `🎨 Animated` vs `🎭 Live-Action`.
+    - Completely eliminates false ownership matches between original animated works and live-action adaptations (e.g. *One Piece* 1999 Anime vs 2023 Netflix Live-Action, or *The Lion King* 1994 vs 2019).
+    - Prevents movies from mixing with TV series across all discovery, inspector, and torrent queries.
+  - **Interactive Style & Type Filters**: Instant toggles between `All Media`, `🎬 Movies`, `📺 TV Shows` and `All Styles`, `🎨 Animated`, `🎭 Live-Action` with distinct visual badges and explicit release years on every card.
+  - **Series Seasons Inspector**: Deep inspect any discovered TV show to review all seasons, episode counts, air dates, and local library ownership status before downloading.
+- **High-Fidelity Technical Specs Parser (1337x, YTS, TorrentGalaxy Standard)**:
+  - `TorrentDiscoveryService` queries verified P2P sources with strict category isolation (`cat=201,207` for Movies; `cat=205,208` for TV Shows) and parses technical specifications matching top torrent sites:
+    - **Resolution**: `2160p 4K`, `1080p FHD`, `720p HD`.
+    - **Source Type**: `REMUX`, `BluRay`, `WEB-DL`, `WEBRip`, `HDTV`.
+    - **Video Codec**: `HEVC / x265 (10-bit)`, `AVC / x264`, `AV1 (10-bit)`.
+    - **Audio Codec & Channels**: `Dolby Atmos (7.1)`, `TrueHD (7.1)`, `DTS-HD MA (5.1)`, `Dolby Digital Plus (5.1)`, `AAC (2.0)`, `FLAC Lossless`.
+    - **HDR Dynamic Range**: `Dolby Vision + HDR10`, `Dolby Vision`, `HDR10+`, `HDR10`, `SDR`.
+    - **Dubs & Languages**: `Dual-Audio`, `Multi-Audio`, `Arabic`, `Hindi`, `Japanese`, `Tamil`, `Telugu`.
+    - **Subtitles**: `Multi-Subs`, `Arabic Subs`, `English Subs`.
+    - **Release Group**: `PSA`, `QxR`, `YTS`, `GalaxyRG`, `FLUX`, `Framestor`, etc.
+    - **Seed Health & Speed Tier**: `excellent` (15+ seeds), `good` (5-14 seeds), `fair` (2-4 seeds), with 0-seed stall warnings.
+- **1-Click Auto-Organization & Physical Routing**:
+  - Target Drive: `H:\Entertainment` with automatic folder and file structuring:
+    - Movies: `H:\Entertainment\Movies\{Title} ({Year})\{Title} ({Year}) [{Quality}].ext`
+    - TV Shows: `H:\Entertainment\TV Shows\{Show Title}\Season {SS}\{Show Title} - S{SS}E{EE} - {Ep Title} [{Quality}].ext`
 - **Deep Companion Subtitle Extraction & Lexical Content Classification**:
   - Traverses incoming torrent directory trees including subfolders (`Subs/`, `Subtitles/`, `Sub/`).
   - Leverages `SubtitleLanguageDetectorService` to analyze actual dialogue text via Unicode Arabic script blocks (`\p{Arabic}`) vs Latin stop-words, reliably classifying generic subtitle filenames (e.g. `track1.srt`, `Movie.srt`) into `.ar.srt` or `.en.srt` without blind guessing or overwrites.
@@ -328,17 +355,18 @@ npm run build
 
 ---
 
-## 💻 Windows Desktop App (Electron Standalone)
+## 🚀 1-Click Launching & LAN Streaming Server (`Start-CreativeMediaHub.bat`)
 
-Run Creative Media Hub as a standalone desktop cinema application:
+Launch Creative Media Hub with one click for zero-overhead local and home network cinema streaming:
 
-```bash
-# Start in Electron development mode
-npm run electron:dev
-
-# Package as a portable Windows executable (.exe)
-npm run electron:build
+```bat
+:: Double-click to start
+Start-CreativeMediaHub.bat
 ```
+
+- **Zero-Bloat Native Architecture**: Runs directly on PHP 8.2+ and Vite without heavy Electron browser bundling, eliminating high RAM and CPU usage.
+- **Automatic Browser Launch**: Automatically opens `http://127.0.0.1:8088` in your default web browser or standalone PWA window.
+- **Home Network LAN Accessibility**: Access your complete cinema library from any device on your local network (smartphones, tablets, Smart TVs, laptops) using your machine's local IP (e.g., `http://192.168.1.xxx:8088`).
 
 ---
 

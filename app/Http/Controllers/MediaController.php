@@ -75,7 +75,12 @@ class MediaController extends Controller
                 }),
                 'indian' => $query->where(function ($q) {
                     $q->whereIn('original_language', ['hi', 'te', 'ta', 'ml', 'kn', 'mr', 'bn', 'pa', 'ur'])
-                        ->orWhere('origin_country', 'IN');
+                        ->orWhere(function ($sub) {
+                            $sub->where('origin_country', 'IN')
+                                ->whereNotIn('original_language', ['es', 'fr', 'de', 'it', 'ja', 'ko', 'ru', 'pt']);
+                        })
+                        ->orWhere('file_path', 'like', '%/Indian/%')
+                        ->orWhere('file_path', 'like', '%\Indian\%');
                 }),
                 'asian' => $query->where(function ($q) {
                     $q->whereIn('original_language', ['ja', 'ko', 'zh', 'cn', 'hk', 'tw', 'th'])

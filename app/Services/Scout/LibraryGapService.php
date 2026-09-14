@@ -344,6 +344,14 @@ class LibraryGapService
 
                     $partNumber = $index + 1;
 
+                    $matchedLocalMovie = null;
+                    if ($isOwned) {
+                        $matchedLocalMovie = $localMovies->first(function ($lm) use ($pId, $pTitle) {
+                            return ($pId && (int) $lm->tmdb_id === $pId)
+                                || (strtolower(trim($lm->title)) === $pTitle);
+                        });
+                    }
+
                     $partItem = [
                         'id' => "movie_col_{$colId}_{$pId}",
                         'type' => 'collection_movie',
@@ -354,8 +362,12 @@ class LibraryGapService
                         'part_number' => $partNumber,
                         'release_year' => ! empty($relDate) ? (int) substr($relDate, 0, 4) : null,
                         'release_date' => $relDate,
-                        'poster_path' => ! empty($part['poster_path']) ? "https://image.tmdb.org/t/p/w500{$part['poster_path']}" : null,
-                        'backdrop_path' => ! empty($part['backdrop_path']) ? "https://image.tmdb.org/t/p/w1280{$part['backdrop_path']}" : null,
+                        'poster_path' => ! empty($part['poster_path'])
+                            ? "https://image.tmdb.org/t/p/w500{$part['poster_path']}"
+                            : ($matchedLocalMovie?->poster_path ?? null),
+                        'backdrop_path' => ! empty($part['backdrop_path'])
+                            ? "https://image.tmdb.org/t/p/w1280{$part['backdrop_path']}"
+                            : ($matchedLocalMovie?->backdrop_path ?? null),
                         'overview' => $part['overview'] ?? '',
                         'rating' => round($part['vote_average'] ?? 0, 1),
                         'tmdb_id' => $pId,
@@ -371,16 +383,22 @@ class LibraryGapService
                     }
                 }
 
-                if (! empty($missingParts)) {
+                $ownedCount = count($ownedParts);
+                $totalCount = count($parts);
+
+                // STRICT: Only include if there are missing parts AND at least 1 movie is actually owned in library!
+                if (! empty($missingParts) && $ownedCount > 0) {
+                    $localCollectionPoster = $localMovies->pluck('collection_poster')->filter()->first()
+                        ?? $localMovies->pluck('poster_path')->filter()->first();
+                    $localCollectionBackdrop = $localMovies->pluck('backdrop_path')->filter()->first();
+
                     $colPoster = ! empty($colDetails['poster_path'])
                         ? "https://image.tmdb.org/t/p/w780{$colDetails['poster_path']}"
-                        : ($ownedParts[0]['poster_path'] ?? null);
+                        : ($localCollectionPoster ?: ($ownedParts[0]['poster_path'] ?? null));
+
                     $colBackdrop = ! empty($colDetails['backdrop_path'])
                         ? "https://image.tmdb.org/t/p/w1280{$colDetails['backdrop_path']}"
-                        : null;
-
-                    $totalCount = count($parts);
-                    $ownedCount = count($ownedParts);
+                        : ($localCollectionBackdrop ?? null);
 
                     foreach ($missingParts as &$m) {
                         $m['owned_parts_count'] = $ownedCount;

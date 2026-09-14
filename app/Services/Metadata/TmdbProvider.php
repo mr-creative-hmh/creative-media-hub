@@ -201,6 +201,43 @@ class TmdbProvider implements MetadataProviderInterface
         return [];
     }
 
+    /**
+     * Fetch trending media (movies and TV series) from TMDb.
+     */
+    public function getTrendingMedia(string $mediaType = 'all', string $timeWindow = 'week'): array
+    {
+        $key = $this->getApiKey();
+        if (! $key) {
+            return [];
+        }
+
+        try {
+            $endpoint = "{$this->baseUrl}/trending/{$mediaType}/{$timeWindow}";
+            $response = Http::timeout(8)->get($endpoint, [
+                'api_key' => $key,
+            ]);
+
+            if ($response->successful()) {
+                $results = $response->json('results', []);
+
+                return array_values(array_filter(array_map(function ($item) {
+                    $type = $item['media_type'] ?? (isset($item['first_air_date']) ? 'series' : 'movie');
+                    if ($type === 'movie') {
+                        return $this->formatMovieSummary($item);
+                    } elseif ($type === 'tv' || $type === 'series') {
+                        return $this->formatSeriesSummary($item);
+                    }
+
+                    return null;
+                }, $results)));
+            }
+        } catch (\Exception $e) {
+            Log::warning('TMDb getTrendingMedia failed: '.$e->getMessage());
+        }
+
+        return [];
+    }
+
     public function searchCollection(string $query, string $lang = 'en'): array
     {
         $key = $this->getApiKey();
@@ -308,9 +345,7 @@ class TmdbProvider implements MetadataProviderInterface
                 }
 
                 $origLang = $data['original_language'] ?? null;
-                $originCountry = ! empty($data['production_countries'][0]['iso_3166_1'])
-                    ? $data['production_countries'][0]['iso_3166_1']
-                    : (! empty($data['origin_country'][0]) ? $data['origin_country'][0] : null);
+                $originCountry = self::resolvePrimaryCountry($data, $origLang);
 
                 return [
                     'provider' => 'TMDb',
@@ -649,10 +684,16 @@ class TmdbProvider implements MetadataProviderInterface
 
     protected function formatMovieSummary(array $item): array
     {
+        $genreIds = $item['genre_ids'] ?? [];
+        $isAnimated = in_array(16, $genreIds)
+            || str_contains(strtolower($item['title'] ?? ''), 'animated')
+            || str_contains(strtolower($item['overview'] ?? ''), 'animated');
+
         return [
             'provider' => 'TMDb',
             'id' => (string) $item['id'],
             'tmdb_id' => (string) $item['id'],
+            'media_type' => 'movie',
             'title' => $item['title'] ?? '',
             'original_title' => $item['original_title'] ?? '',
             'release_year' => isset($item['release_date']) ? (int) substr($item['release_date'], 0, 4) : null,
@@ -660,15 +701,26 @@ class TmdbProvider implements MetadataProviderInterface
             'poster_path' => isset($item['poster_path']) ? "https://image.tmdb.org/t/p/w500{$item['poster_path']}" : null,
             'backdrop_path' => isset($item['backdrop_path']) ? "https://image.tmdb.org/t/p/w1280{$item['backdrop_path']}" : null,
             'rating' => round($item['vote_average'] ?? 0, 1),
+            'vote_count' => (int) ($item['vote_count'] ?? 0),
+            'original_language' => $item['original_language'] ?? null,
+            'genre_ids' => $genreIds,
+            'is_animated' => $isAnimated,
         ];
     }
 
     protected function formatSeriesSummary(array $item): array
     {
+        $genreIds = $item['genre_ids'] ?? [];
+        $isAnimated = in_array(16, $genreIds)
+            || str_contains(strtolower($item['name'] ?? ''), 'animated')
+            || str_contains(strtolower($item['overview'] ?? ''), 'animated series')
+            || str_contains(strtolower($item['overview'] ?? ''), 'anime');
+
         return [
             'provider' => 'TMDb',
             'id' => (string) $item['id'],
             'tmdb_id' => (string) $item['id'],
+            'media_type' => 'series',
             'title' => $item['name'] ?? '',
             'original_title' => $item['original_name'] ?? '',
             'release_year' => isset($item['first_air_date']) ? (int) substr($item['first_air_date'], 0, 4) : null,
@@ -676,6 +728,10 @@ class TmdbProvider implements MetadataProviderInterface
             'poster_path' => isset($item['poster_path']) ? "https://image.tmdb.org/t/p/w500{$item['poster_path']}" : null,
             'backdrop_path' => isset($item['backdrop_path']) ? "https://image.tmdb.org/t/p/w1280{$item['backdrop_path']}" : null,
             'rating' => round($item['vote_average'] ?? 0, 1),
+            'vote_count' => (int) ($item['vote_count'] ?? 0),
+            'original_language' => $item['original_language'] ?? null,
+            'genre_ids' => $genreIds,
+            'is_animated' => $isAnimated,
         ];
     }
 
@@ -688,5 +744,61 @@ class TmdbProvider implements MetadataProviderInterface
         }
 
         return null;
+    }
+
+    /**
+     * Intelligently resolve the primary origin country by correlating original_language
+     * with production_countries and origin_country, preventing offshore/subcontracted
+     * vendor locations from overriding the true country of origin.
+     */
+    public static function resolvePrimaryCountry(array $data, ?string $origLang): ?string
+    {
+        $productionCountries = array_column($data['production_countries'] ?? [], 'iso_3166_1');
+        $originCountries = (array) ($data['origin_country'] ?? []);
+        $allCountries = array_unique(array_filter(array_merge($productionCountries, $originCountries)));
+
+        if ($origLang) {
+            $langToCountries = [
+                'es' => ['ES', 'MX', 'AR', 'CO', 'CL', 'PE'],
+                'fr' => ['FR', 'BE', 'CA', 'CH'],
+                'de' => ['DE', 'AT', 'CH'],
+                'it' => ['IT'],
+                'ja' => ['JP'],
+                'ko' => ['KR'],
+                'hi' => ['IN'],
+                'te' => ['IN'],
+                'ta' => ['IN'],
+                'ml' => ['IN'],
+                'kn' => ['IN'],
+                'mr' => ['IN'],
+                'bn' => ['IN', 'BD'],
+                'pa' => ['IN', 'PK'],
+                'ur' => ['PK', 'IN'],
+                'tr' => ['TR'],
+                'ru' => ['RU'],
+                'zh' => ['CN', 'HK', 'TW'],
+                'cn' => ['CN', 'HK'],
+                'ar' => ['EG', 'SA', 'SY', 'LB', 'AE', 'KW', 'JO', 'MA', 'IQ', 'TN', 'DZ'],
+                'en' => ['US', 'GB', 'AU', 'CA', 'NZ', 'IE'],
+                'pt' => ['BR', 'PT'],
+                'da' => ['DK'],
+                'sv' => ['SE'],
+                'no' => ['NO'],
+                'nl' => ['NL', 'BE'],
+                'pl' => ['PL'],
+            ];
+
+            if (isset($langToCountries[$origLang])) {
+                foreach ($langToCountries[$origLang] as $c) {
+                    if (in_array($c, $allCountries, true)) {
+                        return $c;
+                    }
+                }
+            }
+        }
+
+        return ! empty($data['production_countries'][0]['iso_3166_1'])
+            ? $data['production_countries'][0]['iso_3166_1']
+            : (! empty($data['origin_country'][0]) ? $data['origin_country'][0] : null);
     }
 }

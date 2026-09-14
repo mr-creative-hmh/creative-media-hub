@@ -5,7 +5,7 @@ import {
     X, Download, Check, AlertCircle, Loader2, Sparkles,
     HardDrive, FolderSync, ShieldCheck, ArrowUpRight, Film, Tv,
     Zap, AlertTriangle, CheckCircle2, ShieldAlert, ArrowDownUp,
-    Copy, ExternalLink
+    Copy, ExternalLink, Layers, Volume2, Subtitles, Minus, Plus
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -31,6 +31,34 @@ const errorMessage = ref<string | null>(null);
 const zeroSeedWarningTorrent = ref<any | null>(null);
 const copiedHash = ref<string | null>(null);
 
+const isSeriesLike = computed(() => {
+    return props.gapItem?.type === 'episode' || props.gapItem?.type === 'season' || props.gapItem?.type === 'series';
+});
+
+const searchMode = ref<'episode' | 'season'>('episode');
+const currentSeason = ref<number>(1);
+const currentEpisode = ref<number>(1);
+
+watch([() => props.isOpen, () => props.gapItem], ([newOpen, newItem]) => {
+    if (newOpen && newItem) {
+        if (newItem.type === 'season') {
+            searchMode.value = 'season';
+        } else if (newItem.type === 'episode') {
+            searchMode.value = 'episode';
+        } else if (newItem.type === 'series') {
+            searchMode.value = 'season';
+        }
+        currentSeason.value = Math.max(1, Number(newItem.season_number || 1));
+        currentEpisode.value = Math.max(1, Number(newItem.episode_number || 1));
+        fetchTorrents();
+    } else {
+        torrents.value = [];
+        selectedQuality.value = 'all';
+        errorMessage.value = null;
+        zeroSeedWarningTorrent.value = null;
+    }
+});
+
 const copyMagnet = async (torrent: any) => {
     if (!torrent.magnet_url) return;
     try {
@@ -47,17 +75,6 @@ const copyMagnet = async (torrent: any) => {
 };
 
 const qualities = ['all', '4K', '1080p', '720p'];
-
-watch(() => props.isOpen, async (newVal) => {
-    if (newVal && props.gapItem) {
-        await fetchTorrents();
-    } else {
-        torrents.value = [];
-        selectedQuality.value = 'all';
-        errorMessage.value = null;
-        zeroSeedWarningTorrent.value = null;
-    }
-});
 
 const getSeeds = (t: any): number => {
     return Number(t.seeders ?? t.seeds ?? 0);
@@ -78,28 +95,39 @@ const fetchTorrents = async () => {
     torrents.value = [];
 
     try {
+        const isEp = isSeriesLike.value && searchMode.value === 'episode';
+        const isSeas = isSeriesLike.value && searchMode.value === 'season';
+
+        const effectiveType = isEp ? 'episode' : (isSeas ? 'season' : (props.gapItem.type || 'movie'));
+        const effectiveTitle = props.gapItem.series_title || props.gapItem.movie_title || props.gapItem.title;
+
+        const yearVal = props.gapItem.release_year || props.gapItem.year;
         const params: Record<string, any> = {
-            type: props.gapItem.type,
-            title: props.gapItem.type === 'collection_movie'
-                ? props.gapItem.movie_title
-                : props.gapItem.series_title,
+            type: effectiveType,
+            title: effectiveTitle,
             imdb_id: props.gapItem.imdb_id,
             tmdb_id: props.gapItem.tmdb_id,
         };
 
-        if (props.gapItem.type === 'episode') {
-            params.season = props.gapItem.season_number;
-            params.episode = props.gapItem.episode_number;
-        } else if (props.gapItem.type === 'season') {
-            params.season = props.gapItem.season_number;
-        } else if (props.gapItem.type === 'collection_movie') {
-            params.year = props.gapItem.release_year;
+        if (yearVal) {
+            params.year = yearVal;
+        }
+        if (props.gapItem.is_animated !== undefined) {
+            params.is_animated = props.gapItem.is_animated ? 1 : 0;
+        }
+
+        if (isEp) {
+            params.season = currentSeason.value;
+            params.episode = currentEpisode.value;
+        } else if (isSeas) {
+            params.season = currentSeason.value;
         }
 
         const queryParams = new URLSearchParams();
         Object.entries(params).forEach(([k, v]) => {
-            if (v !== null && v !== undefined) queryParams.append(k, String(v));
+            if (v !== null && v !== undefined && v !== '') queryParams.append(k, String(v));
         });
+
         const res = await fetch(`/api/scout/torrents?${queryParams.toString()}`, {
             headers: { 'Accept': 'application/json' }
         });
@@ -109,6 +137,29 @@ const fetchTorrents = async () => {
         errorMessage.value = err?.message || 'Failed to search torrents';
     } finally {
         loading.value = false;
+    }
+};
+
+const setMode = (mode: 'episode' | 'season') => {
+    if (searchMode.value !== mode) {
+        searchMode.value = mode;
+        fetchTorrents();
+    }
+};
+
+const adjustSeason = (delta: number) => {
+    const next = Math.max(1, currentSeason.value + delta);
+    if (next !== currentSeason.value) {
+        currentSeason.value = next;
+        fetchTorrents();
+    }
+};
+
+const adjustEpisode = (delta: number) => {
+    const next = Math.max(1, currentEpisode.value + delta);
+    if (next !== currentEpisode.value) {
+        currentEpisode.value = next;
+        fetchTorrents();
     }
 };
 
@@ -151,22 +202,25 @@ const startDownload = async (torrent: any) => {
     errorMessage.value = null;
 
     try {
-        const mediaType = (props.gapItem.type === 'episode' || props.gapItem.type === 'season') ? 'series' : 'movie';
+        const mediaType = isSeriesLike.value ? 'series' : 'movie';
         const metadata: Record<string, any> = {
             gap_id: props.gapItem.id,
             auto_organize: autoOrganize.value,
         };
 
         if (mediaType === 'series') {
-            metadata.series_title = props.gapItem.series_title;
-            metadata.series_id = props.gapItem.series_id;
-            metadata.season_number = props.gapItem.season_number;
-            metadata.episode_number = props.gapItem.episode_number || 1;
-            metadata.episode_title = props.gapItem.episode_title;
+            metadata.series_title = props.gapItem.series_title || props.gapItem.title;
+            metadata.series_id = props.gapItem.series_id || props.gapItem.local_id;
+            metadata.season_number = currentSeason.value;
+            metadata.is_season_pack = (searchMode.value === 'season');
+            if (searchMode.value === 'episode') {
+                metadata.episode_number = currentEpisode.value;
+                metadata.episode_title = props.gapItem.episode_title || `Episode ${currentEpisode.value}`;
+            }
             metadata.resolution = torrent.resolution;
         } else {
-            metadata.movie_title = props.gapItem.movie_title;
-            metadata.release_year = props.gapItem.release_year;
+            metadata.movie_title = props.gapItem.movie_title || props.gapItem.title;
+            metadata.release_year = props.gapItem.release_year || props.gapItem.year;
             metadata.collection_name = props.gapItem.collection_name;
             metadata.collection_id = props.gapItem.collection_id;
         }
@@ -219,40 +273,115 @@ const startDownload = async (torrent: any) => {
 
             <!-- Header Section -->
             <div class="relative z-10 flex items-start justify-between p-6 border-b border-white/10 bg-slate-950/50">
-                <div class="flex items-center gap-4">
+                <div class="flex items-start gap-4">
                     <img
                         v-if="gapItem?.still_path || gapItem?.poster_path || gapItem?.series_poster"
                         :src="gapItem?.still_path || gapItem?.poster_path || gapItem?.series_poster"
                         class="w-16 h-24 object-cover rounded-2xl border border-white/10 shadow-lg shrink-0"
                         alt="Poster"
+                        loading="lazy"
+                        @error="(e: any) => (e.target.style.display = 'none')"
                     />
                     <div v-else class="w-16 h-24 rounded-2xl bg-slate-800 border border-white/10 flex items-center justify-center text-slate-600 shrink-0">
-                        <Film v-if="gapItem?.type === 'collection_movie'" class="w-8 h-8" />
+                        <Film v-if="gapItem?.type === 'collection_movie' || gapItem?.type === 'movie'" class="w-8 h-8" />
                         <Tv v-else class="w-8 h-8" />
                     </div>
 
-                    <div class="space-y-1.5">
+                    <div class="space-y-2">
                         <div class="flex items-center gap-2 flex-wrap">
                             <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex items-center gap-1">
                                 <Sparkles class="w-3 h-3" />
-                                <span>{{ gapItem?.episode_code || gapItem?.season_name || gapItem?.collection_name || (isRTL ? 'عنصر مفقود' : 'Missing Item') }}</span>
+                                <span>{{ isSeriesLike ? (searchMode === 'episode' ? `S${String(currentSeason).padStart(2,'0')}E${String(currentEpisode).padStart(2,'0')}` : `Season ${currentSeason} Pack`) : (gapItem?.collection_name || (isRTL ? 'فيلم' : 'Movie')) }}</span>
                             </span>
-                            <span v-if="gapItem?.air_date || gapItem?.release_year" class="text-xs text-slate-400 font-semibold px-2 py-0.5 rounded-md bg-white/5 border border-white/10">
-                                {{ gapItem?.air_date || gapItem?.release_year }}
+                            <!-- Animated vs Live-Action Badge -->
+                            <span
+                                v-if="gapItem?.is_animated"
+                                class="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1"
+                            >
+                                <span>🎨 {{ isRTL ? 'أنيميشن' : 'Animated' }}</span>
+                            </span>
+                            <span
+                                v-else-if="gapItem?.is_animated === false"
+                                class="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1"
+                            >
+                                <span>🎭 {{ isRTL ? 'عمل واقعي' : 'Live-Action' }}</span>
+                            </span>
+                            <span v-if="gapItem?.air_date || gapItem?.release_year || gapItem?.year" class="text-xs text-slate-400 font-semibold px-2 py-0.5 rounded-md bg-white/5 border border-white/10">
+                                {{ gapItem?.release_year || gapItem?.year || gapItem?.air_date }}
                             </span>
                             <span v-if="gapItem?.part_number" class="text-xs text-purple-300 font-bold px-2 py-0.5 rounded-md bg-purple-500/20 border border-purple-500/30">
                                 {{ isRTL ? `الجزء ${gapItem.part_number}` : `Part ${gapItem.part_number}` }}
                             </span>
                         </div>
+
                         <h2 class="text-xl font-black text-white leading-tight">
-                            {{ gapItem?.series_title || gapItem?.movie_title }}
+                            {{ gapItem?.series_title || gapItem?.movie_title || gapItem?.title }}
                         </h2>
-                        <p v-if="gapItem?.episode_title" class="text-xs text-slate-300 font-medium">
+
+                        <p v-if="gapItem?.episode_title && searchMode === 'episode'" class="text-xs text-slate-300 font-medium">
                             {{ isRTL && gapItem?.episode_title_ar ? gapItem.episode_title_ar : gapItem.episode_title }}
                         </p>
                         <p v-else-if="gapItem?.collection_name && gapItem?.type === 'collection_movie'" class="text-xs text-slate-400">
                             {{ isRTL ? `ضمن سلسلة: ${gapItem.collection_name}` : `Franchise: ${gapItem.collection_name}` }}
                         </p>
+
+                        <!-- Series Specific: Switcher Between Episode & Season Pack -->
+                        <div v-if="isSeriesLike" class="flex flex-wrap items-center gap-2.5 pt-1">
+                            <!-- Toggle Mode -->
+                            <div class="inline-flex p-0.5 rounded-xl bg-black/60 border border-white/10 shadow-inner">
+                                <button
+                                    type="button"
+                                    @click="setMode('episode')"
+                                    :class="[
+                                        'px-3 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer',
+                                        searchMode === 'episode'
+                                            ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                                            : 'text-slate-400 hover:text-white'
+                                    ]"
+                                >
+                                    <Sparkles class="w-3 h-3" />
+                                    <span>{{ isRTL ? `حلقة محددة` : `Specific Episode` }}</span>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    @click="setMode('season')"
+                                    :class="[
+                                        'px-3 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer',
+                                        searchMode === 'season'
+                                            ? 'bg-purple-500 text-white shadow-md shadow-purple-500/20'
+                                            : 'text-slate-400 hover:text-white'
+                                    ]"
+                                >
+                                    <Layers class="w-3 h-3" />
+                                    <span>{{ isRTL ? `الموسم بالكامل (حزمة)` : `Season Pack` }}</span>
+                                </button>
+                            </div>
+
+                            <!-- Season Picker -->
+                            <div class="flex items-center bg-black/50 border border-white/10 rounded-xl px-2 py-0.5 gap-1.5 text-xs">
+                                <span class="text-slate-400 text-[11px] font-semibold">{{ isRTL ? 'الموسم' : 'Season' }}:</span>
+                                <button @click="adjustSeason(-1)" class="w-5 h-5 rounded hover:bg-white/10 flex items-center justify-center text-slate-300 cursor-pointer">
+                                    <Minus class="w-3 h-3" />
+                                </button>
+                                <span class="font-black text-white w-4 text-center">{{ currentSeason }}</span>
+                                <button @click="adjustSeason(1)" class="w-5 h-5 rounded hover:bg-white/10 flex items-center justify-center text-slate-300 cursor-pointer">
+                                    <Plus class="w-3 h-3" />
+                                </button>
+                            </div>
+
+                            <!-- Episode Picker (only in episode mode) -->
+                            <div v-if="searchMode === 'episode'" class="flex items-center bg-black/50 border border-white/10 rounded-xl px-2 py-0.5 gap-1.5 text-xs">
+                                <span class="text-slate-400 text-[11px] font-semibold">{{ isRTL ? 'الحلقة' : 'Ep' }}:</span>
+                                <button @click="adjustEpisode(-1)" class="w-5 h-5 rounded hover:bg-white/10 flex items-center justify-center text-slate-300 cursor-pointer">
+                                    <Minus class="w-3 h-3" />
+                                </button>
+                                <span class="font-black text-amber-400 w-5 text-center">{{ currentEpisode }}</span>
+                                <button @click="adjustEpisode(1)" class="w-5 h-5 rounded hover:bg-white/10 flex items-center justify-center text-slate-300 cursor-pointer">
+                                    <Plus class="w-3 h-3" />
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -274,11 +403,16 @@ const startDownload = async (torrent: any) => {
                         <h4 class="font-bold text-white flex items-center gap-1.5">
                             <span>{{ isRTL ? 'إرشادات عدد الموزعين (Seeders)' : 'Seeders & Download Speed Guide' }}</span>
                             <span class="text-[10px] text-cyan-400 font-normal px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20">
-                                {{ isRTL ? 'الأولوية للأعلى سرعة' : 'Sorted by highest seeds' }}
+                                {{ isRTL ? 'الأولوية للأعلى سرعة ومطابقة' : 'Sorted by highest seeds' }}
                             </span>
                         </h4>
                         <p class="text-[11px] text-slate-400">
-                            {{ isRTL ? 'اختر تورنت يحتوي على 5+ موزعين لبدء التحميل فوراً بأقصى سرعة وتفادي التوقف.' : 'Choose torrents with 5+ seeders for high speed and to avoid stalling at 0%.' }}
+                            {{ isSeriesLike 
+                                ? (searchMode === 'episode' 
+                                    ? (isRTL ? 'يتم عرض نتائج الحلقة المحددة فقط بدقة وتفادي خلطها مع المواسم الكاملة.' : `Strictly searching for Episode S${String(currentSeason).padStart(2,'0')}E${String(currentEpisode).padStart(2,'0')} without mixing season packs.`)
+                                    : (isRTL ? 'يتم عرض حزم الموسم بالكامل فقط وتفادي الحلقات الفردية.' : `Strictly searching for complete Season ${currentSeason} packs without individual episodes.`))
+                                : (isRTL ? 'اختر تورنت يحتوي على 5+ موزعين لبدء التحميل فوراً بأقصى سرعة.' : 'Choose torrents with 5+ seeders for high speed and to avoid stalling at 0%.')
+                            }}
                         </p>
                     </div>
                 </div>
@@ -295,7 +429,7 @@ const startDownload = async (torrent: any) => {
                     </span>
                     <span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
                         <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
-                        <span>0–1 {{ isRTL ? 'خامل / توقف 0%' : 'Seeds: Stalled' }}</span>
+                        <span>0–1 {{ isRTL ? 'خامل' : 'Seeds: Stalled' }}</span>
                     </span>
                 </div>
             </div>
@@ -331,7 +465,7 @@ const startDownload = async (torrent: any) => {
                     </label>
                 </div>
 
-                <!-- Organize and add to Library (Scan) Option Checkbox -->
+                <!-- Organize and add to Library Checkbox -->
                 <label class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-200 select-none bg-emerald-950/40 border border-emerald-500/30 px-3.5 py-1.5 rounded-xl hover:bg-emerald-950/60 transition-colors">
                     <input
                         type="checkbox"
@@ -339,7 +473,7 @@ const startDownload = async (torrent: any) => {
                         class="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500/40 bg-black/60 border-white/20 cursor-pointer"
                     />
                     <FolderSync class="w-3.5 h-3.5 text-emerald-400" />
-                    <span>{{ isRTL ? 'تنظيم وإضافة للمكتبة (فحص) في H:\\Entertainment' : 'Organize and add to Library (Scan) into H:\\Entertainment' }}</span>
+                    <span>{{ isRTL ? 'تنظيم وإضافة للمكتبة في H:\\Entertainment' : 'Auto-organize into H:\\Entertainment' }}</span>
                 </label>
             </div>
 
@@ -349,7 +483,7 @@ const startDownload = async (torrent: any) => {
                 <div v-if="loading" class="py-16 text-center space-y-3">
                     <Loader2 class="w-8 h-8 text-cyan-400 animate-spin mx-auto" />
                     <p class="text-xs text-slate-400 font-medium">
-                        {{ isRTL ? 'جارٍ البحث عن أفضل الروابط وترتيبها حسب عدد الموزعين والسرعة...' : 'Searching multiple indexers and ranking by seeders...' }}
+                        {{ isRTL ? 'جارٍ فحص خوادم التورنت واستخراج المواصفات التقنية الدقيقة...' : 'Scanning indexers & extracting technical release specs...' }}
                     </p>
                 </div>
 
@@ -368,7 +502,10 @@ const startDownload = async (torrent: any) => {
                         {{ isRTL ? 'لم يتم العثور على تورنت نشط' : 'No Active Torrents Found' }}
                     </p>
                     <p class="text-xs text-slate-400 max-w-md mx-auto">
-                        {{ isRTL ? 'جرّب تغيير فلتر الجودة أو إلغاء تحديد إخفاء الروابط الخاملة.' : 'Try changing the resolution filter or unchecking the dead torrent filter.' }}
+                        {{ isSeriesLike && searchMode === 'episode'
+                            ? (isRTL ? 'جرّب التبديل إلى "الموسم بالكامل" للبحث عن حزمة الموسم كاملة.' : 'Try switching to "Season Pack" mode to find a full season bundle.')
+                            : (isRTL ? 'جرّب تغيير فلتر الجودة أو إلغاء تحديد إخفاء الروابط الخاملة.' : 'Try changing the resolution filter or unchecking the dead torrent filter.')
+                        }}
                     </p>
                 </div>
 
@@ -384,31 +521,91 @@ const startDownload = async (torrent: any) => {
                     ]"
                 >
                     <div class="space-y-2 flex-1 min-w-0">
+                        <!-- Technical Badges Row (Similar to premier torrent trackers) -->
                         <div class="flex items-center gap-2 flex-wrap">
                             <!-- Top Recommended Choice Tag -->
                             <span
                                 v-if="index === 0 && getSeeds(torrent) >= 5"
-                                class="px-2.5 py-0.5 rounded-md text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 shadow-sm"
+                                class="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 shadow-sm"
                             >
                                 <Sparkles class="w-3 h-3 text-amber-400" />
-                                <span>{{ isRTL ? 'الخيار الأفضل والموصى به' : 'Recommended (Highest Seeds)' }}</span>
+                                <span>{{ isRTL ? 'الأعلى جودة وتوزيعاً' : 'Top Choice' }}</span>
                             </span>
 
                             <!-- Resolution Badge -->
                             <span
                                 :class="[
-                                    'px-2 py-0.5 rounded-md text-[10px] font-black',
-                                    torrent.resolution === '4K'
-                                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                                        : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                                    'px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider',
+                                    torrent.resolution === '4K' || torrent.resolution === '2160p'
+                                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-sm shadow-purple-500/10'
+                                        : (torrent.resolution === '1080p'
+                                            ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                                            : 'bg-slate-700/40 text-slate-300 border border-white/10')
                                 ]"
                             >
                                 {{ torrent.resolution || 'HD' }}
                             </span>
 
-                            <!-- Quality & Codec Badges -->
-                            <span v-if="torrent.quality_tag || torrent.quality" class="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-slate-300">
-                                {{ torrent.quality_tag || torrent.quality }}
+                            <!-- Source Type (REMUX / BluRay / WEB-DL) -->
+                            <span
+                                v-if="torrent.source_type"
+                                :class="[
+                                    'px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase',
+                                    torrent.source_type === 'REMUX'
+                                        ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30'
+                                        : (torrent.source_type === 'BluRay'
+                                            ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                                            : 'bg-sky-500/20 text-sky-300 border border-sky-500/30')
+                                ]"
+                            >
+                                {{ torrent.source_type }}
+                            </span>
+
+                            <!-- Video Codec (HEVC 10-bit, AVC, AV1) -->
+                            <span v-if="torrent.video_codec" class="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-emerald-300">
+                                {{ torrent.video_codec }}
+                            </span>
+
+                            <!-- Audio Codec & Channels -->
+                            <span v-if="torrent.audio_codec" class="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-blue-300 flex items-center gap-1">
+                                <Volume2 class="w-3 h-3 text-blue-400" />
+                                <span>{{ torrent.audio_codec }}</span>
+                            </span>
+
+                            <!-- HDR Badge -->
+                            <span
+                                v-if="torrent.hdr && torrent.hdr !== 'SDR'"
+                                class="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1"
+                            >
+                                <span>✨ {{ torrent.hdr }}</span>
+                            </span>
+
+                            <!-- Dubs / Languages -->
+                            <template v-if="torrent.audio_languages && torrent.audio_languages.length > 0">
+                                <span
+                                    v-for="lang in torrent.audio_languages"
+                                    :key="lang"
+                                    class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                                >
+                                    🗣️ {{ lang }}
+                                </span>
+                            </template>
+
+                            <!-- Subtitles -->
+                            <template v-if="torrent.subtitles && torrent.subtitles.length > 0">
+                                <span
+                                    v-for="sub in torrent.subtitles"
+                                    :key="sub"
+                                    class="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-white/10 flex items-center gap-1"
+                                >
+                                    <Subtitles class="w-3 h-3" />
+                                    <span>{{ sub }}</span>
+                                </span>
+                            </template>
+
+                            <!-- Release Group -->
+                            <span v-if="torrent.release_group && torrent.release_group !== 'Scene/P2P'" class="text-[10px] font-black text-cyan-400 px-2 py-0.5 rounded bg-cyan-950/40 border border-cyan-500/20">
+                                🏷️ {{ torrent.release_group }}
                             </span>
 
                             <!-- Source Indexer -->
@@ -430,14 +627,21 @@ const startDownload = async (torrent: any) => {
 
                             <!-- Prominent Seeders Badge with Color & Speed Label -->
                             <span
-                                v-if="getSeeds(torrent) >= 10"
+                                v-if="getSeeds(torrent) >= 15"
                                 class="px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-sm"
                             >
-                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                                <span>👤 {{ getSeeds(torrent) }} {{ isRTL ? 'موزع (فائق السرعة)' : 'Seeds (High Speed)' }}</span>
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                <span>👤 {{ getSeeds(torrent) }} {{ isRTL ? 'موزع (فائق السرعة)' : 'Seeds (Ultra Fast)' }}</span>
                             </span>
                             <span
-                                v-else-if="getSeeds(torrent) >= 3"
+                                v-else-if="getSeeds(torrent) >= 5"
+                                class="px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1"
+                            >
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                <span>👤 {{ getSeeds(torrent) }} {{ isRTL ? 'موزعين (سريع)' : 'Seeds (Fast)' }}</span>
+                            </span>
+                            <span
+                                v-else-if="getSeeds(torrent) >= 2"
                                 class="px-2.5 py-0.5 rounded-full font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1"
                             >
                                 <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
@@ -528,8 +732,8 @@ const startDownload = async (torrent: any) => {
                         </h3>
                         <p class="text-xs text-slate-300 leading-relaxed">
                             {{ isRTL 
-                                ? 'هذا التورنت لا يحتوي على أي موزع نشط حالياً، وسيتوقف عند 0% ولن يكتمل التحميل (مثلما حدث سابقاً). نوصي باختيار رابط يحتوي على موزعين نشطين.'
-                                : 'This torrent has 0 active seeders and will likely stall at 0% without downloading the movie. We strongly recommend choosing a release with active seeders.' }}
+                                ? 'هذا التورنت لا يحتوي على أي موزع نشط حالياً، وسيتوقف عند 0% ولن يكتمل التحميل. نوصي باختيار رابط يحتوي على موزعين نشطين.'
+                                : 'This torrent has 0 active seeders and will likely stall at 0% without downloading. We strongly recommend choosing a release with active seeders.' }}
                         </p>
                     </div>
                     <div class="flex items-center justify-center gap-3 pt-2">
@@ -553,7 +757,7 @@ const startDownload = async (torrent: any) => {
             <div class="relative z-10 p-4 border-t border-white/10 bg-slate-950/60 flex items-center justify-between text-xs text-slate-400">
                 <span class="flex items-center gap-1.5">
                     <HardDrive class="w-3.5 h-3.5 text-cyan-400" />
-                    <span>{{ isRTL ? 'القرص المستهدف:' : 'Target Media Drive:' }} <strong class="text-white">H:\Entertainment</strong></span>
+                    <span>{{ isRTL ? 'القرص المستهدف للتنظيم:' : 'Target Media Drive:' }} <strong class="text-white">H:\Entertainment</strong></span>
                 </span>
                 <button
                     @click="emit('close')"

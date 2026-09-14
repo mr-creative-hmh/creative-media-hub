@@ -10,8 +10,11 @@ use Illuminate\Support\Facades\Log;
 class TorrentDiscoveryService
 {
     protected const TORRENTIO_URL = 'https://torrentio.strem.fun';
+
     protected const EZTV_URL = 'https://eztv.re/api/get-torrents';
+
     protected const YTS_URL = 'https://yts.lt/api/v2/list_movies.json';
+
     protected const APIBAY_URL = 'https://apibay.org/q.php';
 
     protected array $trackers = [
@@ -28,9 +31,10 @@ class TorrentDiscoveryService
     /**
      * Search torrents for a movie.
      */
-    public function searchMovieTorrents(string $title, ?int $year = null, ?string $imdbId = null, ?int $tmdbId = null): array
+    public function searchMovieTorrents(string $title, ?int $year = null, ?string $imdbId = null, ?int $tmdbId = null, bool $isAnimated = false): array
     {
-        $cacheKey = 'scout_torrents_movie_' . md5("{$title}_{$year}_{$imdbId}_{$tmdbId}");
+        $cacheKey = 'scout_torrents_movie_'.md5("{$title}_{$year}_{$imdbId}_{$tmdbId}_{$isAnimated}");
+
         return Cache::remember($cacheKey, 1800, function () use ($title, $year, $imdbId, $tmdbId) {
             $results = [];
 
@@ -51,28 +55,112 @@ class TorrentDiscoveryService
                 $results = array_merge($results, $ytsResults);
             }
 
-            // 4. Fallback to Apibay if low results
-            if (count($results) < 3) {
-                $query = $year ? "{$title} {$year}" : $title;
-                $apibayResults = $this->fetchFromApibay($query);
-                if (! empty($apibayResults)) {
-                    $results = array_merge($results, $apibayResults);
-                }
+            // 4. Try Apibay strictly with Movies categories (201, 207)
+            $query = $year ? "{$title} {$year}" : $title;
+            $apibayResults = $this->fetchFromApibay($query, '201,207');
+            if (! empty($apibayResults)) {
+                $results = array_merge($results, $apibayResults);
             }
 
-            return $this->rankAndDeduplicate($results);
+            // STRICT FILTERING FOR MOVIES:
+            // 1. Exclude any TV series patterns (e.g. S01, S02E01, 1x02, Season 1, Episode 4)
+            // 2. Exclude releases whose explicit 4-digit year differs by more than 1 (disentangling remakes from originals)
+            $filtered = array_filter($results, function ($item) use ($year) {
+                $tTitle = $item['title'] ?? '';
+
+                if (preg_match('/(?i)\bS\d{1,2}(?:E\d{1,2})?\b|\b\d{1,2}x\d{1,2}\b|\bSeason\s*\d+\b|\bEpisode\s*\d+\b/', $tTitle)) {
+                    return false;
+                }
+
+                if ($year && preg_match('/\b(19\d{2}|20\d{2})\b/', $tTitle, $m)) {
+                    $relYear = (int) $m[1];
+                    if (abs($relYear - $year) > 1) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+
+            $finalList = ! empty($filtered) ? array_values($filtered) : $results;
+
+            return $this->rankAndDeduplicate($finalList);
         });
+    }
+
+    /**
+     * Determine if a torrent title matches a specific episode (e.g., S01E02, 1x02).
+     */
+    public function matchesEpisode(string $title, int $season, int $episode): bool
+    {
+        $cleanTitle = trim($title);
+
+        // 1. Standard S01E02 / S1E2 / S01.E02 / S01_E02 / S01 - E02
+        if (preg_match('/(?i)\bS0*'.$season.'[\.\_\-\s]*E0*'.$episode.'\b/', $cleanTitle)) {
+            return true;
+        }
+
+        // 2. Standard 1x02 / 01x02 / 1x2
+        if (preg_match('/(?i)\b0*'.$season.'x0*'.$episode.'\b/', $cleanTitle)) {
+            return true;
+        }
+
+        // 3. Multi-episode range like S01E01-E04, S01E01-04, S01E01-E02
+        if (preg_match('/(?i)\bS0*'.$season.'[\.\_\-\s]*E(\d+)[\-\_–~]+(?:E)?(\d+)\b/', $cleanTitle, $m)) {
+            $start = (int) $m[1];
+            $end = (int) $m[2];
+            if ($episode >= $start && $episode <= $end) {
+                return true;
+            }
+        }
+
+        // 4. "Episode 2" or "Ep 02" if season is 1 or season is explicitly mentioned elsewhere in title
+        if (preg_match('/(?i)\b(?:EP|EPISODE)[\.\_\-\s]*0*'.$episode.'\b/', $cleanTitle)) {
+            if ($season === 1 || preg_match('/(?i)\b(?:S0*'.$season.'|Season[\.\_\-\s]*0*'.$season.')\b/', $cleanTitle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Determine if a torrent title represents a full season pack (e.g. S01 Complete, Season 1 Batch).
+     */
+    public function isSeasonPack(string $title, int $season): bool
+    {
+        $cleanTitle = trim($title);
+
+        // Disqualify if it explicitly matches a single episode like S01E05 or 1x05 without being a complete pack
+        if (preg_match('/(?i)\bS0*\d+[\.\_\-\s]*E\d+\b/', $cleanTitle) || preg_match('/(?i)\b\d+x\d+\b/', $cleanTitle)) {
+            // Only allow if it's explicitly a multi-episode batch like E01-E24 or has Complete/Batch
+            if (! preg_match('/(?i)\bE\d+[\-\_–~]+(?:E)?\d+\b/', $cleanTitle) && ! preg_match('/(?i)\b(?:Complete|Full|Batch)\b/', $cleanTitle)) {
+                return false;
+            }
+        }
+
+        // Must match Season number
+        $hasSeason = preg_match('/(?i)\b(?:Season[\.\_\-\s]*0*'.$season.'|S0*'.$season.')\b/', $cleanTitle);
+        if (! $hasSeason) {
+            return false;
+        }
+
+        // Check for season pack keywords or absence of single episode
+        $isPack = preg_match('/(?i)\b(?:Complete|Full|Batch|Season[\.\_\-\s]*Pack|All[\.\_\-\s]*Episodes|Boxset)\b/', $cleanTitle)
+            || preg_match('/(?i)\b(?:Season[\.\_\-\s]*0*'.$season.'|S0*'.$season.')\b(?![.\s_-]*E\d+)/', $cleanTitle);
+
+        return (bool) $isPack;
     }
 
     /**
      * Search torrents for a specific episode.
      */
-    public function searchEpisodeTorrents(string $seriesTitle, int $season, int $episode, ?string $imdbId = null, ?int $tmdbId = null): array
+    public function searchEpisodeTorrents(string $seriesTitle, int $season, int $episode, ?string $imdbId = null, ?int $tmdbId = null, ?int $year = null, bool $isAnimated = false): array
     {
         $epCode = sprintf('S%02dE%02d', $season, $episode);
-        $cacheKey = 'scout_torrents_ep_' . md5("{$seriesTitle}_{$epCode}_{$imdbId}_{$tmdbId}");
+        $cacheKey = 'scout_torrents_ep_'.md5("{$seriesTitle}_{$epCode}_{$imdbId}_{$tmdbId}_{$year}_{$isAnimated}");
 
-        return Cache::remember($cacheKey, 1800, function () use ($seriesTitle, $season, $episode, $epCode, $imdbId, $tmdbId) {
+        return Cache::remember($cacheKey, 1800, function () use ($seriesTitle, $season, $episode, $epCode, $imdbId, $tmdbId, $year) {
             $results = [];
 
             // 1. Resolve IMDB ID if missing
@@ -96,38 +184,102 @@ class TorrentDiscoveryService
                 }
             }
 
-            // 4. Fallback to Apibay
-            if (count($results) < 3) {
-                $query = "{$seriesTitle} {$epCode}";
-                $apibayResults = $this->fetchFromApibay($query);
+            // 4. Try Apibay strictly with TV categories (205, 208)
+            $queries = [];
+            if ($year) {
+                $queries[] = "{$seriesTitle} {$year} {$epCode}";
+            }
+            $queries[] = "{$seriesTitle} {$epCode}";
+            $queries[] = "{$seriesTitle} ".sprintf('%dx%02d', $season, $episode);
+            $queries[] = "{$seriesTitle} ".sprintf('S%dE%02d', $season, $episode);
+
+            foreach ($queries as $q) {
+                $apibayResults = $this->fetchFromApibay($q, '205,208');
                 if (! empty($apibayResults)) {
                     $results = array_merge($results, $apibayResults);
                 }
+                if (count($results) >= 15) {
+                    break;
+                }
             }
 
-            return $this->rankAndDeduplicate($results);
+            // 5. STRICT FILTERING: Keep only torrents that match episode and release year
+            $filtered = array_filter($results, function ($item) use ($season, $episode, $year) {
+                $tTitle = $item['title'] ?? '';
+
+                if (! $this->matchesEpisode($tTitle, $season, $episode)) {
+                    return false;
+                }
+
+                if ($year && preg_match('/\b(19\d{2}|20\d{2})\b/', $tTitle, $m)) {
+                    $relYear = (int) $m[1];
+                    if (abs($relYear - $year) > 1) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+
+            $finalList = ! empty($filtered) ? array_values($filtered) : $results;
+
+            return $this->rankAndDeduplicate($finalList);
         });
     }
 
     /**
      * Search torrents for an entire season pack.
      */
-    public function searchSeasonTorrents(string $seriesTitle, int $season, ?string $imdbId = null, ?int $tmdbId = null): array
+    public function searchSeasonTorrents(string $seriesTitle, int $season, ?string $imdbId = null, ?int $tmdbId = null, ?int $year = null, bool $isAnimated = false): array
     {
         $seasonCode = sprintf('Season %02d', $season);
-        $cacheKey = 'scout_torrents_season_' . md5("{$seriesTitle}_{$season}_{$imdbId}_{$tmdbId}");
+        $cacheKey = 'scout_torrents_season_'.md5("{$seriesTitle}_{$season}_{$imdbId}_{$tmdbId}_{$year}_{$isAnimated}");
 
-        return Cache::remember($cacheKey, 1800, function () use ($seriesTitle, $season, $seasonCode) {
+        return Cache::remember($cacheKey, 1800, function () use ($seriesTitle, $season, $year) {
             $results = [];
+            $sPadded = sprintf('%02d', $season);
 
-            $query1 = "{$seriesTitle} S" . sprintf('%02d', $season);
-            $query2 = "{$seriesTitle} Season {$season}";
+            $queries = [];
+            if ($year) {
+                $queries[] = "{$seriesTitle} {$year} S{$sPadded} Complete";
+                $queries[] = "{$seriesTitle} {$year} Season {$season}";
+            }
+            $queries[] = "{$seriesTitle} S{$sPadded} Complete";
+            $queries[] = "{$seriesTitle} Season {$season} Complete";
+            $queries[] = "{$seriesTitle} Season {$season}";
+            $queries[] = "{$seriesTitle} S{$sPadded}";
 
-            $apibay1 = $this->fetchFromApibay($query1);
-            $apibay2 = $this->fetchFromApibay($query2);
+            foreach ($queries as $q) {
+                $apibayResults = $this->fetchFromApibay($q, '205,208');
+                if (! empty($apibayResults)) {
+                    $results = array_merge($results, $apibayResults);
+                }
+                if (count($results) >= 20) {
+                    break;
+                }
+            }
 
-            $merged = array_merge($apibay1, $apibay2);
-            return $this->rankAndDeduplicate($merged);
+            // STRICT FILTERING: Only include true season packs and respect release year
+            $seasonPacks = array_filter($results, function ($item) use ($season, $year) {
+                $tTitle = $item['title'] ?? '';
+
+                if (! $this->isSeasonPack($tTitle, $season)) {
+                    return false;
+                }
+
+                if ($year && preg_match('/\b(19\d{2}|20\d{2})\b/', $tTitle, $m)) {
+                    $relYear = (int) $m[1];
+                    if (abs($relYear - $year) > 1) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+
+            $finalList = ! empty($seasonPacks) ? array_values($seasonPacks) : $results;
+
+            return $this->rankAndDeduplicate($finalList);
         });
     }
 
@@ -137,7 +289,7 @@ class TorrentDiscoveryService
     protected function fetchFromTorrentio(string $path, string $fallbackTitle): array
     {
         try {
-            $url = self::TORRENTIO_URL . "/{$path}";
+            $url = self::TORRENTIO_URL."/{$path}";
             $res = Http::timeout(8)->withOptions(['verify' => false])->get($url);
 
             if (! $res->successful()) {
@@ -177,26 +329,26 @@ class TorrentDiscoveryService
                     }
                 }
 
-                $quality = $this->extractQualityTag($releaseName . ' ' . ($stream['name'] ?? ''));
-                $resolution = $quality['resolution'];
-
+                $specs = $this->extractTechnicalSpecs($releaseName, $rawTitle.' '.($stream['name'] ?? ''));
                 $magnet = $this->buildMagnetUri($infoHash, $releaseName);
 
                 $results[] = $this->formatTorrentItem(
                     title: $releaseName,
-                    resolution: $resolution,
-                    qualityTag: $quality['tag'],
+                    resolution: $specs['resolution'],
+                    qualityTag: $specs['quality_tag'],
                     sizeHuman: $sizeHuman,
                     seeders: $seeds,
                     source: $source,
                     infoHash: $infoHash,
-                    magnetUrl: $magnet
+                    magnetUrl: $magnet,
+                    technicalSpecs: $specs
                 );
             }
 
             return $results;
         } catch (\Throwable $e) {
-            Log::warning("Torrentio search failed: " . $e->getMessage());
+            Log::warning('Torrentio search failed: '.$e->getMessage());
+
             return [];
         }
     }
@@ -255,7 +407,8 @@ class TorrentDiscoveryService
 
             return $results;
         } catch (\Throwable $e) {
-            Log::warning("EZTV search failed: " . $e->getMessage());
+            Log::warning('EZTV search failed: '.$e->getMessage());
+
             return [];
         }
     }
@@ -315,20 +468,24 @@ class TorrentDiscoveryService
 
             return $results;
         } catch (\Throwable $e) {
-            Log::warning("YTS search failed: " . $e->getMessage());
+            Log::warning('YTS search failed: '.$e->getMessage());
+
             return [];
         }
     }
 
     /**
-     * Fetch from Apibay.
+     * Fetch from Apibay with optional category filtering (e.g. 201,207 for Movies, 205,208 for TV Shows).
      */
-    protected function fetchFromApibay(string $query): array
+    protected function fetchFromApibay(string $query, ?string $category = null): array
     {
         try {
-            $res = Http::timeout(8)->withOptions(['verify' => false])->get(self::APIBAY_URL, [
-                'q' => $query,
-            ]);
+            $params = ['q' => $query];
+            if ($category) {
+                $params['cat'] = $category;
+            }
+
+            $res = Http::timeout(8)->withOptions(['verify' => false])->get(self::APIBAY_URL, $params);
 
             if (! $res->successful()) {
                 return [];
@@ -371,7 +528,8 @@ class TorrentDiscoveryService
 
             return $results;
         } catch (\Throwable $e) {
-            Log::warning("Apibay search failed: " . $e->getMessage());
+            Log::warning('Apibay search failed: '.$e->getMessage());
+
             return [];
         }
     }
@@ -420,11 +578,11 @@ class TorrentDiscoveryService
     public function buildMagnetUri(string $infoHash, string $name): string
     {
         $dn = rawurlencode(trim($name));
-        $xt = "urn:btih:" . strtolower(trim($infoHash));
+        $xt = 'urn:btih:'.strtolower(trim($infoHash));
         $trackersStr = '';
 
         foreach ($this->trackers as $tr) {
-            $trackersStr .= '&tr=' . rawurlencode($tr);
+            $trackersStr .= '&tr='.rawurlencode($tr);
         }
 
         return "magnet:?xt={$xt}&dn={$dn}{$trackersStr}";
@@ -462,7 +620,173 @@ class TorrentDiscoveryService
     }
 
     /**
-     * Format a torrent item with standard keys, seed health, and speed tier.
+     * Extract detailed torrent site specifications from release title and context.
+     * Extracts resolution, source type, video codec, audio specs, HDR, languages, subs, and release group.
+     */
+    public function extractTechnicalSpecs(string $title, ?string $rawContext = null): array
+    {
+        $text = $title.' '.($rawContext ?? '');
+
+        // 1. Resolution
+        $resolution = '1080p';
+        if (preg_match('/\b(2160p|4k|uhd)\b/i', $text)) {
+            $resolution = '4K UHD';
+        } elseif (preg_match('/\b(1080p|1080i|fhd)\b/i', $text)) {
+            $resolution = '1080p FHD';
+        } elseif (preg_match('/\b(720p|hd)\b/i', $text)) {
+            $resolution = '720p HD';
+        } elseif (preg_match('/\b(480p|sd|dvdrip)\b/i', $text)) {
+            $resolution = '480p SD';
+        }
+
+        // 2. Source Type / Remux
+        $sourceType = 'WEB-DL';
+        if (preg_match('/\bremux\b/i', $text)) {
+            $sourceType = 'Remux';
+        } elseif (preg_match('/\b(bluray|bdrip|brrip)\b/i', $text)) {
+            $sourceType = 'BluRay';
+        } elseif (preg_match('/\b(web-?dl|webrip)\b/i', $text)) {
+            $sourceType = preg_match('/\bwebrip\b/i', $text) ? 'WEBRip' : 'WEB-DL';
+        } elseif (preg_match('/\bhdtv\b/i', $text)) {
+            $sourceType = 'HDTV';
+        } elseif (preg_match('/\b(dvd|dvd-?r)\b/i', $text)) {
+            $sourceType = 'DVD';
+        } elseif (preg_match('/\b(cam|hdts|telecine|telesync)\b/i', $text)) {
+            $sourceType = 'CAM/TS';
+        }
+
+        // 3. Video Codec & Bit Depth
+        $videoCodec = 'x264 (8-bit)';
+        $is10bit = (bool) preg_match('/\b(10-?bit|main\s*10)\b/i', $text);
+        if (preg_match('/\b(x265|hevc|h\.?265)\b/i', $text)) {
+            $videoCodec = $is10bit ? 'HEVC / x265 (10-bit)' : 'HEVC / x265';
+        } elseif (preg_match('/\b(av0?1)\b/i', $text)) {
+            $videoCodec = 'AV1 (10-bit)';
+        } elseif (preg_match('/\b(x264|h\.?264|avc)\b/i', $text)) {
+            $videoCodec = $is10bit ? 'AVC / x264 (10-bit)' : 'AVC / x264';
+        } elseif (preg_match('/\b(xvid|divx)\b/i', $text)) {
+            $videoCodec = 'XviD';
+        }
+
+        // 4. HDR / Color Dynamics
+        $hdr = 'SDR';
+        $hasDv = (bool) preg_match('/\b(dv|dovi|dolby\s*vision)\b/i', $text);
+        $hasHdr10Plus = (bool) preg_match('/\bhdr10\+\b/i', $text);
+        $hasHdr10 = (bool) preg_match('/\bhdr(?:10)?\b/i', $text);
+
+        if ($hasDv && ($hasHdr10Plus || $hasHdr10)) {
+            $hdr = 'Dolby Vision + HDR10';
+        } elseif ($hasDv) {
+            $hdr = 'Dolby Vision';
+        } elseif ($hasHdr10Plus) {
+            $hdr = 'HDR10+';
+        } elseif ($hasHdr10) {
+            $hdr = 'HDR10';
+        }
+
+        // 5. Audio Codecs & Channels
+        $audio = 'AAC 2.0';
+        $channels = '2.0';
+        if (preg_match('/\b7\.1\b/i', $text)) {
+            $channels = '7.1';
+        } elseif (preg_match('/\b5\.1\b/i', $text)) {
+            $channels = '5.1';
+        }
+
+        if (preg_match('/\batmos\b/i', $text)) {
+            $audio = "Dolby Atmos ({$channels})";
+        } elseif (preg_match('/\btruehd\b/i', $text)) {
+            $audio = "TrueHD ({$channels})";
+        } elseif (preg_match('/\bdts-?hd(?:\s*ma)?\b/i', $text)) {
+            $audio = "DTS-HD MA ({$channels})";
+        } elseif (preg_match('/\bdts\b/i', $text)) {
+            $audio = "DTS ({$channels})";
+        } elseif (preg_match('/\b(ddp|eac3|dd\+|dolby\s*digital\s*plus)\b/i', $text)) {
+            $audio = "Dolby Digital Plus ({$channels})";
+        } elseif (preg_match('/\b(ac3|dd5\.1|dd2\.0)\b/i', $text)) {
+            $audio = "Dolby Digital ({$channels})";
+        } elseif (preg_match('/\bflac\b/i', $text)) {
+            $audio = "FLAC Lossless ({$channels})";
+        } elseif (preg_match('/\baac\b/i', $text)) {
+            $audio = "AAC ({$channels})";
+        }
+
+        // 6. Dubs / Multi-Audio
+        $audioLanguages = [];
+        if (preg_match('/\bdual-?audio\b/i', $text)) {
+            $audioLanguages[] = 'Dual-Audio';
+        }
+        if (preg_match('/\bmulti-?(?:audio|lang)\b/i', $text)) {
+            $audioLanguages[] = 'Multi-Audio';
+        }
+        if (preg_match('/\b(hindi|hin)\b/i', $text)) {
+            $audioLanguages[] = 'Hindi';
+        }
+        if (preg_match('/\b(arabic|ara)\b/i', $text)) {
+            $audioLanguages[] = 'Arabic';
+        }
+        if (preg_match('/\b(tamil|tam)\b/i', $text)) {
+            $audioLanguages[] = 'Tamil';
+        }
+        if (preg_match('/\b(telugu|tel)\b/i', $text)) {
+            $audioLanguages[] = 'Telugu';
+        }
+        if (preg_match('/\b(japanese|jpn)\b/i', $text)) {
+            $audioLanguages[] = 'Japanese';
+        }
+        if (preg_match('/\b(korean|kor)\b/i', $text)) {
+            $audioLanguages[] = 'Korean';
+        }
+
+        // 7. Subtitles
+        $subs = [];
+        if (preg_match('/\bmulti-?subs?\b/i', $text)) {
+            $subs[] = 'Multi-Subs';
+        }
+        if (preg_match('/\b(esubs?|eng-?subs?)\b/i', $text)) {
+            $subs[] = 'English Subs';
+        }
+        if (preg_match('/\b(ar-?subs?|arabic-?subs?)\b/i', $text)) {
+            $subs[] = 'Arabic Subs';
+        }
+
+        // 8. Release Group
+        $releaseGroup = null;
+        if (preg_match('/-([A-Za-z0-9]+)(?:\[[^\]]*\])*$/', trim($title), $m)) {
+            $releaseGroup = $m[1];
+        }
+        if (empty($releaseGroup)) {
+            $knownGroups = [
+                'PSA', 'QxR', 'YIFY', 'YTS', 'RARBG', 'FLUX', 'GalaxyRG', 'NTb',
+                'SWTYBLZ', 'Framestor', 'Tigole', 'UTR', 'Vyndros', 'ION10',
+                'MeGusta', 'GECKOS', 'SPARKS', 'AMIABLE', 'LOST', 'CtrlHD',
+                'DON', 'playBD', 'KOGi', 'SURCODE', 'SMURF', 'Pahe', 'TGx',
+                'ETRG', 'BONE', 'CMRG', 'EVO', 'WAF', 'SEV', 'TEKNO3D',
+            ];
+            foreach ($knownGroups as $kg) {
+                if (preg_match('/\b'.preg_quote($kg, '/').'\b/i', $text)) {
+                    $releaseGroup = $kg;
+                    break;
+                }
+            }
+        }
+
+        return [
+            'resolution' => $resolution,
+            'source_type' => $sourceType,
+            'quality_tag' => "{$resolution} {$sourceType}",
+            'video_codec' => $videoCodec,
+            'audio_codec' => $audio,
+            'audio_channels' => $channels,
+            'hdr' => $hdr,
+            'audio_languages' => $audioLanguages,
+            'subtitles' => $subs,
+            'release_group' => $releaseGroup ?? 'Scene/P2P',
+        ];
+    }
+
+    /**
+     * Format a torrent item with standard keys, seed health, speed tier, and rich technical specs.
      */
     protected function formatTorrentItem(
         string $title,
@@ -473,8 +797,11 @@ class TorrentDiscoveryService
         string $source,
         string $infoHash,
         string $magnetUrl,
-        int $leechers = 0
+        int $leechers = 0,
+        ?array $technicalSpecs = null
     ): array {
+        $specs = $technicalSpecs ?? $this->extractTechnicalSpecs($title);
+
         $health = match (true) {
             $seeders >= 15 => 'excellent',
             $seeders >= 5 => 'good',
@@ -493,8 +820,16 @@ class TorrentDiscoveryService
 
         return [
             'title' => $title,
-            'resolution' => $resolution,
-            'quality_tag' => $qualityTag,
+            'resolution' => $specs['resolution'] ?? $resolution,
+            'source_type' => $specs['source_type'] ?? 'WEB-DL',
+            'quality_tag' => $specs['quality_tag'] ?? $qualityTag,
+            'video_codec' => $specs['video_codec'] ?? 'x264',
+            'audio_codec' => $specs['audio_codec'] ?? 'AAC 2.0',
+            'audio_channels' => $specs['audio_channels'] ?? '2.0',
+            'hdr' => $specs['hdr'] ?? 'SDR',
+            'audio_languages' => $specs['audio_languages'] ?? [],
+            'subtitles' => $specs['subtitles'] ?? [],
+            'release_group' => $specs['release_group'] ?? 'Scene/P2P',
             'size_human' => $sizeHuman,
             'seeders' => $seeders,
             'seeds' => $seeders,
@@ -564,12 +899,13 @@ class TorrentDiscoveryService
     protected function formatBytes(int $bytes): string
     {
         if ($bytes >= 1073741824) {
-            return number_format($bytes / 1073741824, 2) . ' GB';
+            return number_format($bytes / 1073741824, 2).' GB';
         } elseif ($bytes >= 1048576) {
-            return number_format($bytes / 1048576, 1) . ' MB';
+            return number_format($bytes / 1048576, 1).' MB';
         } elseif ($bytes >= 1024) {
-            return number_format($bytes / 1024, 1) . ' KB';
+            return number_format($bytes / 1024, 1).' KB';
         }
-        return $bytes . ' B';
+
+        return $bytes.' B';
     }
 }

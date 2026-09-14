@@ -178,19 +178,38 @@ Creative Media Hub is powered by 14 interconnected pipelines designed for maximu
 
 ---
 
-### 2.12. Media Scout Gap Detection & Automated Acquisition Pipeline
-- **Location**: `App\Services\Scout\LibraryGapService` & `App\Services\Scout\LibraryAcquisitionService`
+### 2.12. Media Scout Gap Detection, Discover & High-Fidelity Acquisition Pipeline
+- **Location**: `App\Services\Scout\LibraryGapService`, `App\Services\Scout\TorrentDiscoveryService`, & `App\Services\Scout\LibraryAcquisitionService`
 - **Lifecycle**:
-  1. **Franchise & Season Audit**: When a collection or TV series is loaded, `LibraryGapService` queries TMDb to determine all released movies in the franchise or episodes in the season.
-  2. **Gap Calculation**: Compares TMDb parts with local media items to identify missing movies or missing episodes, calculating real completion percentage.
-  3. **Automated Torrent Search**: When acquisition is initiated, `LibraryAcquisitionService` queries torrent providers for healthy torrents matching the missing content.
-  4. **Batch Downloader Ingestion**: Enqueues verified magnet links into the download manager.
-  5. **Post-Download Flattening, Subtitle Extraction & Canonical Renaming**:
+  1. **Franchise & Season Gap Audit**: When a collection or TV series is loaded, `LibraryGapService` queries TMDb to determine all released movies in the franchise or episodes in the season, calculating exact missing counts and completion percentages.
+  2. **Global Media Discovery & Live Search**:
+     - Users can search any movie or TV series globally on TMDb, or explore weekly trending releases directly from the Discover tab.
+     - Live library enrichment correlates TMDb items against local database records with strict year discrimination (`abs(release_year - year) <= 1`).
+     - **Strict Animated vs Live-Action Discrimination**: Evaluates TMDb genre ID 16 ("Animation") to classify media as `🎨 Animated` vs `🎭 Live-Action`. This eliminates false ownership matches between original animated works and live-action remakes (such as *One Piece* 1999 Anime vs 2023 Netflix Live-Action, or *The Lion King* 1994 vs 2019).
+  3. **Strictly-Scoped P2P Torrent Discovery**:
+     - `TorrentDiscoveryService` queries verified P2P sources (Apibay/TPB, YTS, TorrentGalaxy) with strict category scoping (`cat=201,207` for Movies; `cat=205,208` for TV Shows).
+     - TV show patterns (`S01`, `Season 1`, `Episode 1`) are strictly purged from movie results, and explicit mismatched release years (e.g. 1999 torrents when searching for a 2023 release) are excluded.
+  4. **High-Fidelity Technical Specs Parser**:
+     - Extracts top torrent site specifications (matching 1337x, YTS, and TorrentGalaxy standards):
+       - **Resolution**: `2160p 4K`, `1080p FHD`, `720p HD`.
+       - **Source Type**: `REMUX`, `BluRay`, `WEB-DL`, `WEBRip`, `HDTV`.
+       - **Video Codec**: `HEVC / x265 (10-bit)`, `AVC / x264`, `AV1 (10-bit)`.
+       - **Audio & Channels**: `Dolby Atmos (7.1)`, `TrueHD (7.1)`, `DTS-HD MA (5.1)`, `Dolby Digital Plus (5.1)`, `AAC (2.0)`.
+       - **HDR Dynamic Range**: `Dolby Vision + HDR10`, `Dolby Vision`, `HDR10+`, `HDR10`, `SDR`.
+       - **Dubs & Languages**: `Dual-Audio`, `Multi-Audio`, `Arabic`, `Hindi`, `Japanese`, `Tamil`, `Telugu`.
+       - **Subtitles**: `Multi-Subs`, `Arabic Subs`, `English Subs`.
+       - **Release Group**: `PSA`, `QxR`, `YTS`, `GalaxyRG`, `FLUX`, `Framestor`, etc.
+       - **Seed Health & Speed Tier**: `excellent` (15+ seeds), `good` (5-14 seeds), `fair` (2-4 seeds), with 0-seed stall warnings.
+  5. **1-Click Auto-Organization & Ingestion**:
+     - Enqueues verified magnet links into the download manager with automatic destination paths:
+       - Movies: `H:\Entertainment\Movies\{Title} ({Year})\{Title} ({Year}) [{Quality}].ext`
+       - TV Shows: `H:\Entertainment\TV Shows\{Show Title}\Season {SS}\{Show Title} - S{SS}E{EE} - {Ep Title} [{Quality}].ext`
+  6. **Post-Download Flattening, Subtitle Extraction & Canonical Renaming**:
      - Recursively flattens nested folder trees created by torrent clients.
-     - Renames video files to canonical pattern: `Show - S01E01 - Title [1080p].ext` or `Genre/Collection/Movie (Year)/Movie (Year).ext`.
+     - Renames video files to canonical pattern: `Show - S01E01 - Title [1080p].ext` or `Movie (Year)/Movie (Year) [1080p].ext`.
      - **Deep Companion Subtitle Extraction & Content-Based Classification**:
        - Scans download root and nested folders (`Subs/`, `Subtitles/`, `Sub/`) for subtitle formats (`.srt`, `.vtt`, `.ass`, `.ssa`, `.sub`).
-       - Analyzes dialogue text with `SubtitleLanguageDetectorService` using Unicode Arabic blocks (`\x0600-\x06FF`) vs Latin stop-word matrices. Generic names like `track1.srt` or `Movie.srt` are accurately classified as `.ar.srt` or `.en.srt` rather than guessed.
+       - Analyzes dialogue text with `SubtitleLanguageDetectorService` using Unicode Arabic blocks (`\x0600-\x06FF`) vs Latin stop-word matrices. Generic names like `track1.srt` or `Movie.srt` are accurately classified as `.ar.srt` or `.en.srt`.
        - Preserves dual-language tracks alongside the media file, normalizes ASS/SSA into clean UTF-8 SRT, and prunes empty subtitle directories.
      - **Automatic Collection Invalidation**: Calls `CollectionController::clearCache()` to ensure newly acquired franchise installments appear instantly on `/collections`.
      - Removes leftover empty directories and triggers library scanner refresh.

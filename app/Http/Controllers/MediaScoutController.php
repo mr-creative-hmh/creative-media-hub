@@ -2,7 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Episode;
+use App\Models\MediaItem;
+use App\Models\Series;
 use App\Services\Downloader\DownloadManagerService;
+use App\Services\Metadata\TmdbProvider;
 use App\Services\Organizer\SceneNameParserService;
 use App\Services\Scout\LibraryAcquisitionService;
 use App\Services\Scout\LibraryGapService;
@@ -20,7 +24,8 @@ class MediaScoutController extends Controller
         protected TorrentDiscoveryService $torrentService,
         protected LibraryAcquisitionService $acquisitionService,
         protected DownloadManagerService $downloadManager,
-        protected SceneNameParserService $parserService
+        protected SceneNameParserService $parserService,
+        protected TmdbProvider $tmdb
     ) {}
 
     /**
@@ -39,6 +44,7 @@ class MediaScoutController extends Controller
             'initialEpisodes' => $this->gapService->getMissingEpisodesSummary(false),
             'initialSeasons' => $this->gapService->getMissingSeasonsSummary(false),
             'initialMovies' => $this->gapService->getMissingCollectionMoviesSummary(false),
+            'initialTrending' => $this->enrichWithLibraryStatus($this->tmdb->getTrendingMedia('all', 'week')),
         ]);
     }
 
@@ -176,37 +182,315 @@ class MediaScoutController extends Controller
     }
 
     /**
-     * API: Search torrent suggestions for a specific gap.
+     * API: Search torrent suggestions for a specific gap or new media item.
      */
     public function getTorrents(Request $request): JsonResponse
     {
         $request->validate([
-            'type' => 'required|in:movie,collection_movie,episode,season',
+            'type' => 'required|in:movie,collection_movie,episode,season,series,season_pack',
             'title' => 'required|string',
         ]);
 
         $type = $request->input('type');
         $title = $request->input('title');
-        $year = $request->filled('year') ? (int) $request->input('year') : null;
+        $year = $request->filled('year') ? (int) $request->input('year') : ($request->filled('release_year') ? (int) $request->input('release_year') : null);
         $imdbId = $request->input('imdb_id');
         $tmdbId = $request->filled('tmdb_id') ? (int) $request->input('tmdb_id') : null;
         $season = $request->filled('season') ? (int) $request->input('season') : 1;
         $episode = $request->filled('episode') ? (int) $request->input('episode') : 1;
+        $isAnimated = $request->boolean('is_animated', false);
 
         $torrents = [];
 
         if ($type === 'episode') {
-            $torrents = $this->torrentService->searchEpisodeTorrents($title, $season, $episode, $imdbId, $tmdbId);
-        } elseif ($type === 'season') {
-            $torrents = $this->torrentService->searchSeasonTorrents($title, $season, $imdbId, $tmdbId);
+            $torrents = $this->torrentService->searchEpisodeTorrents($title, $season, $episode, $imdbId, $tmdbId, $year, $isAnimated);
+        } elseif ($type === 'season' || $type === 'season_pack') {
+            $torrents = $this->torrentService->searchSeasonTorrents($title, $season, $imdbId, $tmdbId, $year, $isAnimated);
+        } elseif ($type === 'series') {
+            if ($request->filled('episode')) {
+                $torrents = $this->torrentService->searchEpisodeTorrents($title, $season, $episode, $imdbId, $tmdbId, $year, $isAnimated);
+            } else {
+                $torrents = $this->torrentService->searchSeasonTorrents($title, $season, $imdbId, $tmdbId, $year, $isAnimated);
+            }
         } else {
-            $torrents = $this->torrentService->searchMovieTorrents($title, $year, $imdbId, $tmdbId);
+            $torrents = $this->torrentService->searchMovieTorrents($title, $year, $imdbId, $tmdbId, $isAnimated);
         }
 
         return response()->json([
             'torrents' => $torrents,
             'count' => count($torrents),
         ]);
+    }
+
+    /**
+     * API: Discover & live search new media across TMDb with library status badges.
+     */
+    public function discoverSearch(Request $request): JsonResponse
+    {
+        $query = trim($request->input('query', ''));
+        $type = $request->input('type', 'all'); // 'all', 'movie', 'tv'
+
+        if (empty($query)) {
+            $trending = $this->tmdb->getTrendingMedia($type === 'tv' ? 'tv' : ($type === 'movie' ? 'movie' : 'all'), 'week');
+
+            return response()->json([
+                'results' => $this->enrichWithLibraryStatus($trending),
+            ]);
+        }
+
+        $results = [];
+        if ($type === 'movie' || $type === 'all') {
+            $movieResults = $this->tmdb->searchMovie($query);
+            $results = array_merge($results, $movieResults);
+        }
+
+        if ($type === 'tv' || $type === 'all') {
+            $seriesResults = $this->tmdb->searchSeries($query);
+            $results = array_merge($results, $seriesResults);
+        }
+
+        return response()->json([
+            'results' => $this->enrichWithLibraryStatus($results),
+        ]);
+    }
+
+    /**
+     * API: Get detailed series seasons & episodes breakdown for discover inspector.
+     */
+    public function discoverSeriesDetails(Request $request): JsonResponse
+    {
+        $request->validate(['tmdb_id' => 'required|integer']);
+        $tmdbId = (int) $request->input('tmdb_id');
+
+        $details = $this->tmdb->getSeriesDetails($tmdbId);
+        if (empty($details)) {
+            return response()->json(['error' => 'Series not found on TMDb'], 404);
+        }
+
+        $localSeries = Series::with(['seasons'])->where('tmdb_id', $tmdbId)->first();
+        $localOwnedSeasonNumbers = $localSeries ? $localSeries->seasons->pluck('season_number')->map(fn ($n) => (int) $n)->toArray() : [];
+
+        $seasons = [];
+        foreach ($details['seasons'] ?? [] as $s) {
+            $sNum = (int) ($s['season_number'] ?? 0);
+            if ($sNum <= 0) {
+                continue;
+            }
+
+            $isSeasonOwned = in_array($sNum, $localOwnedSeasonNumbers, true);
+            $seasons[] = [
+                'season_number' => $sNum,
+                'name' => $s['name'] ?? "Season {$sNum}",
+                'episode_count' => $s['episode_count'] ?? 0,
+                'air_date' => $s['air_date'] ?? null,
+                'poster_path' => ! empty($s['poster_path']) ? "https://image.tmdb.org/t/p/w500{$s['poster_path']}" : null,
+                'in_library' => $isSeasonOwned,
+            ];
+        }
+
+        return response()->json([
+            'series' => [
+                'tmdb_id' => $tmdbId,
+                'title' => $details['name'] ?? ($details['title'] ?? ''),
+                'overview' => $details['overview'] ?? '',
+                'poster_path' => ! empty($details['poster_path']) ? "https://image.tmdb.org/t/p/w500{$details['poster_path']}" : null,
+                'backdrop_path' => ! empty($details['backdrop_path']) ? "https://image.tmdb.org/t/p/w1280{$details['backdrop_path']}" : null,
+                'first_air_date' => $details['first_air_date'] ?? null,
+                'in_library' => (bool) $localSeries,
+                'local_id' => $localSeries?->id,
+            ],
+            'seasons' => $seasons,
+        ]);
+    }
+
+    /**
+     * Cross-reference TMDb media items with the local library to mark owned status.
+     *
+     * @param  array<int, array<string, mixed>>  $items
+     * @return array<int, array<string, mixed>>
+     */
+    protected function enrichWithLibraryStatus(array $items): array
+    {
+        return array_map(function ($item) {
+            $mediaType = $item['media_type'] ?? (isset($item['first_air_date']) ? 'series' : 'movie');
+
+            // Normalize release_year and year for uniform access across views
+            $year = $item['release_year'] ?? ($item['year'] ?? null);
+            $item['release_year'] = $year;
+            $item['year'] = $year;
+
+            if ($mediaType === 'movie') {
+                $match = $this->findMatchingMovie($item);
+
+                $item['in_library'] = (bool) $match;
+                $item['local_id'] = $match?->id;
+                $item['media_type'] = 'movie';
+            } else {
+                $match = $this->findMatchingSeries($item);
+
+                $item['in_library'] = (bool) $match;
+                $item['local_id'] = $match?->id;
+                $item['media_type'] = 'series';
+                $item['owned_episodes_count'] = $match ? Episode::where('series_id', $match->id)->whereNotNull('file_path')->count() : 0;
+            }
+
+            return $item;
+        }, $items);
+    }
+
+    /**
+     * Intelligently find matching movie in the local library using TMDB ID, IMDb ID,
+     * exact/localized title matching, and normalized alphanumeric comparison.
+     */
+    protected function findMatchingMovie(array $item): ?MediaItem
+    {
+        $tmdbId = ! empty($item['tmdb_id']) ? (string) $item['tmdb_id'] : (! empty($item['id']) ? (string) $item['id'] : null);
+        if ($tmdbId) {
+            $match = MediaItem::where('tmdb_id', $tmdbId)->first();
+            if ($match) {
+                return $match;
+            }
+        }
+
+        if (! empty($item['imdb_id'])) {
+            $match = MediaItem::where('imdb_id', (string) $item['imdb_id'])->first();
+            if ($match) {
+                return $match;
+            }
+        }
+
+        $title = trim($item['title'] ?? '');
+        $originalTitle = trim($item['original_title'] ?? '');
+        $year = ! empty($item['release_year']) ? (int) $item['release_year'] : (! empty($item['year']) ? (int) $item['year'] : null);
+
+        if (! empty($title) || ! empty($originalTitle)) {
+            $candidates = MediaItem::query()
+                ->where(function ($q) use ($title, $originalTitle) {
+                    if (! empty($title)) {
+                        $q->where('title', 'like', $title)
+                            ->orWhere('original_title', 'like', $title)
+                            ->orWhere('title_ar', 'like', $title);
+                    }
+                    if (! empty($originalTitle) && $originalTitle !== $title) {
+                        $q->orWhere('title', 'like', $originalTitle)
+                            ->orWhere('original_title', 'like', $originalTitle);
+                    }
+                })
+                ->get();
+
+            if ($candidates->isNotEmpty()) {
+                if ($year) {
+                    $yearMatch = $candidates->first(function ($c) use ($year) {
+                        return $c->release_year && abs((int) $c->release_year - $year) <= 1;
+                    });
+                    if ($yearMatch) {
+                        return $yearMatch;
+                    }
+                    // Year mismatch: DO NOT match across animated originals vs live-action remakes
+                } elseif ($candidates->count() === 1) {
+                    return $candidates->first();
+                }
+            }
+
+            // Normalized alphanumeric title comparison with strict year matching
+            $cleanTitle = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($title));
+            if (strlen($cleanTitle) >= 3) {
+                $yearQuery = MediaItem::query();
+                if ($year) {
+                    $yearQuery->whereBetween('release_year', [$year - 1, $year + 1]);
+                }
+                $potentialMovies = $yearQuery->get(['id', 'title', 'original_title', 'release_year']);
+                foreach ($potentialMovies as $m) {
+                    if ($year && abs((int) $m->release_year - $year) > 1) {
+                        continue;
+                    }
+                    $mClean = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($m->title));
+                    $mCleanOrig = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($m->original_title ?? ''));
+                    if ($mClean === $cleanTitle || ($mCleanOrig && $mCleanOrig === $cleanTitle)) {
+                        return $m;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Intelligently find matching series in the local library using TMDB ID, IMDb ID,
+     * exact/localized title matching, and normalized alphanumeric comparison.
+     */
+    protected function findMatchingSeries(array $item): ?Series
+    {
+        $tmdbId = ! empty($item['tmdb_id']) ? (string) $item['tmdb_id'] : (! empty($item['id']) ? (string) $item['id'] : null);
+        if ($tmdbId) {
+            $match = Series::where('tmdb_id', $tmdbId)->first();
+            if ($match) {
+                return $match;
+            }
+        }
+
+        if (! empty($item['imdb_id'])) {
+            $match = Series::where('imdb_id', (string) $item['imdb_id'])->first();
+            if ($match) {
+                return $match;
+            }
+        }
+
+        $title = trim($item['title'] ?? '');
+        $originalTitle = trim($item['original_title'] ?? '');
+        $year = ! empty($item['release_year']) ? (int) $item['release_year'] : (! empty($item['year']) ? (int) $item['year'] : null);
+
+        if (! empty($title) || ! empty($originalTitle)) {
+            $candidates = Series::query()
+                ->where(function ($q) use ($title, $originalTitle) {
+                    if (! empty($title)) {
+                        $q->where('title', 'like', $title)
+                            ->orWhere('original_title', 'like', $title)
+                            ->orWhere('title_ar', 'like', $title);
+                    }
+                    if (! empty($originalTitle) && $originalTitle !== $title) {
+                        $q->orWhere('title', 'like', $originalTitle)
+                            ->orWhere('original_title', 'like', $originalTitle);
+                    }
+                })
+                ->get();
+
+            if ($candidates->isNotEmpty()) {
+                if ($year) {
+                    $yearMatch = $candidates->first(function ($c) use ($year) {
+                        return $c->release_year && abs((int) $c->release_year - $year) <= 1;
+                    });
+                    if ($yearMatch) {
+                        return $yearMatch;
+                    }
+                    // Year mismatch: DO NOT match across animated originals vs live-action remakes
+                } elseif ($candidates->count() === 1) {
+                    return $candidates->first();
+                }
+            }
+
+            $cleanTitle = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($title));
+            if (strlen($cleanTitle) >= 3) {
+                $yearQuery = Series::query();
+                if ($year) {
+                    $yearQuery->whereBetween('release_year', [$year - 1, $year + 1]);
+                }
+                $potentialSeries = $yearQuery->get(['id', 'title', 'original_title', 'release_year']);
+                foreach ($potentialSeries as $s) {
+                    if ($year && abs((int) $s->release_year - $year) > 1) {
+                        continue;
+                    }
+                    $sClean = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($s->title));
+                    $sCleanOrig = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($s->original_title ?? ''));
+                    if ($sClean === $cleanTitle || ($sCleanOrig && $sCleanOrig === $cleanTitle)) {
+                        return $s;
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -6,17 +6,13 @@
   "author": "Eng. Hasan Mohammad Hasan",
   "private": true,
   "type": "module",
-  "main": "desktop/main.cjs",
   "scripts": {
     "build": "vp build",
     "build:ssr": "vp build && vp build --ssr",
     "dev": "vp dev",
     "check": "vp check",
     "check:fix": "vp check --fix",
-    "types:check": "vue-tsc --noEmit",
-    "desktop:dev": "electron desktop/main.cjs",
-    "desktop:start": "electron desktop/main.cjs",
-    "desktop:build": "electron-builder --win"
+    "types:check": "vue-tsc --noEmit"
   },
   "dependencies": {
     "@inertiajs/vite": "^3.0.0",
@@ -42,8 +38,6 @@
     "@types/node": "^22.13.5",
     "@vitejs/plugin-vue": "^6.0.0",
     "concurrently": "^10.0.3",
-    "electron": "^34.5.8",
-    "electron-builder": "^25.1.8",
     "typescript": "^5.2.2",
     "vite": "^8.0.0",
     "vite-plus": "0.3.0",
@@ -57,29 +51,5 @@
     "@tailwindcss/oxide-win32-x64-msvc": "^4.0.1",
     "lightningcss-linux-x64-gnu": "^1.29.1",
     "lightningcss-win32-x64-msvc": "^1.29.1"
-  },
-  "build": {
-    "appId": "com.creativemediahub.app",
-    "productName": "Creative Media Hub",
-    "files": [
-      "desktop/**/*",
-      "public/**/*",
-      "!public/storage",
-      "package.json"
-    ],
-    "directories": {
-      "output": "dist"
-    },
-    "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ],
-      "icon": "public/favicon.ico"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
   }
 }
