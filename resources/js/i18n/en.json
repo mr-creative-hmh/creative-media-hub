@@ -579,5 +579,36 @@
         "missing_from_library": "Missing From Your Library",
         "scout_franchise": "Scout Entire Franchise",
         "scout_torrent": "Scout Torrent"
+    },
+    "users": {
+        "administrator": "Administrator",
+        "viewer": "Viewer",
+        "kids_profile_badge": "Kids Profile",
+        "pin_auth": "PIN Authentication",
+        "pin_protected": "4-8 Digit PIN",
+        "one_click_access": "1-Click (No PIN)",
+        "max_rating_badge": "Max Content Rating",
+        "blocked_genres_title": "Blocked Genres",
+        "no_restrictions": "No restrictions",
+        "edit_profile": "Edit Profile",
+        "delete_profile": "Delete Profile",
+        "parental_controls": "Parental Controls",
+        "parental_controls_desc": "Enforce maturity rating caps and blocked genres",
+        "reset_pin_title": "Reset PIN for :name",
+        "new_pin_label": "New 4 to 8 Digit Numeric PIN",
+        "new_pin_placeholder": "Leave empty to remove PIN",
+        "new_pin_hint": "If left blank, this profile will become PIN-free with 1-click instant login.",
+        "update_pin": "Update PIN",
+        "updating": "Updating...",
+        "save_profile": "Save Profile",
+        "saving": "Saving...",
+        "delete_confirm_named": "Are you sure you want to delete profile \":name\"? This action cannot be undone.",
+        "server_studio": "Server Studio",
+        "user_studio": "User Studio"
+    },
+    "auth": {
+        "pin_protected": "PIN Protected",
+        "one_click_access": "1-Click Access",
+        "enter_pin_count": "Enter :count-Digit PIN"
     }
 }

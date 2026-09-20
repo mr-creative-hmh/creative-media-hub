@@ -579,5 +579,36 @@
         "missing_from_library": "أجزاء غير متوفرة في مكتبتك",
         "scout_franchise": "بحث عن السلسلة في سكاوت",
         "scout_torrent": "بحث وتحميل"
+    },
+    "users": {
+        "administrator": "مسؤول",
+        "viewer": "مشاهد",
+        "kids_profile_badge": "ملف أطفال",
+        "pin_auth": "المصادقة برمز PIN",
+        "pin_protected": "رمز PIN (4-8 أرقام)",
+        "one_click_access": "دخول بنقرة واحدة (بدون PIN)",
+        "max_rating_badge": "الحد الأقصى للتصنيف",
+        "blocked_genres_title": "الأنواع المحجوبة",
+        "no_restrictions": "بدون قيود",
+        "edit_profile": "تعديل الملف",
+        "delete_profile": "حذف الملف",
+        "parental_controls": "الرقابة الأبوية",
+        "parental_controls_desc": "فرض سقف للتصنيف العمري وحجب أنواع معينة من الفهرس",
+        "reset_pin_title": "إعادة تعيين PIN لـ :name",
+        "new_pin_label": "رمز PIN رقمي جديد (4 إلى 8 أرقام)",
+        "new_pin_placeholder": "اتركه فارغاً لإزالة الرمز",
+        "new_pin_hint": "إذا ترك فارغاً، سيصبح هذا الملف متاحاً للدخول الفوري بنقرة واحدة.",
+        "update_pin": "تحديث PIN",
+        "updating": "جاري التحديث...",
+        "save_profile": "حفظ الملف",
+        "saving": "جاري الحفظ...",
+        "delete_confirm_named": "هل أنت متأكد من حذف الملف \":name\"؟ لا يمكن التراجع عن هذا الإجراء.",
+        "server_studio": "استوديو إدارة السيرفر",
+        "user_studio": "إدارة المستخدمين"
+    },
+    "auth": {
+        "pin_protected": "محمي برمز PIN",
+        "one_click_access": "دخول بنقرة واحدة",
+        "enter_pin_count": "أدخل رمز PIN المكون من :count أرقام"
     }
 }

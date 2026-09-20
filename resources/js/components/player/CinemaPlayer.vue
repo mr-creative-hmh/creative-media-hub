@@ -261,15 +261,18 @@ const updateNativeCueStyle = () => {
     `;
 };
 
-// Custom Subtitle Overlay (Original method) - kept intact, disabled for now per user request to test native <track> as default
-const enableCustomSubtitleOverlay = ref(false);
+// Custom Subtitle Overlay - Enabled for robust multi-screen typography and exact timestamp synchronization
+const enableCustomSubtitleOverlay = ref(true);
 
 const syncTextTracks = () => {
     if (!videoRef.value || !videoRef.value.textTracks) return;
     const tracks = videoRef.value.textTracks;
     for (let i = 0; i < tracks.length; i++) {
         const track = tracks[i];
-        if (selectedSubtitleId.value !== 'off') {
+        if (enableCustomSubtitleOverlay.value) {
+            // When custom overlay is handling rendering, keep native track cues disabled to prevent duplicate or conflicting cues
+            track.mode = 'disabled';
+        } else if (selectedSubtitleId.value !== 'off') {
             const trackId = track.id;
             const expectedId = `sub-track-${selectedSubtitleId.value}`;
             const sub = availableSubtitles.value.find(s => String(s.id) === String(selectedSubtitleId.value));
@@ -631,16 +634,16 @@ const toggleRemuxStream = () => {
 };
 
 const handleVideoError = () => {
+    const err = videoRef.value?.error;
+    // Error code 1 is MEDIA_ERR_ABORTED (user seek or in-flight source interruption) - ignore safely
+    if (err && err.code === 1) {
+        return;
+    }
+
     if (!isRemuxStream.value) {
         showToast(t('player.remux_switching'));
         isRemuxStream.value = true;
         remuxStartOffset.value = currentTime.value;
-        setTimeout(() => {
-            if (videoRef.value) {
-                videoRef.value.load();
-                videoRef.value.play().catch(() => {});
-            }
-        }, 100);
     } else {
         showToast(t('player.playback_error'));
     }
@@ -1267,21 +1270,45 @@ const togglePlay = () => {
     }
 };
 
-// Ultra-Fast Seeking in Remux & Native Stream
-const executeSeek = (targetSecs: number) => {
+// Ultra-Fast Keyframe-Aligned Seeking in Remux & Native Stream
+let currentSeekToken = 0;
+
+const executeSeek = async (targetSecs: number) => {
     const clamped = Math.max(0, Math.min(duration.value || 3600, targetSecs));
     currentTime.value = clamped;
     updateActiveCue(clamped);
 
     // If fully cached on disk, native byte-range seeking is instant without restarting FFmpeg!
     if (isRemuxStream.value && !isServerCached.value) {
-        remuxStartOffset.value = clamped;
-        setTimeout(() => {
-            if (videoRef.value) {
-                videoRef.value.load();
-                videoRef.value.play().catch(() => {});
-            }
-        }, 50);
+        isBuffering.value = true;
+        const seekToken = ++currentSeekToken;
+        let actualTarget = clamped;
+
+        if (clamped > 2) {
+            try {
+                const type = isEpisode.value ? 'episode' : 'movie';
+                const id = activeItem.value?.watchable_id || activeItem.value?.id;
+                const res = await fetch(`/api/media/seek-keyframe?type=${type}&id=${id}&time=${clamped}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (typeof data.keyframe === 'number' && data.keyframe >= 0) {
+                        actualTarget = data.keyframe;
+                    }
+                }
+            } catch (e) {}
+        }
+
+        // Drop stale seek if user sought again while waiting
+        if (seekToken !== currentSeekToken) return;
+
+        remuxStartOffset.value = actualTarget;
+        currentTime.value = actualTarget;
+        updateActiveCue(actualTarget);
+
+        if (videoRef.value) {
+            videoRef.value.currentTime = 0;
+            videoRef.value.play().catch(() => {});
+        }
     } else if (videoRef.value) {
         videoRef.value.currentTime = clamped;
         if (videoRef.value.paused) {
@@ -1290,11 +1317,18 @@ const executeSeek = (targetSecs: number) => {
     }
 };
 
+let seekDebounceTimer: any = null;
 const seekRelative = (seconds: number) => {
     const current = currentTime.value || (videoRef.value ? videoRef.value.currentTime : 0);
     const target = Math.max(0, Math.min(duration.value || 0, current + seconds));
-    executeSeek(target);
+    currentTime.value = target;
+    updateActiveCue(target);
     showControlsTemporarily();
+
+    clearTimeout(seekDebounceTimer);
+    seekDebounceTimer = setTimeout(() => {
+        executeSeek(currentTime.value);
+    }, 150);
 };
 
 // Touch Gestures for Mobile Cinema Experience
@@ -1917,7 +1951,7 @@ onBeforeUnmount(() => {
                 kind="subtitles"
                 :label="sub.language_name || sub.language || 'Subtitle'"
                 :srclang="sub.language || 'ar'"
-                :src="sub.url || `/stream/subtitles/${sub.id}`"
+                :src="sub.url || (isRemuxStream && remuxStartOffset > 0 ? `/stream/subtitles/${sub.id}?start=${Math.round(remuxStartOffset * 100) / 100}` : `/stream/subtitles/${sub.id}`)"
                 :default="String(selectedSubtitleId) === String(sub.id)"
             />
         </video>

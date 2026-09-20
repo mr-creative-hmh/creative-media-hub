@@ -458,4 +458,21 @@ class StreamingAndRoutesTest extends TestCase
         $this->assertCount(2, $resMovie->json('playlist'));
         $this->assertEquals('Alien Collection', $resMovie->json('collection_name'));
     }
+
+    public function test_seek_keyframe_api_endpoint(): void
+    {
+        $movie = MediaItem::create([
+            'title' => 'Test Seek Movie',
+            'release_year' => 2024,
+            'file_path' => null,
+        ]);
+
+        $resEarly = $this->getJson(route('api.media.seek-keyframe', ['type' => 'movie', 'id' => $movie->id, 'time' => 1.5]));
+        $resEarly->assertStatus(200);
+        $resEarly->assertJson(['keyframe' => 0.0, 'requested' => 1.5]);
+
+        $resFallback = $this->getJson(route('api.media.seek-keyframe', ['type' => 'movie', 'id' => $movie->id, 'time' => 45.0]));
+        $resFallback->assertStatus(200);
+        $resFallback->assertJson(['keyframe' => 45.0, 'requested' => 45.0]);
+    }
 }

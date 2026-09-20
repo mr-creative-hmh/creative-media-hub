@@ -10,6 +10,7 @@ use App\Services\Media\FfmpegLocatorService;
 use App\Services\Subtitles\EmbeddedSubtitleDetectorService;
 use App\Services\Subtitles\SubtitleLanguageDetectorService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -66,9 +67,10 @@ class StreamController extends Controller
     /**
      * Stream WebVTT subtitle track.
      */
-    public function streamSubtitle(Subtitle $subtitle)
+    public function streamSubtitle(Subtitle $subtitle, Request $request)
     {
         $path = $subtitle->file_path;
+        $startSeconds = max(0, (float) $request->query('start', 0));
 
         // Check if subtitle is embedded inside video container
         if ($subtitle->is_embedded || str_starts_with($path, 'embedded:')) {
@@ -77,12 +79,13 @@ class StreamController extends Controller
             $videoPath = $parts[2] ?? '';
 
             if ($videoPath && File::exists($videoPath)) {
-                $vtt = $this->embeddedSubDetector->extractToWebVtt($videoPath, $streamIndex, $subtitle->format ?? 'srt');
+                $rawVtt = $this->embeddedSubDetector->extractToWebVtt($videoPath, $streamIndex, $subtitle->format ?? 'srt');
+                $vtt = $this->convertToCleanWebVTT($rawVtt, $subtitle->format ?? 'srt', $startSeconds);
 
                 return response($vtt, 200, [
                     'Content-Type' => 'text/vtt; charset=utf-8',
                     'Access-Control-Allow-Origin' => '*',
-                    'Cache-Control' => 'no-cache',
+                    'Cache-Control' => 'no-cache, no-store, must-revalidate',
                 ]);
             }
         }
@@ -121,7 +124,7 @@ class StreamController extends Controller
             @file_put_contents($path, $cleanUtf8);
         }
 
-        $vtt = $this->convertToCleanWebVTT($cleanUtf8, $subtitle->format ?? 'srt');
+        $vtt = $this->convertToCleanWebVTT($cleanUtf8, $subtitle->format ?? 'srt', $startSeconds);
 
         return response($vtt, 200, [
             'Content-Type' => 'text/vtt; charset=utf-8',
@@ -857,6 +860,72 @@ class StreamController extends Controller
         return "{$width}x{$height}";
     }
 
+    public function getSeekKeyframe(Request $request)
+    {
+        $type = $request->input('type', 'movie');
+        $id = (int) $request->input('id');
+        $time = max(0, (float) $request->input('time', 0));
+
+        if ($time <= 2.0) {
+            return response()->json(['keyframe' => 0.0, 'requested' => $time]);
+        }
+
+        $model = $type === 'episode' ? Episode::find($id) : MediaItem::find($id);
+        if (! $model || ! $model->file_path || ! file_exists($model->file_path)) {
+            return response()->json(['keyframe' => $time, 'requested' => $time]);
+        }
+
+        $cacheKey = "seek_kf_{$type}_{$id}_".round($time, 1);
+        $keyframe = Cache::remember($cacheKey, 3600, function () use ($model, $time) {
+            return $this->findPrecedingKeyframe($model->file_path, $time);
+        });
+
+        return response()->json([
+            'keyframe' => $keyframe,
+            'requested' => $time,
+        ]);
+    }
+
+    public function findPrecedingKeyframe(string $filePath, float $time): float
+    {
+        if ($time <= 2.0) {
+            return 0.0;
+        }
+
+        $ffprobe = FfmpegLocatorService::getFfprobePath();
+        if (! $ffprobe) {
+            return $time;
+        }
+
+        $tMin = max(0, (float) $time - 15.0);
+        $tMax = (float) $time;
+        $interval = $tMin.'%'.$tMax;
+        $escapedFile = escapeshellarg($filePath);
+        $escapedFfprobe = escapeshellarg($ffprobe);
+
+        // Probe packets in interval [time - 15, time] for video keyframes
+        $cmd = "{$escapedFfprobe} -v error -select_streams v:0 -show_packets -show_entries packet=pts_time,flags -read_intervals \"{$interval}\" -of csv=p=0 {$escapedFile}";
+
+        $out = @shell_exec($cmd);
+        if ($out) {
+            $lines = explode("\n", trim($out));
+            for ($i = count($lines) - 1; $i >= 0; $i--) {
+                $line = trim($lines[$i]);
+                if (str_contains($line, 'K')) {
+                    $parts = explode(',', $line);
+                    if (isset($parts[0]) && is_numeric($parts[0])) {
+                        $kf = (float) $parts[0];
+                        if ($kf <= $time) {
+                            return round($kf, 3);
+                        }
+                    }
+                }
+            }
+        }
+
+        return $time;
+    }
+
     /**
      * High-speed direct byte-range file streaming.
      * Complies with HTTP 206 Partial Content for native browser hardware playback and instant seeking.
@@ -928,35 +997,75 @@ class StreamController extends Controller
         }, $status, $headers);
     }
 
-    protected function convertToCleanWebVTT(string $content, string $format = 'srt'): string
+    protected function convertToCleanWebVTT(string $content, string $format = 'srt', float $startSeconds = 0.0): string
     {
         $content = $this->subLanguageDetector->sanitizeToUtf8($content);
         $vtt = "WEBVTT\n\n";
         $content = str_replace(["\r\n", "\r"], "\n", $content);
 
-        // Normalize SRT timestamps to WebVTT
-        $normalized = preg_replace_callback(
-            '/(\d{2}:\d{2}:\d{2}),(\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}),(\d{3})/',
-            function ($m) {
-                return "{$m[1]}.{$m[2]} --> {$m[3]}.{$m[4]}";
-            },
-            $content
-        );
+        if ($startSeconds <= 0) {
+            // Normalize SRT timestamps to WebVTT
+            $normalized = preg_replace_callback(
+                '/(\d{2}:\d{2}:\d{2}),(\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}),(\d{3})/',
+                function ($m) {
+                    return "{$m[1]}.{$m[2]} --> {$m[3]}.{$m[4]}";
+                },
+                $content
+            );
 
-        return $vtt.$normalized;
+            return $vtt.$normalized;
+        }
+
+        // Split into subtitle blocks and shift by $startSeconds
+        $blocks = preg_split('/\n\s*\n/', trim($content));
+        $outputBlocks = [];
+
+        foreach ($blocks as $block) {
+            $block = trim($block);
+            if (empty($block) || str_starts_with($block, 'WEBVTT')) {
+                continue;
+            }
+
+            if (preg_match('/(\d{2}):(\d{2}):(\d{2})[,\.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,\.](\d{3})/', $block, $m)) {
+                $start = ($m[1] * 3600) + ($m[2] * 60) + (int) $m[3] + ((int) $m[4] / 1000.0);
+                $end = ($m[5] * 3600) + ($m[6] * 60) + (int) $m[7] + ((int) $m[8] / 1000.0);
+
+                if ($end <= $startSeconds) {
+                    continue; // Cue finished before seek point
+                }
+
+                $newStart = max(0, $start - $startSeconds);
+                $newEnd = max(0.1, $end - $startSeconds);
+
+                $formatTime = function ($sec) {
+                    $h = floor($sec / 3600);
+                    $m = floor(($sec % 3600) / 60);
+                    $s = floor($sec % 60);
+                    $ms = round(($sec - floor($sec)) * 1000);
+
+                    return sprintf('%02d:%02d:%02d.%03d', $h, $m, $s, $ms);
+                };
+
+                $newTimecode = $formatTime($newStart).' --> '.$formatTime($newEnd);
+                $adjustedBlock = preg_replace('/(\d{2}):(\d{2}):(\d{2})[,\.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,\.](\d{3})/', $newTimecode, $block, 1);
+                $outputBlocks[] = $adjustedBlock;
+            }
+        }
+
+        return $vtt.implode("\n\n", $outputBlocks)."\n";
     }
 
     public function streamRemuxMovie(MediaItem $mediaItem, Request $request)
     {
-        return $this->streamRemuxFile($mediaItem->file_path, $request, $mediaItem->video_codec, 'movie', $mediaItem->id);
+        return $this->streamRemuxFile($mediaItem->file_path, $request, $mediaItem->video_codec, $mediaItem->audio_codec, 'movie', $mediaItem->id);
     }
 
     public function streamRemuxEpisode(Episode $episode, Request $request)
     {
-        return $this->streamRemuxFile($episode->file_path, $request, $episode->video_codec, 'episode', $episode->id);
+        return $this->streamRemuxFile($episode->file_path, $request, $episode->video_codec, $episode->audio_codec, 'episode', $episode->id);
     }
 
-    protected function streamRemuxFile(string $filePath, Request $request, ?string $videoCodec = null, string $modelType = 'media', int $modelId = 0)
+    protected function streamRemuxFile(string $filePath, Request $request, ?string $videoCodec = null, ?string $audioCodec = null, string $modelType = 'media', int $modelId = 0)
     {
         if (! file_exists($filePath)) {
             abort(404, 'Media file not found');
@@ -970,6 +1079,7 @@ class StreamController extends Controller
 
         $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
         $vc = strtolower($videoCodec ?? '');
+        $ac = strtolower($audioCodec ?? '');
 
         // Native H.264 (AVC) in MP4 or MKV can be copied directly with 0 CPU overhead.
         // All legacy formats (AVI, MPEG-4 / XviD, DivX, WMV, VC-1, MPEG-2) and 10-bit HEVC (H.265)
@@ -1071,18 +1181,43 @@ class StreamController extends Controller
             }
         }
 
-        // Build audio filter chain supporting audio-to-video delay compensation
-        $audioFilters = [];
-        if ($audioDelayMs > 0) {
-            // Audio leads video -> delay audio by $audioDelayMs
-            $audioFilters[] = "adelay={$audioDelayMs}|{$audioDelayMs}";
-        } elseif ($audioDelayMs < 0) {
-            // Audio lags behind video -> advance audio by trimming the start
-            $trimSec = abs($audioDelayMs) / 1000.0;
-            $audioFilters[] = "atrim=start={$trimSec},asetpts=PTS-STARTPTS";
+        $isNativeAac = (str_contains($ac, 'aac') || str_contains($ac, 'mp4a')) && $audioDelayMs == 0;
+
+        if ($isNativeAac) {
+            $audioArgs = [
+                '-c:a', 'copy',
+                '-sn',
+            ];
+        } else {
+            // Build audio filter chain supporting audio-to-video delay compensation
+            $audioFilters = [];
+            if ($audioDelayMs > 0) {
+                // Audio leads video -> delay audio by $audioDelayMs
+                $audioFilters[] = "adelay={$audioDelayMs}|{$audioDelayMs}";
+            } elseif ($audioDelayMs < 0) {
+                // Audio lags behind video -> advance audio by trimming the start
+                $trimSec = abs($audioDelayMs) / 1000.0;
+                $audioFilters[] = "atrim=start={$trimSec},asetpts=PTS-STARTPTS";
+            }
+            $audioFilters[] = 'aresample=async=1000:min_hard_comp=0.100000';
+            $audioFilterStr = implode(',', $audioFilters);
+
+            $audioArgs = [
+                '-af', $audioFilterStr,
+                '-c:a', 'aac',
+                '-b:a', '192k',
+                '-ac', '2',
+                '-sn',
+            ];
         }
-        $audioFilters[] = 'aresample=async=1000:min_hard_comp=0.100000:first_pts=0';
-        $audioFilterStr = implode(',', $audioFilters);
+
+        if ($startSeconds > 0 && in_array('copy', $videoArgs)) {
+            $cacheKey = "seek_kf_{$modelType}_{$modelId}_".round($startSeconds, 1);
+            $keyframe = Cache::remember($cacheKey, 3600, function () use ($filePath, $startSeconds) {
+                return $this->findPrecedingKeyframe($filePath, $startSeconds);
+            });
+            $startSeconds = $keyframe;
+        }
 
         $seekArgs = [];
         if ($startSeconds > 0) {
@@ -1103,12 +1238,8 @@ class StreamController extends Controller
                 '-map', '0:a:0?',
             ],
             $videoArgs,
+            $audioArgs,
             [
-                '-af', $audioFilterStr,
-                '-c:a', 'aac',
-                '-b:a', '192k',
-                '-ac', '2',
-                '-sn',
                 '-avoid_negative_ts', 'make_zero',
                 '-max_muxing_queue_size', '1024',
                 '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
@@ -1159,7 +1290,8 @@ class StreamController extends Controller
             'Access-Control-Allow-Origin' => '*',
             'Access-Control-Allow-Methods' => 'GET, HEAD, OPTIONS',
             'Access-Control-Allow-Headers' => 'Range, Content-Type, Accept',
-            'Access-Control-Expose-Headers' => 'Content-Length, Content-Range, Accept-Ranges',
+            'X-Stream-Start-Offset' => (string) $startSeconds,
+            'Access-Control-Expose-Headers' => 'Content-Length, Content-Range, Accept-Ranges, X-Stream-Start-Offset',
         ]);
     }
 }

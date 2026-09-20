@@ -56,7 +56,9 @@ export function useI18n() {
 
         let result = val;
         for (const [pKey, pVal] of Object.entries(params)) {
-            result = result.replace(new RegExp(`{${pKey}}`, 'g'), String(pVal));
+            result = result
+                .replace(new RegExp(`{${pKey}}`, 'g'), String(pVal))
+                .replace(new RegExp(`:${pKey}`, 'g'), String(pVal));
         }
 
         return result;

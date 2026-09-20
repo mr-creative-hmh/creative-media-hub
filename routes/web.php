@@ -147,6 +147,7 @@ Route::delete('/api/watch-history/{id}', [StreamController::class, 'deleteWatchH
 Route::delete('/api/watch-history', [StreamController::class, 'clearWatchHistory'])->name('api.watch-history.clear');
 Route::post('/api/watch-history/clear-all', [StreamController::class, 'clearWatchHistory']);
 Route::get('/api/media/duration', [StreamController::class, 'getMediaDuration'])->name('api.media.duration');
+Route::get('/api/media/seek-keyframe', [StreamController::class, 'getSeekKeyframe'])->name('api.media.seek-keyframe');
 Route::post('/api/stream/stop', [StreamController::class, 'stopStream'])->name('api.stream.stop');
 Route::get('/api/stream/cache-status', [StreamController::class, 'getCacheStatus'])->name('api.stream.cache-status');
 Route::get('/api/stream/playlist', [StreamController::class, 'getPlaylist'])->name('api.stream.playlist');
