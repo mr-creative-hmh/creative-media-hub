@@ -518,7 +518,7 @@ const streamUrl = computed(() => {
             return cachedStreamUrl.value;
         }
         const params: string[] = [];
-        if (remuxStartOffset.value > 0) params.push(`start=${Math.round(remuxStartOffset.value * 100) / 100}`);
+        if (remuxStartOffset.value > 0) params.push(`start=${Math.round(remuxStartOffset.value * 1000) / 1000}`);
         if (delayParam) params.push(delayParam);
         const queryString = params.length > 0 ? `?${params.join('&')}` : '';
         if (isEpisode.value) {
@@ -530,7 +530,7 @@ const streamUrl = computed(() => {
     if (delayParam) {
         // If native stream has an audio sync offset, route via remux so FFmpeg applies the exact offset
         const params: string[] = [delayParam];
-        if (currentTime.value > 0) params.push(`start=${Math.round(currentTime.value * 100) / 100}`);
+        if (currentTime.value > 0) params.push(`start=${Math.round(currentTime.value * 1000) / 1000}`);
         const queryString = `?${params.join('&')}`;
         if (isEpisode.value) {
             return `/stream/remux/episode/${activeItem.value.id}${queryString}`;
@@ -1283,6 +1283,7 @@ const togglePlay = () => {
 
 // Ultra-Fast Keyframe-Aligned Seeking in Remux & Native Stream
 let currentSeekToken = 0;
+const isSeekPending = ref(false);
 
 const executeSeek = async (targetSecs: number) => {
     const clamped = Math.max(0, Math.min(duration.value || 3600, targetSecs));
@@ -1312,6 +1313,7 @@ const executeSeek = async (targetSecs: number) => {
         // Drop stale seek if user sought again while waiting
         if (seekToken !== currentSeekToken) return;
 
+        isSeekPending.value = true;
         remuxStartOffset.value = actualTarget;
         currentTime.value = actualTarget;
         updateActiveCue(actualTarget);
@@ -1544,6 +1546,7 @@ const showControlsTemporarily = () => {
 // Playback Lifecycle & Progress Handlers
 const onLoadedMetadata = () => {
     if (!videoRef.value) return;
+    isSeekPending.value = false;
     updateLiveResolution();
     nextTick(() => {
         syncTextTracks();
@@ -1573,6 +1576,13 @@ const onTimeUpdate = () => {
     if (!videoRef.value) return;
     
     const rawCurrent = videoRef.value.currentTime;
+    if (isSeekPending.value) {
+        if (rawCurrent > 1.0) {
+            return;
+        }
+        isSeekPending.value = false;
+    }
+
     if (isRemuxStream.value && remuxStartOffset.value > 0) {
         currentTime.value = remuxStartOffset.value + rawCurrent;
     } else {
@@ -1612,6 +1622,7 @@ const onVideoWaiting = () => {
 
 const onVideoPlaying = () => {
     isBuffering.value = false;
+    isSeekPending.value = false;
     updateLiveResolution();
 };
 
@@ -1957,12 +1968,12 @@ onBeforeUnmount(() => {
         >
             <track
                 v-for="sub in availableSubtitles"
-                :key="sub.id"
+                :key="`${sub.id}-${remuxStartOffset}`"
                 :id="`sub-track-${sub.id}`"
                 kind="subtitles"
                 :label="sub.language_name || sub.language || 'Subtitle'"
                 :srclang="sub.language || 'ar'"
-                :src="sub.url || (isRemuxStream && remuxStartOffset > 0 ? `/stream/subtitles/${sub.id}?start=${Math.round(remuxStartOffset * 100) / 100}` : `/stream/subtitles/${sub.id}`)"
+                :src="sub.url || (isRemuxStream && remuxStartOffset > 0 ? `/stream/subtitles/${sub.id}?start=${Math.round(remuxStartOffset * 1000) / 1000}` : `/stream/subtitles/${sub.id}`)"
                 :default="!enableCustomSubtitleOverlay && String(selectedSubtitleId) === String(sub.id)"
             />
         </video>

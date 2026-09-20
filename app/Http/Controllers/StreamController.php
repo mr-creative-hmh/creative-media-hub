@@ -898,12 +898,12 @@ class StreamController extends Controller
         }
 
         $tMin = max(0, (float) $time - 15.0);
-        $tMax = (float) $time;
+        $tMax = (float) $time + 0.25;
         $interval = $tMin.'%'.$tMax;
         $escapedFile = escapeshellarg($filePath);
         $escapedFfprobe = escapeshellarg($ffprobe);
 
-        // Probe packets in interval [time - 15, time] for video keyframes
+        // Probe packets in interval [time - 15, time + 0.25] for video keyframes
         $cmd = "{$escapedFfprobe} -v error -select_streams v:0 -show_packets -show_entries packet=pts_time,flags -read_intervals \"{$interval}\" -of csv=p=0 {$escapedFile}";
 
         $out = @shell_exec($cmd);
@@ -915,7 +915,7 @@ class StreamController extends Controller
                     $parts = explode(',', $line);
                     if (isset($parts[0]) && is_numeric($parts[0])) {
                         $kf = (float) $parts[0];
-                        if ($kf <= ($time + 0.05)) {
+                        if ($kf <= ($time + 0.15)) {
                             return round($kf, 3);
                         }
                     }
@@ -1241,7 +1241,9 @@ class StreamController extends Controller
             $keyframe = Cache::remember($cacheKey, 3600, function () use ($filePath, $startSeconds) {
                 return $this->findPrecedingKeyframe($filePath, $startSeconds);
             });
-            $startSeconds = $keyframe;
+            if (abs($keyframe - $startSeconds) > 0.15) {
+                $startSeconds = $keyframe;
+            }
         }
 
         $seekArgs = [];
