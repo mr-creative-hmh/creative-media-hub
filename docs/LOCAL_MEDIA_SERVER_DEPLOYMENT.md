@@ -1,6 +1,6 @@
-# Creative Media Server — Local Network Deployment Guide
+# Creative Media Hub — Local Network Deployment Guide
 
-A complete step-by-step guide for hosting **Creative Media Server** on a dedicated local machine (Windows PC, mini PC, Intel NUC, or home server) so that any laptop, iPhone, iPad, Android phone, tablet, or Smart TV on the same Wi-Fi or LAN network can access and stream movies and series smoothly.
+A complete step-by-step guide for hosting **Creative Media Hub** on a dedicated local machine (Windows PC, mini PC, Intel NUC, or home server) so that any laptop, iPhone, iPad, Android phone, tablet, or Smart TV on the same Wi-Fi or LAN network can access and stream movies and series smoothly.
 
 ---
 
@@ -17,7 +17,7 @@ A complete step-by-step guide for hosting **Creative Media Server** on a dedicat
          └──────────────────────────┼──────────────────────────┘
                                     ▼
                ┌────────────────────────────────────────┐
-               │        LOCAL MEDIA SERVER (PC)         │
+               │        CREATIVE MEDIA HUB (PC)         │
                │         Host IP: 192.168.1.50          │
                │                                        │
                │  • Windows Firewall: Port 8088 Open    │
@@ -55,21 +55,21 @@ By default, Windows blocks incoming connections from other network devices. Allo
 1. Open **PowerShell as Administrator** (Right-click Start Menu -> *Terminal (Admin)* or *PowerShell (Admin)*).
 2. Run this command:
    ```powershell
-   New-NetFirewallRule -DisplayName "Creative Media Server (LAN Port 8088)" -Direction Inbound -LocalPort 8088 -Protocol TCP -Action Allow
+   New-NetFirewallRule -DisplayName "Creative Media Hub (LAN Port 8088)" -Direction Inbound -LocalPort 8088 -Protocol TCP -Action Allow
    ```
 3. To verify:
    ```powershell
-   Get-NetFirewallRule -DisplayName "Creative Media Server*" | Select-Object DisplayName, Direction, Action, Enabled
+   Get-NetFirewallRule -DisplayName "Creative Media Hub*" | Select-Object DisplayName, Direction, Action, Enabled
    ```
 
 ---
 
-## Step 3: Configure `.env` on Creative Media Server
+## Step 3: Configure `.env` on Creative Media Hub
 
-In your server directory (`C:\Users\hasan\Herd\creative-media-server\.env`), set the following:
+In your application directory (`C:\Users\hasan\Herd\creative-media-hub\.env`), set the following:
 
 ```ini
-APP_NAME="Creative Media Server"
+APP_NAME="Creative Media Hub"
 APP_ENV=production
 APP_DEBUG=false
 APP_URL=http://192.168.1.50:8088
@@ -92,15 +92,15 @@ QUEUE_CONNECTION=database
 Running `npm run build` bundles all Vue components, styles, and scripts into `public/build/`. Client devices will receive high-speed static assets directly from PHP without needing Node.js or Vite dev server running in the background.
 
 ```powershell
-cd C:\Users\hasan\Herd\creative-media-server
+cd C:\Users\hasan\Herd\creative-media-hub
 npm run build
 ```
 
 ---
 
-## Step 5: Launch Creative Media Server for LAN Access
+## Step 5: Launch Creative Media Hub for LAN Access
 
-The project includes `Start-CreativeMediaServer.bat` configured to bind to `0.0.0.0:8088`:
+The project includes `Start-CreativeMediaHub.bat` configured to bind to `0.0.0.0:8088`:
 
 ```cmd
 set "PORT=8088"
@@ -108,10 +108,10 @@ set "HOST=0.0.0.0"
 php artisan serve --host=0.0.0.0 --port=8088
 ```
 
-Simply double-click `Start-CreativeMediaServer.bat` on the server machine.
+Simply double-click `Start-CreativeMediaHub.bat` on the server machine.
 You will see:
 ```text
-[*] Starting Creative Media Server for Local Network on port 8088 ...
+[*] Starting Creative Media Hub for Local Network on port 8088 ...
 [*] Access locally at: http://localhost:8088
 [*] Access from phone/tablet/TV at: http://<your-lan-ip>:8088
 ```
@@ -120,22 +120,22 @@ You will see:
 
 ## Step 6: Configure Autostart on Server Boot (Headless Operation)
 
-To have Creative Media Server start automatically when the computer boots up (without needing to manually log in and click the batch file):
+To have Creative Media Hub start automatically when the computer boots up (without needing to manually log in and click the batch file):
 
 ### Method A: Windows Startup Folder (Easiest)
 1. Press `Win + R`, type `shell:startup`, and press Enter.
 2. Right-click inside the folder -> **New** -> **Shortcut**.
-3. Browse to `C:\Users\hasan\Herd\creative-media-server\Start-CreativeMediaServer.bat`.
+3. Browse to `C:\Users\hasan\Herd\creative-media-hub\Start-CreativeMediaHub.bat`.
 4. Click **Next** -> **Finish**.
 
 ### Method B: Windows Task Scheduler (Runs in Background)
 1. Press `Win + R`, type `taskschd.msc`, and press Enter.
 2. Click **Create Basic Task**.
-   - **Name**: `Creative Media Server`
+   - **Name**: `Creative Media Hub`
    - **Trigger**: `When the computer starts`
    - **Action**: `Start a program`
-   - **Program/script**: `C:\Users\hasan\Herd\creative-media-server\Start-CreativeMediaServer.bat`
-   - **Start in**: `C:\Users\hasan\Herd\creative-media-server\`
+   - **Program/script**: `C:\Users\hasan\Herd\creative-media-hub\Start-CreativeMediaHub.bat`
+   - **Start in**: `C:\Users\hasan\Herd\creative-media-hub\`
 3. Check **Open the Properties dialog** and select **Run whether user is logged on or not**.
 
 ---

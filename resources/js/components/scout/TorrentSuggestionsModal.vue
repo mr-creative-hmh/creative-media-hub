@@ -24,6 +24,7 @@ const loading = ref(false);
 const torrents = ref<any[]>([]);
 const selectedQuality = ref<string>('all');
 const hideZeroSeeds = ref<boolean>(true);
+const cleanOnly = ref<boolean>(true);
 const autoOrganize = ref<boolean>(true);
 const downloadingHash = ref<string | null>(null);
 const downloadedHashes = ref<Record<string, boolean>>({});
@@ -50,6 +51,11 @@ watch([() => props.isOpen, () => props.gapItem], ([newOpen, newItem]) => {
         }
         currentSeason.value = Math.max(1, Number(newItem.season_number || 1));
         currentEpisode.value = Math.max(1, Number(newItem.episode_number || 1));
+
+        if (newItem.upgrade_mode || newItem.clean_only) {
+            cleanOnly.value = true;
+        }
+
         fetchTorrents();
     } else {
         torrents.value = [];
@@ -121,6 +127,10 @@ const fetchTorrents = async () => {
             params.episode = currentEpisode.value;
         } else if (isSeas) {
             params.season = currentSeason.value;
+        }
+
+        if (cleanOnly.value || props.gapItem?.upgrade_mode || props.gapItem?.clean_only) {
+            params.clean_only = 1;
         }
 
         const queryParams = new URLSearchParams();
@@ -393,6 +403,42 @@ const startDownload = async (torrent: any) => {
                 </button>
             </div>
 
+            <!-- Quality Upgrade Mode Notice Banner -->
+            <div v-if="gapItem?.upgrade_mode" class="relative z-10 mx-6 mt-4 p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-rose-500/15 to-purple-500/15 border border-amber-500/30 flex items-start justify-between gap-3 text-xs shadow-lg">
+                <div class="flex items-start gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                        <Sparkles class="w-4 h-4" />
+                    </div>
+                    <div class="space-y-1">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span
+                                class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border"
+                                :class="gapItem?.upgrade_category === 'poor_quality' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-amber-500/20 text-amber-300 border-amber-500/30'"
+                            >
+                                {{ gapItem?.upgrade_category === 'poor_quality' ? (isRTL ? 'استبدال نسخة رديئة / مترجمة' : 'Replace Low-Quality Rip') : (isRTL ? 'ترقية جودة منخفضة (<720p)' : 'Sub-720p Upgrade') }}
+                            </span>
+                            <span v-if="gapItem?.current_resolution" class="text-[11px] font-bold text-slate-300">
+                                {{ isRTL ? 'الجودة الحالية بالمكتبة:' : 'Current in Library:' }}
+                                <span class="text-amber-400 font-black">{{ gapItem?.current_resolution }}</span>
+                            </span>
+                            <span v-if="gapItem?.badge_en" class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                {{ isRTL && gapItem?.badge_ar ? gapItem.badge_ar : gapItem.badge_en }}
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-300">
+                            <span class="font-bold text-white">{{ isRTL ? 'الهدف:' : 'Target:' }}</span>
+                            {{ isRTL 
+                                ? 'البحث عن نسخ فائقة النقاء 1080p أو 4K (WEB-DL / BluRay) واستبعاد أي تسجيلات سينمائية أو ترجمات كورية/صينية مدمجة.' 
+                                : 'Finding clean 1080p/4K WEB-DL or BluRay releases, strictly excluding CAM recordings or hardcoded foreign subtitles.' 
+                            }}
+                        </p>
+                        <p v-if="gapItem?.evidence" class="text-[11px] text-slate-400 font-mono">
+                            {{ isRTL ? 'دليل الفحص:' : 'Forensic Note:' }} {{ gapItem.evidence }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
             <!-- Seeders & Download Speed Guidance Banner -->
             <div class="relative z-10 mx-6 mt-4 p-3.5 rounded-2xl bg-slate-950/70 border border-cyan-500/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
                 <div class="flex items-center gap-2.5">
@@ -436,8 +482,8 @@ const startDownload = async (torrent: any) => {
 
             <!-- Controls & Options Bar -->
             <div class="relative z-10 px-6 py-3 border-b border-white/10 bg-slate-900/70 flex flex-wrap items-center justify-between gap-3 mt-3">
-                <!-- Quality Filters -->
-                <div class="flex items-center gap-3">
+                <!-- Quality Filters & Clean Filter -->
+                <div class="flex items-center gap-3 flex-wrap">
                     <div class="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10">
                         <button
                             v-for="q in qualities"
@@ -453,6 +499,18 @@ const startDownload = async (torrent: any) => {
                             {{ q === 'all' ? (isRTL ? 'كافة الجودات' : 'All Qualities') : q }}
                         </button>
                     </div>
+
+                    <!-- Clean Releases Only (Exclude CAM/HC) Toggle -->
+                    <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-300 select-none bg-black/30 border border-white/10 px-3 py-1.5 rounded-xl hover:border-emerald-500/40 transition-all">
+                        <input
+                            type="checkbox"
+                            v-model="cleanOnly"
+                            @change="fetchTorrents"
+                            class="w-3.5 h-3.5 rounded text-emerald-500 focus:ring-emerald-500/40 bg-black/60 border-white/20 cursor-pointer"
+                        />
+                        <ShieldCheck class="w-3.5 h-3.5 text-emerald-400" />
+                        <span>{{ isRTL ? 'نسخ نظيفة فقط (استبعاد CAM / HC)' : 'Clean Only (No CAM/HC)' }}</span>
+                    </label>
 
                     <!-- Hide 0-seed dead torrents toggle -->
                     <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-300 select-none bg-black/30 border border-white/10 px-3 py-1.5 rounded-xl hover:border-cyan-500/30 transition-all">

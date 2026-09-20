@@ -31,11 +31,11 @@ class TorrentDiscoveryService
     /**
      * Search torrents for a movie.
      */
-    public function searchMovieTorrents(string $title, ?int $year = null, ?string $imdbId = null, ?int $tmdbId = null, bool $isAnimated = false): array
+    public function searchMovieTorrents(string $title, ?int $year = null, ?string $imdbId = null, ?int $tmdbId = null, bool $isAnimated = false, bool $cleanOnly = false): array
     {
-        $cacheKey = 'scout_torrents_movie_'.md5("{$title}_{$year}_{$imdbId}_{$tmdbId}_{$isAnimated}");
+        $cacheKey = 'scout_torrents_movie_'.md5("{$title}_{$year}_{$imdbId}_{$tmdbId}_{$isAnimated}_{$cleanOnly}");
 
-        return Cache::remember($cacheKey, 1800, function () use ($title, $year, $imdbId, $tmdbId) {
+        return Cache::remember($cacheKey, 1800, function () use ($title, $year, $imdbId, $tmdbId, $cleanOnly) {
             $results = [];
 
             // 1. Resolve IMDB ID if missing
@@ -65,7 +65,7 @@ class TorrentDiscoveryService
             // STRICT FILTERING FOR MOVIES:
             // 1. Exclude any TV series patterns (e.g. S01, S02E01, 1x02, Season 1, Episode 4)
             // 2. Exclude releases whose explicit 4-digit year differs by more than 1 (disentangling remakes from originals)
-            $filtered = array_filter($results, function ($item) use ($year) {
+            $filtered = array_filter($results, function ($item) use ($year, $cleanOnly) {
                 $tTitle = $item['title'] ?? '';
 
                 if (preg_match('/(?i)\bS\d{1,2}(?:E\d{1,2})?\b|\b\d{1,2}x\d{1,2}\b|\bSeason\s*\d+\b|\bEpisode\s*\d+\b/', $tTitle)) {
@@ -79,10 +79,14 @@ class TorrentDiscoveryService
                     }
                 }
 
+                if ($cleanOnly && preg_match('/\b(cam|hdcam|camrip|ts|hdts|telesync|pdvd|telecine|tc|hdtc|dvdscr|scr|screener|r5|workprint|hc|korsub|subbed)\b/i', $tTitle)) {
+                    return false;
+                }
+
                 return true;
             });
 
-            $finalList = ! empty($filtered) ? array_values($filtered) : $results;
+            $finalList = ! empty($filtered) ? array_values($filtered) : ($cleanOnly ? [] : $results);
 
             return $this->rankAndDeduplicate($finalList);
         });
@@ -155,12 +159,12 @@ class TorrentDiscoveryService
     /**
      * Search torrents for a specific episode.
      */
-    public function searchEpisodeTorrents(string $seriesTitle, int $season, int $episode, ?string $imdbId = null, ?int $tmdbId = null, ?int $year = null, bool $isAnimated = false): array
+    public function searchEpisodeTorrents(string $seriesTitle, int $season, int $episode, ?string $imdbId = null, ?int $tmdbId = null, ?int $year = null, bool $isAnimated = false, bool $cleanOnly = false): array
     {
         $epCode = sprintf('S%02dE%02d', $season, $episode);
-        $cacheKey = 'scout_torrents_ep_'.md5("{$seriesTitle}_{$epCode}_{$imdbId}_{$tmdbId}_{$year}_{$isAnimated}");
+        $cacheKey = 'scout_torrents_ep_'.md5("{$seriesTitle}_{$epCode}_{$imdbId}_{$tmdbId}_{$year}_{$isAnimated}_{$cleanOnly}");
 
-        return Cache::remember($cacheKey, 1800, function () use ($seriesTitle, $season, $episode, $epCode, $imdbId, $tmdbId, $year) {
+        return Cache::remember($cacheKey, 1800, function () use ($seriesTitle, $season, $episode, $epCode, $imdbId, $tmdbId, $year, $cleanOnly) {
             $results = [];
 
             // 1. Resolve IMDB ID if missing
@@ -204,7 +208,7 @@ class TorrentDiscoveryService
             }
 
             // 5. STRICT FILTERING: Keep only torrents that match episode and release year
-            $filtered = array_filter($results, function ($item) use ($season, $episode, $year) {
+            $filtered = array_filter($results, function ($item) use ($season, $episode, $year, $cleanOnly) {
                 $tTitle = $item['title'] ?? '';
 
                 if (! $this->matchesEpisode($tTitle, $season, $episode)) {
@@ -218,10 +222,14 @@ class TorrentDiscoveryService
                     }
                 }
 
+                if ($cleanOnly && preg_match('/\b(cam|hdcam|camrip|ts|hdts|telesync|pdvd|telecine|tc|hdtc|dvdscr|scr|screener|r5|workprint|hc|korsub|subbed)\b/i', $tTitle)) {
+                    return false;
+                }
+
                 return true;
             });
 
-            $finalList = ! empty($filtered) ? array_values($filtered) : $results;
+            $finalList = ! empty($filtered) ? array_values($filtered) : ($cleanOnly ? [] : $results);
 
             return $this->rankAndDeduplicate($finalList);
         });
@@ -230,12 +238,12 @@ class TorrentDiscoveryService
     /**
      * Search torrents for an entire season pack.
      */
-    public function searchSeasonTorrents(string $seriesTitle, int $season, ?string $imdbId = null, ?int $tmdbId = null, ?int $year = null, bool $isAnimated = false): array
+    public function searchSeasonTorrents(string $seriesTitle, int $season, ?string $imdbId = null, ?int $tmdbId = null, ?int $year = null, bool $isAnimated = false, bool $cleanOnly = false): array
     {
         $seasonCode = sprintf('Season %02d', $season);
-        $cacheKey = 'scout_torrents_season_'.md5("{$seriesTitle}_{$season}_{$imdbId}_{$tmdbId}_{$year}_{$isAnimated}");
+        $cacheKey = 'scout_torrents_season_'.md5("{$seriesTitle}_{$season}_{$imdbId}_{$tmdbId}_{$year}_{$isAnimated}_{$cleanOnly}");
 
-        return Cache::remember($cacheKey, 1800, function () use ($seriesTitle, $season, $year) {
+        return Cache::remember($cacheKey, 1800, function () use ($seriesTitle, $season, $year, $cleanOnly) {
             $results = [];
             $sPadded = sprintf('%02d', $season);
 
@@ -260,7 +268,7 @@ class TorrentDiscoveryService
             }
 
             // STRICT FILTERING: Only include true season packs and respect release year
-            $seasonPacks = array_filter($results, function ($item) use ($season, $year) {
+            $seasonPacks = array_filter($results, function ($item) use ($season, $year, $cleanOnly) {
                 $tTitle = $item['title'] ?? '';
 
                 if (! $this->isSeasonPack($tTitle, $season)) {
@@ -272,6 +280,10 @@ class TorrentDiscoveryService
                     if (abs($relYear - $year) > 1) {
                         return false;
                     }
+                }
+
+                if ($cleanOnly && preg_match('/\b(cam|hdcam|camrip|ts|hdts|telesync|pdvd|telecine|tc|hdtc|dvdscr|scr|screener|r5|workprint|hc|korsub|subbed)\b/i', $tTitle)) {
+                    return false;
                 }
 
                 return true;

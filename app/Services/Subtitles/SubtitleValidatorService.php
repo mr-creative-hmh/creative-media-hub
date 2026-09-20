@@ -61,16 +61,21 @@ class SubtitleValidatorService
             ];
         }
 
-        // 3. HTML Error Page Detection (e.g. Cloudflare / 404 / 503 saved as .srt)
+        // 3. HTML Error Page Detection (e.g. Cloudflare / 404 / 503 / DB outage saved as .srt)
         $lowerRaw = strtolower(substr($raw, 0, 2048));
         if (
-            str_contains($lowerRaw, '<!doctype html') ||
+            str_contains($lowerRaw, '<!doctype') ||
             str_contains($lowerRaw, '<html') ||
+            str_contains($lowerRaw, '<?xml') ||
             str_contains($lowerRaw, 'cloudflare') ||
             str_contains($lowerRaw, '503 service temporarily unavailable') ||
             str_contains($lowerRaw, '404 not found') ||
             str_contains($lowerRaw, 'access denied') ||
-            str_contains($lowerRaw, '<title>error</title>')
+            str_contains($lowerRaw, '<title>error</title>') ||
+            str_contains($lowerRaw, 'cannot connect to db') ||
+            str_contains($lowerRaw, 'we have problem with network connection') ||
+            str_contains($lowerRaw, 'try reload page') ||
+            str_contains($lowerRaw, '<!-- not connected')
         ) {
             return [
                 'is_valid' => false,

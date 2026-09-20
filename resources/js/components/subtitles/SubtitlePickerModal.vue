@@ -260,12 +260,12 @@ watch(
                             {{ modalTitle }}
                         </h2>
                         <div class="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
-                            <span>{{ media?.type === 'episode' ? 'Episode' : 'Movie' }}</span>
+                            <span>{{ media?.type === 'episode' ? (isRTL ? 'حلقة' : 'Episode') : (isRTL ? 'فيلم' : 'Movie') }}</span>
                             <span v-if="media?.imdb_id" class="px-1.5 py-0.5 rounded bg-slate-800 font-mono text-[10px] text-cyan-300">
                                 {{ media.imdb_id }}
                             </span>
                             <span v-if="enginesQueried" class="text-slate-500">
-                                · Sources: {{ enginesQueried }}
+                                · {{ isRTL ? 'المصادر:' : 'Sources:' }} {{ enginesQueried }}
                             </span>
                         </div>
                     </div>
@@ -275,7 +275,7 @@ watch(
                     type="button"
                     class="p-2 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-white/10 transition"
                     @click="emit('close')"
-                    aria-label="Close"
+                    :aria-label="isRTL ? 'إغلاق' : 'Close'"
                 >
                     <X class="w-5 h-5" />
                 </button>
@@ -312,7 +312,7 @@ watch(
                         <input
                             v-model="searchQuery"
                             type="text"
-                            placeholder="Title or keywords..."
+                            :placeholder="isRTL ? 'العنوان أو كلمات مفتاحية...' : 'Title or keywords...'"
                             class="w-full bg-slate-900/70 border border-slate-800 text-slate-200 text-xs rounded-xl pl-9 pr-4 rtl:pl-4 rtl:pr-9 py-2 focus:outline-none focus:border-cyan-500 transition placeholder:text-slate-500"
                         />
                     </div>
@@ -323,7 +323,7 @@ watch(
                     >
                         <RefreshCw v-if="!isLoading" class="w-3.5 h-3.5" />
                         <Loader2 v-else class="w-3.5 h-3.5 animate-spin text-cyan-400" />
-                        <span>Search</span>
+                        <span>{{ isRTL ? 'بحث' : 'Search' }}</span>
                     </button>
 
                     <button
@@ -346,8 +346,8 @@ watch(
                 <!-- Loading State -->
                 <div v-if="isLoading" class="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
                     <Loader2 class="w-8 h-8 animate-spin text-cyan-400" />
-                    <p class="text-sm font-medium">Aggregating subtitles from free high-speed providers...</p>
-                    <p class="text-xs text-slate-500">Querying SubSense, YTS-Subs, OpenSubtitles, and SubDL</p>
+                    <p class="text-sm font-medium">{{ isRTL ? 'جاري تجميع الترجمات من مزودات مجانية فائقة السرعة...' : 'Aggregating subtitles from free high-speed providers...' }}</p>
+                    <p class="text-xs text-slate-500">{{ isRTL ? 'استعلام من SubSense و YTS-Subs و OpenSubtitles و SubDL' : 'Querying SubSense, YTS-Subs, OpenSubtitles, and SubDL' }}</p>
                 </div>
 
                 <!-- Empty State -->
@@ -371,7 +371,7 @@ watch(
                         class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 transition"
                         @click="fetchSubtitles"
                     >
-                        Retry Search
+                        {{ isRTL ? 'إعادة المحاولة' : 'Retry Search' }}
                     </button>
 
                     <!-- Instant Arabic Translation Fallback Box -->
@@ -432,7 +432,7 @@ watch(
                                 <span>{{ sub.rating.toFixed(1) }}</span>
                             </span>
                             <span v-if="sub.downloads && sub.downloads > 0" class="text-[10px] text-slate-500">
-                                · {{ sub.downloads.toLocaleString() }} downloads
+                                · {{ sub.downloads.toLocaleString() }} {{ isRTL ? 'تحميل' : 'downloads' }}
                             </span>
                         </div>
 
@@ -455,7 +455,7 @@ watch(
                         >
                             <Loader2 v-if="isDownloadingId === sub.subtitle_id" class="w-3.5 h-3.5 animate-spin" />
                             <Download v-else class="w-3.5 h-3.5" />
-                            <span>{{ isDownloadingId === sub.subtitle_id ? 'Downloading...' : 'Download & Apply' }}</span>
+                            <span>{{ isDownloadingId === sub.subtitle_id ? (isRTL ? 'جارٍ التحميل...' : 'Downloading...') : (isRTL ? 'تحميل وتطبيق' : 'Download & Apply') }}</span>
                         </button>
                     </div>
                 </div>
@@ -465,7 +465,7 @@ watch(
             <div class="px-6 py-4 border-t border-slate-800/80 bg-slate-950/60 flex items-center justify-between text-xs text-slate-400">
                 <div class="flex items-center gap-2">
                     <span class="inline-block w-2 h-2 rounded-full bg-emerald-400"></span>
-                    <span>Free high-speed aggregator online. Subtitles are auto-converted to clean UTF-8.</span>
+                    <span>{{ isRTL ? 'تجميع مباشر من مزودات مجانية. تحويل تلقائي لنص UTF-8 النقي.' : 'Free high-speed aggregator online. Subtitles are auto-converted to clean UTF-8.' }}</span>
                 </div>
 
                 <button
@@ -473,7 +473,7 @@ watch(
                     class="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
                     @click="emit('close')"
                 >
-                    Close
+                    {{ isRTL ? 'إغلاق' : 'Close' }}
                 </button>
             </div>
         </div>

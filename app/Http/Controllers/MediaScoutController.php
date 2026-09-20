@@ -10,6 +10,7 @@ use App\Services\Metadata\TmdbProvider;
 use App\Services\Organizer\SceneNameParserService;
 use App\Services\Scout\LibraryAcquisitionService;
 use App\Services\Scout\LibraryGapService;
+use App\Services\Scout\QualityUpgradeAuditService;
 use App\Services\Scout\TorrentDiscoveryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,7 +26,8 @@ class MediaScoutController extends Controller
         protected LibraryAcquisitionService $acquisitionService,
         protected DownloadManagerService $downloadManager,
         protected SceneNameParserService $parserService,
-        protected TmdbProvider $tmdb
+        protected TmdbProvider $tmdb,
+        protected QualityUpgradeAuditService $qualityService
     ) {}
 
     /**
@@ -36,6 +38,9 @@ class MediaScoutController extends Controller
         $metrics = $this->gapService->getMetrics(false);
         $seriesGaps = $this->gapService->getGroupedSeriesGaps(false);
         $collectionGaps = $this->gapService->getGroupedCollectionGaps(false);
+        $lowRes = $this->qualityService->getLowResolutionMedia(false);
+        $poorQuality = $this->qualityService->getPoorQualityMedia(false);
+        $upgradeMetrics = $this->qualityService->getUpgradeMetrics(false);
 
         return Inertia::render('Scout/Index', [
             'initialMetrics' => $metrics,
@@ -45,6 +50,9 @@ class MediaScoutController extends Controller
             'initialSeasons' => $this->gapService->getMissingSeasonsSummary(false),
             'initialMovies' => $this->gapService->getMissingCollectionMoviesSummary(false),
             'initialTrending' => $this->enrichWithLibraryStatus($this->tmdb->getTrendingMedia('all', 'week')),
+            'initialLowRes' => $lowRes,
+            'initialPoorQuality' => $poorQuality,
+            'initialUpgradeMetrics' => $upgradeMetrics,
         ]);
     }
 
@@ -165,10 +173,15 @@ class MediaScoutController extends Controller
     public function refresh(): JsonResponse
     {
         $this->gapService->clearCache();
+        $this->qualityService->clearCache();
         CollectionController::clearCache();
+
         $metrics = $this->gapService->getMetrics(true);
         $seriesGaps = $this->gapService->getGroupedSeriesGaps(true);
         $collectionGaps = $this->gapService->getGroupedCollectionGaps(true);
+        $lowRes = $this->qualityService->getLowResolutionMedia(true);
+        $poorQuality = $this->qualityService->getPoorQualityMedia(true);
+        $upgradeMetrics = $this->qualityService->getUpgradeMetrics(true);
 
         return response()->json([
             'success' => true,
@@ -178,6 +191,92 @@ class MediaScoutController extends Controller
             'episodes' => $this->gapService->getMissingEpisodesSummary(true),
             'seasons' => $this->gapService->getMissingSeasonsSummary(true),
             'collections' => $this->gapService->getMissingCollectionMoviesSummary(true),
+            'low_res' => $lowRes,
+            'low_resolution' => $lowRes,
+            'poor_quality' => $poorQuality,
+            'upgrade_metrics' => $upgradeMetrics,
+        ]);
+    }
+
+    /**
+     * API: Get categorized upgrade candidates (below 720p or poor quality/CAM/HC).
+     */
+    public function getUpgrades(Request $request): JsonResponse
+    {
+        $tab = $request->query('tab', 'low_resolution');
+        $mediaType = $request->query('media_type', 'all');
+        $resolution = $request->query('resolution', 'all');
+        $category = $request->query('category', 'all');
+        $query = strtolower(trim($request->query('query', '')));
+
+        $lowRes = $this->qualityService->getLowResolutionMedia();
+        $poorQuality = $this->qualityService->getPoorQualityMedia();
+        $metrics = $this->qualityService->getUpgradeMetrics();
+
+        $items = [];
+        if ($tab === 'low_resolution') {
+            $movies = $lowRes['movies'];
+            $episodes = $lowRes['episodes'];
+
+            if ($mediaType === 'movie') {
+                $items = $movies;
+            } elseif ($mediaType === 'episode') {
+                $items = $episodes;
+            } else {
+                $items = array_merge($movies, $episodes);
+            }
+
+            if ($resolution !== 'all') {
+                $items = array_values(array_filter($items, function ($it) use ($resolution) {
+                    $res = strtolower((string) ($it['current_resolution'] ?? ''));
+                    if ($resolution === '480p') {
+                        return str_contains($res, '480p');
+                    }
+                    if ($resolution === '360p') {
+                        return str_contains($res, '360p');
+                    }
+
+                    return ! str_contains($res, '480p') && ! str_contains($res, '360p');
+                }));
+            }
+        } else {
+            $items = $poorQuality['items'];
+
+            if ($mediaType === 'movie') {
+                $items = array_values(array_filter($items, fn ($it) => ($it['type'] ?? '') === 'movie'));
+            } elseif ($mediaType === 'episode') {
+                $items = array_values(array_filter($items, fn ($it) => ($it['type'] ?? '') === 'episode'));
+            }
+
+            if ($category !== 'all') {
+                $items = array_values(array_filter($items, fn ($it) => ($it['flag_category'] ?? '') === $category));
+            }
+        }
+
+        if (! empty($query)) {
+            $items = array_values(array_filter($items, function ($it) use ($query) {
+                $searchable = strtolower(
+                    ($it['title'] ?? '').' '.
+                    ($it['title_ar'] ?? '').' '.
+                    ($it['original_title'] ?? '').' '.
+                    ($it['series_title'] ?? '').' '.
+                    ($it['episode_title'] ?? '').' '.
+                    ($it['badge_en'] ?? '').' '.
+                    ($it['badge_ar'] ?? '')
+                );
+
+                return str_contains($searchable, $query);
+            }));
+        }
+
+        return response()->json([
+            'data' => $items,
+            'total' => count($items),
+            'metrics' => $metrics,
+            'upgrade_metrics' => $metrics,
+            'low_res' => $lowRes,
+            'low_resolution' => $lowRes,
+            'poor_quality' => $poorQuality,
         ]);
     }
 
@@ -199,21 +298,22 @@ class MediaScoutController extends Controller
         $season = $request->filled('season') ? (int) $request->input('season') : 1;
         $episode = $request->filled('episode') ? (int) $request->input('episode') : 1;
         $isAnimated = $request->boolean('is_animated', false);
+        $cleanOnly = $request->boolean('clean_only', false);
 
         $torrents = [];
 
         if ($type === 'episode') {
-            $torrents = $this->torrentService->searchEpisodeTorrents($title, $season, $episode, $imdbId, $tmdbId, $year, $isAnimated);
+            $torrents = $this->torrentService->searchEpisodeTorrents($title, $season, $episode, $imdbId, $tmdbId, $year, $isAnimated, $cleanOnly);
         } elseif ($type === 'season' || $type === 'season_pack') {
-            $torrents = $this->torrentService->searchSeasonTorrents($title, $season, $imdbId, $tmdbId, $year, $isAnimated);
+            $torrents = $this->torrentService->searchSeasonTorrents($title, $season, $imdbId, $tmdbId, $year, $isAnimated, $cleanOnly);
         } elseif ($type === 'series') {
             if ($request->filled('episode')) {
-                $torrents = $this->torrentService->searchEpisodeTorrents($title, $season, $episode, $imdbId, $tmdbId, $year, $isAnimated);
+                $torrents = $this->torrentService->searchEpisodeTorrents($title, $season, $episode, $imdbId, $tmdbId, $year, $isAnimated, $cleanOnly);
             } else {
-                $torrents = $this->torrentService->searchSeasonTorrents($title, $season, $imdbId, $tmdbId, $year, $isAnimated);
+                $torrents = $this->torrentService->searchSeasonTorrents($title, $season, $imdbId, $tmdbId, $year, $isAnimated, $cleanOnly);
             }
         } else {
-            $torrents = $this->torrentService->searchMovieTorrents($title, $year, $imdbId, $tmdbId, $isAnimated);
+            $torrents = $this->torrentService->searchMovieTorrents($title, $year, $imdbId, $tmdbId, $isAnimated, $cleanOnly);
         }
 
         return response()->json([

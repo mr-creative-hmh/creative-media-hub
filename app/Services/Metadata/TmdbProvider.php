@@ -184,18 +184,86 @@ class TmdbProvider implements MetadataProviderInterface
         }
 
         try {
-            $response = Http::timeout(8)->get("{$this->baseUrl}/search/tv", [
+            $params = [
                 'api_key' => $key,
                 'query' => $title,
-                'first_air_date_year' => $year,
                 'include_adult' => false,
-            ]);
+            ];
+            if ($year) {
+                $params['first_air_date_year'] = $year;
+            }
 
+            $response = Http::retry(2, 250)->timeout(12)->get("{$this->baseUrl}/search/tv", $params);
+
+            if ($response->successful()) {
+                $results = array_map(fn ($item) => $this->formatSeriesSummary($item), $response->json('results', []));
+                if (! empty($results)) {
+                    return $results;
+                }
+            }
+
+            // Smart fallback 1: Common spelling variations (e.g. Stewart <-> Stuart)
+            $variants = [];
+            if (stripos($title, 'Stewart') !== false) {
+                $variants[] = preg_replace('/\bStewart\b/i', 'Stuart', $title);
+            } elseif (stripos($title, 'Stuart') !== false) {
+                $variants[] = preg_replace('/\bStuart\b/i', 'Stewart', $title);
+            }
+
+            foreach ($variants as $variant) {
+                if ($variant && $variant !== $title) {
+                    $vRes = $this->searchSeriesDirect($variant, $year, $key);
+                    if (! empty($vRes)) {
+                        return $vRes;
+                    }
+                }
+            }
+
+            // Smart fallback 2: If multi-word title, search without leading name/word
+            $words = explode(' ', trim($title));
+            if (count($words) >= 3) {
+                $strippedFirst = implode(' ', array_slice($words, 1));
+                $sRes = $this->searchSeriesDirect($strippedFirst, $year, $key);
+                if (! empty($sRes)) {
+                    $cleanTitleLower = strtolower($title);
+                    $strippedLower = strtolower($strippedFirst);
+                    $filtered = [];
+                    foreach ($sRes as $cand) {
+                        $candTitleLower = strtolower($cand['title'] ?? '');
+                        similar_text($cleanTitleLower, $candTitleLower, $percent);
+                        if ($percent >= 55 || str_contains($candTitleLower, $strippedLower)) {
+                            $filtered[] = $cand;
+                        }
+                    }
+                    if (! empty($filtered)) {
+                        return $filtered;
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning('TMDb searchSeries failed: '.$e->getMessage());
+        }
+
+        return [];
+    }
+
+    protected function searchSeriesDirect(string $query, ?int $year, string $key): array
+    {
+        try {
+            $params = [
+                'api_key' => $key,
+                'query' => $query,
+                'include_adult' => false,
+            ];
+            if ($year) {
+                $params['first_air_date_year'] = $year;
+            }
+
+            $response = Http::retry(2, 250)->timeout(12)->get("{$this->baseUrl}/search/tv", $params);
             if ($response->successful()) {
                 return array_map(fn ($item) => $this->formatSeriesSummary($item), $response->json('results', []));
             }
         } catch (\Exception $e) {
-            Log::warning('TMDb searchSeries failed: '.$e->getMessage());
         }
 
         return [];
@@ -490,7 +558,7 @@ class TmdbProvider implements MetadataProviderInterface
         }
 
         try {
-            $response = Http::timeout(10)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
+            $response = Http::retry(2, 250)->timeout(12)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
                 'api_key' => $key,
                 'language' => $lang === 'ar' ? 'ar-SA' : 'en-US',
             ]);
@@ -525,7 +593,7 @@ class TmdbProvider implements MetadataProviderInterface
 
         try {
             // 1. Fetch English details
-            $resEn = Http::timeout(10)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
+            $resEn = Http::retry(2, 250)->timeout(12)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
                 'api_key' => $key,
                 'language' => 'en-US',
             ]);
@@ -535,7 +603,7 @@ class TmdbProvider implements MetadataProviderInterface
             }
 
             // 2. Fetch Arabic details
-            $resAr = Http::timeout(10)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
+            $resAr = Http::retry(2, 250)->timeout(12)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
                 'api_key' => $key,
                 'language' => 'ar-SA',
             ]);

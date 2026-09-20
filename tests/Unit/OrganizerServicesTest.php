@@ -239,4 +239,57 @@ class OrganizerServicesTest extends TestCase
         $this->assertCount(1, $plan);
         $this->assertStringContainsString('S06E01-E02', $plan[0]['destination_path']);
     }
+
+    public function test_english_series_not_classified_as_arabic(): void
+    {
+        $parser = new SceneNameParserService;
+        $organizer = new PhysicalOrganizerService($parser);
+
+        $parsed = $parser->parse('Stuart.Fails.to.Save.the.Universe.S01E01.720p.x264-FENiX.mkv');
+        $this->assertNull($parsed['series_title_ar']);
+        $this->assertEquals('Stuart Fails to Save the Universe', $parsed['clean_title']);
+
+        $scanned = [
+            [
+                'path' => 'D:/Downloads/Stuart.Fails.to.Save.the.Universe.S01E01.720p.mkv',
+                'filename' => 'Stuart.Fails.to.Save.the.Universe.S01E01.720p.mkv',
+                'size_bytes' => 400000000,
+                'parsed' => $parsed,
+                'fetch_episode_titles' => false,
+            ],
+        ];
+
+        $pattern = '{Type}/{Title}/Season {Season:02}/{Title} - S{Season:02}E{Episode:02}.{ext}';
+        $plan = $organizer->generateDryRun($scanned, 'H:/Entertainment', null, $pattern);
+
+        $this->assertCount(1, $plan);
+        // Must NOT be placed in Arabic Series
+        $this->assertStringNotContainsString('Arabic Series', $plan[0]['destination_path']);
+        $this->assertStringContainsString('H:/Entertainment/TV Shows/Stuart Fails to Save the Universe', $plan[0]['destination_path']);
+    }
+
+    public function test_arabic_series_classified_correctly(): void
+    {
+        $parser = new SceneNameParserService;
+        $organizer = new PhysicalOrganizerService($parser);
+
+        $parsed = $parser->parse('مسلسل الاختيار S01E01 1080p.mp4');
+        $this->assertEquals('الاختيار', $parsed['series_title_ar']);
+
+        $scanned = [
+            [
+                'path' => 'C:/Downloads/مسلسل الاختيار S01E01 1080p.mp4',
+                'filename' => 'مسلسل الاختيار S01E01 1080p.mp4',
+                'size_bytes' => 500000000,
+                'parsed' => $parsed,
+                'fetch_episode_titles' => false,
+            ],
+        ];
+
+        $pattern = '{Type}/{Title}/Season {Season:02}/{Title} - S{Season:02}E{Episode:02}.{ext}';
+        $plan = $organizer->generateDryRun($scanned, 'H:/Entertainment', null, $pattern);
+
+        $this->assertCount(1, $plan);
+        $this->assertStringContainsString('TV Shows/Arabic Series/الاختيار', $plan[0]['destination_path']);
+    }
 }

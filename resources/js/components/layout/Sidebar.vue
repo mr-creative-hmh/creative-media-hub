@@ -55,7 +55,7 @@ const isActive = (pattern: string) => {
                 <Pause v-else-if="isPaused" class="w-4 h-4 text-slate-950 fill-current" />
                 <HardDrive v-else class="w-4 h-4 text-slate-950" />
                 <span>
-                    {{ isScanning ? (isPaused ? (isRTL ? 'الفحص متوقف مؤقتاً' : 'Scan Paused') : `${isRTL ? 'جاري الفحص' : 'Scanning'} ${scanStatus.progress_percent || 0}%`) : (isRTL ? 'فحص ومراقبة المكتبة' : 'Scan Media Library') }}
+                    {{ isScanning ? (isPaused ? t('sidebar.scan_paused') : `${t('sidebar.scanning')} ${scanStatus.progress_percent || 0}%`) : t('sidebar.scan_media_library') }}
                 </span>
             </button>
         </div>
@@ -96,7 +96,7 @@ const isActive = (pattern: string) => {
                 <div class="flex items-center justify-between mb-1">
                     <h4 class="font-bold text-xs text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
                         <Activity class="w-3.5 h-3.5 text-cyan-400" />
-                        <span>{{ isRTL ? 'مركز العمليات الموحد' : 'Universal Job Center' }}</span>
+                        <span>{{ t('jobs.universal_job_center') }}</span>
                     </h4>
                     <span
                         class="w-2 h-2 rounded-full"
@@ -104,13 +104,13 @@ const isActive = (pattern: string) => {
                     ></span>
                 </div>
                 <p class="text-[11px] text-slate-400 mb-2.5 leading-relaxed">
-                    {{ isRTL ? 'إدارة وتتبع الفاحص الافتراضي ومنظم القرص الفعلي وفاحص الترجمات مباشرة.' : 'Live unified control for Virtual Scanner, Disk Organizer, and Subtitles.' }}
+                    {{ t('jobs.sidebar_job_center_desc') }}
                 </p>
                 <button
                     @click="openActivityCenter()"
                     class="inline-flex items-center justify-center w-full py-1.5 rounded-xl bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500 hover:text-slate-950 border border-cyan-500/30 text-xs font-bold transition-all shadow-sm cursor-pointer"
                 >
-                    {{ isRTL ? 'فتح مركز العمليات الموحد' : 'Open Universal Job Center' }}
+                    {{ t('jobs.open_universal_job_center') }}
                 </button>
             </div>
         </div>

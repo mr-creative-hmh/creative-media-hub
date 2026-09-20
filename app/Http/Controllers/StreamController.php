@@ -143,10 +143,12 @@ class StreamController extends Controller
 
         $modelClass = ($wType === 'episode') ? Episode::class : MediaItem::class;
         $isCompleted = ($prog / max(1, $dur)) >= 0.92;
+        $userId = $request->user()?->id;
 
         // Clean up any stray duplicate rows if any exist
         $duplicates = WatchHistory::where('watchable_type', $modelClass)
             ->where('watchable_id', $wId)
+            ->when($userId, fn ($q) => $q->where('user_id', $userId))
             ->orderByDesc('id')
             ->get();
 
@@ -154,16 +156,23 @@ class StreamController extends Controller
             $keep = $duplicates->first();
             WatchHistory::where('watchable_type', $modelClass)
                 ->where('watchable_id', $wId)
+                ->when($userId, fn ($q) => $q->where('user_id', $userId))
                 ->where('id', '!=', $keep->id)
                 ->delete();
         }
 
+        $lookup = [
+            'watchable_type' => $modelClass,
+            'watchable_id' => $wId,
+        ];
+        if ($userId) {
+            $lookup['user_id'] = $userId;
+        }
+
         $watchHistory = WatchHistory::updateOrCreate(
+            $lookup,
             [
-                'watchable_type' => $modelClass,
-                'watchable_id' => $wId,
-            ],
-            [
+                'user_id' => $userId,
                 'progress_seconds' => $prog,
                 'duration_seconds' => $dur,
                 'is_completed' => $isCompleted,
@@ -180,11 +189,15 @@ class StreamController extends Controller
     public function getWatchHistory(Request $request)
     {
         $type = $request->input('type', 'all');
+        $userId = $request->user()?->id;
 
-        // Fetch all in-progress watch history items
+        // Fetch all in-progress watch history items (scoped to active user profile if logged in)
         $rawHistory = WatchHistory::query()
             ->where('is_completed', false)
             ->where('progress_seconds', '>', 3)
+            ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
+                $sub->where('user_id', $userId)->orWhereNull('user_id');
+            }))
             ->orderByDesc('last_watched_at')
             ->with(['watchable'])
             ->get();
@@ -579,9 +592,12 @@ class StreamController extends Controller
     public function deleteWatchHistory(Request $request, $id)
     {
         $type = $request->input('type');
+        $userId = $request->user()?->id;
 
         // Check if $id matches WatchHistory primary ID
-        $record = WatchHistory::find($id);
+        $record = WatchHistory::when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
+            $sub->where('user_id', $userId)->orWhereNull('user_id');
+        }))->find($id);
         if ($record) {
             $record->delete();
 
@@ -595,13 +611,21 @@ class StreamController extends Controller
         $modelClass = ($type === 'series' || $type === 'episode') ? Episode::class : MediaItem::class;
 
         WatchHistory::where('watchable_id', $id)
+            ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
+                $sub->where('user_id', $userId)->orWhereNull('user_id');
+            }))
             ->when($type, fn ($q) => $q->where('watchable_type', $modelClass))
             ->delete();
 
         // If removing an entire series by series_id
         if ($type === 'series' || $request->boolean('is_series')) {
             $epIds = Episode::where('series_id', $id)->pluck('id');
-            WatchHistory::where('watchable_type', Episode::class)->whereIn('watchable_id', $epIds)->delete();
+            WatchHistory::where('watchable_type', Episode::class)
+                ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
+                    $sub->where('user_id', $userId)->orWhereNull('user_id');
+                }))
+                ->whereIn('watchable_id', $epIds)
+                ->delete();
         }
 
         return response()->json([
@@ -613,16 +637,21 @@ class StreamController extends Controller
     public function clearWatchHistory(Request $request)
     {
         $type = $request->input('type', 'all');
+        $userId = $request->user()?->id;
+
+        $baseQuery = WatchHistory::query()->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
+            $sub->where('user_id', $userId)->orWhereNull('user_id');
+        }));
 
         if ($type === 'movie' || $type === 'movies') {
-            WatchHistory::where('watchable_type', MediaItem::class)->delete();
+            $baseQuery->where('watchable_type', MediaItem::class)->delete();
         } elseif ($type === 'series' || $type === 'episode') {
-            WatchHistory::where('watchable_type', Episode::class)->delete();
+            $baseQuery->where('watchable_type', Episode::class)->delete();
         } elseif ($type === 'collection' || $type === 'collections') {
             $colIds = MediaItem::whereNotNull('collection_name')->where('collection_name', '!=', '')->pluck('id');
-            WatchHistory::where('watchable_type', MediaItem::class)->whereIn('watchable_id', $colIds)->delete();
+            $baseQuery->where('watchable_type', MediaItem::class)->whereIn('watchable_id', $colIds)->delete();
         } else {
-            WatchHistory::query()->delete();
+            $baseQuery->delete();
         }
 
         return response()->json([
@@ -650,18 +679,23 @@ class StreamController extends Controller
         $cacheDir = storage_path('app/cache/media_streams');
         $cacheKey = "stream_{$type}_{$id}_{$mtime}";
         $cachedFile = "{$cacheDir}/{$cacheKey}.mp4";
-        $partFile1 = "{$cacheDir}/{$cacheKey}.part.mp4";
-        $partFile2 = "{$cacheDir}/{$cacheKey}.mp4.part";
+        $completeFile = "{$cachedFile}.complete";
+        $partFile = "{$cacheDir}/{$cacheKey}.part.mp4";
 
-        if (file_exists($cachedFile) && filesize($cachedFile) > 1024 * 1024) {
+        if (file_exists($cachedFile) && file_exists($completeFile)) {
+            $streamRoute = $type === 'episode'
+                ? route('stream.remux.episode', $id)
+                : route('stream.remux.movie', $id);
+
             return response()->json([
                 'is_cached' => true,
                 'cached_percent' => 100,
                 'file_size' => filesize($cachedFile),
+                'stream_url' => $streamRoute,
             ]);
         }
 
-        $activePart = file_exists($partFile1) ? $partFile1 : (file_exists($partFile2) ? $partFile2 : null);
+        $activePart = file_exists($partFile) ? $partFile : null;
         if ($activePart) {
             $origSize = filesize($model->file_path);
             $partSize = filesize($activePart);
@@ -684,9 +718,37 @@ class StreamController extends Controller
 
         $cacheDir = storage_path('app/cache/media_streams');
         if (is_dir($cacheDir)) {
-            $pattern = "{$cacheDir}/stream_{$type}_{$id}_*.lock";
-            foreach (glob($pattern) as $lock) {
+            $isWin = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+
+            // Terminate any active background FFmpeg process for this item using PID files
+            $pidPattern = "{$cacheDir}/run_stream_{$type}_{$id}_*.pid";
+            foreach (glob($pidPattern) as $pidFile) {
+                $pid = (int) trim(@file_get_contents($pidFile));
+                if ($pid > 0) {
+                    if ($isWin) {
+                        @exec("taskkill /F /T /PID {$pid} > NUL 2>&1");
+                    } else {
+                        @posix_kill($pid, SIGTERM);
+                    }
+                }
+                @unlink($pidFile);
+            }
+
+            // Clean up locks and incomplete parts if .complete sentinel is missing
+            $lockPattern = "{$cacheDir}/stream_{$type}_{$id}_*.lock";
+            foreach (glob($lockPattern) as $lock) {
+                $base = preg_replace('/\.lock$/', '', $lock);
+                if (! file_exists("{$base}.complete")) {
+                    @unlink("{$base}.part.mp4");
+                    @unlink("{$base}.mp4.part");
+                }
                 @unlink($lock);
+            }
+
+            // Remove any temporary batch files
+            $batPattern = "{$cacheDir}/run_stream_{$type}_{$id}_*.bat";
+            foreach (glob($batPattern) as $bat) {
+                @unlink($bat);
             }
         }
 
@@ -938,18 +1000,21 @@ class StreamController extends Controller
         $mtime = file_exists($filePath) ? filemtime($filePath) : 0;
         $cacheKey = "stream_{$modelType}_{$modelId}_{$mtime}";
         $cachedFile = "{$cacheDir}/{$cacheKey}.mp4";
+        $completeFile = "{$cachedFile}.complete";
         $lockFile = "{$cacheDir}/{$cacheKey}.lock";
+        $pidFile = "{$cacheDir}/run_{$cacheKey}.pid";
 
         $audioDelayMs = (int) $request->query('audio_delay', 0);
 
-        // If complete cached file is ready on disk and we are starting from 0 AND no audio delay was requested, stream directly with Byte-Range HTTP 206
-        if (file_exists($cachedFile) && filesize($cachedFile) > 1024 * 1024 && $startSeconds == 0 && $audioDelayMs == 0) {
+        // If complete cached file is ready on disk and no audio delay was requested, stream directly via HTTP 206 Byte Ranges!
+        // This enables instant, 0ms native seeking to any timestamp with zero audio/video desync.
+        if (file_exists($cachedFile) && file_exists($completeFile) && $audioDelayMs == 0) {
             return $this->streamFileRange($cachedFile, $request);
         }
 
-        // Launch background transcode worker to cache the full file to disk so caching continues even when paused
+        // Launch background transcode worker to cache the full file to disk so caching completes seamlessly
         $partFile = "{$cacheDir}/{$cacheKey}.part.mp4";
-        if (! file_exists($lockFile) && ! file_exists($cachedFile)) {
+        if (! file_exists($lockFile) && ! file_exists($completeFile)) {
             @file_put_contents($lockFile, date('Y-m-d H:i:s'));
             $bgCmd = array_merge(
                 [
@@ -981,15 +1046,27 @@ class StreamController extends Controller
             if ($isWin) {
                 $batFile = "{$cacheDir}/run_{$cacheKey}.bat";
                 $batWinCached = str_replace('/', '\\', $cachedFile);
+                $batWinComplete = str_replace('/', '\\', $completeFile);
                 $batWinPart = str_replace('/', '\\', $partFile);
                 $batWinLock = str_replace('/', '\\', $lockFile);
                 $batWinBat = str_replace('/', '\\', $batFile);
+                $batWinPid = str_replace('/', '\\', $pidFile);
 
-                $batContent = "@echo off\r\n".$bgCmdStr."\r\nmove /Y \"{$batWinPart}\" \"{$batWinCached}\" > NUL 2>&1\r\ndel /F /Q \"{$batWinLock}\" \"{$batWinBat}\" > NUL 2>&1\r\n";
+                $batContent = "@echo off\r\n"
+                    ."echo %$! > \"{$batWinPid}\"\r\n"
+                    .$bgCmdStr."\r\n"
+                    ."if %ERRORLEVEL% EQU 0 (\r\n"
+                    ."  move /Y \"{$batWinPart}\" \"{$batWinCached}\" > NUL 2>&1\r\n"
+                    ."  echo complete > \"{$batWinComplete}\"\r\n"
+                    .") else (\r\n"
+                    ."  del /F /Q \"{$batWinPart}\" > NUL 2>&1\r\n"
+                    .")\r\n"
+                    ."del /F /Q \"{$batWinLock}\" \"{$batWinBat}\" \"{$batWinPid}\" > NUL 2>&1\r\n";
+
                 @file_put_contents($batFile, $batContent);
                 @pclose(popen("start \"\" /B cmd /c \"\"{$batFile}\"\"", 'r'));
             } else {
-                $finalBgCmd = "({$bgCmdStr} && mv '{$partFile}' '{$cachedFile}' && rm -f '{$lockFile}') > /dev/null 2>&1 &";
+                $finalBgCmd = "({$bgCmdStr} && mv '{$partFile}' '{$cachedFile}' && touch '{$completeFile}' && rm -f '{$lockFile}') > /dev/null 2>&1 &";
                 @exec($finalBgCmd);
             }
         }
@@ -1004,8 +1081,13 @@ class StreamController extends Controller
             $trimSec = abs($audioDelayMs) / 1000.0;
             $audioFilters[] = "atrim=start={$trimSec},asetpts=PTS-STARTPTS";
         }
-        $audioFilters[] = 'aresample=async=1000:min_hard_comp=0.100000';
+        $audioFilters[] = 'aresample=async=1000:min_hard_comp=0.100000:first_pts=0';
         $audioFilterStr = implode(',', $audioFilters);
+
+        $seekArgs = [];
+        if ($startSeconds > 0) {
+            $seekArgs = ['-noaccurate_seek', '-ss', (string) $startSeconds];
+        }
 
         $cmd = array_merge(
             [
@@ -1013,7 +1095,9 @@ class StreamController extends Controller
                 '-nostdin',
                 '-hide_banner',
                 '-loglevel', 'error',
-                '-ss', (string) $startSeconds,
+            ],
+            $seekArgs,
+            [
                 '-i', $filePath,
                 '-map', '0:v:0',
                 '-map', '0:a:0?',

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
 import CinemaLoader from '@/components/player/CinemaLoader.vue';
@@ -44,6 +44,7 @@ interface SubtitleItem {
     is_embedded?: boolean;
     file_path?: string;
     is_default?: boolean | number;
+    url?: string;
 }
 
 interface CueItem {
@@ -63,7 +64,7 @@ const emit = defineEmits<{
     (e: 'update:progress', val: number): void;
 }>();
 
-const { isRTL } = useI18n();
+const { isRTL, t } = useI18n();
 const globalToast = useToast();
 
 // Active Item for smooth in-player playlist navigation (Series episodes, Collections movies)
@@ -104,7 +105,12 @@ const showEqualizer = ref(false);
 const showSubtitlesMenu = ref(false);
 const showPlaybackSpeedMenu = ref(false);
 const showSubtitleSearchModal = ref(false);
+const showDiagnostics = ref(false);
 const playbackRate = ref(1.0);
+const isServerCached = ref(false);
+const cachedStreamUrl = ref('');
+const droppedFrames = ref(0);
+const bufferAheadSecs = ref(0);
 
 // Playlist Management (Series & Collections)
 const internalPlaylist = ref<any[]>([]);
@@ -211,8 +217,94 @@ const setSubtitleFont = (fontKey: 'cairo' | 'jakarta' | 'system') => {
     try {
         localStorage.setItem('cinema_subtitle_font', fontKey);
     } catch {}
-    showToast(isRTL.value ? 'تم تغيير خط الترجمة' : 'Subtitle font updated');
+    showToast(t('player.subtitle_font_updated'));
 };
+
+const updateNativeCueStyle = () => {
+    let styleEl = document.getElementById('cinema-native-cue-style') as HTMLStyleElement | null;
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'cinema-native-cue-style';
+        document.head.appendChild(styleEl);
+    }
+
+    const sizeMap: Record<string, string> = {
+        sm: 'clamp(1.2rem, 1.8vw, 1.6rem)',
+        md: 'clamp(1.5rem, 2.5vw, 2.2rem)',
+        lg: 'clamp(1.9rem, 3.2vw, 2.8rem)',
+        xl: 'clamp(2.3rem, 4.0vw, 3.5rem)',
+    };
+    const size = sizeMap[subtitleFontSize.value] || sizeMap.md;
+    const font = subtitleFontFamily.value || "'Cairo', 'Plus Jakarta Sans', system-ui, sans-serif";
+
+    styleEl.textContent = `
+        video::cue {
+            font-family: ${font} !important;
+            font-size: ${size} !important;
+            font-weight: 700 !important;
+            color: #ffffff !important;
+            background-color: rgba(0, 0, 0, 0.75) !important;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.95), 0 0 3px #000, 1px 1px 2px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000 !important;
+            line-height: 1.5 !important;
+            white-space: pre-line !important;
+        }
+        ::cue {
+            font-family: ${font} !important;
+            font-size: ${size} !important;
+            font-weight: 700 !important;
+            color: #ffffff !important;
+            background-color: rgba(0, 0, 0, 0.75) !important;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.95), 0 0 3px #000, 1px 1px 2px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000 !important;
+            line-height: 1.5 !important;
+            white-space: pre-line !important;
+        }
+    `;
+};
+
+// Custom Subtitle Overlay (Original method) - kept intact, disabled for now per user request to test native <track> as default
+const enableCustomSubtitleOverlay = ref(false);
+
+const syncTextTracks = () => {
+    if (!videoRef.value || !videoRef.value.textTracks) return;
+    const tracks = videoRef.value.textTracks;
+    for (let i = 0; i < tracks.length; i++) {
+        const track = tracks[i];
+        if (selectedSubtitleId.value !== 'off') {
+            const trackId = track.id;
+            const expectedId = `sub-track-${selectedSubtitleId.value}`;
+            const sub = availableSubtitles.value.find(s => String(s.id) === String(selectedSubtitleId.value));
+            const isMatch = (trackId && trackId === expectedId) ||
+                            (sub && sub.language && track.language === sub.language) ||
+                            (sub && sub.language_name && track.label === sub.language_name);
+            track.mode = isMatch ? 'showing' : 'disabled';
+        } else {
+            track.mode = 'disabled';
+        }
+    }
+};
+
+watch([subtitleFont, subtitleFontSize, subtitleFontFamily], () => {
+    updateNativeCueStyle();
+}, { immediate: true });
+
+watch(selectedSubtitleId, () => {
+    nextTick(() => {
+        syncTextTracks();
+    });
+});
+
+watch(isFullscreen, () => {
+    nextTick(() => {
+        syncTextTracks();
+    });
+});
+
+watch(availableSubtitles, () => {
+    nextTick(() => {
+        syncTextTracks();
+    });
+}, { deep: true });
+
 const parsedCues = ref<CueItem[]>([]);
 const activeCueText = ref<string>('');
 const isFetchingSubtitle = ref(false);
@@ -311,12 +403,9 @@ const applyAudioDelay = (delayVal: number, commitToStream = true) => {
             videoRef.value.load();
             videoRef.value.play().catch(() => {});
         }
-        const label = delayVal === 0 
-            ? (isRTL.value ? 'مزامنة الصوت: متطابق (0ms)' : 'Audio Sync: In Sync (0ms)')
-            : (isRTL.value 
-                ? `مزامنة الصوت: ${delayVal > 0 ? '+' : ''}${delayVal}ms (${delayVal < 0 ? 'تقديم الصوت' : 'تأخير الصوت'})` 
-                : `Audio Sync: ${delayVal > 0 ? '+' : ''}${delayVal}ms (${delayVal < 0 ? 'Audio Advanced' : 'Audio Delayed'})`
-              );
+        const label = delayVal === 0
+            ? t('player.audio_sync_in_sync')
+            : t('player.audio_sync_delayed', { ms: (delayVal > 0 ? '+' : '') + delayVal, state: delayVal < 0 ? t('player.audio_advanced') : t('player.audio_delayed') });
         showToast(label);
     }, 400);
 };
@@ -345,15 +434,62 @@ const checkNeedsRemux = (item: any) => {
     const video = (item.video_codec || '').toLowerCase();
 
     // Containers that HTML5 <video> strictly cannot demux natively
-    const isUnsupportedContainer = path.endsWith('.avi') || path.endsWith('.wmv') || path.endsWith('.ts') || path.endsWith('.flv') || path.endsWith('.vob') || path.endsWith('.m2ts');
+    const isUnsupportedContainer = path.endsWith('.avi') || path.endsWith('.wmv') || 
+                                  path.endsWith('.ts') || path.endsWith('.m2ts') || 
+                                  path.endsWith('.flv') || path.endsWith('.vob') || 
+                                  path.endsWith('.mpg') || path.endsWith('.mpeg') || 
+                                  path.endsWith('.divx') || path.endsWith('.iso') || 
+                                  path.endsWith('.rmvb');
+
+    // Unsupported audio codecs: browsers (Chrome/Firefox/Edge) have NO native decoders for:
+    // - Dolby Digital (AC-3 / A52)
+    // - Dolby Digital Plus (E-AC-3 / DDP / Atmos)
+    // - Dolby TrueHD
+    // - DTS, DTS-HD, DTS-MA, DTS:X
+    // - WMA
+    // - Multi-channel / Raw PCM
+    // In Direct Stream, browsers play video silently with 0 audio!
+    const isUnsupportedAudio = 
+        audio.includes('dolby') ||
+        audio.includes('ac-3') ||
+        audio.includes('ac3') ||
+        audio.includes('a52') ||
+        audio.includes('eac3') ||
+        audio.includes('e-ac-3') ||
+        audio.includes('ddp') ||
+        audio.includes('dd+') ||
+        audio.includes('atmos') ||
+        audio.includes('truehd') ||
+        audio.includes('mlp') ||
+        audio.includes('dts') ||
+        audio.includes('dca') ||
+        audio.includes('wma') ||
+        audio.includes('pcm');
 
     // Obsolete legacy video codecs that browsers cannot decode
-    const isUnsupportedVideo = video.includes('xvid') || video.includes('divx') || video.includes('mpeg4') || video.includes('mpeg2') || video.includes('mpeg-2') || video.includes('wmv') || video.includes('vc-1');
+    const isUnsupportedVideo = 
+        video.includes('xvid') || 
+        video.includes('divx') || 
+        video.includes('mpeg4') || 
+        video.includes('mpeg-4') || 
+        video.includes('mp4v') || 
+        video.includes('msmpeg4') || 
+        video.includes('mpeg2') || 
+        video.includes('mpeg-2') || 
+        video.includes('mpeg1') || 
+        video.includes('mpeg-1') || 
+        video.includes('wmv') || 
+        video.includes('vc-1') || 
+        video.includes('vc1') || 
+        video.includes('theora') || 
+        video.includes('rv40');
 
-    // Unsupported audio codecs that browsers cannot decode (DTS, TrueHD)
-    const isUnsupportedAudio = audio.includes('dts') || audio.includes('truehd') || audio.includes('wma');
+    // MKV container with non-web audio (HTML5 video only plays MKV audio if it's AAC / MP3 / Opus / Vorbis)
+    const isMkvWithNonWebAudio = path.endsWith('.mkv') && (
+        !audio || (!audio.includes('aac') && !audio.includes('mp3') && !audio.includes('opus') && !audio.includes('vorbis'))
+    );
 
-    return isUnsupportedContainer || isUnsupportedVideo || isUnsupportedAudio;
+    return isUnsupportedContainer || isUnsupportedAudio || isUnsupportedVideo || isMkvWithNonWebAudio;
 };
 
 const isRemuxStream = ref(checkNeedsRemux(props.item));
@@ -364,6 +500,9 @@ const streamUrl = computed(() => {
     if (!activeItem.value) return '';
     const delayParam = audioDelayMs.value !== 0 ? `audio_delay=${audioDelayMs.value}` : '';
     if (isRemuxStream.value) {
+        if (isServerCached.value && cachedStreamUrl.value && audioDelayMs.value === 0) {
+            return cachedStreamUrl.value;
+        }
         const params: string[] = [];
         if (remuxStartOffset.value > 0) params.push(`start=${Math.round(remuxStartOffset.value * 100) / 100}`);
         if (delayParam) params.push(delayParam);
@@ -430,7 +569,7 @@ const changeActiveItem = (newItem: any, initialProgress = 0) => {
         }
     }, 50);
 
-    showToast(isRTL.value ? `تشغيل: ${playerHeaderTitle.value}` : `Playing: ${playerHeaderTitle.value}`);
+    showToast(t('player.playing_title', { title: playerHeaderTitle.value }));
 };
 
 const playNext = () => {
@@ -448,14 +587,14 @@ const playPrevious = () => {
 const onVideoEnded = () => {
     savePlaybackProgress(true);
     if (hasNext.value) {
-        showToast(isRTL.value ? 'جاري الانتقال للعنصر التالي تلقائياً...' : 'Autoplaying next in 2s...');
+        showToast(t('player.autoplay_next'));
         setTimeout(() => {
             if (hasNext.value) {
                 playNext();
             }
         }, 1800);
     } else {
-        showToast(isRTL.value ? 'اكتملت المشاهدة' : 'Playback completed');
+        showToast(t('player.playback_completed'));
     }
 };
 
@@ -480,8 +619,8 @@ const toggleRemuxStream = () => {
         remuxStartOffset.value = 0;
     }
     showToast(isRemuxStream.value 
-        ? (isRTL.value ? 'تم تفعيل البث المباشر المحسن (Server Remux)' : 'Enabled Ultra-Fast Server Remux')
-        : (isRTL.value ? 'تم التبديل للبث المباشر الأصلي' : 'Switched to Native Direct Stream')
+        ? t('player.remux_enabled')
+        : t('player.remux_native_stream')
     );
     setTimeout(() => {
         if (videoRef.value) {
@@ -493,7 +632,7 @@ const toggleRemuxStream = () => {
 
 const handleVideoError = () => {
     if (!isRemuxStream.value) {
-        showToast(isRTL.value ? 'جاري التحويل للبث المحسن (Remux)...' : 'Switching to Ultra-Fast Server Remux...');
+        showToast(t('player.remux_switching'));
         isRemuxStream.value = true;
         remuxStartOffset.value = currentTime.value;
         setTimeout(() => {
@@ -503,7 +642,7 @@ const handleVideoError = () => {
             }
         }, 100);
     } else {
-        showToast(isRTL.value ? 'حدث خطأ في تشغيل البث.' : 'Playback error occurred.');
+        showToast(t('player.playback_error'));
     }
 };
 
@@ -778,6 +917,27 @@ const updateBufferProgress = () => {
             bufferedPercent.value = streamEst;
         }
     }
+    updateDiagnostics();
+};
+
+const updateDiagnostics = () => {
+    if (!videoRef.value) return;
+    try {
+        if (typeof (videoRef.value as any).getVideoPlaybackQuality === 'function') {
+            const q = (videoRef.value as any).getVideoPlaybackQuality();
+            droppedFrames.value = q?.droppedVideoFrames ?? 0;
+        }
+        const ct = videoRef.value.currentTime;
+        const b = videoRef.value.buffered;
+        let ahead = 0;
+        for (let i = 0; i < b.length; i++) {
+            if (b.start(i) <= ct && ct <= b.end(i)) {
+                ahead = b.end(i) - ct;
+                break;
+            }
+        }
+        bufferAheadSecs.value = Math.max(0, Math.round(ahead * 10) / 10);
+    } catch (e) {}
 };
 
 // Check server background transcode cache progress
@@ -788,6 +948,10 @@ const checkServerCacheStatus = async () => {
         if (res.ok) {
             const data = await res.json();
             if (data.is_cached) {
+                isServerCached.value = true;
+                if (data.stream_url) {
+                    cachedStreamUrl.value = data.stream_url;
+                }
                 bufferedPercent.value = 100;
                 if (serverCachePollInterval) {
                     clearInterval(serverCachePollInterval);
@@ -894,7 +1058,7 @@ const performSubtitleSearch = async () => {
             const data = await res.json();
             subtitleSearchResults.value = data.results || [];
         } else {
-            subtitleSearchError.value = isRTL.value ? 'فشل البحث عن الترجمة' : 'Failed to search subtitles';
+            subtitleSearchError.value = t('player.subtitle_search_failed');
         }
     } catch (e: any) {
         subtitleSearchError.value = e.message || 'Error';
@@ -937,17 +1101,17 @@ const downloadAndApplySubtitle = async (result: any) => {
                 }
                 showSubtitleSearchModal.value = false;
                 await selectSubtitle(newSub.id, false);
-                const msg = isRTL.value ? 'تم تنزيل وتفعيل الترجمة بنجاح!' : 'Subtitle downloaded & activated!';
+                const msg = t('player.subtitle_download_success');
                 showToast(msg);
                 globalToast.success(msg, 'Subtitle Ready');
             }
         } else {
-            const err = isRTL.value ? 'تعذر تنزيل الترجمة' : 'Failed to download subtitle';
+            const err = t('player.subtitle_download_failed');
             showToast(err);
             globalToast.error(err, 'Subtitle Download Failed');
         }
     } catch (e: any) {
-        const err = isRTL.value ? 'حدث خطأ أثناء التنزيل' : 'Error downloading subtitle';
+        const err = t('player.subtitle_download_error');
         showToast(err);
         globalToast.error(e.message || err, 'Download Error');
     } finally {
@@ -1007,16 +1171,16 @@ const translateSubtitleToArabic = async (sourceSubId?: number | string) => {
                 ? 'تم توليد وتفعيل الترجمة العربية بنجاح بدقة زمنية تامة!'
                 : 'Arabic subtitle generated & activated successfully!';
             showToast(successMsg);
-            globalToast.success(successMsg, isRTL.value ? 'الترجمة جاهزة' : 'Subtitles Ready');
+            globalToast.success(successMsg, t('player.subtitle_ready'));
 
             if (showSubtitleSearchModal.value) {
                 showSubtitleSearchModal.value = false;
             }
         }
     } catch (e: any) {
-        const errMsg = e.message || (isRTL.value ? 'تعذر توليد الترجمة العربية' : 'Failed to generate Arabic subtitle');
+        const errMsg = e.message || t('player.arabic_translation_failed');
         showToast(errMsg);
-        globalToast.error(errMsg, isRTL.value ? 'خطأ في الترجمة' : 'Translation Error');
+        globalToast.error(errMsg, t('player.translation_error'));
     } finally {
         isTranslatingSubtitle.value = false;
     }
@@ -1109,7 +1273,8 @@ const executeSeek = (targetSecs: number) => {
     currentTime.value = clamped;
     updateActiveCue(clamped);
 
-    if (isRemuxStream.value) {
+    // If fully cached on disk, native byte-range seeking is instant without restarting FFmpeg!
+    if (isRemuxStream.value && !isServerCached.value) {
         remuxStartOffset.value = clamped;
         setTimeout(() => {
             if (videoRef.value) {
@@ -1119,6 +1284,9 @@ const executeSeek = (targetSecs: number) => {
         }, 50);
     } else if (videoRef.value) {
         videoRef.value.currentTime = clamped;
+        if (videoRef.value.paused) {
+            videoRef.value.play().catch(() => {});
+        }
     }
 };
 
@@ -1221,7 +1389,7 @@ const setPlaybackRate = (rate: number) => {
         videoRef.value.playbackRate = rate;
     }
     showPlaybackSpeedMenu.value = false;
-    showToast(isRTL.value ? `السرعة: ${rate}x` : `Playback Speed: ${rate}x`);
+    showToast(t('player.playback_speed', { rate }));
 };
 
 const toggleFullscreen = () => {
@@ -1243,10 +1411,16 @@ const toggleFullscreen = () => {
         }
         isFullscreen.value = false;
     }
+    nextTick(() => {
+        syncTextTracks();
+    });
 };
 
 const onFullscreenChange = () => {
     isFullscreen.value = Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
+    nextTick(() => {
+        syncTextTracks();
+    });
 };
 
 const selectSubtitle = async (subId: number | string, notify = true) => {
@@ -1264,35 +1438,52 @@ const selectSubtitle = async (subId: number | string, notify = true) => {
         }
     }
     await loadSubtitleTrack(subId);
+    nextTick(() => {
+        syncTextTracks();
+    });
     showSubtitlesMenu.value = false;
     if (notify) {
         const found = availableSubtitles.value.find(s => String(s.id) === String(subId));
-        showToast(subId === 'off' ? (isRTL.value ? 'الترجمة: معطلة' : 'Subtitles: Off') : (isRTL.value ? `تم اختيار: ${found?.language_name}` : `Selected: ${found?.language_name}`));
+        showToast(subId === 'off' ? t('player.subtitles_off') : t('player.selected_track', { name: found?.language_name || '' }));
     }
 };
 
 const adjustSubtitleDelay = (delta: number) => {
     subtitleDelay.value = parseFloat((subtitleDelay.value + delta).toFixed(2));
     updateActiveCue(currentTime.value);
-    showToast(isRTL.value ? `تأخير الترجمة: ${subtitleDelay.value} ثانية` : `Subtitle Sync: ${subtitleDelay.value > 0 ? '+' : ''}${subtitleDelay.value}s`);
+    if (videoRef.value && videoRef.value.textTracks) {
+        for (let i = 0; i < videoRef.value.textTracks.length; i++) {
+            const track = videoRef.value.textTracks[i];
+            if (track.mode === 'showing' && track.cues) {
+                for (let j = 0; j < track.cues.length; j++) {
+                    const c = track.cues[j] as VTTCue;
+                    if (c) {
+                        c.startTime = Math.max(0, c.startTime + delta);
+                        c.endTime = Math.max(0, c.endTime + delta);
+                    }
+                }
+            }
+        }
+    }
+    showToast(t('player.subtitle_sync_sec', { sec: subtitleDelay.value }));
 };
 
 const toggleVocalBoost = () => {
     vocalBoost.value = !vocalBoost.value;
     updateAudioFilters();
-    showToast(vocalBoost.value ? (isRTL.value ? 'تم تفعيل تعزيز الحوار والوضوح' : 'Vocal Clarity Boost Enabled') : (isRTL.value ? 'تم تعطيل تعزيز الحوار' : 'Vocal Boost Disabled'));
+    showToast(vocalBoost.value ? t('player.vocal_boost_enabled') : t('player.vocal_boost_disabled'));
 };
 
 const toggleBassBoost = () => {
     bassBoost.value = !bassBoost.value;
     updateAudioFilters();
-    showToast(bassBoost.value ? (isRTL.value ? 'تم تفعيل التضخيم السينمائي (Bass)' : 'Cinema Bass Boost Enabled') : (isRTL.value ? 'تم تعطيل التضخيم' : 'Bass Boost Disabled'));
+    showToast(bassBoost.value ? t('player.bass_boost_enabled') : t('player.bass_boost_disabled'));
 };
 
 const toggleNightMode = () => {
     nightMode.value = !nightMode.value;
     updateAudioFilters();
-    showToast(nightMode.value ? (isRTL.value ? 'تم تفعيل الوضع الليلي (ضغط الصوت)' : 'Night Mode Active') : (isRTL.value ? 'تم تعطيل الوضع الليلي' : 'Night Mode Disabled'));
+    showToast(nightMode.value ? t('player.night_mode_enabled') : t('player.night_mode_disabled'));
 };
 
 const showControlsTemporarily = () => {
@@ -1309,6 +1500,9 @@ const showControlsTemporarily = () => {
 const onLoadedMetadata = () => {
     if (!videoRef.value) return;
     updateLiveResolution();
+    nextTick(() => {
+        syncTextTracks();
+    });
     const d = videoRef.value.duration;
     if (!isDurationLocked.value && !isRemuxStream.value && d && isFinite(d) && !isNaN(d) && d > 0) {
         duration.value = d;
@@ -1354,6 +1548,7 @@ const onTimeUpdate = () => {
 
 const onVideoPlay = () => {
     isPlaying.value = true;
+    syncTextTracks();
     initAudioPipeline();
     if (audioCtx && audioCtx.state === 'suspended') {
         audioCtx.resume();
@@ -1431,7 +1626,8 @@ const stopServerStreamingCache = () => {
             id: activeItem.value?.id
         });
         if (navigator.sendBeacon) {
-            navigator.sendBeacon('/api/stream/stop', payload);
+            const blob = new Blob([payload], { type: 'application/json' });
+            navigator.sendBeacon('/api/stream/stop', blob);
         } else {
             fetch('/api/stream/stop', {
                 method: 'POST',
@@ -1518,6 +1714,10 @@ onMounted(() => {
     window.addEventListener('keydown', onKeyDown);
     document.addEventListener('fullscreenchange', onFullscreenChange);
     document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+    updateNativeCueStyle();
+    nextTick(() => {
+        syncTextTracks();
+    });
     audioDelayMs.value = getSavedAudioDelay();
     if (availableSubtitles.value.length > 0) {
         autoSelectAndLoadSubtitle(availableSubtitles.value);
@@ -1552,6 +1752,8 @@ onBeforeUnmount(() => {
     window.removeEventListener('keydown', onKeyDown);
     document.removeEventListener('fullscreenchange', onFullscreenChange);
     document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
+    const cueStyle = document.getElementById('cinema-native-cue-style');
+    if (cueStyle) cueStyle.remove();
     clearInterval(progressSaveInterval);
     clearInterval(bufferTrackInterval);
     clearInterval(serverCachePollInterval);
@@ -1574,7 +1776,7 @@ onBeforeUnmount(() => {
         @click="showControlsTemporarily"
         @touchend="handlePlayerTouchEnd"
         class="fixed inset-0 z-50 bg-black flex items-center justify-center select-none overflow-hidden font-sans group"
-        :class="{ 'cursor-none': !isControlsVisible && isPlaying }"
+        :class="{ 'cursor-none': !isControlsVisible && isPlaying, 'is-fullscreen': isFullscreen }"
     >
         <!-- Double Tap Mobile Seek Feedback (10s Left/Right) -->
         <transition name="fade">
@@ -1707,13 +1909,25 @@ onBeforeUnmount(() => {
             crossorigin="anonymous"
             playsinline
             class="w-full h-full object-contain cursor-pointer"
-        ></video>
+        >
+            <track
+                v-for="sub in availableSubtitles"
+                :key="sub.id"
+                :id="`sub-track-${sub.id}`"
+                kind="subtitles"
+                :label="sub.language_name || sub.language || 'Subtitle'"
+                :srclang="sub.language || 'ar'"
+                :src="sub.url || `/stream/subtitles/${sub.id}`"
+                :default="String(selectedSubtitleId) === String(sub.id)"
+            />
+        </video>
 
         <!-- Subtitle Overlay (Dynamic WebVTT Rendering with Crystal-Clear Arabic/English Typography) -->
+        <!-- Preserved intact, disabled for now per user request to test native <track> as default -->
         <div
-            v-if="selectedSubtitleId !== 'off' && activeCueText"
-            class="absolute inset-x-0 z-45 flex items-center justify-center px-4 sm:px-8 pointer-events-none transition-all duration-200 ease-out"
-            :style="{ bottom: isControlsVisible ? '7.5rem' : '2.5rem' }"
+            v-if="enableCustomSubtitleOverlay && selectedSubtitleId !== 'off' && activeCueText"
+            class="absolute inset-x-0 flex items-center justify-center px-4 sm:px-8 pointer-events-none transition-all duration-200 ease-out subtitle-overlay-container"
+            :style="{ bottom: isControlsVisible ? '7.5rem' : '3.5rem', zIndex: 60 }"
         >
             <div
                 class="subtitle-pill px-3.5 py-1 sm:px-5 sm:py-1.5 rounded-xl bg-black/45 text-white text-center font-bold tracking-normal shadow-lg transition-all duration-100 max-w-4xl pointer-events-none border border-white/10"
@@ -1742,7 +1956,7 @@ onBeforeUnmount(() => {
                 <CinemaLoader
                     size="md"
                     :is-r-t-l="false"
-                    :status-text="isRTL ? 'جاري ضبط وتدفق البث السينمائي...' : 'Buffering Cinema Stream...'"
+                    :status-text="t('player.buffering_stream')"
                     :sub-text="`${isRemuxStream ? 'Ultra-Fast Remux' : 'Direct Stream'} · ${liveResolution || displayResolution}`"
                 />
             </div>
@@ -1826,7 +2040,7 @@ onBeforeUnmount(() => {
                             :disabled="!hasPrevious"
                             class="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
                             :class="hasPrevious ? 'text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer active:scale-90' : 'opacity-20 cursor-not-allowed pointer-events-none text-slate-600'"
-                            :title="!hasPrevious ? (isRTL ? (isEpisode ? 'أول حلقة في المسلسل' : 'أول فيلم في المجموعة') : (isEpisode ? 'First episode in series' : 'First movie in collection')) : (isRTL ? 'العنصر السابق (Shift+P)' : 'Previous (Shift+P)')"
+                            :title="!hasPrevious ? (isEpisode ? t('player.first_episode') : t('player.first_movie')) : t('player.previous_item')"
                         >
                             <SkipBack class="w-4 h-4 fill-current" />
                         </button>
@@ -1847,7 +2061,7 @@ onBeforeUnmount(() => {
                             :disabled="!hasNext"
                             class="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
                             :class="hasNext ? 'text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer active:scale-90' : 'opacity-20 cursor-not-allowed pointer-events-none text-slate-600'"
-                            :title="!hasNext ? (isRTL ? (isEpisode ? 'آخر حلقة في المسلسل' : 'آخر فيلم في المجموعة') : (isEpisode ? 'Last episode in series' : 'Last movie in collection')) : (isRTL ? 'العنصر التالي (Shift+N)' : 'Next (Shift+N)')"
+                            :title="!hasNext ? (isEpisode ? t('player.last_episode') : t('player.last_movie')) : t('player.next_item')"
                         >
                             <SkipForward class="w-4 h-4 fill-current" />
                         </button>
@@ -1954,7 +2168,7 @@ onBeforeUnmount(() => {
                                     <div class="flex items-center justify-between border-b border-white/10 pb-2">
                                         <span class="text-xs font-bold text-white flex items-center gap-1.5">
                                             <MessageSquare class="w-3.5 h-3.5 text-purple-400" />
-                                            {{ isRTL ? 'مسارات الترجمة' : 'Subtitle Tracks' }}
+                                            {{ t('player.subtitle_tracks') }}
                                         </span>
                                         <span class="text-[10px] text-slate-400">{{ availableSubtitles.length }} available</span>
                                     </div>
@@ -1966,7 +2180,7 @@ onBeforeUnmount(() => {
                                             class="px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-all cursor-pointer"
                                             :class="selectedSubtitleId === 'off' ? 'bg-purple-500 text-white' : 'text-slate-300 hover:bg-white/10'"
                                         >
-                                            <span>{{ isRTL ? 'إيقاف الترجمة' : 'Off' }}</span>
+                                            <span>{{ t('player.off') }}</span>
                                             <Check v-if="selectedSubtitleId === 'off'" class="w-3.5 h-3.5" />
                                         </button>
 
@@ -1988,7 +2202,7 @@ onBeforeUnmount(() => {
                                                     @click.stop="translateSubtitleToArabic(sub.id)"
                                                     :disabled="isTranslatingSubtitle"
                                                     class="p-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 hover:text-white transition-all cursor-pointer opacity-80 group-hover/sub:opacity-100"
-                                                    :title="isRTL ? 'ترجمة هذا المسار الإنجليزي إلى العربية' : 'Translate this English track to Arabic'"
+                                                    :title="t('player.translate_english_to_arabic')"
                                                 >
                                                     <Sparkles class="w-3 h-3 text-emerald-400" />
                                                 </button>
@@ -2005,12 +2219,12 @@ onBeforeUnmount(() => {
                                             @click="translateSubtitleToArabic()"
                                             :disabled="isTranslatingSubtitle"
                                             class="w-full px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-500/25 via-teal-500/20 to-cyan-500/20 hover:from-emerald-500/40 hover:to-teal-500/35 text-emerald-300 hover:text-white border border-emerald-500/40 text-xs font-bold flex items-center justify-between transition-all cursor-pointer shadow-sm disabled:opacity-50 group/tr"
-                                            :title="isRTL ? 'توليد ترجمة عربية سينمائية دقيقة من مسار الترجمة الإنجليزي' : 'Translate English subtitle to Arabic with cinema accuracy'"
+                                            :title="t('player.translate_english_accuracy')"
                                         >
                                             <div class="flex items-center gap-2">
                                                 <Loader2 v-if="isTranslatingSubtitle" class="w-3.5 h-3.5 text-emerald-400 animate-spin" />
                                                 <Sparkles v-else class="w-3.5 h-3.5 text-emerald-400 group-hover/tr:scale-110 transition-transform" />
-                                                <span>{{ isTranslatingSubtitle ? (isRTL ? 'جاري الترجمة للعربية...' : 'Translating to Arabic...') : (isRTL ? 'ترجمة فورية إلى العربية (من EN)' : 'Translate to Arabic (from EN)') }}</span>
+                                                <span>{{ isTranslatingSubtitle ? t('player.translating_to_arabic') : t('player.translate_to_arabic_instant') }}</span>
                                             </div>
                                             <span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-200 font-mono font-bold">AI</span>
                                         </button>
@@ -2022,7 +2236,7 @@ onBeforeUnmount(() => {
                                             class="w-full px-3 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
                                         >
                                             <Search class="w-3.5 h-3.5" />
-                                            <span>{{ isRTL ? 'بحث وتحميل ترجمة أونلاين...' : 'Search & Download Subtitles...' }}</span>
+                                            <span>{{ t('player.search_download_subtitles') }}</span>
                                         </button>
                                     </div>
 
@@ -2030,7 +2244,7 @@ onBeforeUnmount(() => {
                                     <div v-if="selectedSubtitleId !== 'off'" class="border-t border-white/10 pt-2.5 flex flex-col gap-2">
                                         <!-- Font Size -->
                                         <div class="flex items-center justify-between">
-                                            <span class="text-[11px] text-slate-400">{{ isRTL ? 'حجم الخط' : 'Font Size' }}</span>
+                                            <span class="text-[11px] text-slate-400">{{ t('player.font_size') }}</span>
                                             <div class="flex items-center gap-1 bg-white/5 p-0.5 rounded-lg border border-white/10">
                                                 <button
                                                     v-for="size in (['sm', 'md', 'lg', 'xl'] as const)"
@@ -2046,7 +2260,7 @@ onBeforeUnmount(() => {
 
                                         <!-- Font Family / Style -->
                                         <div class="flex items-center justify-between">
-                                            <span class="text-[11px] text-slate-400">{{ isRTL ? 'نوع الخط' : 'Font Style' }}</span>
+                                            <span class="text-[11px] text-slate-400">{{ t('player.font_style') }}</span>
                                             <div class="flex items-center gap-1 bg-white/5 p-0.5 rounded-lg border border-white/10">
                                                 <button
                                                     v-for="font in ([
@@ -2066,7 +2280,7 @@ onBeforeUnmount(() => {
 
                                         <!-- Subtitle Delay Sync -->
                                         <div class="flex items-center justify-between">
-                                            <span class="text-[11px] text-slate-400">{{ isRTL ? 'تزامن الوقت' : 'Timing Sync' }}</span>
+                                            <span class="text-[11px] text-slate-400">{{ t('player.timing_sync') }}</span>
                                             <div class="flex items-center gap-1.5">
                                                 <button
                                                     @click="adjustSubtitleDelay(-0.5)"
@@ -2112,7 +2326,7 @@ onBeforeUnmount(() => {
                                     <div class="flex items-center justify-between border-b border-white/10 pb-2">
                                         <span class="text-xs font-bold text-white flex items-center gap-1.5">
                                             <Sparkles class="w-3.5 h-3.5 text-cyan-400" />
-                                            {{ isRTL ? 'معالج الصوت السينمائي' : 'Cinema Audio DSP' }}
+                                            {{ t('player.cinema_audio_dsp') }}
                                         </span>
                                     </div>
 
@@ -2124,8 +2338,8 @@ onBeforeUnmount(() => {
                                             :class="vocalBoost ? 'bg-cyan-500/20 border-cyan-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'"
                                         >
                                             <div>
-                                                <div class="text-xs font-bold text-cyan-300">{{ isRTL ? 'تعزيز الحوار (Vocal Boost)' : 'Vocal Clarity Boost' }}</div>
-                                                <div class="text-[10px] text-slate-400">{{ isRTL ? 'توضيح أصوات الممثلين وعزل الضوضاء' : 'Enhance dialogue clarity over background music' }}</div>
+                                                <div class="text-xs font-bold text-cyan-300">{{ t('player.vocal_clarity_boost') }}</div>
+                                                <div class="text-[10px] text-slate-400">{{ t('player.enhance_dialogue_clarity') }}</div>
                                             </div>
                                             <div class="w-4 h-4 rounded-full border flex items-center justify-center shrink-0" :class="vocalBoost ? 'border-cyan-400 bg-cyan-400 text-slate-950' : 'border-slate-600'">
                                                 <Check v-if="vocalBoost" class="w-3 h-3" />
@@ -2139,8 +2353,8 @@ onBeforeUnmount(() => {
                                             :class="bassBoost ? 'bg-cyan-500/20 border-cyan-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'"
                                         >
                                             <div>
-                                                <div class="text-xs font-bold text-cyan-300">{{ isRTL ? 'تضخيم الباس (Bass Boost)' : 'Cinema Bass Boost' }}</div>
-                                                <div class="text-[10px] text-slate-400">{{ isRTL ? 'تعميق الترددات المنخفضة والمؤثرات' : 'Deepen sub-frequencies and explosions' }}</div>
+                                                <div class="text-xs font-bold text-cyan-300">{{ t('player.cinema_bass_boost') }}</div>
+                                                <div class="text-[10px] text-slate-400">{{ t('player.deepen_sub_frequencies') }}</div>
                                             </div>
                                             <div class="w-4 h-4 rounded-full border flex items-center justify-center shrink-0" :class="bassBoost ? 'border-cyan-400 bg-cyan-400 text-slate-950' : 'border-slate-600'">
                                                 <Check v-if="bassBoost" class="w-3 h-3" />
@@ -2154,8 +2368,8 @@ onBeforeUnmount(() => {
                                             :class="nightMode ? 'bg-cyan-500/20 border-cyan-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'"
                                         >
                                             <div>
-                                                <div class="text-xs font-bold text-cyan-300">{{ isRTL ? 'الوضع الليلي (Night Mode)' : 'Night Mode (DRC)' }}</div>
-                                                <div class="text-[10px] text-slate-400">{{ isRTL ? 'موازنة الصوت الهادئ والإنفجارات الصاخبة' : 'Compress dynamic range to avoid loud jumps' }}</div>
+                                                <div class="text-xs font-bold text-cyan-300">{{ t('player.night_mode') }}</div>
+                                                <div class="text-[10px] text-slate-400">{{ t('player.compress_dynamic_range') }}</div>
                                             </div>
                                             <div class="w-4 h-4 rounded-full border flex items-center justify-center shrink-0" :class="nightMode ? 'border-cyan-400 bg-cyan-400 text-slate-950' : 'border-slate-600'">
                                                 <Check v-if="nightMode" class="w-3 h-3" />
@@ -2167,17 +2381,17 @@ onBeforeUnmount(() => {
                                             <div class="flex items-center justify-between">
                                                 <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                                                     <Clock class="w-3.5 h-3.5 text-cyan-400" />
-                                                    <span>{{ isRTL ? 'مزامنة وتعديل توقيت الصوت' : 'Audio / Video Sync' }}</span>
+                                                    <span>{{ t('player.audio_video_sync') }}</span>
                                                 </span>
                                                 <span class="text-xs font-mono font-bold" :class="audioDelayMs === 0 ? 'text-slate-400' : (audioDelayMs < 0 ? 'text-amber-400' : 'text-cyan-400')">
                                                     {{ audioDelayMs > 0 ? `+${audioDelayMs}` : audioDelayMs }} ms
                                                     <span class="text-[9px] font-sans font-normal opacity-80">
-                                                        {{ audioDelayMs === 0 ? (isRTL ? '(متطابق)' : '(Synced)') : (audioDelayMs < 0 ? (isRTL ? '(تقديم)' : '(Advanced)') : (isRTL ? '(تأخير)' : '(Delayed)')) }}
+                                                        {{ audioDelayMs === 0 ? t('player.synced') : (audioDelayMs < 0 ? t('player.advanced') : t('player.delayed')) }}
                                                     </span>
                                                 </span>
                                             </div>
                                             <div class="text-[10px] text-slate-400 leading-tight">
-                                                {{ isRTL ? 'اختر (-) لتقديم الصوت إذا كان متأخراً عن الصورة، أو (+) لتأخير الصوت إذا كان سابقاً للصورة' : 'Use (-) to advance audio if sound lags picture, or (+) to delay audio if sound leads picture' }}
+                                                {{ t('player.audio_sync_hint') }}
                                             </div>
 
                                             <!-- Slider & Nudge Buttons -->
@@ -2186,7 +2400,7 @@ onBeforeUnmount(() => {
                                                     type="button"
                                                     @click="nudgeAudioDelay(-50)"
                                                     class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white font-mono text-[10px] font-bold transition-all cursor-pointer flex-shrink-0"
-                                                    :title="isRTL ? 'تقديم الصوت بمقدار 50 ميلي ثانية' : 'Advance Audio by 50ms'"
+                                                    :title="t('player.advance_audio_50ms')"
                                                 >
                                                     -50ms
                                                 </button>
@@ -2204,7 +2418,7 @@ onBeforeUnmount(() => {
                                                     type="button"
                                                     @click="nudgeAudioDelay(50)"
                                                     class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white font-mono text-[10px] font-bold transition-all cursor-pointer flex-shrink-0"
-                                                    :title="isRTL ? 'تأخير الصوت بمقدار 50 ميلي ثانية' : 'Delay Audio by 50ms'"
+                                                    :title="t('player.delay_audio_50ms')"
                                                 >
                                                     +50ms
                                                 </button>
@@ -2228,6 +2442,16 @@ onBeforeUnmount(() => {
                                 </div>
                             </transition>
                         </div>
+
+                        <!-- Cinema Diagnostics HUD Button -->
+                        <button
+                            @click="showDiagnostics = !showDiagnostics"
+                            class="w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer"
+                            :class="showDiagnostics ? 'bg-cyan-500/30 text-cyan-300 border border-cyan-500/40' : 'text-slate-300 hover:text-white hover:bg-white/10'"
+                            title="Cinema Diagnostics (Stats for Nerds)"
+                        >
+                            <Activity class="w-4 h-4" />
+                        </button>
 
                         <!-- Fullscreen Button -->
                         <button
@@ -2258,10 +2482,10 @@ onBeforeUnmount(() => {
                             </div>
                             <div>
                                 <h3 class="font-black text-sm text-white">
-                                    {{ isRTL ? 'البحث عن ملفات الترجمة وتحميلها فوراً' : 'Search & Download Subtitles' }}
+                                    {{ t('player.search_download_subtitles_header') }}
                                 </h3>
                                 <p class="text-[11px] text-slate-400">
-                                    {{ isRTL ? 'محرك SubDL و OpenSubtitles المباشر' : 'SubDL & OpenSubtitles live engine' }}
+                                    {{ t('player.search_subtitles_engine_subtitle') }}
                                 </p>
                             </div>
                         </div>
@@ -2280,7 +2504,7 @@ onBeforeUnmount(() => {
                                 v-model="subtitleSearchQuery"
                                 @keyup.enter="performSubtitleSearch"
                                 type="text"
-                                :placeholder="isRTL ? 'اسم الفيلم أو المسلسل...' : 'Movie or series title...'"
+                                :placeholder="t('player.search_subtitles_placeholder')"
                                 class="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/15 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
                             />
                             <button
@@ -2290,13 +2514,13 @@ onBeforeUnmount(() => {
                             >
                                 <Loader2 v-if="isSearchingSubtitles" class="w-3.5 h-3.5 animate-spin" />
                                 <Search v-else class="w-3.5 h-3.5" />
-                                <span>{{ isRTL ? 'بحث' : 'Search' }}</span>
+                                <span>{{ t('player.search') }}</span>
                             </button>
                         </div>
 
                         <!-- Language Choice Pills -->
                         <div class="flex items-center gap-2">
-                            <span class="text-xs text-slate-400">{{ isRTL ? 'اللغة:' : 'Language:' }}</span>
+                            <span class="text-xs text-slate-400">{{ t('player.language') }}</span>
                             <button
                                 v-for="l in [{ id: 'ar', label: 'العربية (AR)' }, { id: 'en', label: 'English (EN)' }]"
                                 :key="l.id"
@@ -2315,8 +2539,8 @@ onBeforeUnmount(() => {
                                     <Sparkles class="w-4 h-4" />
                                 </div>
                                 <div class="min-w-0">
-                                    <div class="text-xs font-bold text-white truncate">{{ isRTL ? 'توليد ترجمة عربية فورية بالذكاء الاصطناعي' : 'Instant Arabic Translation' }}</div>
-                                    <div class="text-[10px] text-emerald-300/80 truncate">{{ isRTL ? 'توليد ترجمة دقيقة مطابقة للتوقيت من المسار الإنجليزي' : 'AI-synthesized Arabic subtitles aligned from English' }}</div>
+                                    <div class="text-xs font-bold text-white truncate">{{ t('player.instant_arabic_translation') }}</div>
+                                    <div class="text-[10px] text-emerald-300/80 truncate">{{ t('player.ai_synthesized_arabic') }}</div>
                                 </div>
                             </div>
                             <button
@@ -2327,7 +2551,7 @@ onBeforeUnmount(() => {
                             >
                                 <Loader2 v-if="isTranslatingSubtitle" class="w-3.5 h-3.5 animate-spin" />
                                 <Sparkles v-else class="w-3.5 h-3.5" />
-                                <span>{{ isTranslatingSubtitle ? (isRTL ? 'جاري الترجمة...' : 'Translating...') : (isRTL ? 'ترجمة الآن' : 'Translate Now') }}</span>
+                                <span>{{ isTranslatingSubtitle ? t('player.translating') : t('player.translate_now') }}</span>
                             </button>
                         </div>
                     </div>
@@ -2336,11 +2560,11 @@ onBeforeUnmount(() => {
                     <div class="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar min-h-[160px]">
                         <div v-if="isSearchingSubtitles" class="py-12 flex flex-col items-center justify-center gap-3 text-slate-400">
                             <Loader2 class="w-7 h-7 text-purple-400 animate-spin" />
-                            <span class="text-xs">{{ isRTL ? 'جاري فحص مزودي الترجمة...' : 'Scanning subtitle providers...' }}</span>
+                            <span class="text-xs">{{ t('player.scanning_providers') }}</span>
                         </div>
 
                         <div v-else-if="subtitleSearchResults.length === 0" class="py-10 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2.5">
-                            <div>{{ isRTL ? 'لا توجد نتائج بحث مطابقة. جرب البحث باسم مختلف أو توليد ترجمة عربية فوراً.' : 'No matching subtitles found. Try refining search title or generate Arabic now.' }}</div>
+                            <div>{{ t('player.no_matching_subtitles_found') }}</div>
                             <button
                                 type="button"
                                 @click="translateSubtitleToArabic()"
@@ -2349,7 +2573,7 @@ onBeforeUnmount(() => {
                             >
                                 <Loader2 v-if="isTranslatingSubtitle" class="w-3.5 h-3.5 animate-spin" />
                                 <Sparkles v-else class="w-3.5 h-3.5" />
-                                <span>{{ isTranslatingSubtitle ? (isRTL ? 'جاري الترجمة للعربية...' : 'Translating...') : (isRTL ? 'توليد ترجمة عربية من الإنجليزية فوراً' : 'Generate Arabic Subtitle from English Now') }}</span>
+                                <span>{{ isTranslatingSubtitle ? t('player.translating_to_arabic') : t('player.generate_arabic_now') }}</span>
                             </button>
                         </div>
 
@@ -2379,10 +2603,47 @@ onBeforeUnmount(() => {
                                 class="shrink-0 px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shadow-md shadow-purple-500/20"
                             >
                                 <Download class="w-3.5 h-3.5" />
-                                <span>{{ isRTL ? 'تحميل وتفعيل' : 'Get & Apply' }}</span>
+                                <span>{{ t('player.get_and_apply') }}</span>
                             </button>
                         </div>
                     </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- Cinema Diagnostics HUD (Stats for Nerds) -->
+        <transition name="fade">
+            <div
+                v-if="showDiagnostics"
+                class="absolute top-16 right-6 z-50 p-4 rounded-2xl bg-black/85 backdrop-blur-xl border border-cyan-500/30 text-white font-mono text-xs shadow-2xl max-w-xs space-y-2 pointer-events-auto select-text"
+                dir="ltr"
+            >
+                <div class="flex items-center justify-between border-b border-white/10 pb-2">
+                    <div class="flex items-center gap-2 text-cyan-400 font-bold">
+                        <Activity class="w-4 h-4" />
+                        <span>Cinema Diagnostics</span>
+                    </div>
+                    <button @click="showDiagnostics = false" class="text-slate-400 hover:text-white cursor-pointer">
+                        <X class="w-3.5 h-3.5" />
+                    </button>
+                </div>
+                <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
+                    <span class="text-slate-400">Stream Mode:</span>
+                    <span class="text-cyan-300 truncate">{{ isRemuxStream ? (isServerCached ? 'Cached MP4 (206)' : 'Live Remux (AAC)') : 'Direct Stream (206)' }}</span>
+                    <span class="text-slate-400">Resolution:</span>
+                    <span>{{ activeItem.resolution || 'Auto' }} ({{ videoRef?.videoWidth || 0 }}x{{ videoRef?.videoHeight || 0 }})</span>
+                    <span class="text-slate-400">Video Codec:</span>
+                    <span class="truncate">{{ activeItem.video_codec || 'Auto' }}</span>
+                    <span class="text-slate-400">Audio Codec:</span>
+                    <span class="truncate">{{ activeItem.audio_codec || 'AAC' }}</span>
+                    <span class="text-slate-400">Buffer Health:</span>
+                    <span :class="bufferAheadSecs > 10 ? 'text-emerald-400' : (bufferAheadSecs > 3 ? 'text-amber-400' : 'text-red-400')">{{ bufferAheadSecs }}s ahead</span>
+                    <span class="text-slate-400">Dropped Frames:</span>
+                    <span :class="droppedFrames > 0 ? 'text-amber-400' : 'text-emerald-400'">{{ droppedFrames }}</span>
+                    <span class="text-slate-400">Audio Delay:</span>
+                    <span>{{ audioDelayMs > 0 ? `+${audioDelayMs}` : audioDelayMs }}ms</span>
+                    <span class="text-slate-400">Playback Rate:</span>
+                    <span>{{ playbackRate }}x</span>
                 </div>
             </div>
         </transition>
@@ -2419,6 +2680,12 @@ onBeforeUnmount(() => {
     transform: translateY(16px);
 }
 
+.subtitle-overlay-container {
+    z-index: 60 !important;
+    transform: translateZ(0);
+    will-change: transform;
+}
+
 .subtitle-pill {
     transform: translateZ(0);
     will-change: transform;
@@ -2426,7 +2693,40 @@ onBeforeUnmount(() => {
     backface-visibility: hidden;
 }
 
+:fullscreen,
+:-webkit-full-screen {
+    width: 100vw !important;
+    height: 100vh !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+:fullscreen .subtitle-overlay-container,
+:-webkit-full-screen .subtitle-overlay-container,
+.is-fullscreen .subtitle-overlay-container {
+    z-index: 2147483647 !important;
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+:fullscreen .subtitle-pill,
+:-webkit-full-screen .subtitle-pill,
+.is-fullscreen .subtitle-pill {
+    z-index: 2147483647 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    transform: translate3d(0, 0, 0) !important;
+}
+
+/* Native Track Subtitles (Default) */
+::cue,
 video::cue {
-    display: none;
+    background-color: rgba(0, 0, 0, 0.75);
+    color: #ffffff;
+    font-weight: 700;
+    line-height: 1.5;
+    white-space: pre-line;
 }
 </style>

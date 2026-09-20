@@ -19,14 +19,18 @@ class SubtitleManagerService
 
     protected ?SubDlService $subDl = null;
 
+    protected SubtitleValidatorService $validator;
+
     public function __construct(
         OpenSubtitlesService $openSubtitles,
         SubSenseService $subSense,
-        YtsSubsService $ytsSubs
+        YtsSubsService $ytsSubs,
+        SubtitleValidatorService $validator
     ) {
         $this->openSubtitles = $openSubtitles;
         $this->subSense = $subSense;
         $this->ytsSubs = $ytsSubs;
+        $this->validator = $validator;
         try {
             $this->subDl = app(SubDlService::class);
         } catch (\Throwable $e) {
@@ -192,13 +196,19 @@ class SubtitleManagerService
         if (empty($downloadUrl) && ! empty($fileId) && ($source === 'opensubtitles' || is_numeric($fileId))) {
             $rawBody = $this->openSubtitles->downloadSubtitle((string) $fileId);
             if ($rawBody) {
-                $content = $this->extractSubtitleContent($rawBody);
+                $extracted = $this->extractSubtitleContent($rawBody);
+                if ($this->isValidSubtitleContent($extracted)) {
+                    $content = $extracted;
+                }
             }
         }
 
         // 2. If a direct download URL was provided from a user selection or search result
         if (empty($content) && ! empty($downloadUrl)) {
-            $content = $this->fetchFromUrl($downloadUrl);
+            $downloaded = $this->fetchFromUrl($downloadUrl);
+            if ($this->isValidSubtitleContent($downloaded)) {
+                $content = $downloaded;
+            }
         }
 
         // 3. If no direct URL or download failed, perform automatic multi-source online search
@@ -260,8 +270,9 @@ class SubtitleManagerService
             // Attempt download from top candidates
             foreach ($candidates as $cand) {
                 if (! empty($cand['download_url'])) {
-                    $content = $this->fetchFromUrl($cand['download_url']);
-                    if (! empty($content)) {
+                    $candContent = $this->fetchFromUrl($cand['download_url']);
+                    if (! empty($candContent) && $this->isValidSubtitleContent($candContent)) {
+                        $content = $candContent;
                         if (empty($releaseName)) {
                             $releaseName = $cand['release'] ?? $cand['file_name'] ?? null;
                         }
@@ -272,7 +283,7 @@ class SubtitleManagerService
                     $rawBody = $this->openSubtitles->downloadSubtitle($osFileId);
                     if ($rawBody) {
                         $extracted = $this->extractSubtitleContent($rawBody);
-                        if (! empty($extracted) && str_contains($extracted, '-->')) {
+                        if (! empty($extracted) && $this->isValidSubtitleContent($extracted)) {
                             $content = $extracted;
                             break;
                         }
@@ -282,7 +293,7 @@ class SubtitleManagerService
         }
 
         // 4. If still no valid subtitle content found, return null (or fallback to English translation if Arabic requested)
-        if (empty($content) || ! str_contains($content, '-->')) {
+        if (empty($content) || ! $this->isValidSubtitleContent($content)) {
             if ($langCode === 'ar') {
                 Log::info("No direct Arabic subtitle found for {$media->title}. Attempting translation from English...");
                 try {
@@ -385,13 +396,52 @@ class SubtitleManagerService
             $response = Http::timeout(15)->withoutVerifying()->withHeaders($headers)->get($url);
 
             if ($response->successful()) {
-                return $this->extractSubtitleContent($response->body());
+                $extracted = $this->extractSubtitleContent($response->body());
+                if ($this->isValidSubtitleContent($extracted)) {
+                    return $extracted;
+                }
+                Log::warning("Downloaded content from {$url} was rejected because it failed subtitle validation.");
             }
         } catch (\Throwable $e) {
             Log::warning("Failed to fetch subtitle from {$url}: ".$e->getMessage());
         }
 
         return null;
+    }
+
+    /**
+     * Validate whether raw or extracted subtitle content contains genuine cues and no HTML/server errors.
+     */
+    public function isValidSubtitleContent(?string $content): bool
+    {
+        if (empty($content) || ! is_string($content)) {
+            return false;
+        }
+
+        $trimmed = trim($content);
+        if (strlen($trimmed) < 40) {
+            return false;
+        }
+
+        // Must pass dedicated SubtitleValidatorService checks
+        $validation = $this->validator->validate($trimmed);
+        if ($validation['cue_count'] < 1) {
+            return false;
+        }
+
+        // Check for fatal issues (HTML error page, binary corruption, missing timecodes)
+        foreach ($validation['issues'] as $issue) {
+            if (
+                str_contains($issue, 'HTML error') ||
+                str_contains($issue, 'Corrupted binary') ||
+                str_contains($issue, 'Empty 0-byte') ||
+                str_contains($issue, 'No valid subtitle timestamp')
+            ) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

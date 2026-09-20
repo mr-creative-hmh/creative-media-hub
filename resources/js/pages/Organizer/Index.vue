@@ -946,7 +946,7 @@ onUnmounted(() => {
                                 <div class="flex items-center justify-between text-[10px] font-sans font-extrabold uppercase text-cyan-400">
                                     <div class="flex items-center gap-1.5">
                                         <Film class="w-3.5 h-3.5" />
-                                        <span>Movie Pattern</span>
+                                        <span>{{ isRTL ? 'نمط الأفلام' : 'Movie Pattern' }}</span>
                                     </div>
                                 </div>
                                 <div class="text-cyan-200 font-bold break-all whitespace-normal leading-relaxed text-[11px]">
@@ -962,7 +962,7 @@ onUnmounted(() => {
                                 <div class="flex items-center justify-between text-[10px] font-sans font-extrabold uppercase text-purple-400">
                                     <div class="flex items-center gap-1.5">
                                         <Tv class="w-3.5 h-3.5" />
-                                        <span>Series Pattern</span>
+                                        <span>{{ isRTL ? 'نمط المسلسلات' : 'Series Pattern' }}</span>
                                     </div>
                                 </div>
                                 <div class="text-purple-200 font-bold break-all whitespace-normal leading-relaxed text-[11px]">
@@ -1343,13 +1343,13 @@ onUnmounted(() => {
                             @click="toggleSelectAll(true)"
                             class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 text-xs font-bold transition-colors cursor-pointer"
                         >
-                            Select All
+                            {{ isRTL ? 'تحديد الكل' : 'Select All' }}
                         </button>
                         <button
                             @click="toggleSelectAll(false)"
                             class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 text-xs font-bold transition-colors cursor-pointer"
                         >
-                            Deselect All
+                            {{ isRTL ? 'إلغاء التحديد' : 'Deselect All' }}
                         </button>
                     </div>
                 </div>
@@ -1358,11 +1358,11 @@ onUnmounted(() => {
             <!-- Plan Table -->
             <div class="rounded-3xl border border-white/10 bg-slate-900/60 backdrop-blur-xl overflow-hidden shadow-2xl">
                 <div class="overflow-x-auto">
-                    <table class="w-full text-left text-xs text-slate-300">
+                    <table class="w-full text-left rtl:text-right text-xs text-slate-300">
                         <thead class="bg-slate-950/80 text-slate-400 font-extrabold uppercase text-[10px] tracking-wider border-b border-white/10">
                             <tr>
                                 <th class="p-4 w-12 text-center">
-                                    <span class="sr-only">Select</span>
+                                    <span class="sr-only">{{ isRTL ? 'تحديد' : 'Select' }}</span>
                                 </th>
                                 <th class="p-4">{{ isRTL ? 'الاسم والمصنف' : 'Title & Type' }}</th>
                                 <th class="p-4">{{ isRTL ? 'المسار الأصلي الحالي' : 'Original Source' }}</th>
@@ -1455,19 +1455,19 @@ onUnmounted(() => {
                                         v-if="item.status === 'ready'"
                                         class="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold"
                                     >
-                                        Ready
+                                        {{ isRTL ? 'جاهز' : 'Ready' }}
                                     </span>
                                     <span
                                         v-else-if="item.status === 'identical'"
                                         class="px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-bold"
                                     >
-                                        Already Standardized
+                                        {{ isRTL ? 'منظم مسبقاً' : 'Already Standardized' }}
                                     </span>
                                     <span
                                         v-else
                                         class="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold"
                                     >
-                                        Destination Exists
+                                        {{ isRTL ? 'الملف موجود مسبقاً' : 'Destination Exists' }}
                                     </span>
                                 </td>
                             </tr>
@@ -1478,7 +1478,7 @@ onUnmounted(() => {
                 <!-- Pagination Footer -->
                 <div class="p-4 border-t border-white/10 bg-slate-950/60 flex items-center justify-between text-xs text-slate-400">
                     <div>
-                        Showing {{ (currentPage - 1) * perPage + 1 }} to {{ Math.min(currentPage * perPage, filteredPlan.length) }} of {{ filteredPlan.length }} files
+                        {{ isRTL ? `عرض ${(currentPage - 1) * perPage + 1} إلى ${Math.min(currentPage * perPage, filteredPlan.length)} من أصل ${filteredPlan.length} ملف` : `Showing ${(currentPage - 1) * perPage + 1} to ${Math.min(currentPage * perPage, filteredPlan.length)} of ${filteredPlan.length} files` }}
                     </div>
                     <div class="flex items-center gap-2">
                         <button
@@ -1486,7 +1486,7 @@ onUnmounted(() => {
                             :disabled="currentPage === 1"
                             class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                         >
-                            Previous
+                            {{ isRTL ? 'السابق' : 'Previous' }}
                         </button>
                         <span class="font-mono font-bold text-white px-2">{{ currentPage }} / {{ totalPages }}</span>
                         <button
@@ -1494,7 +1494,7 @@ onUnmounted(() => {
                             :disabled="currentPage === totalPages"
                             class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                         >
-                            Next
+                            {{ isRTL ? 'التالي' : 'Next' }}
                         </button>
                     </div>
                 </div>
@@ -1529,14 +1529,14 @@ onUnmounted(() => {
                     <!-- Mode Badge -->
                     <span class="px-3 py-1.5 rounded-xl font-mono text-xs font-bold uppercase"
                         :class="executeMode === 'move' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'">
-                        {{ executeMode === 'move' ? 'Move Mode' : 'Copy Mode' }}
+                        {{ executeMode === 'move' ? (isRTL ? 'وضع النقل' : 'Move Mode') : (isRTL ? 'وضع النسخ' : 'Copy Mode') }}
                     </span>
                 </div>
 
                 <!-- Horizontal Glowing Progress Bar -->
                 <div class="space-y-2">
                     <div class="flex justify-between text-xs font-mono font-bold">
-                        <span class="text-slate-400">Progress</span>
+                        <span class="text-slate-400">{{ isRTL ? 'نسبة الإنجاز' : 'Progress' }}</span>
                         <span class="text-cyan-400 font-black text-sm">{{ executionStatus.progress_percent }}%</span>
                     </div>
                     <div class="w-full h-3.5 rounded-full bg-slate-950 overflow-hidden p-0.5 border border-white/10">
@@ -1550,23 +1550,23 @@ onUnmounted(() => {
                 <!-- Stats Counters Grid -->
                 <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
                     <div class="p-3.5 rounded-2xl bg-slate-950/60 border border-white/5">
-                        <div class="text-[11px] text-slate-400 font-bold">Total Files</div>
+                        <div class="text-[11px] text-slate-400 font-bold">{{ isRTL ? 'إجمالي الملفات' : 'Total Files' }}</div>
                         <div class="text-lg font-black text-white font-mono mt-1">{{ executionStatus.total_items }}</div>
                     </div>
                     <div class="p-3.5 rounded-2xl bg-slate-950/60 border border-white/5">
-                        <div class="text-[11px] text-slate-400 font-bold">Processed</div>
+                        <div class="text-[11px] text-slate-400 font-bold">{{ isRTL ? 'تمت المعالجة' : 'Processed' }}</div>
                         <div class="text-lg font-black text-cyan-400 font-mono mt-1">{{ executionStatus.processed_count }}</div>
                     </div>
                     <div class="p-3.5 rounded-2xl bg-slate-950/60 border border-white/5">
-                        <div class="text-[11px] text-slate-400 font-bold">Successful</div>
+                        <div class="text-[11px] text-slate-400 font-bold">{{ isRTL ? 'ناجح' : 'Successful' }}</div>
                         <div class="text-lg font-black text-emerald-400 font-mono mt-1">{{ executionStatus.successful_count }}</div>
                     </div>
                     <div class="p-3.5 rounded-2xl bg-slate-950/60 border border-white/5">
-                        <div class="text-[11px] text-slate-400 font-bold">Cleaned Folders</div>
+                        <div class="text-[11px] text-slate-400 font-bold">{{ isRTL ? 'مجلدات تم تنظيفها' : 'Cleaned Folders' }}</div>
                         <div class="text-lg font-black text-amber-400 font-mono mt-1">{{ executionStatus.cleaned_folders_count || 0 }}</div>
                     </div>
                     <div class="p-3.5 rounded-2xl bg-slate-950/60 border border-white/5">
-                        <div class="text-[11px] text-slate-400 font-bold">Failed</div>
+                        <div class="text-[11px] text-slate-400 font-bold">{{ isRTL ? 'فشل' : 'Failed' }}</div>
                         <div class="text-lg font-black font-mono mt-1" :class="executionStatus.failed_count > 0 ? 'text-red-400' : 'text-slate-500'">
                             {{ executionStatus.failed_count }}
                         </div>
@@ -1578,9 +1578,9 @@ onUnmounted(() => {
                     <div class="flex items-center justify-between text-xs font-mono text-slate-400">
                         <div class="flex items-center gap-2">
                             <Terminal class="w-4 h-4 text-cyan-400" />
-                            <span>Live Operation Console Log</span>
+                            <span>{{ isRTL ? 'سجل العمليات المباشر' : 'Live Operation Console Log' }}</span>
                         </div>
-                        <span class="text-[10px] text-slate-500">{{ executionStatus.logs.length }} events</span>
+                        <span class="text-[10px] text-slate-500">{{ executionStatus.logs.length }} {{ isRTL ? 'حدث' : 'events' }}</span>
                     </div>
                     <div
                         ref="logTerminalRef"
@@ -1606,13 +1606,13 @@ onUnmounted(() => {
                         class="px-5 py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors"
                     >
                         <StopCircle class="w-4 h-4" />
-                        <span>Cancel Operation</span>
+                        <span>{{ isRTL ? 'إلغاء العملية' : 'Cancel Operation' }}</span>
                     </button>
 
                     <div v-else-if="!executionStatus.is_completed" class="flex flex-wrap items-center gap-3 w-full justify-between">
                         <div class="flex items-center gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-3.5 py-2 rounded-xl font-bold">
-                            <span>⚠️ Execution Paused / Incomplete</span>
-                            <span class="text-slate-400 font-normal font-mono">({{ executionStatus.processed_count }} of {{ executionStatus.total_items }} files processed)</span>
+                            <span>{{ isRTL ? '⚠️ تم إيقاف التنفيذ مؤقتاً / غير مكتمل' : '⚠️ Execution Paused / Incomplete' }}</span>
+                            <span class="text-slate-400 font-normal font-mono">({{ isRTL ? `تمت معالجة ${executionStatus.processed_count} من أصل ${executionStatus.total_items} ملف` : `${executionStatus.processed_count} of ${executionStatus.total_items} files processed` }})</span>
                         </div>
 
                         <div class="flex items-center gap-3">
@@ -1620,8 +1620,8 @@ onUnmounted(() => {
                                 @click="step = 2"
                                 class="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors"
                             >
-                                <ArrowRight class="w-4 h-4 rotate-180" />
-                                <span>Back to Review</span>
+                                <ArrowRight class="w-4 h-4" :class="isRTL ? '' : 'rotate-180'" />
+                                <span>{{ isRTL ? 'العودة للمراجعة' : 'Back to Review' }}</span>
                             </button>
 
                             <button
@@ -1629,7 +1629,7 @@ onUnmounted(() => {
                                 class="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs shadow-lg shadow-cyan-500/20 flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
                             >
                                 <Play class="w-4 h-4 fill-current" />
-                                <span>Resume Execution ({{ Math.max(0, executionStatus.total_items - executionStatus.processed_count) }} Remaining)</span>
+                                <span>{{ isRTL ? `استئناف التنفيذ (متبقي ${Math.max(0, executionStatus.total_items - executionStatus.processed_count)})` : `Resume Execution (${Math.max(0, executionStatus.total_items - executionStatus.processed_count)} Remaining)` }}</span>
                             </button>
                         </div>
                     </div>
@@ -1640,7 +1640,7 @@ onUnmounted(() => {
                             class="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors"
                         >
                             <RefreshCw class="w-4 h-4" />
-                            <span>Organize Another Folder</span>
+                            <span>{{ isRTL ? 'تنظيم مجلد آخر' : 'Organize Another Folder' }}</span>
                         </button>
 
                         <div class="flex items-center gap-3">
@@ -1649,7 +1649,7 @@ onUnmounted(() => {
                                 class="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors"
                             >
                                 <Film class="w-4 h-4 text-cyan-400" />
-                                <span>Browse Movies</span>
+                                <span>{{ isRTL ? 'تصفح الأفلام' : 'Browse Movies' }}</span>
                             </Link>
 
                             <Link
@@ -1657,7 +1657,7 @@ onUnmounted(() => {
                                 class="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors"
                             >
                                 <Tv class="w-4 h-4 text-purple-400" />
-                                <span>Browse Series</span>
+                                <span>{{ isRTL ? 'تصفح المسلسلات' : 'Browse Series' }}</span>
                             </Link>
 
                             <Link
@@ -1665,7 +1665,7 @@ onUnmounted(() => {
                                 class="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs shadow-lg shadow-cyan-500/20 flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
                             >
                                 <Sparkles class="w-4 h-4" />
-                                <span>Scan in Library Scanner</span>
+                                <span>{{ isRTL ? 'فحص في ماسح المكتبة' : 'Scan in Library Scanner' }}</span>
                             </Link>
                         </div>
                     </div>
@@ -1681,7 +1681,7 @@ onUnmounted(() => {
                 ? `سيتم ${executeMode === 'move' ? 'نقل وتحديث مسارات' : 'نسخ'} ${selectedItemsCount} ملف وسائط إلى مسار الوجهة المعياري. هل تريد المتابعة؟`
                 : `Are you sure you want to ${executeMode} and reorganize ${selectedItemsCount} media files on physical disk?`"
             :confirm-text="isRTL ? 'بدء التنفيذ الفوري' : 'Start Physical Organization'"
-            :cancel-text="isRTL ? 'ط¥ظ„ط؛ط§ط،' : 'Cancel'"
+            :cancel-text="isRTL ? 'إلغاء' : 'Cancel'"
             @confirm="executePlan"
             @close="showExecuteConfirm = false"
         >
@@ -1694,26 +1694,26 @@ onUnmounted(() => {
                         <button
                             type="button"
                             @click="executeMode = 'move'"
-                            class="p-3 rounded-xl border flex items-center gap-2.5 transition-all cursor-pointer text-left"
+                            class="p-3 rounded-xl border flex items-center gap-2.5 transition-all cursor-pointer text-left rtl:text-right"
                             :class="executeMode === 'move' ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300 font-bold' : 'border-white/10 text-slate-400 hover:border-white/20'"
                         >
                             <Move class="w-4 h-4 shrink-0" />
                             <div>
-                                <div class="font-extrabold text-white text-xs">Move (Recommended)</div>
-                                <div class="text-[10px] text-slate-400">Instant on same drive, updates database</div>
+                                <div class="font-extrabold text-white text-xs">{{ isRTL ? 'نقل (موصى به)' : 'Move (Recommended)' }}</div>
+                                <div class="text-[10px] text-slate-400">{{ isRTL ? 'فوري على نفس القرص، يحدّث قاعدة البيانات' : 'Instant on same drive, updates database' }}</div>
                             </div>
                         </button>
 
                         <button
                             type="button"
                             @click="executeMode = 'copy'"
-                            class="p-3 rounded-xl border flex items-center gap-2.5 transition-all cursor-pointer text-left"
+                            class="p-3 rounded-xl border flex items-center gap-2.5 transition-all cursor-pointer text-left rtl:text-right"
                             :class="executeMode === 'copy' ? 'bg-purple-500/20 border-purple-400 text-purple-300 font-bold' : 'border-white/10 text-slate-400 hover:border-white/20'"
                         >
                             <Copy class="w-4 h-4 shrink-0" />
                             <div>
-                                <div class="font-extrabold text-white text-xs">Copy</div>
-                                <div class="text-[10px] text-slate-400">Keeps originals, requires extra disk space</div>
+                                <div class="font-extrabold text-white text-xs">{{ isRTL ? 'نسخ' : 'Copy' }}</div>
+                                <div class="text-[10px] text-slate-400">{{ isRTL ? 'يحتفظ بالملف الأصلي، يتطلب مساحة قرص إضافية' : 'Keeps originals, requires extra disk space' }}</div>
                             </div>
                         </button>
                     </div>

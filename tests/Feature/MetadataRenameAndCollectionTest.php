@@ -417,7 +417,7 @@ class MetadataRenameAndCollectionTest extends TestCase
         );
 
         $this->assertEquals(
-            'H:/Entertainment/Movies/Action/Bad Boys Collection/Bad Boys - Ride or Die (2024)/Bad Boys - Ride or Die (2024).mkv',
+            'H:/Entertainment/Movies/Action/Bad Boys Collection/Bad Boys Ride or Die (2024)/Bad Boys Ride or Die (2024) [1080p].mkv',
             $movieDest
         );
     }

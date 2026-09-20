@@ -632,7 +632,7 @@ class SceneNameParserService
             'title' => $cleanTitle,
             'clean_title' => $cleanTitle,
             'series_title' => $type === 'series' ? $cleanTitle : null,
-            'series_title_ar' => $type === 'series' ? ($seriesTitleAr ?? $cleanTitle) : null,
+            'series_title_ar' => $type === 'series' ? ($seriesTitleAr ?? (preg_match('/\p{Arabic}/u', (string) $cleanTitle) ? $cleanTitle : null)) : null,
             'series_title_en' => $type === 'series' ? $seriesTitleEn : null,
             'collection_name' => $type === 'series' ? null : ($collectionName ?? $detectedCollectionName ?? null),
             'type' => $type,

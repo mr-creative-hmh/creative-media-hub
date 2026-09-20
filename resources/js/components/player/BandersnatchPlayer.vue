@@ -693,7 +693,7 @@ const resetStory = () => {
         }).catch(() => {});
     }
 
-    toast.success(isRTL.value ? 'تمت إعادة ضبط مسار القصة وبدء التجربة من جديد' : 'Story decisions reset to beginning');
+    toast.success(t('player.bandersnatch.reset_success'));
 };
 
 // Video Event Handlers
@@ -1026,7 +1026,7 @@ onBeforeUnmount(() => {
                 <div class="w-16 h-16 rounded-full border-4 border-t-red-500 border-r-transparent border-b-white/20 border-l-transparent animate-spin"></div>
             </div>
             <h3 class="text-lg font-black tracking-widest uppercase text-red-500 font-mono">
-                {{ isRTL ? 'تحميل التجربة التفاعلية...' : 'Loading Interactive Experience...' }}
+                {{ t('player.bandersnatch.loading_interactive') }}
             </h3>
             <p class="text-xs text-slate-400 mt-1">Black Mirror: Bandersnatch</p>
         </div>
@@ -1036,7 +1036,7 @@ onBeforeUnmount(() => {
             <div class="w-16 h-16 rounded-full bg-red-600/20 text-red-500 flex items-center justify-center mb-4 border border-red-500/30">
                 <AlertTriangle class="w-8 h-8" />
             </div>
-            <h3 class="text-lg font-bold text-white mb-2">{{ isRTL ? 'فشل التشغيل' : 'Playback Failed' }}</h3>
+            <h3 class="text-lg font-bold text-white mb-2">{{ t('player.bandersnatch.playback_failed') }}</h3>
             <p class="text-xs text-slate-400 mb-6 max-w-md">{{ videoError }}</p>
             <div class="flex items-center gap-3">
                 <button
@@ -1044,13 +1044,13 @@ onBeforeUnmount(() => {
                     class="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-red-600/40"
                 >
                     <RefreshCw class="w-4 h-4" />
-                    <span>{{ isRTL ? 'إعادة المحاولة' : 'Retry' }}</span>
+                    <span>{{ t('player.bandersnatch.retry') }}</span>
                 </button>
                 <button
                     @click="emit('close')"
                     class="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 font-bold text-xs cursor-pointer"
                 >
-                    {{ isRTL ? 'إغلاق' : 'Close' }}
+                    {{ t('player.bandersnatch.close') }}
                 </button>
             </div>
         </div>
@@ -1072,7 +1072,7 @@ onBeforeUnmount(() => {
                         class="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer backdrop-blur-md border border-white/15 active:scale-95"
                     >
                         <ArrowLeft class="w-4 h-4" />
-                        <span>{{ isRTL ? 'العودة للمكتبة' : 'Back to Library' }}</span>
+                        <span>{{ t('player.bandersnatch.back_to_library') }}</span>
                     </button>
 
                     <div class="flex items-center gap-2">
@@ -1093,10 +1093,10 @@ onBeforeUnmount(() => {
                     <button
                         @click="resetStory"
                         class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-red-500/20 border border-white/15 hover:border-red-500/40 text-slate-300 hover:text-red-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                        :title="isRTL ? 'إعادة ضبط مسار القصة وبدء التجربة من جديد' : 'Reset Story Decisions to Beginning'"
+                        :title="t('player.bandersnatch.reset_story_title')"
                     >
                         <RotateCcw class="w-3.5 h-3.5" />
-                        <span class="hidden sm:inline">{{ isRTL ? 'إعادة ضبط القصة' : 'Reset Story' }}</span>
+                        <span class="hidden sm:inline">{{ t('player.bandersnatch.reset_story') }}</span>
                     </button>
 
                     <!-- Settings (Audio Sync) -->
@@ -1140,7 +1140,7 @@ onBeforeUnmount(() => {
                 <div class="flex items-center justify-between border-b border-white/10 pb-2">
                     <span class="font-bold text-white flex items-center gap-1.5">
                         <Sliders class="w-3.5 h-3.5 text-red-500" />
-                        <span>{{ isRTL ? 'تأخير مزامنة الصوت' : 'Audio Sync Delay' }}</span>
+                        <span>{{ t('player.bandersnatch.audio_sync_delay') }}</span>
                     </span>
                     <button @click="showSettings = false" class="text-slate-400 hover:text-white cursor-pointer">
                         <X class="w-3.5 h-3.5" />
@@ -1149,7 +1149,7 @@ onBeforeUnmount(() => {
 
                 <div>
                     <div class="flex items-center justify-between text-[11px] mb-1 font-mono">
-                        <span class="text-slate-400">{{ isRTL ? 'تأخير الصوت:' : 'Audio Delay:' }}</span>
+                        <span class="text-slate-400">{{ t('player.bandersnatch.audio_delay_label') }}</span>
                         <span class="text-red-400 font-bold">{{ audioDelayMs }}ms</span>
                     </div>
                     <input
@@ -1168,7 +1168,7 @@ onBeforeUnmount(() => {
                         @click="updateAudioDelay(0)"
                         class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-[10px] text-slate-300 cursor-pointer"
                     >
-                        {{ isRTL ? 'إعادة ضبط' : 'Reset Delay' }}
+                        {{ t('player.bandersnatch.reset_delay') }}
                     </button>
                     <span class="text-[9px] text-slate-500 font-mono">Direct Range Streaming</span>
                 </div>
@@ -1184,10 +1184,10 @@ onBeforeUnmount(() => {
                 <div class="flex items-center justify-between border-b border-white/10 pb-2">
                     <span class="text-xs font-bold text-white flex items-center gap-1.5">
                         <MessageSquare class="w-3.5 h-3.5 text-purple-400" />
-                        {{ isRTL ? 'مسارات الترجمة' : 'Subtitle Tracks' }}
+                        {{ t('player.subtitle_tracks') }}
                     </span>
                     <div class="flex items-center gap-2">
-                        <span class="text-[10px] text-slate-400">{{ availableSubtitles.length }} {{ isRTL ? 'متوفر' : 'available' }}</span>
+                        <span class="text-[10px] text-slate-400">{{ availableSubtitles.length }} {{ t('player.bandersnatch.available') }}</span>
                         <button @click="showSubtitlesMenu = false" class="text-slate-400 hover:text-white cursor-pointer">
                             <X class="w-3.5 h-3.5" />
                         </button>
@@ -1201,7 +1201,7 @@ onBeforeUnmount(() => {
                         class="px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-all cursor-pointer"
                         :class="selectedSubtitleId === 'off' ? 'bg-purple-600 text-white' : 'text-slate-300 hover:bg-white/10'"
                     >
-                        <span>{{ isRTL ? 'إيقاف الترجمة' : 'Off' }}</span>
+                        <span>{{ t('player.off') }}</span>
                         <Check v-if="selectedSubtitleId === 'off'" class="w-3.5 h-3.5" />
                     </button>
 
@@ -1225,7 +1225,7 @@ onBeforeUnmount(() => {
                 <div v-if="selectedSubtitleId !== 'off'" class="border-t border-white/10 pt-2.5 flex flex-col gap-2.5">
                     <!-- Font Size -->
                     <div class="flex items-center justify-between">
-                        <span class="text-[11px] text-slate-400">{{ isRTL ? 'حجم الخط' : 'Font Size' }}</span>
+                        <span class="text-[11px] text-slate-400">{{ t('player.font_size') }}</span>
                         <div class="flex items-center gap-1 bg-white/5 p-0.5 rounded-lg border border-white/10">
                             <button
                                 v-for="size in (['sm', 'md', 'lg', 'xl'] as const)"
@@ -1241,7 +1241,7 @@ onBeforeUnmount(() => {
 
                     <!-- Font Family / Style (Cairo, Jakarta, System) -->
                     <div class="flex items-center justify-between">
-                        <span class="text-[11px] text-slate-400">{{ isRTL ? 'نوع الخط' : 'Font Style' }}</span>
+                        <span class="text-[11px] text-slate-400">{{ t('player.font_style') }}</span>
                         <div class="flex items-center gap-1 bg-white/5 p-0.5 rounded-lg border border-white/10">
                             <button
                                 v-for="font in ([
@@ -1261,7 +1261,7 @@ onBeforeUnmount(() => {
 
                     <!-- Subtitle Delay Sync -->
                     <div class="flex items-center justify-between">
-                        <span class="text-[11px] text-slate-400">{{ isRTL ? 'مزامنة التوقيت' : 'Timing Sync' }}</span>
+                        <span class="text-[11px] text-slate-400">{{ t('player.timing_sync') }}</span>
                         <div class="flex items-center gap-1.5 font-mono">
                             <button
                                 @click="adjustSubtitleDelay(-0.5)"
@@ -1283,7 +1283,7 @@ onBeforeUnmount(() => {
                                 @click="adjustSubtitleDelay(-subtitleDelay)"
                                 class="text-[10px] text-slate-400 hover:text-white ml-1 cursor-pointer"
                             >
-                                {{ isRTL ? 'إعادة' : 'Reset' }}
+                                {{ t('player.bandersnatch.reset') }}
                             </button>
                         </div>
                     </div>
@@ -1315,11 +1315,12 @@ onBeforeUnmount(() => {
             <!-- SUBTITLE OVERLAY (Dynamic WebVTT with selected Font and Size) -->
             <div
                 v-if="showSubtitles && selectedSubtitleId !== 'off' && activeCueText"
-                class="absolute inset-x-0 z-45 flex items-center justify-center px-4 sm:px-8 pointer-events-none transition-all duration-150 ease-out"
+                class="absolute inset-x-0 flex items-center justify-center px-4 sm:px-8 pointer-events-none transition-all duration-150 ease-out subtitle-overlay-container"
                 :style="{
                     bottom: currentChoiceMoment
                         ? '10.5rem'
-                        : (showControls ? '7.5rem' : '2.5rem')
+                        : (showControls ? '7.5rem' : '3.5rem'),
+                    zIndex: 60
                 }"
             >
                 <div
@@ -1351,7 +1352,7 @@ onBeforeUnmount(() => {
                         <Play class="w-10 h-10 fill-current ml-1" />
                     </div>
                     <span class="mt-4 px-4 py-1.5 rounded-full bg-black/70 text-xs font-mono font-bold text-slate-200 border border-white/10">
-                        {{ isRTL ? 'انقر للتشغيل / مسافة' : 'Click to Play / Press Space' }}
+                        {{ t('player.bandersnatch.click_to_play') }}
                     </span>
                 </div>
             </transition>
@@ -1395,7 +1396,7 @@ onBeforeUnmount(() => {
                     <!-- PHONE SCENE 5-DIGIT KEYPAD -->
                     <div v-else class="flex flex-col items-center bg-black/90 p-6 rounded-3xl border border-white/20 backdrop-blur-xl shadow-2xl mb-4 max-w-sm w-full">
                         <div class="text-xs font-mono text-slate-300 mb-3 font-bold">
-                            {{ isRTL ? 'أدخل رمز الهاتف المكون من 5 أرقام:' : 'Enter 5-digit Telephone Code:' }}
+                            {{ t('player.bandersnatch.enter_code') }}
                         </div>
                         <div class="flex items-center gap-3 mb-4 font-mono text-2xl font-bold">
                             <span
@@ -1421,7 +1422,7 @@ onBeforeUnmount(() => {
                             @click.stop="backspaceDigit"
                             class="mt-3 text-[11px] text-slate-400 hover:text-white cursor-pointer"
                         >
-                            {{ isRTL ? 'مسح الرقم الأخير' : 'Backspace' }}
+                            {{ t('player.bandersnatch.backspace') }}
                         </button>
                     </div>
 
@@ -1456,7 +1457,7 @@ onBeforeUnmount(() => {
                     <button
                         @click="jumpBack"
                         class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all cursor-pointer active:scale-90"
-                        :title="isRTL ? 'المشهد / القرار السابق (السهم الأيسر)' : 'Previous Scene / Decision (Left Arrow)'"
+                        :title="t('player.bandersnatch.prev_scene')"
                     >
                         <SkipBack class="w-4 h-4" />
                     </button>
@@ -1465,7 +1466,7 @@ onBeforeUnmount(() => {
                     <button
                         @click="jumpForward"
                         class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all cursor-pointer active:scale-90"
-                        :title="isRTL ? 'المشهد / القرار التالي (السهم الأيمن)' : 'Next Scene / Decision (Right Arrow)'"
+                        :title="t('player.bandersnatch.next_scene')"
                     >
                         <SkipForward class="w-4 h-4" />
                     </button>
@@ -1550,11 +1551,42 @@ onBeforeUnmount(() => {
     border-radius: 4px;
 }
 
+.subtitle-overlay-container {
+    z-index: 60 !important;
+    transform: translateZ(0);
+    will-change: transform;
+}
+
 .subtitle-pill {
     transform: translateZ(0);
     will-change: transform;
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
+}
+
+:fullscreen,
+:-webkit-full-screen {
+    width: 100vw !important;
+    height: 100vh !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+:fullscreen .subtitle-overlay-container,
+:-webkit-full-screen .subtitle-overlay-container {
+    z-index: 2147483647 !important;
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+:fullscreen .subtitle-pill,
+:-webkit-full-screen .subtitle-pill {
+    z-index: 2147483647 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    transform: translate3d(0, 0, 0) !important;
 }
 
 video::cue {

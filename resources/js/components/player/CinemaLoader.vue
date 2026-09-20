@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from '@/i18n/useI18n';
 import { Film, Sparkles } from 'lucide-vue-next';
 
 interface Props {
@@ -16,9 +17,11 @@ const props = withDefaults(defineProps<Props>(), {
     isRTL: false,
 });
 
+const { t } = useI18n();
+
 const defaultTitle = computed(() => {
     if (props.statusText) return props.statusText;
-    return props.isRTL ? 'جاري ضبط وتدفق البث...' : 'Buffering Cinema Stream...';
+    return t('player.buffering_stream');
 });
 </script>
 

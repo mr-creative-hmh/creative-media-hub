@@ -234,6 +234,49 @@ class PhysicalOrganizerService
 
         // 3. Online TMDb lookup (cached per series & season)
         try {
+            $tmdbSeries = $this->resolveOnlineSeriesSummary($cleanTitle, $year, $arabicTitle);
+            if (! $tmdbSeries || empty($tmdbSeries['id'])) {
+                return null;
+            }
+
+            $tmdbSeriesId = (int) $tmdbSeries['id'];
+            $cacheKeySeason = "{$tmdbSeriesId}_S{$seasonNum}";
+            if (! isset(self::$onlineSeasonCache[$cacheKeySeason])) {
+                $tmdb = app(TmdbProvider::class);
+                $seasonEps = $tmdb->getSeasonEpisodesBilingual($tmdbSeriesId, $seasonNum);
+                if (! empty($seasonEps)) {
+                    self::$onlineSeasonCache[$cacheKeySeason] = $seasonEps;
+                }
+            } else {
+                $seasonEps = self::$onlineSeasonCache[$cacheKeySeason];
+            }
+
+            if (! empty($seasonEps[$episodeNum])) {
+                $ep = $seasonEps[$episodeNum];
+                if ($titleLanguage === 'arabic') {
+                    if (! empty($ep['title_ar']) && ! preg_match('/^(?:Episode|الحلقة|Ep|Part)\s*\d+$/i', $ep['title_ar'])) {
+                        return $ep['title_ar'];
+                    }
+                    if (! empty($ep['title']) && ! preg_match('/^(?:Episode|الحلقة|Ep|Part)\s*\d+$/i', $ep['title'])) {
+                        return $ep['title'];
+                    }
+                } elseif (! empty($ep['title']) && ! preg_match('/^(?:Episode|الحلقة|Ep|Part)\s*\d+$/i', $ep['title'])) {
+                    return $ep['title'];
+                }
+            }
+        } catch (\Throwable $e) {
+            // Fallback: "do as usual"
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve online series summary with caching (ID, title, release_year, original_language)
+     */
+    public function resolveOnlineSeriesSummary(string $cleanTitle, ?string $year = null, ?string $arabicTitle = null): ?array
+    {
+        try {
             $tmdb = app(TmdbProvider::class);
             if (! $tmdb->isConfigured()) {
                 return null;
@@ -246,34 +289,13 @@ class PhysicalOrganizerService
                 if (empty($results) && ! empty($arabicTitle)) {
                     $results = $tmdb->searchSeries($arabicTitle, $searchYear);
                 }
-                self::$onlineSeriesCache[$cacheKeySeries] = ! empty($results[0]['id']) ? (int) $results[0]['id'] : null;
+                self::$onlineSeriesCache[$cacheKeySeries] = ! empty($results[0]) ? $results[0] : null;
             }
 
-            $tmdbSeriesId = self::$onlineSeriesCache[$cacheKeySeries];
-            if (! $tmdbSeriesId) {
-                return null;
-            }
-
-            $cacheKeySeason = "{$tmdbSeriesId}_S{$seasonNum}";
-            if (! array_key_exists($cacheKeySeason, self::$onlineSeasonCache)) {
-                self::$onlineSeasonCache[$cacheKeySeason] = $tmdb->getSeasonEpisodesBilingual($tmdbSeriesId, $seasonNum);
-            }
-
-            $seasonEps = self::$onlineSeasonCache[$cacheKeySeason];
-            if (! empty($seasonEps[$episodeNum])) {
-                $ep = $seasonEps[$episodeNum];
-                if ($titleLanguage === 'arabic' && ! empty($ep['title_ar']) && ! preg_match('/^(?:Episode|الحلقة|Ep|Part)\s*\d+$/i', $ep['title_ar'])) {
-                    return $ep['title_ar'];
-                }
-                if (! empty($ep['title']) && ! preg_match('/^(?:Episode|الحلقة|Ep|Part)\s*\d+$/i', $ep['title'])) {
-                    return $ep['title'];
-                }
-            }
+            return self::$onlineSeriesCache[$cacheKeySeries];
         } catch (\Throwable $e) {
-            // Fallback: "do as usual"
+            return null;
         }
-
-        return null;
     }
 
     /**
@@ -433,9 +455,24 @@ class PhysicalOrganizerService
                     || preg_match('/\p{Arabic}/u', $parsed['series_title_ar'] ?? '')
                     || preg_match('/\p{Arabic}/u', $filePath)
                     || preg_match('/\b(مسلسل|رمضان|دراما)\b/ui', $filePath)
-                    || ! empty($parsed['series_title_ar'])
+                    || (! empty($parsed['series_title_ar']) && preg_match('/\p{Arabic}/u', $parsed['series_title_ar']))
                 ) {
                     $isArabicSeries = true;
+                }
+
+                // Check online TMDb metadata to prevent false positives for foreign/English series and populate year
+                $onlineSeries = $this->resolveOnlineSeriesSummary($cleanTitle, $year, $parsed['series_title_ar'] ?? null);
+                if ($onlineSeries) {
+                    if (! empty($onlineSeries['original_language'])) {
+                        if ($onlineSeries['original_language'] === 'ar' || in_array('EG', $onlineSeries['origin_country'] ?? []) || in_array('SY', $onlineSeries['origin_country'] ?? [])) {
+                            $isArabicSeries = true;
+                        } else {
+                            $isArabicSeries = false;
+                        }
+                    }
+                    if (empty($year) && ! empty($onlineSeries['release_year'])) {
+                        $year = (string) $onlineSeries['release_year'];
+                    }
                 }
             }
             if ($isArabicSeries) {

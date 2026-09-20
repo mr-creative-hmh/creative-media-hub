@@ -161,6 +161,7 @@ Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics
 // Media Scout (Missing Content & Fast Library Acquisition)
 Route::get('/scout', [MediaScoutController::class, 'index'])->name('scout.index');
 Route::get('/api/scout/gaps', [MediaScoutController::class, 'getGaps'])->name('api.scout.gaps');
+Route::get('/api/scout/upgrades', [MediaScoutController::class, 'getUpgrades'])->name('api.scout.upgrades');
 Route::post('/api/scout/refresh', [MediaScoutController::class, 'refresh'])->name('api.scout.refresh');
 Route::get('/api/scout/torrents', [MediaScoutController::class, 'getTorrents'])->name('api.scout.torrents');
 Route::get('/api/scout/discover/search', [MediaScoutController::class, 'discoverSearch'])->name('api.scout.discover.search');
