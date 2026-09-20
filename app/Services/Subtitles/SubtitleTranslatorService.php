@@ -13,9 +13,77 @@ class SubtitleTranslatorService
 {
     protected SubtitleManagerService $subtitleManager;
 
-    public function __construct(SubtitleManagerService $subtitleManager)
-    {
+    protected EmbeddedSubtitleDetectorService $embeddedDetector;
+
+    public function __construct(
+        SubtitleManagerService $subtitleManager,
+        ?EmbeddedSubtitleDetectorService $embeddedDetector = null
+    ) {
         $this->subtitleManager = $subtitleManager;
+        $this->embeddedDetector = $embeddedDetector ?? app(EmbeddedSubtitleDetectorService::class);
+    }
+
+    /**
+     * Convert WebVTT content (from embedded streams or web sources) to standard SRT format.
+     * Accurately parses both MM:SS.mmm and HH:MM:SS.mmm, standardizing to HH:MM:SS,mmm.
+     */
+    public function convertVttToSrt(string $vtt): string
+    {
+        $vtt = str_replace(["\r\n", "\r"], "\n", trim($vtt));
+        if (str_starts_with($vtt, "\xEF\xBB\xBF")) {
+            $vtt = substr($vtt, 3);
+        }
+
+        $blocks = preg_split('/\n\s*\n/', $vtt);
+        $srtBlocks = [];
+        $counter = 1;
+
+        $timeRegex = '/(?:(\d{1,2}):)?(\d{2}):(\d{2})[,\.](\d{2,3})\s*-->\s*(?:(\d{1,2}):)?(\d{2}):(\d{2})[,\.](\d{2,3})/';
+
+        foreach ($blocks as $block) {
+            $block = trim($block);
+            if (empty($block) || str_starts_with($block, 'WEBVTT') || str_starts_with($block, 'NOTE')) {
+                continue;
+            }
+
+            $lines = explode("\n", $block);
+            $timeLineIndex = -1;
+            $timeMatch = null;
+
+            foreach ($lines as $idx => $line) {
+                if (preg_match($timeRegex, $line, $m)) {
+                    $timeLineIndex = $idx;
+                    $timeMatch = $m;
+                    break;
+                }
+            }
+
+            if ($timeLineIndex === -1 || ! $timeMatch) {
+                continue;
+            }
+
+            $h1 = ! empty($timeMatch[1]) ? str_pad($timeMatch[1], 2, '0', STR_PAD_LEFT) : '00';
+            $m1 = $timeMatch[2];
+            $s1 = $timeMatch[3];
+            $ms1 = str_pad($timeMatch[4], 3, '0', STR_PAD_RIGHT);
+
+            $h2 = ! empty($timeMatch[5]) ? str_pad($timeMatch[5], 2, '0', STR_PAD_LEFT) : '00';
+            $m2 = $timeMatch[6];
+            $s2 = $timeMatch[7];
+            $ms2 = str_pad($timeMatch[8], 3, '0', STR_PAD_RIGHT);
+
+            $timeline = "{$h1}:{$m1}:{$s1},{$ms1} --> {$h2}:{$m2}:{$s2},{$ms2}";
+            $textLines = array_slice($lines, $timeLineIndex + 1);
+            $text = trim(implode("\n", $textLines));
+            $text = strip_tags($text);
+
+            if (! empty($text)) {
+                $srtBlocks[] = "{$counter}\n{$timeline}\n{$text}";
+                $counter++;
+            }
+        }
+
+        return implode("\n\n", $srtBlocks)."\n";
     }
 
     /**
@@ -288,33 +356,78 @@ class SubtitleTranslatorService
 
     /**
      * Generate Arabic subtitle for a MediaItem or Episode by translating its English subtitle.
+     * Prioritizes embedded subtitles directly from the container to guarantee 100% video sync
+     * and prevents duplicate English subtitle registration.
      */
     public function generateArabicForMedia(MediaItem|Episode $media, ?int $sourceSubtitleId = null): ?Subtitle
     {
-        $englishSrtPath = null;
+        $englishContent = null;
+        $usedEmbedded = false;
 
         // 0. If specific source subtitle requested, prioritize it
         if ($sourceSubtitleId) {
             $sourceSub = Subtitle::find($sourceSubtitleId);
-            if ($sourceSub && $sourceSub->file_path && File::exists($sourceSub->file_path)) {
-                $englishSrtPath = $sourceSub->file_path;
+            if ($sourceSub) {
+                if ($sourceSub->is_embedded || str_starts_with($sourceSub->file_path ?? '', 'embedded:')) {
+                    $parts = explode(':', $sourceSub->file_path ?? '', 3);
+                    $streamIdx = isset($parts[1]) ? (int) $parts[1] : 0;
+                    $vPath = $parts[2] ?? $media->file_path;
+                    if ($vPath && File::exists($vPath)) {
+                        $rawVtt = $this->embeddedDetector->extractToWebVtt($vPath, $streamIdx, $sourceSub->format ?? 'srt');
+                        $englishContent = $this->convertVttToSrt($rawVtt);
+                        $usedEmbedded = true;
+                    }
+                } elseif ($sourceSub->file_path && File::exists($sourceSub->file_path)) {
+                    $englishContent = File::get($sourceSub->file_path);
+                }
             }
         }
 
         // 1. Find existing English subtitle in DB
-        if (! $englishSrtPath) {
-            $englishSub = Subtitle::where('subtitlable_id', $media->id)
+        if (! $englishContent) {
+            $englishSubs = Subtitle::where('subtitlable_id', $media->id)
                 ->where('subtitlable_type', get_class($media))
                 ->whereIn('language', ['en', 'eng'])
-                ->first();
+                ->get();
 
-            if ($englishSub && $englishSub->file_path && File::exists($englishSub->file_path)) {
-                $englishSrtPath = $englishSub->file_path;
+            // 1a. Prioritize embedded English subtitle from DB
+            $embeddedSub = $englishSubs->first(fn ($s) => $s->is_embedded || str_starts_with($s->file_path ?? '', 'embedded:'));
+            if ($embeddedSub) {
+                $parts = explode(':', $embeddedSub->file_path ?? '', 3);
+                $streamIdx = isset($parts[1]) ? (int) $parts[1] : 0;
+                $vPath = $parts[2] ?? $media->file_path;
+                if ($vPath && File::exists($vPath)) {
+                    $rawVtt = $this->embeddedDetector->extractToWebVtt($vPath, $streamIdx, $embeddedSub->format ?? 'srt');
+                    $englishContent = $this->convertVttToSrt($rawVtt);
+                    $usedEmbedded = true;
+                }
+            }
+
+            // 1b. Non-embedded local English subtitle in DB
+            if (! $englishContent) {
+                $fileSub = $englishSubs->first(fn ($s) => $s->file_path && ! str_starts_with($s->file_path, 'embedded:') && File::exists($s->file_path));
+                if ($fileSub) {
+                    $englishContent = File::get($fileSub->file_path);
+                }
             }
         }
 
-        // 2. If not in DB, inspect filesystem next to media file
-        if (! $englishSrtPath && $media->file_path) {
+        // 2. Check embedded streams directly from media file container if not yet in DB
+        if (! $englishContent && $media->file_path && File::exists($media->file_path)) {
+            $detectedTracks = $this->embeddedDetector->detectEmbeddedSubtitles($media->file_path);
+            foreach ($detectedTracks as $track) {
+                if (in_array(strtolower($track['language'] ?? ''), ['en', 'eng'])) {
+                    $streamIdx = (int) ($track['stream_index'] ?? 0);
+                    $rawVtt = $this->embeddedDetector->extractToWebVtt($media->file_path, $streamIdx, $track['format'] ?? 'srt');
+                    $englishContent = $this->convertVttToSrt($rawVtt);
+                    $usedEmbedded = true;
+                    break;
+                }
+            }
+        }
+
+        // 3. If not in DB or container, inspect filesystem next to media file
+        if (! $englishContent && $media->file_path) {
             $mediaDir = pathinfo($media->file_path, PATHINFO_DIRNAME);
             $baseName = pathinfo($media->file_path, PATHINFO_FILENAME);
 
@@ -328,33 +441,41 @@ class SubtitleTranslatorService
 
             foreach ($potentialPaths as $p) {
                 if (File::exists($p)) {
-                    $englishSrtPath = $p;
+                    $englishContent = File::get($p);
                     break;
                 }
             }
         }
 
-        // 3. If still not available on disk, attempt downloading English subtitle
-        if (! $englishSrtPath) {
-            Log::info("No local English subtitle found for {$media->title}. Attempting to download English subtitle first...");
+        // 4. Only if still not available, attempt downloading English subtitle from web
+        if (! $englishContent) {
+            Log::info("No local or embedded English subtitle found for {$media->title}. Attempting to download English subtitle first...");
             $englishSub = $this->subtitleManager->downloadAndAttachRealSubtitle($media, 'en');
             if ($englishSub && $englishSub->file_path && File::exists($englishSub->file_path)) {
-                $englishSrtPath = $englishSub->file_path;
+                $englishContent = File::get($englishSub->file_path);
             }
         }
 
-        if (! $englishSrtPath || ! File::exists($englishSrtPath)) {
-            Log::warning("Cannot generate Arabic subtitle for {$media->title}: No English subtitle available to translate.");
+        if (empty($englishContent) || ! str_contains($englishContent, '-->')) {
+            Log::warning("Cannot generate Arabic subtitle for {$media->title}: No valid English subtitle content available to translate.");
 
             return null;
         }
 
-        // 4. Read and validate English SRT content
-        $englishContent = File::get($englishSrtPath);
-        if (empty($englishContent) || ! str_contains($englishContent, '-->')) {
-            Log::warning("English subtitle at {$englishSrtPath} does not contain valid SRT cues.");
+        // Clean up redundant downloaded English subtitles if embedded English was used
+        if ($usedEmbedded) {
+            $redundantEnSubs = Subtitle::where('subtitlable_id', $media->id)
+                ->where('subtitlable_type', get_class($media))
+                ->whereIn('language', ['en', 'eng'])
+                ->where('is_embedded', false)
+                ->get();
 
-            return null;
+            foreach ($redundantEnSubs as $redundant) {
+                if ($redundant->file_path && File::exists($redundant->file_path)) {
+                    @File::delete($redundant->file_path);
+                }
+                $redundant->delete();
+            }
         }
 
         // 5. Translate to Arabic

@@ -393,6 +393,7 @@ class SubtitleController extends Controller
             if ($existingEmbedded === 0) {
                 $embeddedTracks = $this->detector->detectEmbeddedSubtitles($model->file_path);
                 foreach ($embeddedTracks as $track) {
+                    $normPath = str_replace('\\', '/', $model->file_path);
                     Subtitle::updateOrCreate(
                         [
                             'subtitlable_id' => $model->id,
@@ -404,6 +405,7 @@ class SubtitleController extends Controller
                             'language_name' => $track['language_name'],
                             'format' => $track['format'],
                             'title' => $track['title'],
+                            'file_path' => "embedded:{$track['stream_index']}:{$normPath}",
                             'is_embedded' => true,
                             'is_default' => $track['is_default'] ?? false,
                         ]

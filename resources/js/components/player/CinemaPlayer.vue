@@ -228,6 +228,17 @@ const updateNativeCueStyle = () => {
         document.head.appendChild(styleEl);
     }
 
+    if (enableCustomSubtitleOverlay.value) {
+        styleEl.textContent = `
+            video::cue, ::cue {
+                display: none !important;
+                opacity: 0 !important;
+                visibility: hidden !important;
+            }
+        `;
+        return;
+    }
+
     const sizeMap: Record<string, string> = {
         sm: 'clamp(1.2rem, 1.8vw, 1.6rem)',
         md: 'clamp(1.5rem, 2.5vw, 2.2rem)',
@@ -1952,7 +1963,7 @@ onBeforeUnmount(() => {
                 :label="sub.language_name || sub.language || 'Subtitle'"
                 :srclang="sub.language || 'ar'"
                 :src="sub.url || (isRemuxStream && remuxStartOffset > 0 ? `/stream/subtitles/${sub.id}?start=${Math.round(remuxStartOffset * 100) / 100}` : `/stream/subtitles/${sub.id}`)"
-                :default="String(selectedSubtitleId) === String(sub.id)"
+                :default="!enableCustomSubtitleOverlay && String(selectedSubtitleId) === String(sub.id)"
             />
         </video>
 
@@ -2228,6 +2239,9 @@ onBeforeUnmount(() => {
                                             <div class="flex items-center gap-1.5 truncate">
                                                 <span class="uppercase text-[10px] px-1 py-0.5 rounded bg-black/40">{{ sub.language || 'CC' }}</span>
                                                 <span class="truncate">{{ sub.language_name || 'Subtitle' }}</span>
+                                                <span v-if="sub.is_embedded" class="text-[9px] px-1 py-0.5 rounded bg-purple-500/25 text-purple-300 font-mono font-medium">
+                                                    {{ t('player.embedded') || 'Embedded' }}
+                                                </span>
                                             </div>
                                             <div class="flex items-center gap-1">
                                                 <button
@@ -2754,13 +2768,11 @@ onBeforeUnmount(() => {
     transform: translate3d(0, 0, 0) !important;
 }
 
-/* Native Track Subtitles (Default) */
+/* Native Track Subtitles (Suppressed when custom overlay is active to eliminate double rendering) */
 ::cue,
 video::cue {
-    background-color: rgba(0, 0, 0, 0.75);
-    color: #ffffff;
-    font-weight: 700;
-    line-height: 1.5;
-    white-space: pre-line;
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
 }
 </style>

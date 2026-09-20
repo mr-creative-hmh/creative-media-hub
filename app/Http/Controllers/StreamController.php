@@ -915,7 +915,7 @@ class StreamController extends Controller
                     $parts = explode(',', $line);
                     if (isset($parts[0]) && is_numeric($parts[0])) {
                         $kf = (float) $parts[0];
-                        if ($kf <= $time) {
+                        if ($kf <= ($time + 0.05)) {
                             return round($kf, 3);
                         }
                     }
@@ -1003,17 +1003,32 @@ class StreamController extends Controller
         $vtt = "WEBVTT\n\n";
         $content = str_replace(["\r\n", "\r"], "\n", $content);
 
+        // Strip existing WEBVTT header and initial comments to prevent duplicate WEBVTT\n\nWEBVTT\n\n
+        $content = preg_replace('/^WEBVTT[^\n]*\n+/i', '', trim($content));
+
+        $timeRegex = '/(?:(\d{1,2}):)?(\d{2}):(\d{2})[,\.](\d{2,3})\s*-->\s*(?:(\d{1,2}):)?(\d{2}):(\d{2})[,\.](\d{2,3})/';
+
         if ($startSeconds <= 0) {
-            // Normalize SRT timestamps to WebVTT
+            // Normalize timestamps to standard WebVTT format (HH:MM:SS.mmm)
             $normalized = preg_replace_callback(
-                '/(\d{2}:\d{2}:\d{2}),(\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}),(\d{3})/',
+                $timeRegex,
                 function ($m) {
-                    return "{$m[1]}.{$m[2]} --> {$m[3]}.{$m[4]}";
+                    $h1 = ! empty($m[1]) ? str_pad($m[1], 2, '0', STR_PAD_LEFT) : '00';
+                    $m1 = $m[2];
+                    $s1 = $m[3];
+                    $ms1 = str_pad($m[4], 3, '0', STR_PAD_RIGHT);
+
+                    $h2 = ! empty($m[5]) ? str_pad($m[5], 2, '0', STR_PAD_LEFT) : '00';
+                    $m2 = $m[6];
+                    $s2 = $m[7];
+                    $ms2 = str_pad($m[8], 3, '0', STR_PAD_RIGHT);
+
+                    return "{$h1}:{$m1}:{$s1}.{$ms1} --> {$h2}:{$m2}:{$s2}.{$ms2}";
                 },
                 $content
             );
 
-            return $vtt.$normalized;
+            return $vtt.trim($normalized)."\n";
         }
 
         // Split into subtitle blocks and shift by $startSeconds
@@ -1022,13 +1037,23 @@ class StreamController extends Controller
 
         foreach ($blocks as $block) {
             $block = trim($block);
-            if (empty($block) || str_starts_with($block, 'WEBVTT')) {
+            if (empty($block) || str_starts_with($block, 'WEBVTT') || str_starts_with($block, 'NOTE')) {
                 continue;
             }
 
-            if (preg_match('/(\d{2}):(\d{2}):(\d{2})[,\.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,\.](\d{3})/', $block, $m)) {
-                $start = ($m[1] * 3600) + ($m[2] * 60) + (int) $m[3] + ((int) $m[4] / 1000.0);
-                $end = ($m[5] * 3600) + ($m[6] * 60) + (int) $m[7] + ((int) $m[8] / 1000.0);
+            if (preg_match($timeRegex, $block, $m)) {
+                $h1 = ! empty($m[1]) ? (int) $m[1] : 0;
+                $m1 = (int) $m[2];
+                $s1 = (int) $m[3];
+                $ms1 = (float) str_pad($m[4], 3, '0', STR_PAD_RIGHT);
+
+                $h2 = ! empty($m[5]) ? (int) $m[5] : 0;
+                $m2 = (int) $m[6];
+                $s2 = (int) $m[7];
+                $ms2 = (float) str_pad($m[8], 3, '0', STR_PAD_RIGHT);
+
+                $start = ($h1 * 3600) + ($m1 * 60) + $s1 + ($ms1 / 1000.0);
+                $end = ($h2 * 3600) + ($m2 * 60) + $s2 + ($ms2 / 1000.0);
 
                 if ($end <= $startSeconds) {
                     continue; // Cue finished before seek point
@@ -1047,7 +1072,7 @@ class StreamController extends Controller
                 };
 
                 $newTimecode = $formatTime($newStart).' --> '.$formatTime($newEnd);
-                $adjustedBlock = preg_replace('/(\d{2}):(\d{2}):(\d{2})[,\.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,\.](\d{3})/', $newTimecode, $block, 1);
+                $adjustedBlock = preg_replace($timeRegex, $newTimecode, $block, 1);
                 $outputBlocks[] = $adjustedBlock;
             }
         }

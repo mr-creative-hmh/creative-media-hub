@@ -107,4 +107,19 @@ class SubtitleTranslatorServiceTest extends TestCase
         // Cleanup test directory
         File::deleteDirectory($testDir);
     }
+
+    public function test_convert_vtt_to_srt_handles_various_timestamp_formats(): void
+    {
+        $translator = app(SubtitleTranslatorService::class);
+
+        $vtt = "WEBVTT\n\n00:10.135 --> 00:11.260\nCheck it out.\n\n01:05:12.456 --> 01:05:15.789\n<c.yellow>This is colored text</c>\n";
+        $srt = $translator->convertVttToSrt($vtt);
+
+        $this->assertStringContainsString('00:00:10,135 --> 00:00:11,260', $srt);
+        $this->assertStringContainsString('Check it out.', $srt);
+        $this->assertStringContainsString('01:05:12,456 --> 01:05:15,789', $srt);
+        $this->assertStringContainsString('This is colored text', $srt);
+        $this->assertStringNotContainsString('WEBVTT', $srt);
+        $this->assertStringNotContainsString('<c.yellow>', $srt);
+    }
 }
