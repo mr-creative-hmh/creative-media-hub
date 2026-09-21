@@ -11,7 +11,7 @@
 ```text
 creative-media-hub/
 ├── app/
-│   ├── Console/Commands/       # Artisan CLI commands (subtitles:check, etc.)
+│   ├── Console/Commands/       # Artisan CLI commands (subtitles:check, subtitles:repair-embedded, etc.)
 │   ├── Http/
 │   │   ├── Controllers/        # Thin HTTP controllers delegating to services
 │   │   └── Middleware/         # Inertia share, locale & application middleware

@@ -88,6 +88,18 @@ php artisan subtitles:check --fix --delete-invalid
 php artisan subtitles:check --path="D:/Media/Movies" --fix
 ```
 
+### 3.1. Embedded Subtitle Path Repair Tool
+
+When media items or TV episodes are organized, moved into franchise collections, or renamed, embedded subtitle records may point to obsolete video paths. To audit and batch repair them across the database:
+
+```bash
+# Dry-run audit for stale embedded subtitle paths
+php artisan subtitles:repair-embedded --dry-run
+
+# Execute batch repair across entire library database
+php artisan subtitles:repair-embedded
+```
+
 ---
 
 ## 4. Collection Franchise Auditor CLI

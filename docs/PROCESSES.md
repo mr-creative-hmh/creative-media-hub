@@ -121,14 +121,19 @@ Creative Media Hub is powered by 14 interconnected pipelines designed for maximu
 ---
 
 ### 2.7. Subtitle Health Checker & Normalizer Pipeline
-- **Location**: `App\Services\Subtitles\SubtitleHealthCheckService` & `CheckSubtitlesCommand`
+- **Location**: `App\Services\Subtitles\SubtitleHealthCheckService`, `EmbeddedSubtitleDetectorService`, `CheckSubtitlesCommand`, & `RepairEmbeddedSubtitlesCommand`
 - **Workflow**:
   - **Lexical Dialogue Extraction**: Strips timestamps, formatting tags, and numeric indices to isolate raw spoken dialogue.
   - **Multi-Encoding Conversion**: Decodes Windows-1256, ISO-8859-6, Windows-1252, ISO-8859-1, and UTF-16 into clean UTF-8.
   - **Script & Stop-Words Language Identification**: Identifies Arabic via `\p{Arabic}` with stop-word cross-validation; identifies Cyrillic, CJK, Greek, Hebrew; evaluates Latin dialogue stop-word frequency matrices for English, French, Spanish, German, Italian, Portuguese, Turkish, Dutch.
+  - **Embedded Container Demuxing & Dynamic Fallback**:
+    - Demuxes embedded container subtitle streams (`0:s:index`) on demand via FFmpeg into clean WebVTT, cached in `storage/app/subtitles/cache`.
+    - **Dynamic Parent Resolution**: If an embedded subtitle record contains a stale video path due to past moves or collection restructuring, `StreamController` automatically falls back to `$subtitle->subtitlable?->file_path` on disk.
+    - **Instant Database Self-Healing**: Transparently updates the subtitle record's path upon streaming with zero user intervention.
+    - **Batch Repair Command**: `php artisan subtitles:repair-embedded {--dry-run}` scans all embedded subtitles in the database, verifies them against active parent video files, and updates all broken paths in a single pass.
   - **Integrity Validation**: Detects 0-byte corrupt files, HTML error pages (Cloudflare 404/503), and dummy stubs (< 5 cues or < 300 bytes).
   - **Standardized Renaming**: Renames adjacent subtitles to `{videoBase}.{lang}.srt` (e.g. `Inception (2010).ar.srt`) and synchronizes the database.
-  - **Execution**: Can be run via CLI `php artisan subtitles:check {--fix} {--dry-run} {--path=}` or the interactive web studio.
+  - **Execution**: Can be run via CLI `php artisan subtitles:check {--fix} {--dry-run} {--path=}`, `php artisan subtitles:repair-embedded {--dry-run}`, or the interactive web studio.
 
 ---
 

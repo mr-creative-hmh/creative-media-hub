@@ -77,12 +77,18 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 
 ## ✨ Key Features & Capabilities
 
-### 1. 🛡️ Subtitle Checker & Health Normalizer
+### 1. 🛡️ Subtitle Checker, Embedded Demuxer & Health Normalizer
 - **Lexical Dialogue Language Detector**: Analyzes spoken dialogue directly (ignoring timecodes and tags) using Unicode script blocks (`\p{Arabic}` with stop-word validation, Cyrillic, CJK, Greek, Hebrew) and Latin dialogue stop-word frequency matrices (`ar`, `en`, `fr`, `es`, `de`, `it`, `pt`, `tr`, `nl`).
 - **Encoding Normalizer**: Automatically decodes Windows-1256 (Arabic CP1256), ISO-8859-6, Windows-1252, ISO-8859-1, UTF-16, and UTF-8 BOM into clean UTF-8.
+- **Embedded Subtitle Stream Demuxer & Self-Healing Resilience**:
+  - Dynamically extracts embedded container tracks (SRT, WebVTT, ASS/SSA, tx3g, PGS) from MKV/MP4 files on demand via FFmpeg into pristine WebVTT.
+  - **Dynamic Parent Fallback**: When an embedded subtitle references an obsolete or moved video path (e.g. after franchise collection reorganization), `StreamController` automatically falls back to the parent `MediaItem` or `Episode` path on disk.
+  - **Database Self-Healing**: Automatically repairs the stored database path on the fly upon the first stream request with zero latency.
+  - **Auto-Realignment in Subtitle Controller**: `SubtitleController::forMedia()` auto-syncs stale embedded subtitle paths to match current media file locations.
+  - **Batch Path Repair CLI**: `php artisan subtitles:repair-embedded {--dry-run}` scans the entire database, verifies embedded track paths against physical files, and batch-repairs all broken paths in seconds.
 - **Strict Integrity Purger**: Detects 0-byte corrupt files, HTML 404/503 Cloudflare pages, and dummy stubs (< 5 cues or < 300 bytes), deleting them from disk and database.
 - **Standardized Extension Renamer**: Renames adjacent subtitle files to standard convention: `{mediaBase}.{lang}.srt` (e.g. `Gladiator (2000).ar.srt`, `Gladiator (2000).en.srt`).
-- **CLI & Web Studio**: Available via `php artisan subtitles:check {--fix} {--dry-run} {--path=}` and interactive Subtitle Studio UI.
+- **CLI & Web Studio**: Available via `php artisan subtitles:check {--fix} {--dry-run} {--path=}`, `php artisan subtitles:repair-embedded {--dry-run}`, and interactive Subtitle Studio UI.
 
 ### 2. 💬 100% Real Subtitle Cloud Engine & In-Player Search
 - **Zero Fake Subtitles**: Removed all mock generator placeholders. Real online search via SubDL and OpenSubtitles v3.

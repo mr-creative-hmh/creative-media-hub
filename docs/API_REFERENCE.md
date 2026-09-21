@@ -25,6 +25,14 @@
 - **`POST /api/stream/stop`**  
   Gracefully terminates any running FFmpeg sub-processes for a given client stream.
 
+### 1.4. Subtitle WebVTT Stream & Container Demuxer
+- **`GET /stream/subtitles/{id}?start={seconds}`**  
+  Streams WebVTT cues for an external subtitle file (`.srt`/`.vtt`) or dynamically extracts embedded tracks (`embedded:{stream_index}:{video_path}`) from MKV/MP4 containers via FFmpeg.
+  - **Parent Fallback**: If the stored video path has moved, automatically falls back to parent `subtitlable` file on disk.
+  - **Self-Healing**: Automatically repairs stale database path records on stream.
+  - **Timestamp Offset**: Shifts cue timings by `start` seconds when seeking during remux playback.
+  - **Response**: `text/vtt; charset=utf-8` clean UTF-8 cues.
+
 ---
 
 ## 2. Metadata & Fix Match Studio Endpoints
