@@ -385,6 +385,21 @@ class SubtitleController extends Controller
 
         // Auto-detect and sync embedded tracks inside video file if not yet detected
         if ($model->file_path && File::exists($model->file_path)) {
+            $normPath = str_replace('\\', '/', $model->file_path);
+
+            // Re-align any existing embedded subtitles pointing to stale video paths
+            $staleEmbedded = Subtitle::where('subtitlable_id', $model->id)
+                ->where('subtitlable_type', get_class($model))
+                ->where('is_embedded', true)
+                ->where('file_path', 'NOT LIKE', "%:{$normPath}")
+                ->get();
+
+            foreach ($staleEmbedded as $staleSub) {
+                if (preg_match('/^embedded:(\d+):/i', $staleSub->file_path, $m)) {
+                    $staleSub->update(['file_path' => "embedded:{$m[1]}:{$normPath}"]);
+                }
+            }
+
             $existingEmbedded = Subtitle::where('subtitlable_id', $model->id)
                 ->where('subtitlable_type', get_class($model))
                 ->where('is_embedded', true)
@@ -393,19 +408,19 @@ class SubtitleController extends Controller
             if ($existingEmbedded === 0) {
                 $embeddedTracks = $this->detector->detectEmbeddedSubtitles($model->file_path);
                 foreach ($embeddedTracks as $track) {
-                    $normPath = str_replace('\\', '/', $model->file_path);
+                    $streamIdx = $track['stream_index'] ?? 0;
+                    $subKey = "embedded:{$streamIdx}:{$normPath}";
+
                     Subtitle::updateOrCreate(
                         [
                             'subtitlable_id' => $model->id,
                             'subtitlable_type' => get_class($model),
-                            'stream_index' => $track['stream_index'],
+                            'file_path' => $subKey,
                         ],
                         [
-                            'language' => $track['language'],
-                            'language_name' => $track['language_name'],
-                            'format' => $track['format'],
-                            'title' => $track['title'],
-                            'file_path' => "embedded:{$track['stream_index']}:{$normPath}",
+                            'language' => $track['language'] ?? 'und',
+                            'language_name' => $track['language_name'] ?? 'Embedded Track',
+                            'format' => $track['codec'] ?? $track['format'] ?? 'srt',
                             'is_embedded' => true,
                             'is_default' => $track['is_default'] ?? false,
                         ]

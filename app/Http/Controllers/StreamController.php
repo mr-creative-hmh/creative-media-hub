@@ -78,6 +78,14 @@ class StreamController extends Controller
             $streamIndex = isset($parts[1]) ? (int) $parts[1] : 0;
             $videoPath = $parts[2] ?? '';
 
+            if (! $videoPath || ! File::exists($videoPath)) {
+                $parentPath = $subtitle->subtitlable?->file_path;
+                if ($parentPath && File::exists($parentPath)) {
+                    $videoPath = str_replace('\\', '/', $parentPath);
+                    $subtitle->update(['file_path' => "embedded:{$streamIndex}:{$videoPath}"]);
+                }
+            }
+
             if ($videoPath && File::exists($videoPath)) {
                 $rawVtt = $this->embeddedSubDetector->extractToWebVtt($videoPath, $streamIndex, $subtitle->format ?? 'srt');
                 $vtt = $this->convertToCleanWebVTT($rawVtt, $subtitle->format ?? 'srt', $startSeconds);

@@ -371,8 +371,13 @@ class SubtitleTranslatorService
                 if ($sourceSub->is_embedded || str_starts_with($sourceSub->file_path ?? '', 'embedded:')) {
                     $parts = explode(':', $sourceSub->file_path ?? '', 3);
                     $streamIdx = isset($parts[1]) ? (int) $parts[1] : 0;
-                    $vPath = $parts[2] ?? $media->file_path;
+                    $candidatePath = $parts[2] ?? '';
+                    $vPath = ($candidatePath && File::exists($candidatePath)) ? $candidatePath : ($media->file_path ?? '');
                     if ($vPath && File::exists($vPath)) {
+                        if ($candidatePath !== $vPath) {
+                            $normVPath = str_replace('\\', '/', $vPath);
+                            $sourceSub->update(['file_path' => "embedded:{$streamIdx}:{$normVPath}"]);
+                        }
                         $rawVtt = $this->embeddedDetector->extractToWebVtt($vPath, $streamIdx, $sourceSub->format ?? 'srt');
                         $englishContent = $this->convertVttToSrt($rawVtt);
                         $usedEmbedded = true;
@@ -395,8 +400,13 @@ class SubtitleTranslatorService
             if ($embeddedSub) {
                 $parts = explode(':', $embeddedSub->file_path ?? '', 3);
                 $streamIdx = isset($parts[1]) ? (int) $parts[1] : 0;
-                $vPath = $parts[2] ?? $media->file_path;
+                $candidatePath = $parts[2] ?? '';
+                $vPath = ($candidatePath && File::exists($candidatePath)) ? $candidatePath : ($media->file_path ?? '');
                 if ($vPath && File::exists($vPath)) {
+                    if ($candidatePath !== $vPath) {
+                        $normVPath = str_replace('\\', '/', $vPath);
+                        $embeddedSub->update(['file_path' => "embedded:{$streamIdx}:{$normVPath}"]);
+                    }
                     $rawVtt = $this->embeddedDetector->extractToWebVtt($vPath, $streamIdx, $embeddedSub->format ?? 'srt');
                     $englishContent = $this->convertVttToSrt($rawVtt);
                     $usedEmbedded = true;
