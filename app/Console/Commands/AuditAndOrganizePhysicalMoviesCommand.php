@@ -511,11 +511,12 @@ class AuditAndOrganizePhysicalMoviesCommand extends Command
             foreach ($legacyDirs as $ld) {
                 $p = "{$root}/{$ld}";
                 if (is_dir($p)) {
-                    $subdirs = glob("{$p}/*");
+                    $subdirs = glob("{$p}/*") ?: [];
                     $allEmptyOrEvacuated = true;
                     foreach ($subdirs as $sd) {
                         if (is_dir($sd)) {
-                            $inner = array_diff(scandir($sd), ['.', '..']);
+                            $scanned = scandir($sd);
+                            $inner = $scanned !== false ? array_diff($scanned, ['.', '..']) : [];
                             $innerHasMovieDirs = false;
                             foreach ($inner as $in) {
                                 if (is_dir("{$sd}/{$in}")) {
@@ -532,7 +533,8 @@ class AuditAndOrganizePhysicalMoviesCommand extends Command
                     if ($allEmptyOrEvacuated) {
                         foreach ($subdirs as $sd) {
                             if (is_dir($sd)) {
-                                foreach (glob("{$sd}/*") as $sf) {
+                                $innerFiles = glob("{$sd}/*") ?: [];
+                                foreach ($innerFiles as $sf) {
                                     @unlink($sf);
                                 }
                                 @rmdir($sd);

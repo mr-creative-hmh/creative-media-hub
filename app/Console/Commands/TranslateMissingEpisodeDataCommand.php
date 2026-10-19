@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Episode;
 use Illuminate\Console\Command;
 use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -44,9 +45,9 @@ class TranslateMissingEpisodeDataCommand extends Command
         if (! $force) {
             $query->where(function ($q) {
                 $q->whereNull('title_ar')
-                  ->orWhere('title_ar', '')
-                  ->orWhereNull('overview_ar')
-                  ->orWhere('overview_ar', '');
+                    ->orWhere('title_ar', '')
+                    ->orWhereNull('overview_ar')
+                    ->orWhere('overview_ar', '');
             });
         }
 
@@ -55,6 +56,7 @@ class TranslateMissingEpisodeDataCommand extends Command
 
         if ($total === 0) {
             $this->info('All episodes already have complete Arabic metadata! Nothing to translate.');
+
             return self::SUCCESS;
         }
 
@@ -133,6 +135,7 @@ class TranslateMissingEpisodeDataCommand extends Command
                                 'q' => $call['text'],
                             ]);
                         }
+
                         return $reqs;
                     });
 
@@ -141,7 +144,7 @@ class TranslateMissingEpisodeDataCommand extends Command
                         $ep = $call['ep'];
                         $translated = null;
 
-                        if ($res && $res->successful()) {
+                        if ($res instanceof Response && $res->successful()) {
                             $d = $res->json();
                             $str = is_array($d) ? implode(' ', $d) : (string) $d;
                             if (! empty(trim($str)) && trim($str) !== $call['text']) {

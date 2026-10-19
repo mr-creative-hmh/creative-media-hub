@@ -217,6 +217,10 @@ class SeriesController extends Controller
             }
         }
 
+        // Preserve existing valid Arabic metadata if provider search result has none
+        $titleAr = $titleAr ?: $series->title_ar;
+        $overviewAr = $overviewAr ?: $series->overview_ar;
+
         $metaDataPayload = [
             'title' => $validated['title'],
             'title_ar' => $titleAr,
@@ -256,6 +260,9 @@ class SeriesController extends Controller
 
         $series->load(['genres', 'seasons.episodes.subtitles']);
 
+        Cache::forget('series.hero_items.v3');
+        Cache::forget('series.hero_items.v2');
+
         return response()->json([
             'success' => true,
             'message' => 'Series metadata successfully matched and saved with bilingual details!',
@@ -285,6 +292,9 @@ class SeriesController extends Controller
 
         $series->update($validated);
         $series->load(['genres', 'seasons.episodes.subtitles']);
+
+        Cache::forget('series.hero_items.v3');
+        Cache::forget('series.hero_items.v2');
 
         return response()->json([
             'success' => true,

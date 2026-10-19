@@ -67,6 +67,30 @@ const handleToggleFavorite = async (item: any) => {
         console.error(e);
     }
 };
+
+const handleMediaUpdated = (updatedItem: any) => {
+    if (!updatedItem) return;
+
+    const found = props.movies.data.find((m) => m.id === updatedItem.id);
+    if (found) {
+        Object.assign(found, updatedItem);
+    }
+
+    if (props.heroItems) {
+        const heroFound = props.heroItems.find((h) => h.id === updatedItem.id);
+        if (heroFound) {
+            Object.assign(heroFound, updatedItem);
+        }
+    }
+
+    if (props.heroItem && props.heroItem.id === updatedItem.id) {
+        Object.assign(props.heroItem, updatedItem);
+    }
+
+    if (selectedDetailItem.value && selectedDetailItem.value.id === updatedItem.id) {
+        Object.assign(selectedDetailItem.value, updatedItem);
+    }
+};
 </script>
 
 <template>
@@ -153,6 +177,7 @@ const handleToggleFavorite = async (item: any) => {
             :is-open="!!selectedDetailItem"
             @close="handleCloseModal"
             @play="(item) => { handleCloseModal(); play(item); }"
+            @updated="handleMediaUpdated"
         />
     </AppLayout>
 </template>

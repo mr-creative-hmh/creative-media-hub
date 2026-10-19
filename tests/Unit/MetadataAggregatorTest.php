@@ -44,4 +44,26 @@ class MetadataAggregatorTest extends TestCase
         $results = $aggregator->searchMovie('Inception', 2010);
         $this->assertNotEmpty($results);
     }
+
+    public function test_sanitize_arabic_title_strips_commentary_and_footnotes(): void
+    {
+        $aggregator = app(MetadataAggregator::class);
+
+        $crowdsourcedJunk = 'أونابومبر (Unabomber) ,تيد كازينسكي (ولد عام 1942 باسم تيودور جون كازينسكي) ,رجل كاره للتكنولوجيا أرسل العديد من الرسائل المتفجرة للجامعات وخطوط الطيران في الولايات المتحدة (بدأ في أواخر 1970 وأنتهي نشاطه في بدايات 1990) قبل أن تقبض علية FBI في أبريل 1996 (حكم عليه بالسجن مدى الحياة في مايو 1998)';
+        $clean = $aggregator->sanitizeArabicTitle($crowdsourcedJunk, 'UNABOMBER');
+
+        $this->assertEquals('أونابومبر', $clean);
+
+        $wikiTitle = 'فارس الظلام (فيلم)';
+        $this->assertEquals('فارس الظلام', $aggregator->sanitizeArabicTitle($wikiTitle, 'The Dark Knight'));
+    }
+
+    public function test_sanitize_arabic_title_rejects_warnings_and_non_arabic(): void
+    {
+        $aggregator = app(MetadataAggregator::class);
+
+        $this->assertNull($aggregator->sanitizeArabicTitle('MYMEMORY WARNING: QUOTA EXCEEDED', 'Sample'));
+        $this->assertNull($aggregator->sanitizeArabicTitle('Sample Movie', 'Sample Movie'));
+        $this->assertNull($aggregator->sanitizeArabicTitle(null, 'Sample Movie'));
+    }
 }

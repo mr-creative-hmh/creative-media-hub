@@ -241,6 +241,10 @@ class MediaController extends Controller
             }
         }
 
+        // Preserve existing valid Arabic metadata if provider search result has none
+        $titleAr = $titleAr ?: $mediaItem->title_ar;
+        $overviewAr = $overviewAr ?: $mediaItem->overview_ar;
+
         $metaDataPayload = [
             'title' => $validated['title'],
             'title_ar' => $titleAr,
@@ -269,6 +273,10 @@ class MediaController extends Controller
         ]);
 
         $mediaItem->load(['genres', 'subtitles']);
+
+        Cache::forget('movies.hero_items.v4');
+        Cache::forget('movies.hero_items.v3');
+        Cache::forget('movies.hero_items.v2');
 
         return response()->json([
             'success' => true,
@@ -299,6 +307,10 @@ class MediaController extends Controller
 
         $mediaItem->update($validated);
         $mediaItem->load(['genres', 'subtitles']);
+
+        Cache::forget('movies.hero_items.v4');
+        Cache::forget('movies.hero_items.v3');
+        Cache::forget('movies.hero_items.v2');
 
         return response()->json([
             'success' => true,

@@ -46,22 +46,44 @@ const loadItems = async () => {
 
 const removeItem = async (item: any, e: MouseEvent) => {
     e.stopPropagation();
-    const itemId = item.history_id || item.id;
+    const itemId = item.history_id || item.watchable_id || item.id;
     if (removingIds.value.has(itemId)) return;
 
-    // Optimistic UI removal
+    const previousItems = [...items.value];
+    const seriesId = item.series_id || item.series?.id || null;
+    const watchableId = item.watchable_id || item.id;
+    const isSeries = item.category === 'series' || item.type === 'episode' || item.watchable_type === 'episode';
+    const watchableType = item.watchable_type || (isSeries ? 'episode' : 'movie');
+
     removingIds.value.add(itemId);
-    items.value = items.value.filter((i) => (i.history_id || i.id) !== itemId);
+
+    // Optimistic UI removal - if it's a series, remove any cards with this seriesId or itemId
+    items.value = items.value.filter((i) => {
+        const idMatches = (i.history_id || i.watchable_id || i.id) === itemId;
+        const seriesMatches = seriesId && (i.series_id || i.series?.id) === seriesId;
+        return !idMatches && !seriesMatches;
+    });
     emit('item-removed', item);
 
     try {
-        const res = await fetch(`/api/watch-history/${itemId}?type=${item.category || item.type}`, {
+        const params = new URLSearchParams({
+            type: item.category || item.type || (isSeries ? 'series' : 'movie'),
+            ...(watchableId ? { watchable_id: String(watchableId) } : {}),
+            ...(watchableType ? { watchable_type: String(watchableType) } : {}),
+            ...(seriesId ? { series_id: String(seriesId), is_series: '1' } : {}),
+        });
+
+        const res = await fetch(`/api/watch-history/${itemId}?${params.toString()}`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
             },
         });
+
+        if (!res.ok) {
+            throw new Error(`Failed to remove item: HTTP ${res.status}`);
+        }
 
         // Broadcast toast
         window.dispatchEvent(new CustomEvent('app-toast', {
@@ -72,6 +94,15 @@ const removeItem = async (item: any, e: MouseEvent) => {
         }));
     } catch (err) {
         console.error('Failed to delete watch history item', err);
+        // Rollback optimistic removal
+        items.value = previousItems;
+
+        window.dispatchEvent(new CustomEvent('app-toast', {
+            detail: {
+                type: 'error',
+                message: t('watch_history.remove_failed') || 'Failed to remove item from watch history',
+            }
+        }));
     } finally {
         removingIds.value.delete(itemId);
     }

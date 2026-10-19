@@ -30,19 +30,24 @@ class FfmpegLocatorService
         } catch (\Throwable $e) {
         }
 
-        $userProfile = getenv('USERPROFILE') ?: 'C:\\Users\\hasan';
-        $localAppData = getenv('LOCALAPPDATA') ?: "{$userProfile}\\AppData\\Local";
+        $userProfile = getenv('USERPROFILE') ?: (getenv('HOMEDRIVE') && getenv('HOMEPATH') ? getenv('HOMEDRIVE').getenv('HOMEPATH') : null);
+        $localAppData = getenv('LOCALAPPDATA') ?: ($userProfile ? "{$userProfile}\\AppData\\Local" : null);
 
         // 2. Direct exact known paths
-        $candidates = [
-            "{$localAppData}\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build\\bin\\ffmpeg.exe",
-            'C:\\Users\\hasan\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build\\bin\\ffmpeg.exe',
-            "{$localAppData}\\Microsoft\\WinGet\\Links\\ffmpeg.exe",
+        $candidates = array_values(array_filter([
+            $localAppData ? "{$localAppData}\\Microsoft\\WinGet\\Links\\ffmpeg.exe" : null,
             'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe',
             'C:\\ffmpeg\\bin\\ffmpeg.exe',
             'C:\\ProgramData\\chocolatey\\bin\\ffmpeg.exe',
-            "{$userProfile}\\scoop\\shims\\ffmpeg.exe",
-        ];
+            $userProfile ? "{$userProfile}\\scoop\\shims\\ffmpeg.exe" : null,
+        ]));
+
+        if ($localAppData) {
+            $wingetMatches = glob("{$localAppData}\\Microsoft\\WinGet\\Packages\\*FFmpeg*\\*\\bin\\ffmpeg.exe") ?: [];
+            if (! empty($wingetMatches)) {
+                array_unshift($candidates, ...$wingetMatches);
+            }
+        }
 
         foreach ($candidates as $cand) {
             if ($cand && file_exists($cand)) {
@@ -51,11 +56,13 @@ class FfmpegLocatorService
         }
 
         // 3. Recursive directory scan of WinGet packages
-        $packagesDir = "{$localAppData}\\Microsoft\\WinGet\\Packages";
-        if (is_dir($packagesDir)) {
-            $files = self::findFileRecursive($packagesDir, 'ffmpeg.exe');
-            if (! empty($files)) {
-                return self::$cachedFfmpegPath = $files[0];
+        if ($localAppData) {
+            $packagesDir = "{$localAppData}\\Microsoft\\WinGet\\Packages";
+            if (is_dir($packagesDir)) {
+                $files = self::findFileRecursive($packagesDir, 'ffmpeg.exe');
+                if (! empty($files)) {
+                    return self::$cachedFfmpegPath = $files[0];
+                }
             }
         }
 
@@ -98,16 +105,23 @@ class FfmpegLocatorService
             }
         }
 
-        $userProfile = getenv('USERPROFILE') ?: 'C:\\Users\\hasan';
-        $localAppData = getenv('LOCALAPPDATA') ?: "{$userProfile}\\AppData\\Local";
+        $userProfile = getenv('USERPROFILE') ?: (getenv('HOMEDRIVE') && getenv('HOMEPATH') ? getenv('HOMEDRIVE').getenv('HOMEPATH') : null);
+        $localAppData = getenv('LOCALAPPDATA') ?: ($userProfile ? "{$userProfile}\\AppData\\Local" : null);
 
-        $candidates = [
-            "{$localAppData}\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build\\bin\\ffprobe.exe",
-            'C:\\Users\\hasan\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-full_build\\bin\\ffprobe.exe',
-            "{$localAppData}\\Microsoft\\WinGet\\Links\\ffprobe.exe",
+        $candidates = array_values(array_filter([
+            $localAppData ? "{$localAppData}\\Microsoft\\WinGet\\Links\\ffprobe.exe" : null,
             'C:\\tools\\ffmpeg\\bin\\ffprobe.exe',
             'C:\\ffmpeg\\bin\\ffprobe.exe',
-        ];
+            'C:\\ProgramData\\chocolatey\\bin\\ffprobe.exe',
+            $userProfile ? "{$userProfile}\\scoop\\shims\\ffprobe.exe" : null,
+        ]));
+
+        if ($localAppData) {
+            $wingetMatches = glob("{$localAppData}\\Microsoft\\WinGet\\Packages\\*FFmpeg*\\*\\bin\\ffprobe.exe") ?: [];
+            if (! empty($wingetMatches)) {
+                array_unshift($candidates, ...$wingetMatches);
+            }
+        }
 
         foreach ($candidates as $cand) {
             if ($cand && file_exists($cand)) {

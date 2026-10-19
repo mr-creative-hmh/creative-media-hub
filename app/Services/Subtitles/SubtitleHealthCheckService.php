@@ -32,7 +32,7 @@ class SubtitleHealthCheckService
      * Run subtitle health check across directories, prune invalid files, and standardize naming.
      *
      * @param  array{dry_run?: bool, delete_invalid?: bool, auto_rename?: bool, target_path?: ?string}  $options
-     * @return array{total_scanned: int, valid_count: int, invalid_count: int, deleted_count: int, renamed_count: int, already_standard_count: int, dry_run: bool, language_breakdown: array, items: array}
+     * @return array{total_scanned: int, valid_count: int, invalid_count: int, deleted_count: int, renamed_count: int, already_standard_count: int, encoding_fixed_count: int, dry_run: bool, language_breakdown: array, items: array}
      */
     public function checkAndNormalize(array $options = []): array
     {
@@ -528,7 +528,7 @@ class SubtitleHealthCheckService
                 [
                     'time' => now()->format('H:i:s'),
                     'level' => 'info',
-                    'message' => 'Discovered ' . count($scannedFiles) . ' subtitle files across library folders.',
+                    'message' => 'Discovered '.count($scannedFiles).' subtitle files across library folders.',
                 ],
             ],
             'summary' => [
@@ -647,7 +647,7 @@ class SubtitleHealthCheckService
                 $state['logs'][] = [
                     'time' => now()->format('H:i:s'),
                     'level' => 'error',
-                    'message' => "Error analyzing {$filename}: " . substr($e->getMessage(), 0, 80),
+                    'message' => "Error analyzing {$filename}: ".substr($e->getMessage(), 0, 80),
                 ];
             }
         }
@@ -891,7 +891,8 @@ class SubtitleHealthCheckService
                     File::put($normalizedPath, $cleanUtf8);
                     $summaryInc['encoding_fixed_count'] = 1;
                 }
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
         }
 
         $issues = [];
@@ -1000,6 +1001,7 @@ class SubtitleHealthCheckService
             ];
         }
     }
+
     /**
      * Safely link or update subtitle record ensuring zero duplicates.
      */
@@ -1052,5 +1054,4 @@ class SubtitleHealthCheckService
             );
         }
     }
-
 }

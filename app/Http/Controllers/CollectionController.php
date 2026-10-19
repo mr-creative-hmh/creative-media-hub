@@ -14,12 +14,18 @@ use Inertia\Response;
 
 class CollectionController extends Controller
 {
+    public static function getCacheKey(): string
+    {
+        $version = (int) Cache::get('collections.cache.version', 1);
+
+        return "collections.index.data.v{$version}";
+    }
+
     public static function clearCache(): void
     {
-        for ($i = 1; $i <= 25; $i++) {
-            Cache::forget("collections.index.data.v{$i}");
-        }
+        Cache::increment('collections.cache.version');
         Cache::forget('collections.index.data');
+        Cache::forget('collections.index.data.v10');
 
         try {
             app(LibraryGapService::class)->clearCache();
@@ -61,7 +67,7 @@ class CollectionController extends Controller
         }
 
         if (empty($search) && ! app()->environment('testing')) {
-            $raw = Cache::remember('collections.index.data.v10', 3600, function () use ($masterService, $gapService) {
+            $raw = Cache::remember(self::getCacheKey(), 3600, function () use ($masterService, $gapService) {
                 $allMovies = MediaItem::query()
                     ->whereNotNull('collection_name')
                     ->where('collection_name', '!=', '')

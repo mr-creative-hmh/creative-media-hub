@@ -75,7 +75,7 @@ class SyncMovieCollectionsCommand extends Command
                         }
 
                         if (! $dryRun) {
-                            $movie->collection_id = $tmdbColId;
+                            $movie->collection_id = $tmdbColId > 0 ? $tmdbColId : null;
                             $movie->collection_name = $tmdbColName;
                             $movie->collection_id_source = 'tmdb';
                             if ($tmdbColPoster) {
@@ -118,7 +118,7 @@ class SyncMovieCollectionsCommand extends Command
         if (! $dryRun) {
             $this->info('Rebuilding master collection index and clearing caches...');
             try {
-                $masterService->buildAll(false, false, false);
+                $masterService->buildMasterIndex(false, false);
             } catch (\Throwable $e) {
             }
             CollectionController::clearCache();

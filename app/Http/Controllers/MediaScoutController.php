@@ -411,7 +411,53 @@ class MediaScoutController extends Controller
      */
     protected function enrichWithLibraryStatus(array $items): array
     {
-        return array_map(function ($item) {
+        if (empty($items)) {
+            return [];
+        }
+
+        $movieTmdbIds = [];
+        $movieImdbIds = [];
+        $seriesTmdbIds = [];
+        $seriesImdbIds = [];
+
+        foreach ($items as $item) {
+            $mediaType = $item['media_type'] ?? (isset($item['first_air_date']) ? 'series' : 'movie');
+            $tmdbId = ! empty($item['tmdb_id']) ? (string) $item['tmdb_id'] : (! empty($item['id']) ? (string) $item['id'] : null);
+            $imdbId = ! empty($item['imdb_id']) ? (string) $item['imdb_id'] : null;
+
+            if ($mediaType === 'movie') {
+                if ($tmdbId) {
+                    $movieTmdbIds[] = $tmdbId;
+                }
+                if ($imdbId) {
+                    $movieImdbIds[] = $imdbId;
+                }
+            } else {
+                if ($tmdbId) {
+                    $seriesTmdbIds[] = $tmdbId;
+                }
+                if ($imdbId) {
+                    $seriesImdbIds[] = $imdbId;
+                }
+            }
+        }
+
+        $moviesByTmdb = ! empty($movieTmdbIds) ? MediaItem::whereIn('tmdb_id', $movieTmdbIds)->get()->keyBy(fn ($m) => (string) $m->tmdb_id) : collect();
+        $moviesByImdb = ! empty($movieImdbIds) ? MediaItem::whereIn('imdb_id', $movieImdbIds)->get()->keyBy(fn ($m) => (string) $m->imdb_id) : collect();
+        $seriesByTmdb = ! empty($seriesTmdbIds) ? Series::whereIn('tmdb_id', $seriesTmdbIds)->get()->keyBy(fn ($s) => (string) $s->tmdb_id) : collect();
+        $seriesByImdb = ! empty($seriesImdbIds) ? Series::whereIn('imdb_id', $seriesImdbIds)->get()->keyBy(fn ($s) => (string) $s->imdb_id) : collect();
+
+        $matchedSeriesIds = $seriesByTmdb->pluck('id')->merge($seriesByImdb->pluck('id'))->unique()->values()->all();
+        $episodeCounts = ! empty($matchedSeriesIds)
+            ? Episode::whereIn('series_id', $matchedSeriesIds)
+                ->whereNotNull('file_path')
+                ->selectRaw('series_id, count(*) as count')
+                ->groupBy('series_id')
+                ->pluck('count', 'series_id')
+                ->all()
+            : [];
+
+        return array_map(function ($item) use ($moviesByTmdb, $moviesByImdb, $seriesByTmdb, $seriesByImdb, $episodeCounts) {
             $mediaType = $item['media_type'] ?? (isset($item['first_air_date']) ? 'series' : 'movie');
 
             // Normalize release_year and year for uniform access across views
@@ -419,19 +465,28 @@ class MediaScoutController extends Controller
             $item['release_year'] = $year;
             $item['year'] = $year;
 
+            $tmdbId = ! empty($item['tmdb_id']) ? (string) $item['tmdb_id'] : (! empty($item['id']) ? (string) $item['id'] : null);
+            $imdbId = ! empty($item['imdb_id']) ? (string) $item['imdb_id'] : null;
+
             if ($mediaType === 'movie') {
-                $match = $this->findMatchingMovie($item);
+                $match = ($tmdbId ? $moviesByTmdb->get($tmdbId) : null)
+                    ?? ($imdbId ? $moviesByImdb->get($imdbId) : null)
+                    ?? $this->findMatchingMovie($item);
 
                 $item['in_library'] = (bool) $match;
                 $item['local_id'] = $match?->id;
                 $item['media_type'] = 'movie';
             } else {
-                $match = $this->findMatchingSeries($item);
+                $match = ($tmdbId ? $seriesByTmdb->get($tmdbId) : null)
+                    ?? ($imdbId ? $seriesByImdb->get($imdbId) : null)
+                    ?? $this->findMatchingSeries($item);
 
                 $item['in_library'] = (bool) $match;
                 $item['local_id'] = $match?->id;
                 $item['media_type'] = 'series';
-                $item['owned_episodes_count'] = $match ? Episode::where('series_id', $match->id)->whereNotNull('file_path')->count() : 0;
+                $item['owned_episodes_count'] = $match
+                    ? ($episodeCounts[$match->id] ?? Episode::where('series_id', $match->id)->whereNotNull('file_path')->count())
+                    : 0;
             }
 
             return $item;

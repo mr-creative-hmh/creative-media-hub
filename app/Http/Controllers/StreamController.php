@@ -602,14 +602,98 @@ class StreamController extends Controller
 
     public function deleteWatchHistory(Request $request, $id)
     {
-        $type = $request->input('type');
+        $rawType = strtolower((string) $request->input('type', ''));
+        $isSeriesRequest = ($rawType === 'series' || $request->boolean('is_series'));
+        $isEpisodeRequest = ($rawType === 'episode' || $rawType === 'episodes');
+        $isMovieRequest = ($rawType === 'movie' || $rawType === 'movies' || $rawType === 'collection' || $rawType === 'collections');
+
+        $explicitWatchableType = $request->input('watchable_type');
+        $seriesId = $request->input('series_id');
+        $explicitWatchableId = $request->input('watchable_id');
         $userId = $request->user()?->id;
 
-        // Check if $id matches WatchHistory primary ID
+        if ($explicitWatchableType) {
+            $modelClass = in_array(strtolower((string) $explicitWatchableType), ['episode', 'episodes', Episode::class])
+                ? Episode::class
+                : MediaItem::class;
+        } elseif ($isSeriesRequest || $isEpisodeRequest) {
+            $modelClass = Episode::class;
+        } elseif ($isMovieRequest) {
+            $modelClass = MediaItem::class;
+        } else {
+            $modelClass = null;
+        }
+
+        // 1. If explicit series_id provided, remove all watched episodes for that series
+        if (! empty($seriesId)) {
+            $epIds = Episode::where('series_id', $seriesId)->pluck('id');
+            WatchHistory::where('watchable_type', Episode::class)
+                ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
+                    $sub->where('user_id', $userId)->orWhereNull('user_id');
+                }))
+                ->whereIn('watchable_id', $epIds)
+                ->delete();
+        }
+
+        // 2. If caller explicitly passed watchable_id or watchable_type, prioritize deleting by watchable entity
+        $targetWatchableId = $explicitWatchableId ?: ($explicitWatchableType ? $id : null);
+        if ($targetWatchableId) {
+            $targetClass = $modelClass ?? (($isSeriesRequest || $isEpisodeRequest) ? Episode::class : MediaItem::class);
+
+            if ($targetClass === Episode::class) {
+                $ep = Episode::find($targetWatchableId);
+                $resolvedSeriesId = $ep?->series_id ?? ($ep?->season?->series_id ?? 0);
+                if ($resolvedSeriesId > 0 && $isSeriesRequest) {
+                    $epIds = Episode::where('series_id', $resolvedSeriesId)->pluck('id');
+                    WatchHistory::where('watchable_type', Episode::class)
+                        ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
+                            $sub->where('user_id', $userId)->orWhereNull('user_id');
+                        }))
+                        ->whereIn('watchable_id', $epIds)
+                        ->delete();
+                }
+
+                WatchHistory::where('watchable_type', Episode::class)
+                    ->where('watchable_id', $targetWatchableId)
+                    ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
+                        $sub->where('user_id', $userId)->orWhereNull('user_id');
+                    }))
+                    ->delete();
+            } else {
+                WatchHistory::where('watchable_type', MediaItem::class)
+                    ->where('watchable_id', $targetWatchableId)
+                    ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
+                        $sub->where('user_id', $userId)->orWhereNull('user_id');
+                    }))
+                    ->delete();
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Item removed from watch history',
+            ]);
+        }
+
+        // 3. Check if $id matches a WatchHistory primary ID (with type collision guard)
         $record = WatchHistory::when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
             $sub->where('user_id', $userId)->orWhereNull('user_id');
         }))->find($id);
-        if ($record) {
+
+        if ($record && ($modelClass === null || $record->watchable_type === $modelClass)) {
+            if ($record->watchable_type === Episode::class) {
+                $ep = $record->watchable ?? Episode::find($record->watchable_id);
+                $resolvedSeriesId = $ep?->series_id ?? ($ep?->season?->series_id ?? 0);
+                if ($resolvedSeriesId > 0 && ($isSeriesRequest || ! empty($seriesId))) {
+                    $epIds = Episode::where('series_id', $resolvedSeriesId)->pluck('id');
+                    WatchHistory::where('watchable_type', Episode::class)
+                        ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
+                            $sub->where('user_id', $userId)->orWhereNull('user_id');
+                        }))
+                        ->whereIn('watchable_id', $epIds)
+                        ->delete();
+                }
+            }
+
             $record->delete();
 
             return response()->json([
@@ -618,25 +702,47 @@ class StreamController extends Controller
             ]);
         }
 
-        // Otherwise check if watchable_id and watchable_type match
-        $modelClass = ($type === 'series' || $type === 'episode') ? Episode::class : MediaItem::class;
+        // 4. Fallback: treat $id as entity primary key
+        $fallbackClass = $modelClass ?? (($isSeriesRequest || $isEpisodeRequest) ? Episode::class : MediaItem::class);
+        if ($fallbackClass === Episode::class) {
+            $ep = Episode::find($id);
+            $resolvedSeriesId = $ep?->series_id ?? ($ep?->season?->series_id ?? 0);
+            if ($resolvedSeriesId > 0 && $isSeriesRequest) {
+                $epIds = Episode::where('series_id', $resolvedSeriesId)->pluck('id');
+                WatchHistory::where('watchable_type', Episode::class)
+                    ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
+                        $sub->where('user_id', $userId)->orWhereNull('user_id');
+                    }))
+                    ->whereIn('watchable_id', $epIds)
+                    ->delete();
+            }
 
-        WatchHistory::where('watchable_id', $id)
-            ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
-                $sub->where('user_id', $userId)->orWhereNull('user_id');
-            }))
-            ->when($type, fn ($q) => $q->where('watchable_type', $modelClass))
-            ->delete();
-
-        // If removing an entire series by series_id
-        if ($type === 'series' || $request->boolean('is_series')) {
-            $epIds = Episode::where('series_id', $id)->pluck('id');
             WatchHistory::where('watchable_type', Episode::class)
+                ->where('watchable_id', $id)
                 ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
                     $sub->where('user_id', $userId)->orWhereNull('user_id');
                 }))
-                ->whereIn('watchable_id', $epIds)
                 ->delete();
+        } else {
+            WatchHistory::where('watchable_type', MediaItem::class)
+                ->where('watchable_id', $id)
+                ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
+                    $sub->where('user_id', $userId)->orWhereNull('user_id');
+                }))
+                ->delete();
+        }
+
+        // 5. If caller passed a series ID directly when $isSeriesRequest is true
+        if ($isSeriesRequest) {
+            $epIds = Episode::where('series_id', $id)->pluck('id');
+            if ($epIds->isNotEmpty()) {
+                WatchHistory::where('watchable_type', Episode::class)
+                    ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
+                        $sub->where('user_id', $userId)->orWhereNull('user_id');
+                    }))
+                    ->whereIn('watchable_id', $epIds)
+                    ->delete();
+            }
         }
 
         return response()->json([

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class MediaItem extends Model
@@ -18,6 +19,18 @@ class MediaItem extends Model
                 $base = Str::slug($model->title.($model->release_year ? " {$model->release_year}" : ''));
                 $model->slug = $base ?: 'movie-'.uniqid();
             }
+        });
+
+        static::saved(function () {
+            Cache::forget('movies.hero_items.v4');
+            Cache::forget('movies.hero_items.v3');
+            Cache::forget('movies.hero_items.v2');
+        });
+
+        static::deleted(function () {
+            Cache::forget('movies.hero_items.v4');
+            Cache::forget('movies.hero_items.v3');
+            Cache::forget('movies.hero_items.v2');
         });
     }
 
@@ -75,7 +88,7 @@ class MediaItem extends Model
 
     public function scopeMovies($query)
     {
-        return $query->where('type', 'movie');
+        return $query;
     }
 
     public function scopeFavorites($query)

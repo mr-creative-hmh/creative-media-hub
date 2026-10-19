@@ -276,6 +276,90 @@ class StreamingAndRoutesTest extends TestCase
         $this->assertDatabaseMissing('watch_histories', ['id' => $history->id]);
     }
 
+    public function test_delete_series_watch_history_removes_all_episodes_for_that_series(): void
+    {
+        $series = Series::create(['title' => 'Breaking Bad', 'release_year' => 2008]);
+        $season = Season::create(['series_id' => $series->id, 'season_number' => 1]);
+        $ep1 = Episode::create(['series_id' => $series->id, 'season_id' => $season->id, 'episode_number' => 1, 'title' => 'Pilot']);
+        $ep2 = Episode::create(['series_id' => $series->id, 'season_id' => $season->id, 'episode_number' => 2, 'title' => 'Cat\'s in the Bag']);
+
+        $h1 = WatchHistory::create([
+            'watchable_id' => $ep1->id,
+            'watchable_type' => Episode::class,
+            'progress_seconds' => 100,
+            'duration_seconds' => 3000,
+            'is_completed' => false,
+            'last_watched_at' => now()->subDay(),
+        ]);
+
+        $h2 = WatchHistory::create([
+            'watchable_id' => $ep2->id,
+            'watchable_type' => Episode::class,
+            'progress_seconds' => 200,
+            'duration_seconds' => 3000,
+            'is_completed' => false,
+            'last_watched_at' => now(),
+        ]);
+
+        // Removing latest episode watch history with type=series should clean up all episodes of the series
+        $res = $this->deleteJson('/api/watch-history/'.$h2->id.'?type=series');
+        $res->assertStatus(200);
+        $res->assertJson(['success' => true]);
+
+        $this->assertDatabaseMissing('watch_histories', ['id' => $h2->id]);
+        $this->assertDatabaseMissing('watch_histories', ['id' => $h1->id]);
+    }
+
+    public function test_delete_watch_history_avoids_id_collision_between_models(): void
+    {
+        $movie = MediaItem::create(['title' => 'Inception', 'release_year' => 2010]);
+        $series = Series::create(['title' => 'Dark', 'release_year' => 2017]);
+        $season = Season::create(['series_id' => $series->id, 'season_number' => 1]);
+        $ep = Episode::create(['series_id' => $series->id, 'season_id' => $season->id, 'episode_number' => 1, 'title' => 'Secrets']);
+
+        $h1 = WatchHistory::create([
+            'watchable_id' => $ep->id,
+            'watchable_type' => Episode::class,
+            'progress_seconds' => 300,
+            'duration_seconds' => 3000,
+            'is_completed' => false,
+            'last_watched_at' => now(),
+        ]);
+
+        $h2 = WatchHistory::create([
+            'watchable_id' => $movie->id,
+            'watchable_type' => MediaItem::class,
+            'progress_seconds' => 500,
+            'duration_seconds' => 7000,
+            'is_completed' => false,
+            'last_watched_at' => now(),
+        ]);
+
+        // When requesting to delete a movie by watchable_id with type=movie,
+        // even if $movie->id accidentally equals $h1->id, it must NOT delete $h1 (Episode)!
+        // Simulate: movie ID equals $h1->id
+        $targetId = $h1->id;
+        $collidingMovie = MediaItem::create(['title' => 'Colliding Movie', 'release_year' => 2023]);
+        // Set colliding watch history for movie with watchable_id = $targetId
+        $hMovie = WatchHistory::create([
+            'watchable_id' => $collidingMovie->id,
+            'watchable_type' => MediaItem::class,
+            'progress_seconds' => 450,
+            'duration_seconds' => 5000,
+            'is_completed' => false,
+            'last_watched_at' => now(),
+        ]);
+
+        // Request deletion using movie's watchable ID:
+        $res = $this->deleteJson('/api/watch-history/'.$collidingMovie->id.'?type=movie&watchable_type=movie');
+        $res->assertStatus(200);
+
+        // $hMovie must be removed
+        $this->assertDatabaseMissing('watch_histories', ['id' => $hMovie->id]);
+        // $h1 (Episode) must remain untouched even if its PK equals $targetId
+        $this->assertDatabaseHas('watch_histories', ['id' => $h1->id]);
+    }
+
     public function test_clear_all_watch_history_removes_records(): void
     {
         $movie = MediaItem::create([

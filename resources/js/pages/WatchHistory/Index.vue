@@ -100,25 +100,46 @@ const seriesList = computed(() => {
 // Remove individual item
 const removeItem = async (item: any, e?: MouseEvent) => {
     if (e) e.stopPropagation();
-    const itemId = item.history_id || item.id;
+    const itemId = item.history_id || item.watchable_id || item.id;
     if (removingIds.value.has(itemId)) return;
+
+    const previousItems = [...allItems.value];
+    const seriesId = item.series_id || item.series?.id || null;
+    const watchableId = item.watchable_id || item.id;
+    const isSeries = item.category === 'series' || item.type === 'episode' || item.watchable_type === 'episode';
+    const watchableType = item.watchable_type || (isSeries ? 'episode' : 'movie');
 
     removingIds.value.add(itemId);
 
-    // Optimistic removal from local list
-    allItems.value = allItems.value.filter((i) => (i.history_id || i.id) !== itemId);
+    // Optimistic removal from local list (for series, remove any cards with same seriesId or itemId)
+    allItems.value = allItems.value.filter((i) => {
+        const idMatches = (i.history_id || i.watchable_id || i.id) === itemId;
+        const seriesMatches = seriesId && (i.series_id || i.series?.id) === seriesId;
+        return !idMatches && !seriesMatches;
+    });
 
     // Recompute counts
     updateCountsLocally();
 
     try {
-        await fetch(`/api/watch-history/${itemId}?type=${item.category || item.type}`, {
+        const params = new URLSearchParams({
+            type: item.category || item.type || (isSeries ? 'series' : 'movie'),
+            ...(watchableId ? { watchable_id: String(watchableId) } : {}),
+            ...(watchableType ? { watchable_type: String(watchableType) } : {}),
+            ...(seriesId ? { series_id: String(seriesId), is_series: '1' } : {}),
+        });
+
+        const res = await fetch(`/api/watch-history/${itemId}?${params.toString()}`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
             },
         });
+
+        if (!res.ok) {
+            throw new Error(`Failed to remove item: HTTP ${res.status}`);
+        }
 
         window.dispatchEvent(new CustomEvent('app-toast', {
             detail: {
@@ -128,6 +149,16 @@ const removeItem = async (item: any, e?: MouseEvent) => {
         }));
     } catch (err) {
         console.error('Failed to remove item', err);
+        // Rollback optimistic removal
+        allItems.value = previousItems;
+        updateCountsLocally();
+
+        window.dispatchEvent(new CustomEvent('app-toast', {
+            detail: {
+                type: 'error',
+                message: t('watch_history.remove_failed') || 'Failed to remove item from watch history',
+            }
+        }));
     } finally {
         removingIds.value.delete(itemId);
     }
@@ -142,8 +173,24 @@ const openClearModal = (category: 'all' | 'movie' | 'series' | 'collection' = 'a
 // Execute clear all
 const executeClear = async () => {
     isClearing.value = true;
+    const cat = clearTargetCategory.value;
+    const previousItems = [...allItems.value];
+    const previousCounts = { ...counts.value };
+
+    // Optimistically update
+    if (cat === 'all') {
+        allItems.value = [];
+        counts.value = { all: 0, movies: 0, series: 0, collections: 0 };
+    } else if (cat === 'movie') {
+        allItems.value = allItems.value.filter((i) => i.type !== 'movie' && i.watchable_type !== 'movie');
+    } else if (cat === 'series') {
+        allItems.value = allItems.value.filter((i) => i.type !== 'episode' && i.watchable_type !== 'episode');
+    } else if (cat === 'collection') {
+        allItems.value = allItems.value.filter((i) => !i.collection_name);
+    }
+    updateCountsLocally();
+
     try {
-        const cat = clearTargetCategory.value;
         const res = await fetch(`/api/watch-history?type=${cat}`, {
             method: 'DELETE',
             headers: {
@@ -152,28 +199,29 @@ const executeClear = async () => {
             },
         });
 
-        if (res.ok) {
-            if (cat === 'all') {
-                allItems.value = [];
-                counts.value = { all: 0, movies: 0, series: 0, collections: 0 };
-            } else if (cat === 'movie') {
-                allItems.value = allItems.value.filter((i) => i.type !== 'movie');
-            } else if (cat === 'series') {
-                allItems.value = allItems.value.filter((i) => i.type !== 'episode');
-            } else if (cat === 'collection') {
-                allItems.value = allItems.value.filter((i) => !i.collection_name);
-            }
-            updateCountsLocally();
-
-            window.dispatchEvent(new CustomEvent('app-toast', {
-                detail: {
-                    type: 'success',
-                    message: t('watch_history.cleared_success'),
-                }
-            }));
+        if (!res.ok) {
+            throw new Error(`Failed to clear watch history: HTTP ${res.status}`);
         }
+
+        window.dispatchEvent(new CustomEvent('app-toast', {
+            detail: {
+                type: 'success',
+                message: t('watch_history.cleared_success'),
+            }
+        }));
     } catch (err) {
         console.error('Failed to clear watch history', err);
+        // Rollback on failure
+        allItems.value = previousItems;
+        counts.value = previousCounts;
+        updateCountsLocally();
+
+        window.dispatchEvent(new CustomEvent('app-toast', {
+            detail: {
+                type: 'error',
+                message: t('watch_history.clear_failed') || 'Failed to clear watch history',
+            }
+        }));
     } finally {
         isClearing.value = false;
         isClearModalOpen.value = false;

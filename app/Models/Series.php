@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class Series extends Model
@@ -18,6 +19,16 @@ class Series extends Model
                 $base = Str::slug($model->title.($model->release_year ? " {$model->release_year}" : ''));
                 $model->slug = $base ?: 'series-'.uniqid();
             }
+        });
+
+        static::saved(function () {
+            Cache::forget('series.hero_items.v3');
+            Cache::forget('series.hero_items.v2');
+        });
+
+        static::deleted(function () {
+            Cache::forget('series.hero_items.v3');
+            Cache::forget('series.hero_items.v2');
         });
     }
 

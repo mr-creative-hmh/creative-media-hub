@@ -311,7 +311,7 @@ class MetadataAggregator
         return $data;
     }
 
-        public function getSeasonEpisodesBilingual(string|int $seriesId, int $seasonNumber, string $providerKey = 'tmdb'): array
+    public function getSeasonEpisodesBilingual(string|int $seriesId, int $seasonNumber, string $providerKey = 'tmdb'): array
     {
         if ($providerKey === 'tmdb' && isset($this->providers['tmdb']) && method_exists($this->providers['tmdb'], 'getSeasonEpisodesBilingual')) {
             return $this->providers['tmdb']->getSeasonEpisodesBilingual($seriesId, $seasonNumber);
@@ -324,6 +324,7 @@ class MetadataAggregator
             $num = (int) ($ep['episode_number'] ?? 1);
             $result[$num] = $ep;
         }
+
         return $result;
     }
 
@@ -437,8 +438,9 @@ class MetadataAggregator
                 foreach ($pages as $p) {
                     if (! empty($p['langlinks'][0]['*'])) {
                         $wikiArTitle = $p['langlinks'][0]['*'];
-                        if (! $hasArabicTitle) {
-                            $data['title_ar'] = $wikiArTitle;
+                        $sanitizedWikiTitle = $this->sanitizeArabicTitle($wikiArTitle, $title);
+                        if (! $hasArabicTitle && $sanitizedWikiTitle) {
+                            $data['title_ar'] = $sanitizedWikiTitle;
                             $hasArabicTitle = true;
                         }
 
@@ -466,8 +468,9 @@ class MetadataAggregator
                     'langpair' => 'en|ar',
                 ]);
                 $trans = $res->json('responseData.translatedText');
-                if ($trans && strtolower(trim($trans)) !== strtolower(trim($title)) && ! str_contains($trans, 'MYMEMORY WARNING')) {
-                    $data['title_ar'] = $trans;
+                $sanitizedTitle = $this->sanitizeArabicTitle($trans, $title);
+                if ($sanitizedTitle) {
+                    $data['title_ar'] = $sanitizedTitle;
                     $hasArabicTitle = true;
                 }
             } catch (\Throwable $e) {
@@ -623,5 +626,47 @@ class MetadataAggregator
         }
 
         return $details;
+    }
+
+    /**
+     * Sanitize and validate Arabic title translation from machine/crowdsourced APIs.
+     */
+    public function sanitizeArabicTitle(?string $translation, string $originalTitle): ?string
+    {
+        if (empty($translation)) {
+            return null;
+        }
+
+        $trans = html_entity_decode(trim($translation), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        if (strtolower($trans) === strtolower(trim($originalTitle)) || str_contains($trans, 'MYMEMORY WARNING')) {
+            return null;
+        }
+
+        // Must contain Arabic characters
+        if (! preg_match('/[\x{0600}-\x{06FF}]/u', $trans)) {
+            return null;
+        }
+
+        // Strip Wikipedia disambiguation suffixes like (فيلم) or (مسلسل)
+        $trans = preg_replace('/\s*\((?:فيلم|مسلسل|سلسلة أفلام)[\s\d]*\)$/u', '', $trans);
+
+        // Strip extraneous crowdsourced commentary, definitions, or biographical footnotes:
+        // E.g.: "أونابومبر (Unabomber) ,تيد كازينسكي..." -> "أونابومبر"
+        if (preg_match('/^([^\(،,\n\r\t]+)/u', $trans, $matches)) {
+            $candidate = trim($matches[1]);
+            if (! empty($candidate) && mb_strlen($candidate) >= 2) {
+                $trans = $candidate;
+            }
+        }
+
+        $trans = trim(preg_replace('/\s+/u', ' ', $trans));
+
+        // Enforce sane title length (titles are not full paragraphs)
+        if (mb_strlen($trans) > 80) {
+            return null;
+        }
+
+        return $trans;
     }
 }

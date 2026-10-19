@@ -38,10 +38,21 @@ class Aria2Service
             return $this->binaryPath = $bundledGeneral;
         }
 
-        // 3. Check WinGet link if present on host
-        $wingetLink = 'C:\\Users\\hasan\\AppData\\Local\\Microsoft\\WinGet\\Links\\aria2c.exe';
-        if (file_exists($wingetLink)) {
-            return $this->binaryPath = $wingetLink;
+        // 3. Check WinGet / Scoop / Chocolatey links if present on host
+        $userProfile = getenv('USERPROFILE') ?: (getenv('HOMEDRIVE') && getenv('HOMEPATH') ? getenv('HOMEDRIVE').getenv('HOMEPATH') : null);
+        $localAppData = getenv('LOCALAPPDATA') ?: ($userProfile ? "{$userProfile}\\AppData\\Local" : null);
+
+        $hostCandidates = array_values(array_filter([
+            $localAppData ? "{$localAppData}\\Microsoft\\WinGet\\Links\\aria2c.exe" : null,
+            $userProfile ? "{$userProfile}\\scoop\\shims\\aria2c.exe" : null,
+            'C:\\ProgramData\\chocolatey\\bin\\aria2c.exe',
+            'C:\\tools\\aria2\\aria2c.exe',
+        ]));
+
+        foreach ($hostCandidates as $candidate) {
+            if (file_exists($candidate)) {
+                return $this->binaryPath = $candidate;
+            }
         }
 
         // 4. Check system PATH

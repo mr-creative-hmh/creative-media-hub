@@ -53,16 +53,18 @@ class AnalyticsController extends Controller
             if (@file_exists($letter)) {
                 $total = @disk_total_space($letter);
                 $free = @disk_free_space($letter);
-                if ($total) {
-                    $used = $total - $free;
-                    $usedPct = round(($used / $total) * 100, 1);
+                if ($total !== false && $total > 0) {
+                    $freeVal = $free !== false ? (float) $free : 0.0;
+                    $totalVal = (float) $total;
+                    $used = max(0.0, $totalVal - $freeVal);
+                    $usedPct = round(($used / $totalVal) * 100, 1);
                     $hostDrives[] = [
                         'drive' => $letter,
-                        'total_formatted' => $formatBytes($total),
-                        'free_formatted' => $formatBytes($free),
+                        'total_formatted' => $formatBytes($totalVal),
+                        'free_formatted' => $formatBytes($freeVal),
                         'used_formatted' => $formatBytes($used),
-                        'total_bytes' => $total,
-                        'free_bytes' => $free,
+                        'total_bytes' => $totalVal,
+                        'free_bytes' => $freeVal,
                         'used_bytes' => $used,
                         'used_percent' => $usedPct,
                         'status' => $usedPct >= 95 ? 'critical' : ($usedPct >= 85 ? 'warning' : 'normal'),

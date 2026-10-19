@@ -1,4 +1,0 @@
-    public function processBatch(int $batchSize = 4): array
-    {
-        return $this->processNextBatch($batchSize);
-    }

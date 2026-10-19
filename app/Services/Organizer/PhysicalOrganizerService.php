@@ -1302,7 +1302,7 @@ class PhysicalOrganizerService
 
                 // Execute safe cross-drive move or copy with timeout immunity
                 $this->moveOrCopyFile($source, $dest, $mode);
-                if ($mode === 'move') {
+                if ($mode === 'move' || $mode === 'hardlink') {
                     $this->updateDatabasePath($source, $dest, $item['collection_name'] ?? null);
                 }
 
@@ -1325,7 +1325,7 @@ class PhysicalOrganizerService
                             }
 
                             $this->moveOrCopyFile($subSource, $subDest, $mode);
-                            if ($mode === 'move') {
+                            if ($mode === 'move' || $mode === 'hardlink') {
                                 try {
                                     Subtitle::where('file_path', $subSource)->update(['file_path' => $subDest]);
                                 } catch (\Throwable $te) {
@@ -1430,6 +1430,35 @@ class PhysicalOrganizerService
             } while (file_exists($dest));
         }
 
+        if ($mode === 'hardlink') {
+            if ($this->isSameVolume($source, $dest)) {
+                try {
+                    if (@link($source, $dest)) {
+                        return true;
+                    }
+                } catch (\Throwable $e) {
+                }
+
+                if (PHP_OS_FAMILY === 'Windows') {
+                    $winDest = escapeshellarg(str_replace('/', '\\', $dest));
+                    $winSource = escapeshellarg(str_replace('/', '\\', $source));
+                    $cmd = "cmd /c mklink /H {$winDest} {$winSource} 2>NUL";
+                    @exec($cmd, $out, $code);
+                    if ($code === 0 && file_exists($dest)) {
+                        return true;
+                    }
+                }
+            }
+
+            // Cross-volume hardlinks are not supported by NTFS filesystem; fallback safely to copy
+            $copied = $this->streamCopy($source, $dest);
+            if (! $copied) {
+                throw new \RuntimeException("Failed to create hardlink or copy file from [{$source}] to [{$dest}].");
+            }
+
+            return true;
+        }
+
         if ($mode === 'move') {
             // Attempt fast filesystem rename (instantaneous on same partition)
             try {
@@ -1457,6 +1486,39 @@ class PhysicalOrganizerService
 
             return true;
         }
+    }
+
+    /**
+     * Determine if two paths reside on the exact same filesystem storage volume.
+     */
+    public function isSameVolume(string $pathA, string $pathB): bool
+    {
+        if (PHP_OS_FAMILY === 'Windows') {
+            $driveA = '';
+            $driveB = '';
+            if (preg_match('/^([A-Za-z]:)/', $pathA, $mA)) {
+                $driveA = strtoupper($mA[1]);
+            }
+            if (preg_match('/^([A-Za-z]:)/', $pathB, $mB)) {
+                $driveB = strtoupper($mB[1]);
+            }
+            if ($driveA !== '' && $driveB !== '') {
+                return $driveA === $driveB;
+            }
+        }
+
+        try {
+            $checkA = file_exists($pathA) ? $pathA : dirname($pathA);
+            $checkB = file_exists($pathB) ? $pathB : dirname($pathB);
+            $statA = @stat($checkA);
+            $statB = @stat($checkB);
+            if ($statA && $statB && isset($statA['dev'], $statB['dev'])) {
+                return $statA['dev'] === $statB['dev'];
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return true;
     }
 
     /**

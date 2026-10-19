@@ -938,14 +938,25 @@ class VirtualLibraryScannerService
             return $files;
         }
 
-        // Get all already indexed file paths in a single query
-        $indexedPaths = MediaItem::whereIn('file_path', $paths)
-            ->pluck('file_path')
-            ->toArray();
+        // Get all already indexed file paths in chunked queries to respect SQLite variable limits
+        $indexedPaths = [];
+        $indexedEpisodes = [];
 
-        $indexedEpisodes = Episode::whereIn('file_path', $paths)
-            ->pluck('file_path')
-            ->toArray();
+        foreach (array_chunk($paths, 500) as $chunk) {
+            $chunkPaths = MediaItem::whereIn('file_path', $chunk)
+                ->pluck('file_path')
+                ->toArray();
+            if (! empty($chunkPaths)) {
+                $indexedPaths = array_merge($indexedPaths, $chunkPaths);
+            }
+
+            $chunkEpisodes = Episode::whereIn('file_path', $chunk)
+                ->pluck('file_path')
+                ->toArray();
+            if (! empty($chunkEpisodes)) {
+                $indexedEpisodes = array_merge($indexedEpisodes, $chunkEpisodes);
+            }
+        }
 
         $allIndexed = array_merge($indexedPaths, $indexedEpisodes);
 
