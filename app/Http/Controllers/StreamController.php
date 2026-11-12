@@ -6,6 +6,7 @@ use App\Models\Episode;
 use App\Models\MediaItem;
 use App\Models\Subtitle;
 use App\Services\Media\FfmpegLocatorService;
+use App\Services\Streaming\StreamMseService;
 use App\Services\Streaming\StreamRemuxService;
 use App\Services\Streaming\SubtitleStreamService;
 use App\Services\Streaming\WatchHistoryService;
@@ -19,6 +20,7 @@ class StreamController extends Controller
 {
     public function __construct(
         protected StreamRemuxService $remuxService,
+        protected StreamMseService $mseService,
         protected SubtitleStreamService $subtitleService,
         protected WatchHistoryService $watchHistoryService
     ) {}
@@ -84,6 +86,36 @@ class StreamController extends Controller
     public function streamRemuxEpisode(Episode $episode, Request $request)
     {
         return $this->remuxService->streamRemuxFile(
+            $episode->file_path,
+            $request,
+            $episode->video_codec,
+            $episode->audio_codec,
+            'episode',
+            $episode->id
+        );
+    }
+
+    /**
+     * Stream movie formatted as an ISO BMFF fMP4 stream tailored for MediaSource Extensions (MSE).
+     */
+    public function streamMseMovie(MediaItem $mediaItem, Request $request)
+    {
+        return $this->mseService->streamMseFile(
+            $mediaItem->file_path,
+            $request,
+            $mediaItem->video_codec,
+            $mediaItem->audio_codec,
+            'media',
+            $mediaItem->id
+        );
+    }
+
+    /**
+     * Stream episode formatted as an ISO BMFF fMP4 stream tailored for MediaSource Extensions (MSE).
+     */
+    public function streamMseEpisode(Episode $episode, Request $request)
+    {
+        return $this->mseService->streamMseFile(
             $episode->file_path,
             $request,
             $episode->video_codec,

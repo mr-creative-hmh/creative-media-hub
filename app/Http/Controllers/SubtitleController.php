@@ -59,11 +59,11 @@ class SubtitleController extends Controller
 
     public function search(Request $request): JsonResponse
     {
-        $query = $request->input('query', '');
+        $query = $request->input('query', $request->input('q', ''));
         $imdbId = $request->input('imdb_id');
         $lang = $request->input('language', $request->input('languages', 'ar,en'));
-        $mediaId = $request->input('media_id');
-        $mediaType = $request->input('media_type', 'movie');
+        $mediaId = $request->input('media_id', $request->input('id'));
+        $mediaType = $request->input('media_type', $request->input('type', 'movie'));
         $season = $request->input('season_number');
         $episode = $request->input('episode_number');
         $year = $request->input('year');
@@ -305,6 +305,12 @@ class SubtitleController extends Controller
 
     public function downloadForMedia(Request $request): JsonResponse
     {
+        $request->merge([
+            'media_id' => $request->input('media_id', $request->input('id')),
+            'media_type' => $request->input('media_type', $request->input('type')),
+            'release' => $request->input('release', $request->input('release_name', $request->input('file_name'))),
+        ]);
+
         $validated = $request->validate([
             'media_id' => 'required|integer',
             'media_type' => 'required|in:movie,episode',

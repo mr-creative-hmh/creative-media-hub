@@ -122,6 +122,7 @@ Route::get('/subtitles', [SubtitleController::class, 'index'])->name('subtitles.
 Route::get('/api/subtitles/search', [SubtitleController::class, 'search'])->name('api.subtitles.search');
 Route::post('/api/subtitles/download', [SubtitleController::class, 'downloadForMedia'])->name('api.subtitles.download');
 Route::post('/api/subtitles/generate-arabic', [SubtitleController::class, 'generateArabic'])->name('api.subtitles.generate-arabic');
+Route::post('/api/subtitles/translate-arabic', [SubtitleController::class, 'generateArabic'])->name('api.subtitles.translate-arabic');
 Route::get('/api/subtitles/for-media', [SubtitleController::class, 'forMedia'])->name('api.subtitles.for-media');
 Route::get('/api/subtitles/list', [SubtitleController::class, 'forMedia'])->name('api.subtitles.list');
 Route::post('/api/subtitles/verify-engine', [SubtitleController::class, 'verifyEngine'])->name('api.subtitles.verify-engine');
@@ -155,6 +156,10 @@ Route::get('/api/stream/playlist', [StreamController::class, 'getPlaylist'])->na
 // Server-Side Remux Streaming Routes (Instant on-the-fly AAC remuxing for unsupported formats)
 Route::get('/stream/remux/movie/{mediaItem}', [StreamController::class, 'streamRemuxMovie'])->name('stream.remux.movie');
 Route::get('/stream/remux/episode/{episode}', [StreamController::class, 'streamRemuxEpisode'])->name('stream.remux.episode');
+
+// MediaSource Extensions (MSE) Streaming Routes (Zero-Transcode Video Copy & fMP4 Chunked Delivery)
+Route::get('/stream/mse/movie/{mediaItem}', [StreamController::class, 'streamMseMovie'])->name('stream.mse.movie');
+Route::get('/stream/mse/episode/{episode}', [StreamController::class, 'streamMseEpisode'])->name('stream.mse.episode');
 
 // Storage & Codec Analytics
 Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics.index');

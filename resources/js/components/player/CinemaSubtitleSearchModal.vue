@@ -48,7 +48,15 @@ const performSearch = async () => {
     try {
         const type = props.isEpisode ? 'episode' : 'movie';
         const id = props.item?.watchable_id || props.item?.id;
-        const res = await fetch(`/api/subtitles/search?type=${type}&id=${id}&q=${encodeURIComponent(searchQuery.value)}`);
+        const qParams = new URLSearchParams({
+            media_type: type,
+            type: type,
+            media_id: String(id),
+            id: String(id),
+            query: searchQuery.value,
+            q: searchQuery.value,
+        });
+        const res = await fetch(`/api/subtitles/search?${qParams.toString()}`);
         const data = await res.json();
         searchResults.value = Array.isArray(data.results) ? data.results : [];
     } catch (e) {
@@ -70,12 +78,16 @@ const downloadSubtitle = async (result: any) => {
                 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
             },
             body: JSON.stringify({
+                media_type: type,
                 type,
+                media_id: id,
                 id,
                 subtitle_id: result.id,
                 download_url: result.download_url,
                 language: result.language || 'ar',
+                release: result.release_name || result.title,
                 release_name: result.release_name || result.title,
+                file_id: result.file_id || result.id,
             }),
         });
 

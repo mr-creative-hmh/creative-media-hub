@@ -1,5 +1,5 @@
 import { ref, computed, nextTick, type Ref } from 'vue';
-import { WebMediaEngine } from '@/lib/player/webEngine/webMediaEngine';
+import { MseBackendClient } from '@/lib/player/webEngine/mseBackendClient';
 
 export interface UseCinemaPlaybackOptions {
     item: Ref<any>;
@@ -101,7 +101,7 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
     const remuxStartOffset = ref(isRemuxStream.value && pendingInitialSeek.value > 0 ? pendingInitialSeek.value : 0);
     const isServerCached = ref(false);
     const cachedStreamUrl = ref('');
-    const webEngineInstance = ref<WebMediaEngine | null>(null);
+    const webEngineInstance = ref<MseBackendClient | null>(null);
 
     const destroyWebEngine = () => {
         if (webEngineInstance.value) {
@@ -117,25 +117,29 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
         const targetId = activeItem.value?.watchable_id || activeItem.value?.id;
         if (!targetId) return false;
 
-        const directStreamUrl = isEpisode.value ? `/stream/episode/${targetId}` : `/stream/movie/${targetId}`;
+        const mseStreamUrl = isEpisode.value ? `/stream/mse/episode/${targetId}` : `/stream/mse/movie/${targetId}`;
 
         isBuffering.value = true;
-        const engine = new WebMediaEngine({
+        const engine = new MseBackendClient({
             videoElement: videoRef.value,
-            streamUrl: directStreamUrl,
+            streamUrl: mseStreamUrl,
+            onBuffering: (buffering) => {
+                isBuffering.value = buffering;
+            },
+            onError: (err) => {
+                console.warn('[CinemaPlayback] MSE backend client error, falling back:', err);
+            },
         });
 
-        const success = await engine.start();
+        const startAt = pendingInitialSeek.value > 0 ? pendingInitialSeek.value : currentTime.value;
+        const success = await engine.start(startAt);
         isBuffering.value = false;
 
         if (success) {
             webEngineInstance.value = engine;
-            if (pendingInitialSeek.value > 0) {
-                await engine.seekTo(pendingInitialSeek.value);
-            }
             return true;
         } else {
-            console.warn('[CinemaPlayback] WebMediaEngine start failed, smoothly falling back to server remux');
+            console.warn('[CinemaPlayback] MseBackendClient start failed, smoothly falling back to server remux');
             engineMode.value = 'remux';
             isRemuxStream.value = true;
             if (options.onToast) {
@@ -166,6 +170,18 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
 
         const targetId = activeItem.value?.watchable_id || activeItem.value?.id;
         if (!targetId) return '';
+
+        if (engineMode.value === 'web') {
+            const params: string[] = [];
+            if (remuxStartOffset.value > 0) {
+                params.push(`start=${Math.round(remuxStartOffset.value * 1000) / 1000}`);
+            }
+            const queryString = params.length > 0 ? `?${params.join('&')}` : '';
+            if (isEpisode.value) {
+                return `/stream/mse/episode/${targetId}${queryString}`;
+            }
+            return `/stream/mse/movie/${targetId}${queryString}`;
+        }
 
         if (isRemuxStream.value) {
             if (isServerCached.value && cachedStreamUrl.value) {
@@ -299,7 +315,7 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
                     videoRef.value.play().catch(() => {});
                 }
             } catch (e) {
-                console.warn('WebMediaEngine seek error:', e);
+                console.warn('[CinemaPlayback] MseBackendClient seek error:', e);
             } finally {
                 isBuffering.value = false;
             }
