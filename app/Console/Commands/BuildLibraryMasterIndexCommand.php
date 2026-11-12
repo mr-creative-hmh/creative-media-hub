@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use App\Services\Metadata\LibraryMasterIndexService;
+use Illuminate\Console\Command;
 
 class BuildLibraryMasterIndexCommand extends Command
 {
@@ -15,18 +15,18 @@ class BuildLibraryMasterIndexCommand extends Command
 
     public function handle(LibraryMasterIndexService $indexService): int
     {
-        $enrich = (bool)$this->option('enrich');
-        $popular = (bool)$this->option('popular');
+        $enrich = (bool) $this->option('enrich');
+        $popular = (bool) $this->option('popular');
 
-        $this->info("=== Starting Master Metadata Index Compilation ===");
-        $this->line("Enrich from Web: " . ($enrich ? "YES" : "NO"));
-        $this->line("Pre-seed Popular: " . ($popular ? "YES" : "NO"));
+        $this->info('=== Starting Master Metadata Index Compilation ===');
+        $this->line('Enrich from Web: '.($enrich ? 'YES' : 'NO'));
+        $this->line('Pre-seed Popular: '.($popular ? 'YES' : 'NO'));
         $this->newLine();
 
         $result = $indexService->buildMasterIndex(
             $enrich,
             $popular,
-            fn($msg) => $this->line($msg)
+            fn ($msg) => $this->line($msg)
         );
 
         $this->newLine();
@@ -41,7 +41,8 @@ class BuildLibraryMasterIndexCommand extends Command
             ]
         );
 
-        $this->info("Master Metadata Index saved in: " . $indexService->getIndexPath());
+        $this->info('Master Metadata Index saved in: '.$indexService->getIndexPath());
+
         return Command::SUCCESS;
     }
 }

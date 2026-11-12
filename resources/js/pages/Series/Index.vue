@@ -171,7 +171,7 @@ const handleToggleFavorite = async (s: any) => {
                         <div class="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-30 pointer-events-none">
                             <span class="cinema-badge bg-black/70 text-cyan-300 border border-cyan-500/30 text-[10px] flex items-center gap-1 pointer-events-auto">
                                 <Layers class="w-3 h-3" />
-                                {{ s.seasons?.length || 1 }} {{ t('common.seasons') }}
+                                {{ s.seasons_count ?? s.seasons?.length ?? 1 }} {{ t('common.seasons') }}
                             </span>
                             <div class="flex items-center gap-1.5 pointer-events-auto">
                                 <div v-if="s.rating" class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/70 text-amber-300 text-[10px] font-bold">

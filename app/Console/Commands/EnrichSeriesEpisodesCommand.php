@@ -6,7 +6,6 @@ use App\Models\Episode;
 use App\Models\Series;
 use App\Services\Metadata\MetadataAggregator;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Log;
 
 class EnrichSeriesEpisodesCommand extends Command
 {
@@ -26,8 +25,8 @@ class EnrichSeriesEpisodesCommand extends Command
         if ($seriesOption) {
             $query->where(function ($q) use ($seriesOption) {
                 $q->where('id', $seriesOption)
-                  ->orWhere('tmdb_id', $seriesOption)
-                  ->orWhere('title', 'like', "%{$seriesOption}%");
+                    ->orWhere('tmdb_id', $seriesOption)
+                    ->orWhere('title', 'like', "%{$seriesOption}%");
             });
         }
 
@@ -36,6 +35,7 @@ class EnrichSeriesEpisodesCommand extends Command
 
         if ($totalSeries === 0) {
             $this->warn('No series found with a valid TMDb ID.');
+
             return self::SUCCESS;
         }
 
@@ -51,6 +51,7 @@ class EnrichSeriesEpisodesCommand extends Command
             $tmdbId = $series->tmdb_id;
             if (! $tmdbId) {
                 $bar->advance();
+
                 continue;
             }
 
@@ -65,11 +66,13 @@ class EnrichSeriesEpisodesCommand extends Command
                 // Check if any episode needs enrichment (or force is on)
                 $needsEnrichment = $force || $episodes->contains(function ($ep) {
                     $raw = trim($ep->title ?? '');
+
                     return empty($raw) || preg_match('/^(?:Episode|Ep|Part|الحلقة)\s*\d+$/i', $raw) || preg_match('/^S\d+E\d+$/i', $raw);
                 });
 
                 if (! $needsEnrichment) {
                     $totalSkipped += $episodes->count();
+
                     continue;
                 }
 
@@ -91,6 +94,7 @@ class EnrichSeriesEpisodesCommand extends Command
                             'overview_ar' => $episode->overview_ar ?: 'في عام 1984، يبدأ مبرمج شاب بالتشكيك في واقعه أثناء تحويله رواية خيال علمي سوداوية إلى لعبة فيديو.',
                         ]);
                         $totalEnriched++;
+
                         continue;
                     }
 

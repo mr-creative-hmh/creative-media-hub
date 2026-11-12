@@ -47,7 +47,7 @@ class Episode extends Model
         return $this->morphMany(WatchHistory::class, 'watchable');
     }
 
-        public function getSeasonNumberAttribute(): int
+    public function getSeasonNumberAttribute(): int
     {
         return $this->season?->season_number ?? 1;
     }
@@ -61,6 +61,7 @@ class Episode extends Model
         if (empty($raw) || preg_match('/^(?:Episode|Ep|Part|الحلقة)\s*\d+$/i', $raw) || preg_match('/^S\d+E\d+$/i', $raw)) {
             return null;
         }
+
         return $raw;
     }
 
@@ -73,6 +74,7 @@ class Episode extends Model
         if (empty($raw) || preg_match('/^(?:Episode|Ep|Part|الحلقة)\s*\d+$/i', $raw) || preg_match('/^S\d+E\d+$/i', $raw)) {
             return null;
         }
+
         return $raw;
     }
 
@@ -88,6 +90,7 @@ class Episode extends Model
         $cleanTitle = $this->clean_episode_title;
 
         $base = "{$seriesTitle} - Season {$seasonNum} - Episode {$epNum}";
+
         return $cleanTitle ? "{$base} - {$cleanTitle}" : $base;
     }
 
@@ -103,6 +106,7 @@ class Episode extends Model
         $cleanTitle = $this->clean_episode_title_ar ?: $this->clean_episode_title;
 
         $base = "{$seriesTitle} - الموسم {$seasonNum} - الحلقة {$epNum}";
+
         return $cleanTitle ? "{$base} - {$cleanTitle}" : $base;
     }
 
@@ -117,6 +121,7 @@ class Episode extends Model
         $cleanTitle = $this->clean_episode_title;
 
         $base = "Season {$seasonNum} - Episode {$epNum}";
+
         return $cleanTitle ? "{$base} - {$cleanTitle}" : $base;
     }
 }

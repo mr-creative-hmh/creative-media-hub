@@ -8,10 +8,12 @@ use App\Models\MediaItem;
 use App\Models\Series;
 use App\Models\Subtitle;
 use App\Services\Scanner\VirtualLibraryScannerService;
+use App\Support\ByteFormatter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -59,7 +61,7 @@ class ScannerController extends Controller
             'total_episodes' => $totalEpisodes,
             'total_subtitles' => $totalSubs,
             'total_collections' => $totalCollections,
-            'storage_size_formatted' => $this->formatBytes($storageBytes),
+            'storage_size_formatted' => ByteFormatter::format($storageBytes),
         ];
     }
 
@@ -298,7 +300,7 @@ class ScannerController extends Controller
     protected function wipeAllScannedMedia(): void
     {
         retry(5, function () {
-            DB::statement('PRAGMA foreign_keys = OFF;');
+            Schema::disableForeignKeyConstraints();
             DB::statement('DELETE FROM subtitles;');
             DB::statement('DELETE FROM watch_histories;');
             DB::statement('DELETE FROM personables;');
@@ -307,7 +309,7 @@ class ScannerController extends Controller
             DB::statement('DELETE FROM seasons;');
             DB::statement('DELETE FROM series;');
             DB::statement('DELETE FROM media_items;');
-            DB::statement('PRAGMA foreign_keys = ON;');
+            Schema::enableForeignKeyConstraints();
         }, 150);
 
         Cache::forget('virtual_scanner_job_status');
@@ -318,20 +320,5 @@ class ScannerController extends Controller
         $clean = rtrim($folderPath, '/');
         MediaItem::where('file_path', 'like', "{$clean}%")->delete();
         Episode::where('file_path', 'like', "{$clean}%")->delete();
-    }
-
-    protected function formatBytes(int $bytes): string
-    {
-        if ($bytes >= 1073741824 * 1024) {
-            return round($bytes / (1073741824 * 1024), 2).' TB';
-        }
-        if ($bytes >= 1073741824) {
-            return round($bytes / 1073741824, 2).' GB';
-        }
-        if ($bytes >= 1048576) {
-            return round($bytes / 1048576, 1).' MB';
-        }
-
-        return round($bytes / 1024, 1).' KB';
     }
 }

@@ -3,55 +3,20 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
 import CinemaLoader from '@/components/player/CinemaLoader.vue';
-import { formatEpisodeTitle } from '@/lib/mediaTitle';
-import {
-    Play,
-    Pause,
-    Volume2,
-    VolumeX,
-    Volume1,
-    Maximize2,
-    Minimize2,
-    RotateCcw,
-    RotateCw,
-    Sliders,
-    MessageSquare,
-    Sparkles,
-    Film,
-    ArrowLeft,
-    Check,
-    Settings,
-    X,
-    FastForward,
-    Tv,
-    Clock,
-    Activity,
-    Layers,
-    Type,
-    SkipBack,
-    SkipForward,
-    Download,
-    Search,
-    Loader2,
-    Languages
-} from 'lucide-vue-next';
+import CinemaHeader from '@/components/player/CinemaHeader.vue';
+import CinemaScrubber from '@/components/player/CinemaScrubber.vue';
+import CinemaControlsBar from '@/components/player/CinemaControlsBar.vue';
+import CinemaSubtitleOverlay from '@/components/player/CinemaSubtitleOverlay.vue';
+import CinemaSubtitlesModal from '@/components/player/CinemaSubtitlesModal.vue';
+import CinemaSubtitleSearchModal from '@/components/player/CinemaSubtitleSearchModal.vue';
+import CinemaEqualizerModal from '@/components/player/CinemaEqualizerModal.vue';
+import CinemaPlaylistDrawer from '@/components/player/CinemaPlaylistDrawer.vue';
+import CinemaDiagnosticsHud from '@/components/player/CinemaDiagnosticsHud.vue';
 
-interface SubtitleItem {
-    id: number | string;
-    language: string;
-    language_name: string;
-    format: string;
-    is_embedded?: boolean;
-    file_path?: string;
-    is_default?: boolean | number;
-    url?: string;
-}
-
-interface CueItem {
-    start: number;
-    end: number;
-    text: string;
-}
+import { useCinemaPlayback } from '@/composables/player/useCinemaPlayback';
+import { useCinemaAudioPipeline } from '@/composables/player/useCinemaAudioPipeline';
+import { useCinemaSubtitles } from '@/composables/player/useCinemaSubtitles';
+import { useCinemaKeyboardShortcuts } from '@/composables/player/useCinemaKeyboardShortcuts';
 
 const props = defineProps<{
     item: any;
@@ -65,1762 +30,285 @@ const emit = defineEmits<{
 }>();
 
 const { isRTL, t } = useI18n();
-const globalToast = useToast();
+const toast = useToast();
 
-// Active Item for smooth in-player playlist navigation (Series episodes, Collections movies)
-const activeItem = ref(props.item);
+// Modal visibility flags
+const showSubtitlesModal = ref(false);
+const showSubtitleSearchModal = ref(false);
+const showEqualizerModal = ref(false);
+const showPlaylistDrawer = ref(false);
+const showDiagnosticsHud = ref(false);
 
-// Player DOM & State
+// Template refs
 const videoRef = ref<HTMLVideoElement | null>(null);
 const playerContainerRef = ref<HTMLDivElement | null>(null);
 
-const isPlaying = ref(false);
-const isMuted = ref(false);
-const volume = ref(1.0);
+// Interactive visual feedback states
+const touchFeedback = ref<'forward' | 'backward' | null>(null);
+let touchFeedbackTimer: any = null;
+const triggerTouchFeedback = (dir: 'forward' | 'backward') => {
+    touchFeedback.value = dir;
+    clearTimeout(touchFeedbackTimer);
+    touchFeedbackTimer = setTimeout(() => {
+        touchFeedback.value = null;
+    }, 800);
+};
 
-// Initialize initial progress from prop, item, or watchable metadata.
-// Consumed once upon seeking and NEVER bled into subsequent playlist items.
-const pendingInitialSeek = ref<number>(
-    Number(props.initialProgress) ||
-    Number(props.item?.progress_seconds) ||
-    Number(props.item?.initial_progress) ||
-    0
-);
-const currentTime = ref(pendingInitialSeek.value > 0 ? pendingInitialSeek.value : 0);
+const showCenterPlayIndicator = ref(false);
+let centerPlayTimer: any = null;
+const triggerCenterPlayIndicator = () => {
+    showCenterPlayIndicator.value = true;
+    clearTimeout(centerPlayTimer);
+    centerPlayTimer = setTimeout(() => {
+        showCenterPlayIndicator.value = false;
+    }, 600);
+};
 
-// Initialize duration from original file metadata immediately
-const hasExactDuration = Number(props.item?.duration_seconds) > 0;
-const initialDuration = hasExactDuration ? Number(props.item?.duration_seconds) : (Number(props.item?.runtime_minutes) ? Number(props.item.runtime_minutes) * 60 : 0);
-const duration = ref(initialDuration > 0 ? initialDuration : 0);
-const isDurationLocked = ref(hasExactDuration);
+const isAnyModalOpen = () => {
+    return showSubtitlesModal.value || showSubtitleSearchModal.value || showEqualizerModal.value || showPlaylistDrawer.value || showDiagnosticsHud.value;
+};
 
-const bufferedPercent = ref(0);
-const isFullscreen = ref(false);
-const isControlsVisible = ref(true);
-const isBuffering = ref(false);
-const hasAppliedInitialSeek = ref(false);
-
-// Active Modal/Drawer States
-const showEqualizer = ref(false);
-const showSubtitlesMenu = ref(false);
-const showPlaybackSpeedMenu = ref(false);
-const showSubtitleSearchModal = ref(false);
-const showDiagnostics = ref(false);
-const playbackRate = ref(1.0);
-const isServerCached = ref(false);
-const cachedStreamUrl = ref('');
-const droppedFrames = ref(0);
-const bufferAheadSecs = ref(0);
-
-// Playlist Management (Series & Collections)
-const internalPlaylist = ref<any[]>([]);
-
-const currentPlaylist = computed<any[]>(() => {
-    if (props.playlist && Array.isArray(props.playlist) && props.playlist.length > 0) {
-        return props.playlist;
+const closeTopModal = () => {
+    if (showSubtitleSearchModal.value) {
+        showSubtitleSearchModal.value = false;
+        return true;
     }
-    if (activeItem.value?.playlist && Array.isArray(activeItem.value.playlist) && activeItem.value.playlist.length > 0) {
-        return activeItem.value.playlist;
+    if (showSubtitlesModal.value) {
+        showSubtitlesModal.value = false;
+        return true;
     }
-    if (internalPlaylist.value && internalPlaylist.value.length > 0) {
-        return internalPlaylist.value;
+    if (showEqualizerModal.value) {
+        showEqualizerModal.value = false;
+        return true;
     }
-    return [];
+    if (showPlaylistDrawer.value) {
+        showPlaylistDrawer.value = false;
+        return true;
+    }
+    if (showDiagnosticsHud.value) {
+        showDiagnosticsHud.value = false;
+        return true;
+    }
+    return false;
+};
+
+// Controls visibility timer
+let controlsTimeout: any = null;
+const showControlsTemporarily = () => {
+    playback.isControlsVisible.value = true;
+    clearTimeout(controlsTimeout);
+    if (playback.isPlaying.value) {
+        controlsTimeout = setTimeout(() => {
+            if (!isAnyModalOpen()) {
+                playback.isControlsVisible.value = false;
+            }
+        }, 3500);
+    }
+};
+
+// Playback Composable
+const playback = useCinemaPlayback({
+    item: computed(() => props.item),
+    initialProgress: props.initialProgress,
+    videoRef,
+    playerContainerRef,
+    onTimeUpdateCallback: (time) => {
+        subtitles.updateActiveCue(time);
+        emit('update:progress', time);
+    },
+    onToast: (msg) => toast.info(msg),
+    t,
 });
 
-const autoFetchPlaylist = async (item: any) => {
-    if (!item?.id) return;
-    const isEp = Boolean(item.season_id || item.episode_number || item.type === 'episode');
-    const type = isEp ? 'episode' : 'movie';
-    try {
-        const res = await fetch(`/api/stream/playlist?type=${type}&id=${item.id}`);
-        if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data.playlist) && data.playlist.length > 0) {
-                internalPlaylist.value = data.playlist;
-                if (!item.playlist) {
-                    item.playlist = data.playlist;
-                }
-            }
-        }
-    } catch (e) {
-        console.warn('Could not auto-fetch playlist:', e);
+// Audio Pipeline Composable (Web Audio API single-source delay & boosts)
+const audioPipeline = useCinemaAudioPipeline({
+    itemKey: playback.itemKey,
+    onToast: (msg) => toast.info(msg),
+});
+
+// Subtitles Composable
+const subtitles = useCinemaSubtitles({
+    onToast: (msg) => toast.info(msg),
+});
+
+const handleTogglePlay = () => {
+    playback.togglePlay();
+    triggerCenterPlayIndicator();
+};
+
+const handleSeekRelative = (seconds: number) => {
+    playback.seekRelative(seconds);
+    if (seconds > 0) {
+        triggerTouchFeedback('forward');
+    } else {
+        triggerTouchFeedback('backward');
     }
 };
 
-const getItemMediaType = (item: any): 'episode' | 'movie' => {
-    if (!item) return 'movie';
-    if (
-        item.type === 'episode' ||
-        item.watchable_type === 'episode' ||
-        item.category === 'series' ||
-        Boolean(item.season_id) ||
-        Boolean(item.episode_number)
-    ) {
-        return 'episode';
-    }
-    return 'movie';
-};
+// Playlist navigation
+const currentPlaylist = computed(() => {
+    return props.playlist && props.playlist.length > 0 ? props.playlist : [];
+});
 
 const currentIndex = computed(() => {
-    if (!currentPlaylist.value || currentPlaylist.value.length === 0 || !activeItem.value) return -1;
-    const activeMediaId = String(activeItem.value.id ?? activeItem.value.watchable_id ?? '');
-    const activeMediaType = getItemMediaType(activeItem.value);
-
-    return currentPlaylist.value.findIndex((p: any) => {
-        const pMediaId = String(p.id ?? p.watchable_id ?? '');
-        const pMediaType = getItemMediaType(p);
-        return pMediaId === activeMediaId && pMediaType === activeMediaType;
-    });
-});
-
-const hasPrevious = computed(() => {
-    if (!currentPlaylist.value || currentPlaylist.value.length <= 1) return false;
-    return currentIndex.value > 0;
+    return currentPlaylist.value.findIndex((p: any) => String(p.id) === String(playback.activeItem.value?.id));
 });
 
 const hasNext = computed(() => {
-    if (!currentPlaylist.value || currentPlaylist.value.length <= 1) return false;
     return currentIndex.value >= 0 && currentIndex.value < currentPlaylist.value.length - 1;
 });
 
-const getInitialSubtitles = (mediaItem: any): SubtitleItem[] => {
-    if (mediaItem?.subtitles && Array.isArray(mediaItem.subtitles)) {
-        return mediaItem.subtitles;
-    }
-    return [];
-};
-
-// Subtitles State & Cue Engine
-const availableSubtitles = ref<SubtitleItem[]>(getInitialSubtitles(props.item));
-const selectedSubtitleId = ref<number | string>('off');
-const subtitleDelay = ref<number>(0);
-const subtitleFontSize = ref<'sm' | 'md' | 'lg' | 'xl'>('md');
-const subtitleFont = ref<'cairo' | 'jakarta' | 'system'>(
-    (localStorage.getItem('cinema_subtitle_font') as any) || 'cairo'
-);
-
-const subtitleFontFamily = computed(() => {
-    switch (subtitleFont.value) {
-        case 'jakarta':
-            return "'Plus Jakarta Sans', 'Cairo', system-ui, sans-serif";
-        case 'system':
-            return "system-ui, -apple-system, 'Cairo', 'Plus Jakarta Sans', sans-serif";
-        case 'cairo':
-        default:
-            return "'Cairo', 'Plus Jakarta Sans', system-ui, sans-serif";
-    }
+const hasPrevious = computed(() => {
+    return currentIndex.value > 0;
 });
-
-const setSubtitleFont = (fontKey: 'cairo' | 'jakarta' | 'system') => {
-    subtitleFont.value = fontKey;
-    try {
-        localStorage.setItem('cinema_subtitle_font', fontKey);
-    } catch {}
-    showToast(t('player.subtitle_font_updated'));
-};
-
-const updateNativeCueStyle = () => {
-    let styleEl = document.getElementById('cinema-native-cue-style') as HTMLStyleElement | null;
-    if (!styleEl) {
-        styleEl = document.createElement('style');
-        styleEl.id = 'cinema-native-cue-style';
-        document.head.appendChild(styleEl);
-    }
-
-    if (enableCustomSubtitleOverlay.value) {
-        styleEl.textContent = `
-            video::cue, ::cue {
-                display: none !important;
-                opacity: 0 !important;
-                visibility: hidden !important;
-            }
-        `;
-        return;
-    }
-
-    const sizeMap: Record<string, string> = {
-        sm: 'clamp(1.2rem, 1.8vw, 1.6rem)',
-        md: 'clamp(1.5rem, 2.5vw, 2.2rem)',
-        lg: 'clamp(1.9rem, 3.2vw, 2.8rem)',
-        xl: 'clamp(2.3rem, 4.0vw, 3.5rem)',
-    };
-    const size = sizeMap[subtitleFontSize.value] || sizeMap.md;
-    const font = subtitleFontFamily.value || "'Cairo', 'Plus Jakarta Sans', system-ui, sans-serif";
-
-    styleEl.textContent = `
-        video::cue {
-            font-family: ${font} !important;
-            font-size: ${size} !important;
-            font-weight: 700 !important;
-            color: #ffffff !important;
-            background-color: rgba(0, 0, 0, 0.75) !important;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.95), 0 0 3px #000, 1px 1px 2px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000 !important;
-            line-height: 1.5 !important;
-            white-space: pre-line !important;
-        }
-        ::cue {
-            font-family: ${font} !important;
-            font-size: ${size} !important;
-            font-weight: 700 !important;
-            color: #ffffff !important;
-            background-color: rgba(0, 0, 0, 0.75) !important;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.95), 0 0 3px #000, 1px 1px 2px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000 !important;
-            line-height: 1.5 !important;
-            white-space: pre-line !important;
-        }
-    `;
-};
-
-// Custom Subtitle Overlay - Enabled for robust multi-screen typography and exact timestamp synchronization
-const enableCustomSubtitleOverlay = ref(true);
-
-const syncTextTracks = () => {
-    if (!videoRef.value || !videoRef.value.textTracks) return;
-    const tracks = videoRef.value.textTracks;
-    for (let i = 0; i < tracks.length; i++) {
-        const track = tracks[i];
-        if (enableCustomSubtitleOverlay.value) {
-            // When custom overlay is handling rendering, keep native track cues disabled to prevent duplicate or conflicting cues
-            track.mode = 'disabled';
-        } else if (selectedSubtitleId.value !== 'off') {
-            const trackId = track.id;
-            const expectedId = `sub-track-${selectedSubtitleId.value}`;
-            const sub = availableSubtitles.value.find(s => String(s.id) === String(selectedSubtitleId.value));
-            const isMatch = (trackId && trackId === expectedId) ||
-                            (sub && sub.language && track.language === sub.language) ||
-                            (sub && sub.language_name && track.label === sub.language_name);
-            track.mode = isMatch ? 'showing' : 'disabled';
-        } else {
-            track.mode = 'disabled';
-        }
-    }
-};
-
-watch([subtitleFont, subtitleFontSize, subtitleFontFamily], () => {
-    updateNativeCueStyle();
-}, { immediate: true });
-
-watch(selectedSubtitleId, () => {
-    nextTick(() => {
-        syncTextTracks();
-    });
-});
-
-watch(isFullscreen, () => {
-    nextTick(() => {
-        syncTextTracks();
-    });
-});
-
-watch(availableSubtitles, () => {
-    nextTick(() => {
-        syncTextTracks();
-    });
-}, { deep: true });
-
-const parsedCues = ref<CueItem[]>([]);
-const activeCueText = ref<string>('');
-const isFetchingSubtitle = ref(false);
-
-// In-Player Subtitle Search State
-const subtitleSearchQuery = ref('');
-const subtitleSearchLang = ref('ar');
-const isSearchingSubtitles = ref(false);
-const isDownloadingSubtitle = ref(false);
-const isTranslatingSubtitle = ref(false);
-const subtitleSearchResults = ref<any[]>([]);
-const subtitleSearchError = ref<string | null>(null);
-
-// Audio Enhancer & Equalizer State (Web Audio API)
-// Audio Enhancer & Equalizer State (Web Audio API)
-const vocalBoost = ref(true);
-const bassBoost = ref(false);
-const nightMode = ref(false);
-
-const isEpisode = computed(() => {
-    return activeItem.value?.type === 'episode' 
-        || activeItem.value?.watchable_type === 'episode' 
-        || !!activeItem.value?.episode_number 
-        || !!activeItem.value?.season_id;
-});
-
-const itemKey = computed(() => {
-    if (!activeItem.value) return 'default';
-    const type = isEpisode.value ? 'episode' : 'movie';
-    return `${type}_${activeItem.value.id}`;
-});
-
-const getSavedAudioDelay = (): number => {
-    try {
-        const saved = localStorage.getItem(`audio_sync_${itemKey.value}`);
-        return saved !== null ? parseInt(saved, 10) : 0;
-    } catch {
-        return 0;
-    }
-};
-
-const audioDelayMs = ref(0); // Audio-to-video sync delay in milliseconds (-3000 to +3000ms)
-
-const toastNotice = ref<string | null>(null);
-let toastTimeout: any = null;
-
-const showToast = (msg: string) => {
-    toastNotice.value = msg;
-    clearTimeout(toastTimeout);
-    toastTimeout = setTimeout(() => {
-        toastNotice.value = null;
-    }, 2800);
-};
-
-let audioCtx: AudioContext | null = null;
-let sourceNode: MediaElementAudioSourceNode | null = null;
-let voiceFilterNode: BiquadFilterNode | null = null;
-let bassFilterNode: BiquadFilterNode | null = null;
-let trebleFilterNode: BiquadFilterNode | null = null;
-let compressorNode: DynamicsCompressorNode | null = null;
-let delayNode: DelayNode | null = null;
-let gainNode: GainNode | null = null;
-let isAudioPipelineInitialized = false;
-
-let controlsTimeout: any = null;
-let progressSaveInterval: any = null;
-let bufferTrackInterval: any = null;
-let serverCachePollInterval: any = null;
-let audioDelayDebounceTimer: any = null;
-
-const applyAudioDelay = (delayVal: number, commitToStream = true) => {
-    audioDelayMs.value = delayVal;
-    try {
-        localStorage.setItem(`audio_sync_${itemKey.value}`, String(delayVal));
-    } catch {}
-
-    // Instant local preview via Web Audio DelayNode if positive
-    if (delayNode && audioCtx) {
-        if (audioCtx.state === 'suspended') {
-            audioCtx.resume().catch(() => {});
-        }
-        if (delayVal >= 0) {
-            delayNode.delayTime.setTargetAtTime(delayVal / 1000, audioCtx.currentTime, 0.05);
-        } else {
-            delayNode.delayTime.setTargetAtTime(0, audioCtx.currentTime, 0.05);
-        }
-    }
-
-    if (!commitToStream) return;
-
-    clearTimeout(audioDelayDebounceTimer);
-    audioDelayDebounceTimer = setTimeout(() => {
-        if (videoRef.value) {
-            const cur = currentTime.value;
-            remuxStartOffset.value = cur;
-            videoRef.value.load();
-            videoRef.value.play().catch(() => {});
-        }
-        const label = delayVal === 0
-            ? t('player.audio_sync_in_sync')
-            : t('player.audio_sync_delayed', { ms: (delayVal > 0 ? '+' : '') + delayVal, state: delayVal < 0 ? t('player.audio_advanced') : t('player.audio_delayed') });
-        showToast(label);
-    }, 400);
-};
-
-const nudgeAudioDelay = (deltaMs: number) => {
-    const nextVal = Math.min(3000, Math.max(-3000, audioDelayMs.value + deltaMs));
-    applyAudioDelay(nextVal, true);
-};
-
-// Auto-detect if media requires Ultra-Fast Server Remuxing
-const checkNeedsRemux = (item: any) => {
-    if (!item) return false;
-
-    // 1. Check if user explicitly set stream mode for this item
-    try {
-        const type = isEpisode.value ? 'episode' : 'movie';
-        const savedMode = localStorage.getItem(`stream_mode_${type}_${item.id}`);
-        if (savedMode === 'direct') return false;
-        if (savedMode === 'remux') return true;
-    } catch {}
-
-    // 2. Default to Native Direct Stream (stable, zero lag, native GPU decoding)
-    // Only route to Remux if the container or codecs are strictly incompatible with HTML5 <video>
-    const path = (item.file_path || '').toLowerCase();
-    const audio = (item.audio_codec || '').toLowerCase();
-    const video = (item.video_codec || '').toLowerCase();
-
-    // Containers that HTML5 <video> strictly cannot demux natively
-    const isUnsupportedContainer = path.endsWith('.avi') || path.endsWith('.wmv') || 
-                                  path.endsWith('.ts') || path.endsWith('.m2ts') || 
-                                  path.endsWith('.flv') || path.endsWith('.vob') || 
-                                  path.endsWith('.mpg') || path.endsWith('.mpeg') || 
-                                  path.endsWith('.divx') || path.endsWith('.iso') || 
-                                  path.endsWith('.rmvb');
-
-    // Unsupported audio codecs: browsers (Chrome/Firefox/Edge) have NO native decoders for:
-    // - Dolby Digital (AC-3 / A52)
-    // - Dolby Digital Plus (E-AC-3 / DDP / Atmos)
-    // - Dolby TrueHD
-    // - DTS, DTS-HD, DTS-MA, DTS:X
-    // - WMA
-    // - Multi-channel / Raw PCM
-    // In Direct Stream, browsers play video silently with 0 audio!
-    const isUnsupportedAudio = 
-        audio.includes('dolby') ||
-        audio.includes('ac-3') ||
-        audio.includes('ac3') ||
-        audio.includes('a52') ||
-        audio.includes('eac3') ||
-        audio.includes('e-ac-3') ||
-        audio.includes('ddp') ||
-        audio.includes('dd+') ||
-        audio.includes('atmos') ||
-        audio.includes('truehd') ||
-        audio.includes('mlp') ||
-        audio.includes('dts') ||
-        audio.includes('dca') ||
-        audio.includes('wma') ||
-        audio.includes('pcm');
-
-    // Obsolete legacy video codecs that browsers cannot decode
-    const isUnsupportedVideo = 
-        video.includes('xvid') || 
-        video.includes('divx') || 
-        video.includes('mpeg4') || 
-        video.includes('mpeg-4') || 
-        video.includes('mp4v') || 
-        video.includes('msmpeg4') || 
-        video.includes('mpeg2') || 
-        video.includes('mpeg-2') || 
-        video.includes('mpeg1') || 
-        video.includes('mpeg-1') || 
-        video.includes('wmv') || 
-        video.includes('vc-1') || 
-        video.includes('vc1') || 
-        video.includes('theora') || 
-        video.includes('rv40');
-
-    // MKV container with non-web audio (HTML5 video only plays MKV audio if it's AAC / MP3 / Opus / Vorbis)
-    const isMkvWithNonWebAudio = path.endsWith('.mkv') && (
-        !audio || (!audio.includes('aac') && !audio.includes('mp3') && !audio.includes('opus') && !audio.includes('vorbis'))
-    );
-
-    return isUnsupportedContainer || isUnsupportedAudio || isUnsupportedVideo || isMkvWithNonWebAudio;
-};
-
-const isRemuxStream = ref(checkNeedsRemux(props.item));
-const remuxStartOffset = ref(isRemuxStream.value && pendingInitialSeek.value > 0 ? pendingInitialSeek.value : 0);
-
-// Stable Stream URL: Direct Stream vs Server-Side Remux with Audio Delay Offset
-const streamUrl = computed(() => {
-    if (!activeItem.value) return '';
-    const delayParam = audioDelayMs.value !== 0 ? `audio_delay=${audioDelayMs.value}` : '';
-    if (isRemuxStream.value) {
-        if (isServerCached.value && cachedStreamUrl.value && audioDelayMs.value === 0) {
-            return cachedStreamUrl.value;
-        }
-        const params: string[] = [];
-        if (remuxStartOffset.value > 0) params.push(`start=${Math.round(remuxStartOffset.value * 1000) / 1000}`);
-        if (delayParam) params.push(delayParam);
-        const queryString = params.length > 0 ? `?${params.join('&')}` : '';
-        if (isEpisode.value) {
-            return `/stream/remux/episode/${activeItem.value.id}${queryString}`;
-        }
-        return `/stream/remux/movie/${activeItem.value.id}${queryString}`;
-    }
-
-    if (delayParam) {
-        // If native stream has an audio sync offset, route via remux so FFmpeg applies the exact offset
-        const params: string[] = [delayParam];
-        if (currentTime.value > 0) params.push(`start=${Math.round(currentTime.value * 1000) / 1000}`);
-        const queryString = `?${params.join('&')}`;
-        if (isEpisode.value) {
-            return `/stream/remux/episode/${activeItem.value.id}${queryString}`;
-        }
-        return `/stream/remux/movie/${activeItem.value.id}${queryString}`;
-    }
-
-    if (isEpisode.value) {
-        return `/stream/episode/${activeItem.value.id}`;
-    }
-    return `/stream/movie/${activeItem.value.id}`;
-});
-
-const changeActiveItem = (newItem: any, initialProgress = 0) => {
-    savePlaybackProgress();
-    stopServerStreamingCache();
-    activeItem.value = newItem;
-    if ((!props.playlist || props.playlist.length === 0) && (!newItem.playlist || newItem.playlist.length === 0)) {
-        if (!internalPlaylist.value.some((p: any) => String(p.id) === String(newItem.id))) {
-            autoFetchPlaylist(newItem);
-        }
-    }
-    liveResolution.value = '';
-    hasAppliedInitialSeek.value = false;
-    pendingInitialSeek.value = Math.max(0, initialProgress);
-    currentTime.value = pendingInitialSeek.value;
-    const exactDur = Number(newItem?.duration_seconds) || 0;
-    const fallbackDur = Number(newItem?.runtime_minutes) ? Number(newItem.runtime_minutes) * 60 : 0;
-    duration.value = exactDur > 0 ? exactDur : fallbackDur;
-    isDurationLocked.value = exactDur > 0;
-    isRemuxStream.value = checkNeedsRemux(newItem);
-    remuxStartOffset.value = (isRemuxStream.value && pendingInitialSeek.value > 0) ? pendingInitialSeek.value : 0;
-    audioDelayMs.value = getSavedAudioDelay();
-    const nextSubs = getInitialSubtitles(newItem);
-    availableSubtitles.value = nextSubs;
-    if (nextSubs.length > 0) {
-        autoSelectAndLoadSubtitle(nextSubs);
-    } else {
-        selectedSubtitleId.value = 'off';
-        activeCueText.value = '';
-        parsedCues.value = [];
-    }
-
-    setTimeout(() => {
-        fetchSubtitles();
-        fetchMediaDuration();
-        if (videoRef.value) {
-            videoRef.value.load();
-            videoRef.value.play().catch(() => {});
-        }
-    }, 50);
-
-    showToast(t('player.playing_title', { title: playerHeaderTitle.value }));
-};
 
 const playNext = () => {
     if (!hasNext.value) return;
     const nextItem = currentPlaylist.value[currentIndex.value + 1];
-    if (nextItem) changeActiveItem(nextItem, 0);
+    if (nextItem) changeActiveMedia(nextItem);
 };
 
 const playPrevious = () => {
     if (!hasPrevious.value) return;
     const prevItem = currentPlaylist.value[currentIndex.value - 1];
-    if (prevItem) changeActiveItem(prevItem, 0);
+    if (prevItem) changeActiveMedia(prevItem);
 };
 
-const onVideoEnded = () => {
-    savePlaybackProgress(true);
+const changeActiveMedia = (newItem: any) => {
+    playback.savePlaybackProgress();
+    playback.destroyWebEngine();
+    playback.activeItem.value = newItem;
+    playback.currentTime.value = 0;
+    playback.remuxStartOffset.value = 0;
+    const exactDur = Number(newItem?.duration_seconds) || 0;
+    const fallbackDur = Number(newItem?.runtime_minutes) ? Number(newItem.runtime_minutes) * 60 : 0;
+    playback.duration.value = exactDur > 0 ? exactDur : fallbackDur;
+    playback.isDurationLocked.value = exactDur > 0;
+    playback.isRemuxStream.value = playback.checkNeedsRemux(newItem);
+
+    subtitles.selectedSubtitleId.value = 'off';
+    subtitles.parsedCues.value = [];
+    subtitles.activeCueText.value = '';
+
+    setTimeout(() => {
+        const type = playback.isEpisode.value ? 'episode' : 'movie';
+        subtitles.fetchSubtitlesForMedia(type, newItem.watchable_id || newItem.id);
+        if (playback.engineMode.value === 'web') {
+            playback.initWebEngine();
+        } else if (videoRef.value) {
+            videoRef.value.load();
+            videoRef.value.play().catch(() => {});
+        }
+    }, 50);
+};
+
+// Keyboard Shortcuts Composable
+useCinemaKeyboardShortcuts({
+    onTogglePlay: () => handleTogglePlay(),
+    onSeekRelative: (sec) => handleSeekRelative(sec),
+    onVolumeUp: () => playback.setVolume(playback.volume.value + 0.05),
+    onVolumeDown: () => playback.setVolume(playback.volume.value - 0.05),
+    onToggleMute: () => playback.toggleMute(),
+    onToggleFullscreen: () => playback.toggleFullscreen(),
+    onToggleSubtitles: () => {
+        showSubtitlesModal.value = !showSubtitlesModal.value;
+    },
+    onToggleEqualizer: () => {
+        showEqualizerModal.value = !showEqualizerModal.value;
+    },
+    onToggleDiagnostics: () => {
+        showDiagnosticsHud.value = !showDiagnosticsHud.value;
+    },
+    onClose: () => emit('close'),
+    isModalOpen: isAnyModalOpen,
+    closeTopModal: closeTopModal,
+});
+
+// Video Element Handlers
+const handlePlay = () => {
+    playback.isPlaying.value = true;
+    try {
+        if (videoRef.value) {
+            audioPipeline.initAudioPipeline(videoRef.value);
+            audioPipeline.resumeAudioContext();
+        }
+    } catch (e) {
+        console.warn('Audio pipeline init deferred:', e);
+    }
+    showControlsTemporarily();
+};
+
+const handlePause = () => {
+    playback.isPlaying.value = false;
+    playback.savePlaybackProgress();
+    playback.isControlsVisible.value = true;
+};
+
+const handleVolumeChange = (val: number) => {
+    playback.setVolume(val);
+    audioPipeline.setVolumeGain(val);
+};
+
+const handleTranslate = async () => {
+    await subtitles.translateSubtitleToArabic(
+        playback.activeItem.value,
+        playback.isEpisode.value,
+        subtitles.selectedSubtitleId.value
+    );
+};
+
+const handleSeek = (seconds: number) => {
+    playback.executeSeek(seconds);
+};
+
+const handleVideoEnded = () => {
+    playback.savePlaybackProgress(true);
     if (hasNext.value) {
-        showToast(t('player.autoplay_next'));
+        toast.info(t('player.autoplay_next') || 'Playing next episode...');
         setTimeout(() => {
             if (hasNext.value) {
                 playNext();
             }
-        }, 1800);
-    } else {
-        showToast(t('player.playback_completed'));
-    }
-};
-
-watch(() => props.item, (newVal) => {
-    if (newVal && newVal.id !== activeItem.value?.id) {
-        const resumeSec = Number(props.initialProgress) || Number(newVal.progress_seconds) || Number(newVal.initial_progress) || 0;
-        changeActiveItem(newVal, resumeSec);
-    }
-});
-
-const toggleRemuxStream = () => {
-    isRemuxStream.value = !isRemuxStream.value;
-    if (activeItem.value) {
-        try {
-            const type = isEpisode.value ? 'episode' : 'movie';
-            localStorage.setItem(`stream_mode_${type}_${activeItem.value.id}`, isRemuxStream.value ? 'remux' : 'direct');
-        } catch {}
-    }
-    if (isRemuxStream.value) {
-        remuxStartOffset.value = currentTime.value;
-    } else {
-        remuxStartOffset.value = 0;
-    }
-    showToast(isRemuxStream.value 
-        ? t('player.remux_enabled')
-        : t('player.remux_native_stream')
-    );
-    setTimeout(() => {
-        if (videoRef.value) {
-            videoRef.value.load();
-            videoRef.value.play().catch(() => {});
-        }
-    }, 100);
-};
-
-const handleVideoError = () => {
-    const err = videoRef.value?.error;
-    // Error code 1 is MEDIA_ERR_ABORTED (user seek or in-flight source interruption) - ignore safely
-    if (err && err.code === 1) {
-        return;
-    }
-
-    if (!isRemuxStream.value) {
-        showToast(t('player.remux_switching'));
-        isRemuxStream.value = true;
-        remuxStartOffset.value = currentTime.value;
-    } else {
-        showToast(t('player.playback_error'));
-    }
-};
-
-// Active Subtitle WebVTT URL
-const subtitleUrl = computed(() => {
-    if (selectedSubtitleId.value === 'off') return '';
-    return `/stream/subtitles/${selectedSubtitleId.value}`;
-});
-
-// Progress Percent for Scrubber
-const progressPercent = computed(() => {
-    if (!duration.value || duration.value <= 0) return 0;
-    return Math.min(100, Math.max(0, (currentTime.value / duration.value) * 100));
-});
-
-// Live dynamic stream resolution detector from video decoder dimensions
-const liveResolution = ref<string>('');
-
-const updateLiveResolution = () => {
-    const v = videoRef.value;
-    if (!v) return;
-    const w = v.videoWidth;
-    const h = v.videoHeight;
-    if (w > 0 && h > 0) {
-        if (h >= 2160 || w >= 3800) liveResolution.value = '4K UHD';
-        else if (h >= 1440 || w >= 2500) liveResolution.value = '1440p 2K';
-        else if (h >= 1000 || w >= 1900) liveResolution.value = '1080p FHD';
-        else if (h >= 700 || w >= 1200) liveResolution.value = '720p HD';
-        else if (h >= 540) liveResolution.value = '576p SD';
-        else if (h >= 450) liveResolution.value = '480p SD';
-        else if (h >= 340) liveResolution.value = '360p';
-        else if (h >= 200) liveResolution.value = `${h}p`;
-        else liveResolution.value = `${w}x${h}`;
-    }
-};
-
-// Media Meta Display (Resolution, Codec, Audio)
-const displayResolution = computed(() => {
-    if (liveResolution.value) {
-        return liveResolution.value;
-    }
-    const meta = activeItem.value?.resolution || activeItem.value?.video_resolution;
-    if (meta && meta !== 'Unknown') {
-        return meta;
-    }
-    return '';
-});
-
-const displayCodec = computed(() => {
-    return activeItem.value?.video_codec || activeItem.value?.codec || 'H.264 / HEVC';
-});
-
-const displayAudio = computed(() => {
-    return activeItem.value?.audio_codec || 'AAC 5.1';
-});
-
-const displayYear = computed(() => {
-    return activeItem.value?.release_year || activeItem.value?.year || (activeItem.value?.series?.release_year ?? '');
-});
-
-// Extract Series Name, Season Number, and Episode Number with real episode title
-const playerHeaderTitle = computed(() => {
-    if (isEpisode.value) {
-        return formatEpisodeTitle(activeItem.value, {
-            isRTL: isRTL.value,
-            includeSeriesName: true,
-        });
-    }
-
-    if (isRTL.value && activeItem.value?.title_ar) {
-        return activeItem.value.title_ar;
-    }
-    return activeItem.value?.title || 'Media';
-});
-
-// =========================================================================
-// WEBVTT / SRT CLIENT-SIDE CUE PARSER (100% Bulletproof Subtitle Overlay)
-// =========================================================================
-const parseTimestampToSeconds = (ts: string): number => {
-    const parts = ts.trim().replace(',', '.').split(':');
-    if (parts.length === 3) {
-        return parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
-    } else if (parts.length === 2) {
-        return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
-    }
-    return 0;
-};
-
-const parseWebVTTContent = (content: string): CueItem[] => {
-    const lines = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-    const cues: CueItem[] = [];
-    let currentStart = -1;
-    let currentEnd = -1;
-    let currentTextLines: string[] = [];
-
-    const timeRegex = /((?:\d{1,2}:)?\d{2}:\d{2}[\.,]\d{2,3})\s*-->\s*((?:\d{1,2}:)?\d{2}:\d{2}[\.,]\d{2,3})/;
-
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line || line.startsWith('WEBVTT') || line.startsWith('NOTE')) {
-            if (currentStart >= 0 && currentTextLines.length > 0) {
-                cues.push({
-                    start: currentStart,
-                    end: currentEnd,
-                    text: currentTextLines.join('<br>')
-                });
-                currentStart = -1;
-                currentEnd = -1;
-                currentTextLines = [];
-            }
-            continue;
-        }
-
-        const timeMatch = line.match(timeRegex);
-        if (timeMatch) {
-            if (currentStart >= 0 && currentTextLines.length > 0) {
-                cues.push({
-                    start: currentStart,
-                    end: currentEnd,
-                    text: currentTextLines.join('<br>')
-                });
-                currentTextLines = [];
-            }
-            currentStart = parseTimestampToSeconds(timeMatch[1]);
-            currentEnd = parseTimestampToSeconds(timeMatch[2]);
-        } else if (currentStart >= 0 && !line.match(/^\d+$/)) {
-            currentTextLines.push(line);
-        }
-    }
-
-    if (currentStart >= 0 && currentTextLines.length > 0) {
-        cues.push({
-            start: currentStart,
-            end: currentEnd,
-            text: currentTextLines.join('<br>')
-        });
-    }
-
-    return cues;
-};
-
-const loadSubtitleTrack = async (subId: number | string) => {
-    if (subId === 'off') {
-        parsedCues.value = [];
-        activeCueText.value = '';
-        return;
-    }
-
-    isFetchingSubtitle.value = true;
-    try {
-        const res = await fetch(`/stream/subtitles/${subId}`);
-        const content = await res.text();
-        parsedCues.value = parseWebVTTContent(content);
-        updateActiveCue(currentTime.value);
-    } catch (e) {
-        console.error('Failed to load subtitle track:', e);
-    } finally {
-        isFetchingSubtitle.value = false;
-    }
-};
-
-const findBestSubtitle = (tracks: SubtitleItem[]): SubtitleItem | null => {
-    if (!tracks || tracks.length === 0) return null;
-
-    let savedPref: string | null = null;
-    try {
-        savedPref = localStorage.getItem('cinema_subtitle_pref');
-    } catch {}
-
-    if (savedPref === 'off') {
-        return null;
-    }
-
-    // 1. If user previously selected a specific language preference (e.g. 'ar', 'en')
-    if (savedPref && savedPref !== 'auto') {
-        const prefLower = savedPref.toLowerCase();
-        const prefTrack = tracks.find(s => {
-            const lang = (s.language || '').toLowerCase();
-            const langName = (s.language_name || '').toLowerCase();
-            return lang === prefLower ||
-                (prefLower === 'ar' && (lang === 'ara' || langName.includes('arab') || langName.includes('عرب'))) ||
-                (prefLower === 'en' && (lang === 'eng' || langName.includes('eng')));
-        });
-        if (prefTrack) return prefTrack;
-    }
-
-    // 2. In RTL mode (Arabic interface), prioritize Arabic track
-    if (isRTL.value) {
-        const arTrack = tracks.find(s => {
-            const lang = (s.language || '').toLowerCase();
-            const langName = (s.language_name || '').toLowerCase();
-            return lang === 'ar' || lang === 'ara' || langName.includes('arab') || langName.includes('عرب');
-        });
-        if (arTrack) return arTrack;
-    }
-
-    // 3. Subtitle track marked as default
-    const defaultTrack = tracks.find(s => Boolean(s.is_default));
-    if (defaultTrack) return defaultTrack;
-
-    // 4. English track fallback
-    const enTrack = tracks.find(s => {
-        const lang = (s.language || '').toLowerCase();
-        const langName = (s.language_name || '').toLowerCase();
-        return lang === 'en' || lang === 'eng' || langName.includes('eng');
-    });
-    if (enTrack) return enTrack;
-
-    // 5. First available track
-    return tracks[0] || null;
-};
-
-const autoSelectAndLoadSubtitle = async (tracks: SubtitleItem[]) => {
-    if (!tracks || tracks.length === 0) {
-        selectedSubtitleId.value = 'off';
-        parsedCues.value = [];
-        activeCueText.value = '';
-        return;
-    }
-
-    // If a subtitle track is already selected and active, retain it if still valid
-    if (selectedSubtitleId.value !== 'off') {
-        const stillExists = tracks.some(s => String(s.id) === String(selectedSubtitleId.value));
-        if (stillExists) return;
-    }
-
-    const bestTrack = findBestSubtitle(tracks);
-    if (bestTrack) {
-        selectedSubtitleId.value = bestTrack.id;
-        await loadSubtitleTrack(bestTrack.id);
-    } else {
-        selectedSubtitleId.value = 'off';
-        parsedCues.value = [];
-        activeCueText.value = '';
-    }
-};
-
-const updateActiveCue = (timeSec: number) => {
-    if (selectedSubtitleId.value === 'off' || !parsedCues.value.length) {
-        activeCueText.value = '';
-        return;
-    }
-
-    const adjustedTime = timeSec + subtitleDelay.value;
-    const active = parsedCues.value.find(c => adjustedTime >= c.start && adjustedTime <= c.end);
-    activeCueText.value = active ? active.text : '';
-};
-
-// YouTube-Style Continuous Buffer Calculation (during play AND pause)
-const updateBufferProgress = () => {
-    if (!videoRef.value || !duration.value || duration.value <= 0 || !isFinite(duration.value)) return;
-    const buf = videoRef.value.buffered;
-    if (buf && buf.length > 0) {
-        let maxBufferedEnd = 0;
-        for (let i = 0; i < buf.length; i++) {
-            const end = buf.end(i);
-            if (end > maxBufferedEnd) {
-                maxBufferedEnd = end;
-            }
-        }
-        const effectiveEnd = (isRemuxStream.value && remuxStartOffset.value > 0)
-            ? remuxStartOffset.value + maxBufferedEnd
-            : maxBufferedEnd;
-        const calc = Math.min(100, Math.max(0, (effectiveEnd / duration.value) * 100));
-        if (calc > bufferedPercent.value) {
-            bufferedPercent.value = calc;
-        }
-    }
-    if (isRemuxStream.value && isPlaying.value) {
-        const streamEst = Math.min(100, progressPercent.value + 6);
-        if (streamEst > bufferedPercent.value) {
-            bufferedPercent.value = streamEst;
-        }
-    }
-    updateDiagnostics();
-};
-
-const updateDiagnostics = () => {
-    if (!videoRef.value) return;
-    try {
-        if (typeof (videoRef.value as any).getVideoPlaybackQuality === 'function') {
-            const q = (videoRef.value as any).getVideoPlaybackQuality();
-            droppedFrames.value = q?.droppedVideoFrames ?? 0;
-        }
-        const ct = videoRef.value.currentTime;
-        const b = videoRef.value.buffered;
-        let ahead = 0;
-        for (let i = 0; i < b.length; i++) {
-            if (b.start(i) <= ct && ct <= b.end(i)) {
-                ahead = b.end(i) - ct;
-                break;
-            }
-        }
-        bufferAheadSecs.value = Math.max(0, Math.round(ahead * 10) / 10);
-    } catch (e) {}
-};
-
-// Check server background transcode cache progress
-const checkServerCacheStatus = async () => {
-    try {
-        const type = isEpisode.value ? 'episode' : 'movie';
-        const res = await fetch(`/api/stream/cache-status?type=${type}&id=${activeItem.value.id}`);
-        if (res.ok) {
-            const data = await res.json();
-            if (data.is_cached) {
-                isServerCached.value = true;
-                if (data.stream_url) {
-                    cachedStreamUrl.value = data.stream_url;
-                }
-                bufferedPercent.value = 100;
-                if (serverCachePollInterval) {
-                    clearInterval(serverCachePollInterval);
-                    serverCachePollInterval = null;
-                }
-            } else if (typeof data.cached_percent === 'number' && data.cached_percent > bufferedPercent.value) {
-                bufferedPercent.value = data.cached_percent;
-            }
-        }
-    } catch (e) {}
-};
-
-// Fetch Duration & Subtitles
-const fetchMediaDuration = async () => {
-    try {
-        const type = isEpisode.value ? 'episode' : 'movie';
-        const res = await fetch(`/api/media/duration?type=${type}&id=${activeItem.value.id}`);
-        const data = await res.json();
-        if (data.duration_seconds && data.duration_seconds > 0) {
-            duration.value = data.duration_seconds;
-            isDurationLocked.value = true;
-        }
-        if (data.resolution && data.resolution !== 'Unknown' && !liveResolution.value) {
-            liveResolution.value = data.resolution;
-        }
-    } catch (e) {}
-};
-
-const fetchSubtitles = async () => {
-    try {
-        const type = isEpisode.value ? 'episode' : 'movie';
-        const res = await fetch(`/api/subtitles/for-media?type=${type}&id=${activeItem.value?.watchable_id || activeItem.value?.id}`);
-        const data = await res.json();
-        if (data.subtitles && Array.isArray(data.subtitles)) {
-            availableSubtitles.value = data.subtitles;
-
-            // If already playing with an active track, preserve it if still present in data
-            if (selectedSubtitleId.value !== 'off') {
-                const stillExists = data.subtitles.some((s: SubtitleItem) => String(s.id) === String(selectedSubtitleId.value));
-                if (!stillExists) {
-                    await autoSelectAndLoadSubtitle(data.subtitles);
-                }
-            } else {
-                // If currently 'off', check if user explicitly requested 'off'
-                let savedPref: string | null = null;
-                try {
-                    savedPref = localStorage.getItem('cinema_subtitle_pref');
-                } catch {}
-                if (savedPref !== 'off') {
-                    await autoSelectAndLoadSubtitle(data.subtitles);
-                }
-            }
-        }
-    } catch (e) {
-        console.warn('Failed to fetch subtitles:', e);
-    }
-};
-
-// In-Player Subtitle Search & Download Actions
-const openSubtitleSearchModal = () => {
-    showSubtitlesMenu.value = false;
-    showSubtitleSearchModal.value = true;
-    let query = '';
-    if (isEpisode.value) {
-        query = activeItem.value?.series?.title || activeItem.value?.series_title || '';
-        if (!query && activeItem.value?.title) {
-            query = activeItem.value.title.replace(/\s*-\s*(?:Season|الموسم|Episode|الحلقة|S\d+).*$/iu, '').trim();
-        }
-    } else {
-        query = activeItem.value?.title || '';
-        query = query.replace(/\s*\(\d{4}\).*$/, '').trim();
-    }
-    subtitleSearchQuery.value = query;
-    performSubtitleSearch();
-};
-
-const performSubtitleSearch = async () => {
-    if (!subtitleSearchQuery.value.trim()) return;
-    isSearchingSubtitles.value = true;
-    subtitleSearchError.value = null;
-    subtitleSearchResults.value = [];
-    try {
-        const mediaId = activeItem.value?.watchable_id || activeItem.value?.id;
-
-        const queryParams = new URLSearchParams({
-            query: subtitleSearchQuery.value.trim(),
-            language: subtitleSearchLang.value,
-            media_id: String(mediaId),
-            media_type: isEpisode.value ? 'episode' : 'movie',
-        });
-
-        if (activeItem.value?.imdb_id) {
-            queryParams.append('imdb_id', activeItem.value.imdb_id);
-        }
-        if (isEpisode.value) {
-            const s = activeItem.value?.season_number || (activeItem.value?.season?.season_number ?? 1);
-            const ep = activeItem.value?.episode_number || 1;
-            queryParams.append('season_number', String(s));
-            queryParams.append('episode_number', String(ep));
-        }
-
-        const res = await fetch(`/api/subtitles/search?${queryParams.toString()}`);
-        if (res.ok) {
-            const data = await res.json();
-            subtitleSearchResults.value = data.results || [];
-        } else {
-            subtitleSearchError.value = t('player.subtitle_search_failed');
-        }
-    } catch (e: any) {
-        subtitleSearchError.value = e.message || 'Error';
-    } finally {
-        isSearchingSubtitles.value = false;
-    }
-};
-
-const downloadAndApplySubtitle = async (result: any) => {
-    isDownloadingSubtitle.value = true;
-    try {
-        const mediaId = activeItem.value?.watchable_id || activeItem.value?.id;
-
-        const res = await fetch('/api/subtitles/download', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
-            },
-            body: JSON.stringify({
-                media_id: mediaId,
-                media_type: isEpisode.value ? 'episode' : 'movie',
-                language: result.language || subtitleSearchLang.value,
-                download_url: result.download_url || result.url,
-                file_name: result.file_name,
-                release: result.release,
-                source: result.source,
-                file_id: result.subtitle_id,
-            }),
-        });
-        if (res.ok) {
-            const data = await res.json();
-            if (data.subtitle) {
-                const newSub = data.subtitle;
-                const existingIdx = availableSubtitles.value.findIndex(s => String(s.id) === String(newSub.id));
-                if (existingIdx >= 0) {
-                    availableSubtitles.value[existingIdx] = newSub;
-                } else {
-                    availableSubtitles.value.push(newSub);
-                }
-                showSubtitleSearchModal.value = false;
-                await selectSubtitle(newSub.id, false);
-                const msg = t('player.subtitle_download_success');
-                showToast(msg);
-                globalToast.success(msg, 'Subtitle Ready');
-            }
-        } else {
-            const err = t('player.subtitle_download_failed');
-            showToast(err);
-            globalToast.error(err, 'Subtitle Download Failed');
-        }
-    } catch (e: any) {
-        const err = t('player.subtitle_download_error');
-        showToast(err);
-        globalToast.error(e.message || err, 'Download Error');
-    } finally {
-        isDownloadingSubtitle.value = false;
-    }
-};
-
-const translateSubtitleToArabic = async (sourceSubId?: number | string) => {
-    if (!activeItem.value || isTranslatingSubtitle.value) return;
-
-    isTranslatingSubtitle.value = true;
-    const mediaId = activeItem.value?.watchable_id || activeItem.value?.id;
-    const mediaType = isEpisode.value ? 'episode' : 'movie';
-
-    const translatingMsg = isRTL.value
-        ? 'جاري ترجمة وتوليد الترجمة العربية بالذكاء الاصطناعي...'
-        : 'Translating English subtitle to Arabic...';
-    showToast(translatingMsg);
-
-    try {
-        const payload: Record<string, any> = {
-            media_id: mediaId,
-            media_type: mediaType,
-        };
-        if (typeof sourceSubId === 'number') {
-            payload.subtitle_id = sourceSubId;
-        }
-
-        const res = await fetch('/api/subtitles/generate-arabic', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
-            },
-            body: JSON.stringify(payload),
-        });
-
-        const data = await res.json();
-        if (!res.ok || data.status === 'error') {
-            throw new Error(data.message || 'Failed to generate Arabic translation');
-        }
-
-        if (data.subtitle) {
-            const newSub = data.subtitle;
-            const existingIdx = availableSubtitles.value.findIndex(s => String(s.id) === String(newSub.id));
-            if (existingIdx >= 0) {
-                availableSubtitles.value[existingIdx] = newSub;
-            } else {
-                availableSubtitles.value.push(newSub);
-            }
-
-            // Immediately activate the newly translated Arabic track
-            await selectSubtitle(newSub.id, false);
-
-            const successMsg = isRTL.value
-                ? 'تم توليد وتفعيل الترجمة العربية بنجاح بدقة زمنية تامة!'
-                : 'Arabic subtitle generated & activated successfully!';
-            showToast(successMsg);
-            globalToast.success(successMsg, t('player.subtitle_ready'));
-
-            if (showSubtitleSearchModal.value) {
-                showSubtitleSearchModal.value = false;
-            }
-        }
-    } catch (e: any) {
-        const errMsg = e.message || t('player.arabic_translation_failed');
-        showToast(errMsg);
-        globalToast.error(errMsg, t('player.translation_error'));
-    } finally {
-        isTranslatingSubtitle.value = false;
-    }
-};
-
-// Web Audio API Pipeline (Voice Enhancer / Equalizer / Audio Delay Sync)
-const initAudioPipeline = () => {
-    if (isAudioPipelineInitialized || !videoRef.value) return;
-    try {
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        if (!AudioContextClass) return;
-
-        audioCtx = new AudioContextClass();
-        if (audioCtx.state === 'suspended') {
-            audioCtx.resume().catch(() => {});
-        }
-        sourceNode = audioCtx.createMediaElementSource(videoRef.value);
-
-        voiceFilterNode = audioCtx.createBiquadFilter();
-        voiceFilterNode.type = 'peaking';
-        voiceFilterNode.frequency.value = 2500;
-        voiceFilterNode.Q.value = 1.0;
-        voiceFilterNode.gain.value = vocalBoost.value ? 4.5 : 0;
-
-        bassFilterNode = audioCtx.createBiquadFilter();
-        bassFilterNode.type = 'lowshelf';
-        bassFilterNode.frequency.value = 180;
-        bassFilterNode.gain.value = bassBoost.value ? 5.0 : 0;
-
-        trebleFilterNode = audioCtx.createBiquadFilter();
-        trebleFilterNode.type = 'highshelf';
-        trebleFilterNode.frequency.value = 6000;
-        trebleFilterNode.gain.value = 0;
-
-        compressorNode = audioCtx.createDynamicsCompressor();
-        compressorNode.threshold.value = nightMode.value ? -24 : -12;
-        compressorNode.knee.value = 10;
-        compressorNode.ratio.value = nightMode.value ? 12 : 3;
-        compressorNode.attack.value = 0.003;
-        compressorNode.release.value = 0.25;
-
-        // Native Delay Node for Audio/Video Sync Compensation
-        delayNode = audioCtx.createDelay(5.0);
-        delayNode.delayTime.value = Math.max(0, audioDelayMs.value / 1000);
-
-        gainNode = audioCtx.createGain();
-        gainNode.gain.value = volume.value;
-
-        sourceNode.connect(voiceFilterNode);
-        voiceFilterNode.connect(bassFilterNode);
-        bassFilterNode.connect(trebleFilterNode);
-        trebleFilterNode.connect(compressorNode);
-        compressorNode.connect(delayNode);
-        delayNode.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-
-        isAudioPipelineInitialized = true;
-    } catch (e) {
-        console.warn('Web Audio pipeline initialization bypassed:', e);
-    }
-};
-
-const updateAudioFilters = () => {
-    if (!isAudioPipelineInitialized) return;
-    if (voiceFilterNode) {
-        voiceFilterNode.gain.value = vocalBoost.value ? 4.5 : 0;
-    }
-    if (bassFilterNode) {
-        bassFilterNode.gain.value = bassBoost.value ? 5.0 : 0;
-    }
-    if (compressorNode) {
-        compressorNode.threshold.value = nightMode.value ? -24 : -12;
-        compressorNode.ratio.value = nightMode.value ? 12 : 3;
-    }
-};
-
-const togglePlay = () => {
-    if (!videoRef.value) return;
-    if (videoRef.value.paused) {
-        initAudioPipeline();
-        videoRef.value.play().catch(() => {});
-    } else {
-        videoRef.value.pause();
-    }
-};
-
-// Ultra-Fast Keyframe-Aligned Seeking in Remux & Native Stream
-let currentSeekToken = 0;
-const isSeekPending = ref(false);
-
-const executeSeek = async (targetSecs: number) => {
-    const clamped = Math.max(0, Math.min(duration.value || 3600, targetSecs));
-    currentTime.value = clamped;
-    updateActiveCue(clamped);
-
-    // If fully cached on disk, native byte-range seeking is instant without restarting FFmpeg!
-    if (isRemuxStream.value && !isServerCached.value) {
-        isBuffering.value = true;
-        const seekToken = ++currentSeekToken;
-        let actualTarget = clamped;
-
-        if (clamped > 2) {
-            try {
-                const type = isEpisode.value ? 'episode' : 'movie';
-                const id = activeItem.value?.watchable_id || activeItem.value?.id;
-                const res = await fetch(`/api/media/seek-keyframe?type=${type}&id=${id}&time=${clamped}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (typeof data.keyframe === 'number' && data.keyframe >= 0) {
-                        actualTarget = data.keyframe;
-                    }
-                }
-            } catch (e) {}
-        }
-
-        // Drop stale seek if user sought again while waiting
-        if (seekToken !== currentSeekToken) return;
-
-        isSeekPending.value = true;
-        remuxStartOffset.value = actualTarget;
-        currentTime.value = actualTarget;
-        updateActiveCue(actualTarget);
-
-        if (videoRef.value) {
-            videoRef.value.currentTime = 0;
-            videoRef.value.play().catch(() => {});
-        }
-    } else if (videoRef.value) {
-        videoRef.value.currentTime = clamped;
-        if (videoRef.value.paused) {
-            videoRef.value.play().catch(() => {});
-        }
-    }
-};
-
-let seekDebounceTimer: any = null;
-const seekRelative = (seconds: number) => {
-    const current = currentTime.value || (videoRef.value ? videoRef.value.currentTime : 0);
-    const target = Math.max(0, Math.min(duration.value || 0, current + seconds));
-    currentTime.value = target;
-    updateActiveCue(target);
-    showControlsTemporarily();
-
-    clearTimeout(seekDebounceTimer);
-    seekDebounceTimer = setTimeout(() => {
-        executeSeek(currentTime.value);
-    }, 150);
-};
-
-// Touch Gestures for Mobile Cinema Experience
-const touchFeedback = ref<{ side: 'left' | 'right'; show: boolean }>({ side: 'left', show: false });
-let lastTapTime = 0;
-let lastTapX = 0;
-let touchFeedbackTimeout: any = null;
-
-const handlePlayerTouchEnd = (e: TouchEvent) => {
-    const target = e.target as HTMLElement;
-    if (target && target.closest('button, input, select, a, .controls-panel, .drawer-panel')) {
-        return;
-    }
-
-    const touch = e.changedTouches[0];
-    if (!touch) return;
-    const now = Date.now();
-    const rect = playerContainerRef.value?.getBoundingClientRect();
-    if (!rect) return;
-
-    const x = touch.clientX - rect.left;
-    const isDoubleTap = (now - lastTapTime < 340) && Math.abs(x - lastTapX) < 90;
-
-    if (isDoubleTap) {
-        e.preventDefault();
-        const isLeft = x < rect.width / 2;
-        if (isLeft) {
-            seekRelative(-10);
-            touchFeedback.value = { side: 'left', show: true };
-        } else {
-            seekRelative(10);
-            touchFeedback.value = { side: 'right', show: true };
-        }
-        clearTimeout(touchFeedbackTimeout);
-        touchFeedbackTimeout = setTimeout(() => {
-            touchFeedback.value.show = false;
-        }, 700);
-        lastTapTime = 0;
-    } else {
-        lastTapTime = now;
-        lastTapX = x;
-        if (isControlsVisible.value && isPlaying.value) {
-            isControlsVisible.value = false;
-        } else {
-            showControlsTemporarily();
-        }
-    }
-};
-
-const onScrubberInput = (e: Event) => {
-    const val = parseFloat((e.target as HTMLInputElement).value);
-    if (duration.value > 0) {
-        const target = (val / 100) * duration.value;
-        currentTime.value = target;
-        updateActiveCue(target);
-        if (!isRemuxStream.value && videoRef.value) {
-            videoRef.value.currentTime = target;
-        }
-    }
-};
-
-const onScrubberChange = (e: Event) => {
-    const val = parseFloat((e.target as HTMLInputElement).value);
-    if (duration.value > 0) {
-        const target = (val / 100) * duration.value;
-        executeSeek(target);
-    }
-};
-
-const toggleMute = () => {
-    if (!videoRef.value) return;
-    videoRef.value.muted = !videoRef.value.muted;
-    isMuted.value = videoRef.value.muted;
-};
-
-const onVolumeInput = (e: Event) => {
-    const val = parseFloat((e.target as HTMLInputElement).value);
-    volume.value = val;
-    if (videoRef.value) {
-        videoRef.value.volume = val;
-        videoRef.value.muted = val === 0;
-        isMuted.value = val === 0;
-    }
-    if (gainNode) {
-        gainNode.gain.value = val;
-    }
-};
-
-const setPlaybackRate = (rate: number) => {
-    playbackRate.value = rate;
-    if (videoRef.value) {
-        videoRef.value.playbackRate = rate;
-    }
-    showPlaybackSpeedMenu.value = false;
-    showToast(t('player.playback_speed', { rate }));
-};
-
-const toggleFullscreen = () => {
-    if (!playerContainerRef.value) return;
-    const isCurrentlyFullscreen = Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
-    if (!isCurrentlyFullscreen) {
-        const el = playerContainerRef.value;
-        if (el.requestFullscreen) {
-            el.requestFullscreen().catch(() => {});
-        } else if ((el as any).webkitRequestFullscreen) {
-            (el as any).webkitRequestFullscreen();
-        }
-        isFullscreen.value = true;
-    } else {
-        if (document.exitFullscreen) {
-            document.exitFullscreen().catch(() => {});
-        } else if ((document as any).webkitExitFullscreen) {
-            (document as any).webkitExitFullscreen();
-        }
-        isFullscreen.value = false;
-    }
-    nextTick(() => {
-        syncTextTracks();
-    });
-};
-
-const onFullscreenChange = () => {
-    isFullscreen.value = Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
-    nextTick(() => {
-        syncTextTracks();
-    });
-};
-
-const selectSubtitle = async (subId: number | string, notify = true) => {
-    selectedSubtitleId.value = subId;
-    if (subId === 'off') {
-        try {
-            localStorage.setItem('cinema_subtitle_pref', 'off');
-        } catch {}
-    } else {
-        const found = availableSubtitles.value.find(s => String(s.id) === String(subId));
-        if (found?.language) {
-            try {
-                localStorage.setItem('cinema_subtitle_pref', found.language);
-            } catch {}
-        }
-    }
-    await loadSubtitleTrack(subId);
-    nextTick(() => {
-        syncTextTracks();
-    });
-    showSubtitlesMenu.value = false;
-    if (notify) {
-        const found = availableSubtitles.value.find(s => String(s.id) === String(subId));
-        showToast(subId === 'off' ? t('player.subtitles_off') : t('player.selected_track', { name: found?.language_name || '' }));
-    }
-};
-
-const adjustSubtitleDelay = (delta: number) => {
-    subtitleDelay.value = parseFloat((subtitleDelay.value + delta).toFixed(2));
-    updateActiveCue(currentTime.value);
-    if (videoRef.value && videoRef.value.textTracks) {
-        for (let i = 0; i < videoRef.value.textTracks.length; i++) {
-            const track = videoRef.value.textTracks[i];
-            if (track.mode === 'showing' && track.cues) {
-                for (let j = 0; j < track.cues.length; j++) {
-                    const c = track.cues[j] as VTTCue;
-                    if (c) {
-                        c.startTime = Math.max(0, c.startTime + delta);
-                        c.endTime = Math.max(0, c.endTime + delta);
-                    }
-                }
-            }
-        }
-    }
-    showToast(t('player.subtitle_sync_sec', { sec: subtitleDelay.value }));
-};
-
-const toggleVocalBoost = () => {
-    vocalBoost.value = !vocalBoost.value;
-    updateAudioFilters();
-    showToast(vocalBoost.value ? t('player.vocal_boost_enabled') : t('player.vocal_boost_disabled'));
-};
-
-const toggleBassBoost = () => {
-    bassBoost.value = !bassBoost.value;
-    updateAudioFilters();
-    showToast(bassBoost.value ? t('player.bass_boost_enabled') : t('player.bass_boost_disabled'));
-};
-
-const toggleNightMode = () => {
-    nightMode.value = !nightMode.value;
-    updateAudioFilters();
-    showToast(nightMode.value ? t('player.night_mode_enabled') : t('player.night_mode_disabled'));
-};
-
-const showControlsTemporarily = () => {
-    isControlsVisible.value = true;
-    clearTimeout(controlsTimeout);
-    controlsTimeout = setTimeout(() => {
-        if (isPlaying.value && !showEqualizer.value && !showSubtitlesMenu.value && !showPlaybackSpeedMenu.value) {
-            isControlsVisible.value = false;
-        }
-    }, 3200);
-};
-
-// Playback Lifecycle & Progress Handlers
-const onLoadedMetadata = () => {
-    if (!videoRef.value) return;
-    isSeekPending.value = false;
-    updateLiveResolution();
-    nextTick(() => {
-        syncTextTracks();
-    });
-    const d = videoRef.value.duration;
-    if (!isDurationLocked.value && !isRemuxStream.value && d && isFinite(d) && !isNaN(d) && d > 0) {
-        duration.value = d;
-    }
-
-    // Direct stream seek to saved position once on load for this specific item
-    if (!hasAppliedInitialSeek.value) {
-        hasAppliedInitialSeek.value = true;
-        const targetSeek = pendingInitialSeek.value;
-        pendingInitialSeek.value = 0; // Clear immediately so it never leaks
-        if (!isRemuxStream.value && targetSeek > 0 && targetSeek < duration.value - 5) {
-            videoRef.value.currentTime = targetSeek;
-            currentTime.value = targetSeek;
-        }
-    }
-
-    videoRef.value.play().then(() => {
-        isPlaying.value = true;
-    }).catch(() => {});
-};
-
-const onTimeUpdate = () => {
-    if (!videoRef.value) return;
-    
-    const rawCurrent = videoRef.value.currentTime;
-    if (isSeekPending.value) {
-        if (rawCurrent > 1.0) {
-            return;
-        }
-        isSeekPending.value = false;
-    }
-
-    if (isRemuxStream.value && remuxStartOffset.value > 0) {
-        currentTime.value = remuxStartOffset.value + rawCurrent;
-    } else {
-        currentTime.value = rawCurrent;
-    }
-
-    // In Remux mode, NEVER overwrite the locked original file duration with partial chunk durations
-    if (!isDurationLocked.value && !isRemuxStream.value) {
-        const d = videoRef.value.duration;
-        if (d && isFinite(d) && !isNaN(d) && d > 0) {
-            duration.value = d;
-        }
-    }
-
-    updateBufferProgress();
-    updateActiveCue(currentTime.value);
-};
-
-const onVideoPlay = () => {
-    isPlaying.value = true;
-    syncTextTracks();
-    initAudioPipeline();
-    if (audioCtx && audioCtx.state === 'suspended') {
-        audioCtx.resume();
-    }
-};
-
-const onVideoPause = () => {
-    isPlaying.value = false;
-    savePlaybackProgress();
-    updateBufferProgress();
-};
-
-const onVideoWaiting = () => {
-    isBuffering.value = true;
-};
-
-const onVideoPlaying = () => {
-    isBuffering.value = false;
-    isSeekPending.value = false;
-    updateLiveResolution();
-};
-
-// Formatting Time (Handles Hours, Minutes, Seconds with zero NaN or Infinity bugs)
-const formatTime = (seconds: number) => {
-    if (!seconds || isNaN(seconds) || !isFinite(seconds) || seconds <= 0) return '00:00';
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-
-    const m = mins < 10 ? `0${mins}` : `${mins}`;
-    const s = secs < 10 ? `0${secs}` : `${secs}`;
-
-    if (hrs > 0) {
-        return `${hrs}:${m}:${s}`;
-    }
-    return `${mins}:${s}`;
-};
-
-const savePlaybackProgress = async (forceCompleted = false) => {
-    if (!currentTime.value || !activeItem.value) return;
-    const dur = Math.floor(duration.value);
-    const current = Math.floor(currentTime.value);
-    if (current <= 3 && !forceCompleted) return;
-
-    const isCompleted = forceCompleted || (dur > 0 && current >= dur - 30);
-
-    emit('update:progress', current);
-    try {
-        localStorage.setItem(`progress_${isEpisode.value ? 'episode' : 'movie'}_${activeItem.value.id}`, String(current));
-        if (dur > 0) {
-            localStorage.setItem(`duration_${isEpisode.value ? 'episode' : 'movie'}_${activeItem.value.id}`, String(dur));
-        }
-
-        await fetch('/api/watch-history/progress', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || ''
-            },
-            body: JSON.stringify({
-                watchable_type: isEpisode.value ? 'episode' : 'media_item',
-                watchable_id: activeItem.value.id,
-                media_item_id: isEpisode.value ? (activeItem.value.series_id || activeItem.value.series?.id) : activeItem.value.id,
-                progress_seconds: current,
-                duration_seconds: dur,
-                completed: isCompleted,
-            })
-        });
-    } catch (e) {}
-};
-
-const stopServerStreamingCache = () => {
-    try {
-        const payload = JSON.stringify({
-            type: isEpisode.value ? 'episode' : 'movie',
-            id: activeItem.value?.id
-        });
-        if (navigator.sendBeacon) {
-            const blob = new Blob([payload], { type: 'application/json' });
-            navigator.sendBeacon('/api/stream/stop', blob);
-        } else {
-            fetch('/api/stream/stop', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: payload,
-                keepalive: true
-            }).catch(() => {});
-        }
-    } catch (e) {}
-};
-
-// Keyboard Shortcuts
-const onKeyDown = (e: KeyboardEvent) => {
-    if (['input', 'textarea'].includes((e.target as HTMLElement).tagName.toLowerCase())) return;
-
-    if (e.shiftKey && (e.key === 'N' || e.key === 'n')) {
-        e.preventDefault();
-        if (hasNext.value) {
-            playNext();
-        }
-        return;
-    }
-    if (e.shiftKey && (e.key === 'P' || e.key === 'p')) {
-        e.preventDefault();
-        if (hasPrevious.value) {
-            playPrevious();
-        }
-        return;
-    }
-
-    switch (e.key) {
-        case ' ':
-        case 'k':
-            e.preventDefault();
-            togglePlay();
-            showControlsTemporarily();
-            break;
-        case 'ArrowLeft':
-            e.preventDefault();
-            seekRelative(-10);
-            break;
-        case 'ArrowRight':
-            e.preventDefault();
-            seekRelative(10);
-            break;
-        case 'ArrowUp':
-            e.preventDefault();
-            volume.value = Math.min(1, volume.value + 0.1);
-            if (videoRef.value) videoRef.value.volume = volume.value;
-            showControlsTemporarily();
-            break;
-        case 'ArrowDown':
-            e.preventDefault();
-            volume.value = Math.max(0, volume.value - 0.1);
-            if (videoRef.value) videoRef.value.volume = volume.value;
-            showControlsTemporarily();
-            break;
-        case 'f':
-            e.preventDefault();
-            toggleFullscreen();
-            break;
-        case 'm':
-            e.preventDefault();
-            toggleMute();
-            showControlsTemporarily();
-            break;
-        case 'Escape':
-            if (isFullscreen.value) {
-                toggleFullscreen();
-            } else {
-                handleClose();
-            }
-            break;
-    }
-};
-
-const handleClose = () => {
-    savePlaybackProgress();
-    stopServerStreamingCache();
-    emit('close');
-};
-
-onMounted(() => {
-    window.addEventListener('keydown', onKeyDown);
-    document.addEventListener('fullscreenchange', onFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
-    updateNativeCueStyle();
-    nextTick(() => {
-        syncTextTracks();
-    });
-    audioDelayMs.value = getSavedAudioDelay();
-    if (availableSubtitles.value.length > 0) {
-        autoSelectAndLoadSubtitle(availableSubtitles.value);
-    }
-    fetchSubtitles();
-    fetchMediaDuration();
-    if (!currentPlaylist.value || currentPlaylist.value.length === 0) {
-        autoFetchPlaylist(activeItem.value);
-    }
-
-    progressSaveInterval = setInterval(() => {
-        if (isPlaying.value) {
-            savePlaybackProgress();
-        }
-    }, 12000);
-
-    // Track YouTube-Style Buffer Line continuously
-    bufferTrackInterval = setInterval(() => {
-        updateBufferProgress();
-    }, 400);
-
-    // Poll server background transcode cache status in Remux mode
-    if (isRemuxStream.value) {
-        checkServerCacheStatus();
-        serverCachePollInterval = setInterval(() => {
-            checkServerCacheStatus();
         }, 1500);
+    } else {
+        toast.info(t('player.playback_completed') || 'Playback completed');
+    }
+};
+
+// Lifecycle
+let progressInterval: any = null;
+onMounted(() => {
+    const type = playback.isEpisode.value ? 'episode' : 'movie';
+    const id = playback.activeItem.value?.watchable_id || playback.activeItem.value?.id;
+    if (id) {
+        subtitles.fetchSubtitlesForMedia(type, id);
+    }
+
+    if (playback.itemKey.value) {
+        const savedSync = localStorage.getItem(`audio_sync_${playback.itemKey.value}`);
+        if (savedSync) {
+            audioPipeline.setAudioDelay(parseInt(savedSync, 10));
+        }
+    }
+
+    progressInterval = setInterval(() => {
+        if (playback.isPlaying.value) {
+            playback.savePlaybackProgress();
+        }
+    }, 15000);
+
+    if (playback.engineMode.value === 'web') {
+        playback.initWebEngine();
     }
 });
 
 onBeforeUnmount(() => {
-    window.removeEventListener('keydown', onKeyDown);
-    document.removeEventListener('fullscreenchange', onFullscreenChange);
-    document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
-    const cueStyle = document.getElementById('cinema-native-cue-style');
-    if (cueStyle) cueStyle.remove();
-    clearInterval(progressSaveInterval);
-    clearInterval(bufferTrackInterval);
-    clearInterval(serverCachePollInterval);
+    playback.destroyWebEngine();
+    clearInterval(progressInterval);
     clearTimeout(controlsTimeout);
-    clearTimeout(toastTimeout);
-    savePlaybackProgress();
-    stopServerStreamingCache();
-
-    if (audioCtx) {
-        audioCtx.close().catch(() => {});
-    }
+    clearTimeout(touchFeedbackTimer);
+    clearTimeout(centerPlayTimer);
+    playback.savePlaybackProgress();
 });
 </script>
 
@@ -1830,960 +318,239 @@ onBeforeUnmount(() => {
         dir="ltr"
         @mousemove="showControlsTemporarily"
         @click="showControlsTemporarily"
-        @touchend="handlePlayerTouchEnd"
-        class="fixed inset-0 z-50 bg-black flex items-center justify-center select-none overflow-hidden font-sans group"
-        :class="{ 'cursor-none': !isControlsVisible && isPlaying, 'is-fullscreen': isFullscreen }"
+        class="fixed inset-0 z-50 bg-black flex items-center justify-center select-none overflow-hidden font-sans group/player"
+        :class="{ 'cursor-none': !playback.isControlsVisible.value && playback.isPlaying.value }"
     >
-        <!-- Double Tap Mobile Seek Feedback (10s Left/Right) -->
-        <transition name="fade">
-            <div
-                v-if="touchFeedback.show && touchFeedback.side === 'left'"
-                class="absolute left-8 sm:left-16 top-1/2 -translate-y-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none bg-black/80 backdrop-blur-xl px-6 py-4 rounded-3xl border border-cyan-500/40 text-cyan-400 shadow-2xl animate-pulse"
-            >
-                <RotateCcw class="w-8 h-8 animate-spin" />
-                <span class="font-mono font-black text-base">-10s</span>
-            </div>
-        </transition>
-
-        <transition name="fade">
-            <div
-                v-if="touchFeedback.show && touchFeedback.side === 'right'"
-                class="absolute right-8 sm:right-16 top-1/2 -translate-y-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none bg-black/80 backdrop-blur-xl px-6 py-4 rounded-3xl border border-cyan-500/40 text-cyan-400 shadow-2xl animate-pulse"
-            >
-                <RotateCw class="w-8 h-8 animate-spin" />
-                <span class="font-mono font-black text-base">+10s</span>
-            </div>
-        </transition>
-
-        <!-- Toast Notification -->
-        <transition name="fade">
-            <div
-                v-if="toastNotice"
-                class="absolute top-24 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-2xl bg-black/90 border border-cyan-500/50 text-cyan-300 font-extrabold text-sm backdrop-blur-xl shadow-2xl flex items-center gap-2 pointer-events-none"
-            >
-                <Sparkles class="w-4 h-4 text-cyan-400" />
-                <span>{{ toastNotice }}</span>
-            </div>
-        </transition>
-
-        <!-- ========================================================= -->
-        <!-- TOP STATUS LINE & MEDIA HEADER (Always Clear on Hover)    -->
-        <!-- ========================================================= -->
-        <transition name="fade">
-            <div
-                v-show="isControlsVisible || !isPlaying"
-                class="absolute top-0 inset-x-0 p-4 sm:p-6 bg-gradient-to-b from-black/95 via-black/60 to-transparent flex items-center justify-between z-40 transition-opacity"
-            >
-                <!-- Left: Back Button + Title + Status Badges -->
-                <div class="flex items-center gap-3 sm:gap-4">
-                    <button
-                        @click="handleClose"
-                        class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md transition-transform hover:scale-110 active:scale-95 cursor-pointer shadow-lg"
-                        title="Back to Library"
-                    >
-                        <ArrowLeft class="w-5 h-5" />
-                    </button>
-
-                    <div class="flex flex-col gap-1">
-                        <!-- Primary Title & Episode Info -->
-                        <div class="flex items-center gap-2.5 flex-wrap">
-                            <h2 class="font-black text-sm sm:text-lg text-white tracking-wide truncate max-w-xs sm:max-w-xl">
-                                {{ playerHeaderTitle }}
-                            </h2>
-
-                            <!-- Year Badge -->
-                            <span v-if="displayYear" class="px-2 py-0.5 rounded-md bg-white/10 text-slate-300 text-[11px] font-bold">
-                                {{ displayYear }}
-                            </span>
-                        </div>
-
-                        <!-- Technical Status Line (Resolution, Codec, Hardware Stream) -->
-                        <div class="flex items-center gap-2 flex-wrap text-[11px] font-mono">
-                            <!-- Quality Badge -->
-                            <span v-if="displayResolution" class="px-2 py-0.5 rounded-md bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 font-extrabold flex items-center gap-1">
-                                <Film class="w-3 h-3 text-cyan-400" />
-                                {{ displayResolution }}
-                            </span>
-
-                            <!-- Codec & Audio Badge -->
-                            <span class="px-2 py-0.5 rounded-md bg-white/10 text-slate-300 font-semibold hidden sm:inline-flex items-center gap-1">
-                                <Layers class="w-3 h-3 text-slate-400" />
-                                {{ displayCodec }} · {{ displayAudio }}
-                            </span>
-
-                            <!-- Active Subtitle Indicator -->
-                            <span v-if="selectedSubtitleId !== 'off'" class="px-2 py-0.5 rounded-md bg-purple-500/20 border border-purple-400/30 text-purple-300 font-bold flex items-center gap-1">
-                                <MessageSquare class="w-3 h-3 text-purple-400" />
-                                {{ availableSubtitles.find(s => s.id === selectedSubtitleId)?.language_name || 'Subtitles ON' }}
-                            </span>
-
-                            <!-- Stream Engine Badge & Toggle -->
-                            <button
-                                @click="toggleRemuxStream"
-                                class="px-2.5 py-0.5 rounded-md font-bold text-[11px] hidden md:inline-flex items-center gap-1.5 transition-all cursor-pointer"
-                                :class="isRemuxStream ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30'"
-                                :title="isRemuxStream ? 'Ultra-Fast Remux active (Zero CPU video copy + AAC audio). Click to toggle Direct Stream.' : 'Direct Stream active. Click to toggle Server Remux.'"
-                            >
-                                <Activity class="w-3 h-3" :class="isRemuxStream ? 'text-cyan-400' : 'text-emerald-400'" />
-                                <span>{{ isRemuxStream ? 'Ultra-Fast Remux (AAC)' : 'Direct Stream' }}</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Right: Close Button -->
-                <div class="flex items-center gap-2">
-                    <button
-                        @click="handleClose"
-                        class="w-10 h-10 rounded-full bg-white/10 hover:bg-red-500/80 text-white flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 cursor-pointer shadow-lg"
-                        title="Close Player"
-                    >
-                        <X class="w-5 h-5" />
-                    </button>
-                </div>
-            </div>
-        </transition>
-
-        <!-- ========================================================= -->
-        <!-- CORE VIDEO HTML5 ELEMENT & HARDWARE PIPELINE             -->
-        <!-- ========================================================= -->
+        <!-- Video Viewport -->
         <video
             ref="videoRef"
-            :src="streamUrl"
-            @timeupdate="onTimeUpdate"
-            @progress="updateBufferProgress"
-            @loadedmetadata="onLoadedMetadata"
-            @canplay="updateLiveResolution"
-            @play="onVideoPlay"
-            @pause="onVideoPause"
-            @waiting="onVideoWaiting"
-            @playing="onVideoPlaying"
-            @ended="onVideoEnded"
-            @error="handleVideoError"
-            @click="togglePlay"
-            @dblclick="toggleFullscreen"
-            crossorigin="anonymous"
-            playsinline
+            :src="playback.effectiveVideoSrc.value"
             class="w-full h-full object-contain cursor-pointer"
-        >
-            <track
-                v-for="sub in availableSubtitles"
-                :key="`${sub.id}-${remuxStartOffset}`"
-                :id="`sub-track-${sub.id}`"
-                kind="subtitles"
-                :label="sub.language_name || sub.language || 'Subtitle'"
-                :srclang="sub.language || 'ar'"
-                :src="sub.url || (isRemuxStream && remuxStartOffset > 0 ? `/stream/subtitles/${sub.id}?start=${Math.round(remuxStartOffset * 1000) / 1000}` : `/stream/subtitles/${sub.id}`)"
-                :default="!enableCustomSubtitleOverlay && String(selectedSubtitleId) === String(sub.id)"
-            />
-        </video>
+            autoplay
+            playsinline
+            preload="auto"
+            crossorigin="anonymous"
+            @loadedmetadata="playback.onLoadedMetadata"
+            @play="handlePlay"
+            @pause="handlePause"
+            @timeupdate="playback.onTimeUpdate"
+            @ended="handleVideoEnded"
+            @waiting="playback.isBuffering.value = true"
+            @playing="playback.isBuffering.value = false; playback.updateLiveResolution()"
+            @click="handleTogglePlay"
+        />
 
-        <!-- Subtitle Overlay (Dynamic WebVTT Rendering with Crystal-Clear Arabic/English Typography) -->
-        <!-- Preserved intact, disabled for now per user request to test native <track> as default -->
-        <div
-            v-if="enableCustomSubtitleOverlay && selectedSubtitleId !== 'off' && activeCueText"
-            class="absolute inset-x-0 flex items-center justify-center px-4 sm:px-8 pointer-events-none transition-all duration-200 ease-out subtitle-overlay-container"
-            :style="{ bottom: isControlsVisible ? '7.5rem' : '3.5rem', zIndex: 60 }"
+        <!-- Center Play/Pause Animated Ripple Indicator -->
+        <Transition
+            enter-active-class="transition duration-200 ease-out"
+            enter-from-class="opacity-0 scale-75"
+            enter-to-class="opacity-100 scale-100"
+            leave-active-class="transition duration-300 ease-in"
+            leave-from-class="opacity-100 scale-100"
+            leave-to-class="opacity-0 scale-125"
         >
             <div
-                class="subtitle-pill px-3.5 py-1 sm:px-5 sm:py-1.5 rounded-xl bg-black/45 text-white text-center font-bold tracking-normal shadow-lg transition-all duration-100 max-w-4xl pointer-events-none border border-white/10"
-                dir="auto"
-                :class="{
-                    'text-sm sm:text-base': subtitleFontSize === 'sm',
-                    'text-base sm:text-lg': subtitleFontSize === 'md',
-                    'text-lg sm:text-2xl': subtitleFontSize === 'lg',
-                    'text-xl sm:text-3xl': subtitleFontSize === 'xl',
-                }"
-                :style="{
-                    fontFamily: subtitleFontFamily,
-                    textShadow: '0 2px 4px rgba(0,0,0,0.95), 0 0 3px #000, 1px 1px 2px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000',
-                    lineHeight: 1.5,
-                }"
-                v-html="activeCueText"
-            ></div>
-        </div>
+                v-if="showCenterPlayIndicator"
+                class="absolute pointer-events-none z-30 w-20 h-20 rounded-full bg-black/60 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-2xl"
+            >
+                <svg v-if="playback.isPlaying.value" class="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                </svg>
+                <svg v-else class="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                </svg>
+            </div>
+        </Transition>
 
-        <!-- Premium Cinema Buffering & Stream Loader -->
-        <transition name="fade">
+        <!-- Floating Seek Feedback Pills (-10s / +10s) -->
+        <Transition
+            enter-active-class="transition duration-150 ease-out"
+            enter-from-class="opacity-0 -translate-x-4 scale-90"
+            enter-to-class="opacity-100 translate-x-0 scale-100"
+            leave-active-class="transition duration-200 ease-in"
+            leave-from-class="opacity-100 translate-x-0 scale-100"
+            leave-to-class="opacity-0 -translate-x-4 scale-90"
+        >
             <div
-                v-if="isBuffering"
+                v-if="touchFeedback === 'backward'"
+                class="absolute left-16 z-30 pointer-events-none flex items-center gap-2 px-5 py-2.5 rounded-full bg-black/70 backdrop-blur-md border border-white/20 text-white font-bold text-sm tracking-wide shadow-2xl animate-pulse"
+            >
+                <svg class="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.334 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
+                </svg>
+                <span>-10s</span>
+            </div>
+        </Transition>
+
+        <Transition
+            enter-active-class="transition duration-150 ease-out"
+            enter-from-class="opacity-0 translate-x-4 scale-90"
+            enter-to-class="opacity-100 translate-x-0 scale-100"
+            leave-active-class="transition duration-200 ease-in"
+            leave-from-class="opacity-100 translate-x-0 scale-100"
+            leave-to-class="opacity-0 translate-x-4 scale-90"
+        >
+            <div
+                v-if="touchFeedback === 'forward'"
+                class="absolute right-16 z-30 pointer-events-none flex items-center gap-2 px-5 py-2.5 rounded-full bg-black/70 backdrop-blur-md border border-white/20 text-white font-bold text-sm tracking-wide shadow-2xl animate-pulse"
+            >
+                <span>+10s</span>
+                <svg class="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z" />
+                </svg>
+            </div>
+        </Transition>
+
+        <!-- Loading / Buffering Spinner Overlay -->
+        <Transition name="fade">
+            <div
+                v-if="playback.isBuffering.value"
                 class="absolute inset-0 flex items-center justify-center pointer-events-none z-30 bg-black/45 backdrop-blur-xs transition-all"
             >
                 <CinemaLoader
                     size="md"
-                    :is-r-t-l="false"
+                    :is-r-t-l="isRTL"
                     :status-text="t('player.buffering_stream')"
-                    :sub-text="`${isRemuxStream ? 'Ultra-Fast Remux' : 'Direct Stream'} · ${liveResolution || displayResolution}`"
                 />
             </div>
-        </transition>
+        </Transition>
 
-        <!-- Big Play Button Overlay when Paused -->
-        <transition name="scale">
-            <button
-                v-if="!isPlaying && !isBuffering"
-                @click="togglePlay"
-                class="absolute w-20 h-20 rounded-full bg-cyan-500/90 text-slate-950 flex items-center justify-center shadow-2xl shadow-cyan-500/50 hover:scale-110 active:scale-95 transition-all z-20 cursor-pointer"
-            >
-                <Play class="w-8 h-8 fill-current ml-1" />
-            </button>
-        </transition>
+        <!-- Subtitle Overlay -->
+        <CinemaSubtitleOverlay
+            :active-cue-text="subtitles.activeCueText.value"
+            :font-family="subtitles.subtitleFontFamily.value"
+            :font-size="subtitles.subtitleFontSize.value"
+            :is-controls-visible="playback.isControlsVisible.value"
+        />
 
-        <!-- ========================================================= -->
-        <!-- BOTTOM CINEMA CONTROLS BAR & SCRUBBER STATUS              -->
-        <!-- ========================================================= -->
-        <transition name="slide-up">
-            <div
-                v-show="isControlsVisible || !isPlaying"
-                class="absolute bottom-0 inset-x-0 p-4 sm:p-6 bg-gradient-to-t from-black/95 via-black/85 to-transparent flex flex-col gap-3 z-40 transition-all border-t border-white/5 backdrop-blur-xl"
-            >
-                <!-- Timeline Scrubber & YouTube-Style Buffer Status -->
-                <div class="flex items-center gap-3.5 w-full">
-                    <!-- Current Position -->
-                    <span class="text-xs font-mono font-bold text-cyan-300 min-w-[48px] text-right tracking-tight drop-shadow">
-                        {{ formatTime(currentTime) }}
-                    </span>
+        <!-- Top Header Bar -->
+        <CinemaHeader
+            :item="playback.activeItem.value"
+            :is-episode="playback.isEpisode.value"
+            :is-remux-stream="playback.isRemuxStream.value"
+            :engine-mode="playback.engineMode.value"
+            :live-resolution="playback.liveResolution.value"
+            :is-controls-visible="playback.isControlsVisible.value"
+            @close="emit('close')"
+            @toggle-stream="playback.toggleStreamEngine"
+        />
 
-                    <!-- Interactive Seeker Bar -->
-                    <div class="relative flex-1 group/track cursor-pointer flex items-center h-6">
-                        <!-- Visual Track Container -->
-                        <div class="absolute inset-x-0 h-2 group-hover/track:h-3 bg-white/20 rounded-full overflow-hidden transition-all pointer-events-none shadow-inner">
-                            <!-- High-Contrast Light Gray YouTube-Style Buffered Bar -->
-                            <div
-                                class="absolute inset-y-0 left-0 bg-slate-200/75 dark:bg-white/60 rounded-full transition-all duration-300 shadow-[0_0_8px_rgba(255,255,255,0.4)]"
-                                :style="{ width: `${bufferedPercent}%` }"
-                            ></div>
-                            <!-- Active Played Gradient Fill -->
-                            <div
-                                class="absolute inset-y-0 left-0 bg-gradient-to-r from-cyan-500 via-sky-400 to-blue-500 rounded-full shadow-[0_0_12px_rgba(6,182,212,0.8)] transition-all"
-                                :style="{ width: `${progressPercent}%` }"
-                            ></div>
-                        </div>
+        <!-- Bottom Controls Dock -->
+        <div
+            class="absolute bottom-0 inset-x-0 p-4 sm:p-6 bg-gradient-to-t from-black/95 via-black/60 to-transparent z-30 transition-all duration-300 pointer-events-auto space-y-2"
+            :class="{ 'opacity-0 translate-y-4 pointer-events-none': !playback.isControlsVisible.value }"
+        >
+            <!-- Scrubber Timeline -->
+            <CinemaScrubber
+                :current-time="playback.currentTime.value"
+                :duration="playback.duration.value"
+                :buffered-percent="playback.bufferedPercent.value"
+                :progress-percent="playback.progressPercent.value"
+                :format-time="playback.formatTime"
+                @seek="handleSeek"
+            />
 
-                        <!-- Interactive Range Input Overlay -->
-                        <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            step="0.05"
-                            :value="progressPercent"
-                            @input="onScrubberInput"
-                            @change="onScrubberChange"
-                            class="relative z-10 w-full h-full opacity-0 cursor-pointer"
-                        />
+            <!-- Control Bar Buttons -->
+            <CinemaControlsBar
+                :is-playing="playback.isPlaying.value"
+                :is-muted="playback.isMuted.value"
+                :volume="playback.volume.value"
+                :current-time="playback.currentTime.value"
+                :duration="playback.duration.value"
+                :format-time="playback.formatTime"
+                :has-next="hasNext"
+                :has-previous="hasPrevious"
+                :is-controls-visible="playback.isControlsVisible.value"
+                :has-subtitles="subtitles.availableSubtitles.value.length > 0"
+                :has-playlist="currentPlaylist.length > 1"
+                :is-fullscreen="playback.isFullscreen.value"
+                :playback-rate="playback.playbackRate.value"
+                @play-pause="handleTogglePlay"
+                @next="playNext"
+                @prev="playPrevious"
+                @seek-relative="handleSeekRelative"
+                @toggle-mute="playback.toggleMute"
+                @volume-change="handleVolumeChange"
+                @set-speed="playback.setPlaybackRate"
+                @toggle-subtitles="showSubtitlesModal = !showSubtitlesModal"
+                @toggle-equalizer="showEqualizerModal = !showEqualizerModal"
+                @toggle-playlist="showPlaylistDrawer = !showPlaylistDrawer"
+                @toggle-diagnostics="showDiagnosticsHud = !showDiagnosticsHud"
+                @toggle-fullscreen="playback.toggleFullscreen"
+            />
+        </div>
 
-                        <!-- Glowing Thumb Playhead -->
-                        <div
-                            class="absolute w-3.5 h-3.5 bg-white rounded-full shadow-[0_0_10px_rgba(6,182,212,1)] border-2 border-cyan-400 pointer-events-none transition-transform duration-75 group-hover/track:scale-125"
-                            :style="{ left: `calc(${progressPercent}% - 7px)` }"
-                        ></div>
-                    </div>
+        <!-- Modals & Drawers -->
+        <CinemaSubtitlesModal
+            :is-open="showSubtitlesModal"
+            :subtitles="subtitles.availableSubtitles.value"
+            :selected-id="subtitles.selectedSubtitleId.value"
+            :delay="subtitles.subtitleDelay.value"
+            :font="subtitles.subtitleFont.value"
+            :font-size="subtitles.subtitleFontSize.value"
+            :is-translating="subtitles.isTranslatingSubtitle.value"
+            @close="showSubtitlesModal = false"
+            @select="subtitles.loadSubtitleTrack"
+            @adjust-delay="subtitles.adjustSubtitleDelay"
+            @reset-delay="subtitles.resetSubtitleDelay"
+            @set-font="subtitles.setSubtitleFont"
+            @set-size="subtitles.setSubtitleFontSize"
+            @open-search="showSubtitlesModal = false; showSubtitleSearchModal = true"
+            @translate="handleTranslate"
+        />
 
-                    <!-- Total End Time (Locked to original file duration) -->
-                    <span class="text-xs font-mono font-bold text-slate-300 min-w-[48px] tracking-tight drop-shadow">
-                        {{ formatTime(duration) }}
-                    </span>
-                </div>
+        <CinemaSubtitleSearchModal
+            :is-open="showSubtitleSearchModal"
+            :item="playback.activeItem.value"
+            :is-episode="playback.isEpisode.value"
+            :is-translating="subtitles.isTranslatingSubtitle.value"
+            @close="showSubtitleSearchModal = false"
+            @translate="handleTranslate"
+            @downloaded="() => {
+                const type = playback.isEpisode.value ? 'episode' : 'movie';
+                const id = playback.activeItem.value?.watchable_id || playback.activeItem.value?.id;
+                subtitles.fetchSubtitlesForMedia(type, id);
+            }"
+        />
 
-                <!-- Main Controls Row -->
-                <div class="flex items-center justify-between pt-1">
-                    <!-- Left: Play/Pause, Next/Previous, Seek, Volume -->
-                    <div class="flex items-center gap-1.5 sm:gap-2.5">
-                        <!-- Previous Episode / Item Button -->
-                        <button
-                            v-if="currentPlaylist.length > 1"
-                            @click="playPrevious"
-                            :disabled="!hasPrevious"
-                            class="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
-                            :class="hasPrevious ? 'text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer active:scale-90' : 'opacity-20 cursor-not-allowed pointer-events-none text-slate-600'"
-                            :title="!hasPrevious ? (isEpisode ? t('player.first_episode') : t('player.first_movie')) : t('player.previous_item')"
-                        >
-                            <SkipBack class="w-4 h-4 fill-current" />
-                        </button>
+        <CinemaEqualizerModal
+            :is-open="showEqualizerModal"
+            :vocal-boost="audioPipeline.vocalBoost.value"
+            :bass-boost="audioPipeline.bassBoost.value"
+            :night-mode="audioPipeline.nightMode.value"
+            :audio-delay-ms="audioPipeline.audioDelayMs.value"
+            @close="showEqualizerModal = false"
+            @toggle-vocal-boost="audioPipeline.toggleVocalBoost"
+            @toggle-bass-boost="audioPipeline.toggleBassBoost"
+            @toggle-night-mode="audioPipeline.toggleNightMode"
+            @set-audio-delay="audioPipeline.setAudioDelay"
+            @nudge-audio-delay="audioPipeline.nudgeAudioDelay"
+            @reset-audio-delay="audioPipeline.resetAudioDelay"
+        />
 
-                        <button
-                            @click="togglePlay"
-                            class="w-10 h-10 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-lg shadow-cyan-500/20"
-                            :title="isPlaying ? 'Pause (Space)' : 'Play (Space)'"
-                        >
-                            <Play v-if="!isPlaying" class="w-5 h-5 fill-current ml-0.5" />
-                            <Pause v-else class="w-5 h-5 fill-current" />
-                        </button>
+        <CinemaPlaylistDrawer
+            :is-open="showPlaylistDrawer"
+            :playlist="currentPlaylist"
+            :current-item-id="playback.activeItem.value?.id"
+            :is-episode="playback.isEpisode.value"
+            @close="showPlaylistDrawer = false"
+            @select="changeActiveMedia"
+        />
 
-                        <!-- Next Episode / Item Button -->
-                        <button
-                            v-if="currentPlaylist.length > 1"
-                            @click="playNext"
-                            :disabled="!hasNext"
-                            class="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
-                            :class="hasNext ? 'text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer active:scale-90' : 'opacity-20 cursor-not-allowed pointer-events-none text-slate-600'"
-                            :title="!hasNext ? (isEpisode ? t('player.last_episode') : t('player.last_movie')) : t('player.next_item')"
-                        >
-                            <SkipForward class="w-4 h-4 fill-current" />
-                        </button>
-
-                        <button
-                            @click="seekRelative(-10)"
-                            class="w-9 h-9 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-90"
-                            title="Rewind 10s (Left Arrow)"
-                        >
-                            <RotateCcw class="w-4 h-4" />
-                        </button>
-
-                        <button
-                            @click="seekRelative(10)"
-                            class="w-9 h-9 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-90"
-                            title="Forward 10s (Right Arrow)"
-                        >
-                            <RotateCw class="w-4 h-4" />
-                        </button>
-
-                        <!-- Glowing Custom Volume Slider -->
-                        <div class="flex items-center gap-2 group/vol ml-2">
-                            <button
-                                @click="toggleMute"
-                                class="w-9 h-9 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer"
-                                :title="isMuted ? 'Unmute (M)' : 'Mute (M)'"
-                            >
-                                <VolumeX v-if="isMuted || volume === 0" class="w-4 h-4 text-rose-400" />
-                                <Volume1 v-else-if="volume < 0.5" class="w-4 h-4 text-cyan-300" />
-                                <Volume2 v-else class="w-4 h-4 text-cyan-400" />
-                            </button>
-
-                            <!-- Volume Gradient Bar -->
-                            <div class="relative w-16 sm:w-24 flex items-center cursor-pointer h-6">
-                                <div class="absolute inset-x-0 h-1.5 group-hover/vol:h-2 bg-white/20 rounded-full overflow-hidden pointer-events-none transition-all shadow-inner">
-                                    <div
-                                        class="h-full bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full transition-all shadow-[0_0_8px_rgba(6,182,212,0.5)]"
-                                        :style="{ width: `${(isMuted ? 0 : volume) * 100}%` }"
-                                    ></div>
-                                </div>
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="1"
-                                    step="0.02"
-                                    :value="isMuted ? 0 : volume"
-                                    @input="onVolumeInput"
-                                    class="relative z-10 w-full h-full opacity-0 cursor-pointer"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Right: Equalizer, Subtitles, Speed, Fullscreen -->
-                    <div class="flex items-center gap-2">
-                        <!-- Playback Speed -->
-                        <div class="relative">
-                            <button
-                                @click="showPlaybackSpeedMenu = !showPlaybackSpeedMenu; showSubtitlesMenu = false; showEqualizer = false;"
-                                class="px-2.5 py-1.5 rounded-xl text-xs font-bold font-mono transition-all flex items-center gap-1 cursor-pointer"
-                                :class="playbackRate !== 1.0 ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
-                                title="Playback Speed"
-                            >
-                                <span>{{ playbackRate }}x</span>
-                            </button>
-
-                            <!-- Speed Dropdown -->
-                            <transition name="scale">
-                                <div
-                                    v-if="showPlaybackSpeedMenu"
-                                    class="absolute bottom-12 right-0 w-32 bg-slate-950/95 border border-white/10 rounded-2xl p-1.5 shadow-2xl backdrop-blur-xl z-50 flex flex-col gap-1"
-                                >
-                                    <button
-                                        v-for="rate in [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]"
-                                        :key="rate"
-                                        @click="setPlaybackRate(rate)"
-                                        class="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-between transition-all cursor-pointer"
-                                        :class="playbackRate === rate ? 'bg-cyan-500 text-slate-950' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
-                                    >
-                                        <span>{{ rate }}x</span>
-                                        <Check v-if="playbackRate === rate" class="w-3.5 h-3.5" />
-                                    </button>
-                                </div>
-                            </transition>
-                        </div>
-
-                        <!-- Subtitles Menu Button -->
-                        <div class="relative">
-                            <button
-                                @click="showSubtitlesMenu = !showSubtitlesMenu; showEqualizer = false; showPlaybackSpeedMenu = false;"
-                                class="w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer"
-                                :class="selectedSubtitleId !== 'off' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
-                                title="Subtitles & Audio"
-                            >
-                                <MessageSquare class="w-4 h-4" />
-                            </button>
-
-                            <!-- Subtitles Dropdown & Settings Drawer -->
-                            <transition name="scale">
-                                <div
-                                    v-if="showSubtitlesMenu"
-                                    class="absolute bottom-12 right-0 text-left w-80 max-w-[90vw] bg-slate-950/95 border border-white/10 rounded-2xl p-3 shadow-2xl backdrop-blur-xl z-50 flex flex-col gap-3 max-h-96 overflow-y-auto"
-                                >
-                                    <div class="flex items-center justify-between border-b border-white/10 pb-2">
-                                        <span class="text-xs font-bold text-white flex items-center gap-1.5">
-                                            <MessageSquare class="w-3.5 h-3.5 text-purple-400" />
-                                            {{ t('player.subtitle_tracks') }}
-                                        </span>
-                                        <span class="text-[10px] text-slate-400">{{ availableSubtitles.length }} available</span>
-                                    </div>
-
-                                    <!-- Tracks List -->
-                                    <div class="flex flex-col gap-1 max-h-40 overflow-y-auto">
-                                        <button
-                                            @click="selectSubtitle('off')"
-                                            class="px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-all cursor-pointer"
-                                            :class="selectedSubtitleId === 'off' ? 'bg-purple-500 text-white' : 'text-slate-300 hover:bg-white/10'"
-                                        >
-                                            <span>{{ t('player.off') }}</span>
-                                            <Check v-if="selectedSubtitleId === 'off'" class="w-3.5 h-3.5" />
-                                        </button>
-
-                                        <button
-                                            v-for="sub in availableSubtitles"
-                                            :key="sub.id"
-                                            @click="selectSubtitle(sub.id)"
-                                            class="px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-all cursor-pointer group/sub"
-                                            :class="String(selectedSubtitleId) === String(sub.id) ? 'bg-purple-500 text-white' : 'text-slate-300 hover:bg-white/10'"
-                                        >
-                                            <div class="flex items-center gap-1.5 truncate">
-                                                <span class="uppercase text-[10px] px-1 py-0.5 rounded bg-black/40">{{ sub.language || 'CC' }}</span>
-                                                <span class="truncate">{{ sub.language_name || 'Subtitle' }}</span>
-                                                <span v-if="sub.is_embedded" class="text-[9px] px-1 py-0.5 rounded bg-purple-500/25 text-purple-300 font-mono font-medium">
-                                                    {{ t('player.embedded') || 'Embedded' }}
-                                                </span>
-                                            </div>
-                                            <div class="flex items-center gap-1">
-                                                <button
-                                                    v-if="['en', 'eng'].includes(sub.language?.toLowerCase())"
-                                                    type="button"
-                                                    @click.stop="translateSubtitleToArabic(sub.id)"
-                                                    :disabled="isTranslatingSubtitle"
-                                                    class="p-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 hover:text-white transition-all cursor-pointer opacity-80 group-hover/sub:opacity-100"
-                                                    :title="t('player.translate_english_to_arabic')"
-                                                >
-                                                    <Sparkles class="w-3 h-3 text-emerald-400" />
-                                                </button>
-                                                <Check v-if="String(selectedSubtitleId) === String(sub.id)" class="w-3.5 h-3.5 shrink-0" />
-                                            </div>
-                                        </button>
-                                    </div>
-
-                                    <!-- Actions: Instant Translation & Search Subtitles -->
-                                    <div class="border-t border-white/10 pt-2 flex flex-col gap-1.5">
-                                        <!-- Instant Arabic Translation from English -->
-                                        <button
-                                            type="button"
-                                            @click="translateSubtitleToArabic()"
-                                            :disabled="isTranslatingSubtitle"
-                                            class="w-full px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-500/25 via-teal-500/20 to-cyan-500/20 hover:from-emerald-500/40 hover:to-teal-500/35 text-emerald-300 hover:text-white border border-emerald-500/40 text-xs font-bold flex items-center justify-between transition-all cursor-pointer shadow-sm disabled:opacity-50 group/tr"
-                                            :title="t('player.translate_english_accuracy')"
-                                        >
-                                            <div class="flex items-center gap-2">
-                                                <Loader2 v-if="isTranslatingSubtitle" class="w-3.5 h-3.5 text-emerald-400 animate-spin" />
-                                                <Sparkles v-else class="w-3.5 h-3.5 text-emerald-400 group-hover/tr:scale-110 transition-transform" />
-                                                <span>{{ isTranslatingSubtitle ? t('player.translating_to_arabic') : t('player.translate_to_arabic_instant') }}</span>
-                                            </div>
-                                            <span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-200 font-mono font-bold">AI</span>
-                                        </button>
-
-                                        <!-- Online Subtitle Search & Download Trigger -->
-                                        <button
-                                            type="button"
-                                            @click="openSubtitleSearchModal"
-                                            class="w-full px-3 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
-                                        >
-                                            <Search class="w-3.5 h-3.5" />
-                                            <span>{{ t('player.search_download_subtitles') }}</span>
-                                        </button>
-                                    </div>
-
-                                    <!-- Subtitle Size & Sync Options -->
-                                    <div v-if="selectedSubtitleId !== 'off'" class="border-t border-white/10 pt-2.5 flex flex-col gap-2">
-                                        <!-- Font Size -->
-                                        <div class="flex items-center justify-between">
-                                            <span class="text-[11px] text-slate-400">{{ t('player.font_size') }}</span>
-                                            <div class="flex items-center gap-1 bg-white/5 p-0.5 rounded-lg border border-white/10">
-                                                <button
-                                                    v-for="size in (['sm', 'md', 'lg', 'xl'] as const)"
-                                                    :key="size"
-                                                    @click="subtitleFontSize = size"
-                                                    class="px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all cursor-pointer"
-                                                    :class="subtitleFontSize === size ? 'bg-purple-500 text-white' : 'text-slate-400 hover:text-white'"
-                                                >
-                                                    {{ size }}
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <!-- Font Family / Style -->
-                                        <div class="flex items-center justify-between">
-                                            <span class="text-[11px] text-slate-400">{{ t('player.font_style') }}</span>
-                                            <div class="flex items-center gap-1 bg-white/5 p-0.5 rounded-lg border border-white/10">
-                                                <button
-                                                    v-for="font in ([
-                                                        { id: 'cairo', label: 'Cairo' },
-                                                        { id: 'jakarta', label: 'Jakarta' },
-                                                        { id: 'system', label: 'System' },
-                                                    ] as const)"
-                                                    :key="font.id"
-                                                    @click="setSubtitleFont(font.id)"
-                                                    class="px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer"
-                                                    :class="subtitleFont === font.id ? 'bg-purple-500 text-white' : 'text-slate-400 hover:text-white'"
-                                                >
-                                                    {{ font.label }}
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <!-- Subtitle Delay Sync -->
-                                        <div class="flex items-center justify-between">
-                                            <span class="text-[11px] text-slate-400">{{ t('player.timing_sync') }}</span>
-                                            <div class="flex items-center gap-1.5">
-                                                <button
-                                                    @click="adjustSubtitleDelay(-0.5)"
-                                                    class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold cursor-pointer"
-                                                    title="-0.5s"
-                                                >
-                                                    -
-                                                </button>
-                                                <span class="text-[11px] font-mono font-bold text-slate-300 w-12 text-center">
-                                                    {{ subtitleDelay > 0 ? `+${subtitleDelay}` : subtitleDelay }}s
-                                                </span>
-                                                <button
-                                                    @click="adjustSubtitleDelay(0.5)"
-                                                    class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold cursor-pointer"
-                                                    title="+0.5s"
-                                                >
-                                                    +
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </transition>
-                        </div>
-
-                        <!-- Audio Enhancer & Equalizer Modal -->
-                        <div class="relative">
-                            <button
-                                @click="showEqualizer = !showEqualizer; showSubtitlesMenu = false; showPlaybackSpeedMenu = false;"
-                                class="w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer"
-                                :class="vocalBoost || bassBoost || nightMode || audioDelayMs !== 0 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
-                                title="Cinema Audio Enhancer"
-                            >
-                                <Sliders class="w-4 h-4" />
-                            </button>
-
-                            <!-- Equalizer Dropdown -->
-                            <transition name="scale">
-                                <div
-                                    v-if="showEqualizer"
-                                    class="absolute bottom-12 right-0 text-left w-80 max-w-[90vw] bg-slate-950/95 border border-white/10 rounded-2xl p-3.5 shadow-2xl backdrop-blur-xl z-50 flex flex-col gap-3"
-                                >
-                                    <div class="flex items-center justify-between border-b border-white/10 pb-2">
-                                        <span class="text-xs font-bold text-white flex items-center gap-1.5">
-                                            <Sparkles class="w-3.5 h-3.5 text-cyan-400" />
-                                            {{ t('player.cinema_audio_dsp') }}
-                                        </span>
-                                    </div>
-
-                                    <div class="flex flex-col gap-2">
-                                        <!-- Vocal Clarity Boost -->
-                                        <button
-                                            @click="toggleVocalBoost"
-                                            class="p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer text-left"
-                                            :class="vocalBoost ? 'bg-cyan-500/20 border-cyan-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'"
-                                        >
-                                            <div>
-                                                <div class="text-xs font-bold text-cyan-300">{{ t('player.vocal_clarity_boost') }}</div>
-                                                <div class="text-[10px] text-slate-400">{{ t('player.enhance_dialogue_clarity') }}</div>
-                                            </div>
-                                            <div class="w-4 h-4 rounded-full border flex items-center justify-center shrink-0" :class="vocalBoost ? 'border-cyan-400 bg-cyan-400 text-slate-950' : 'border-slate-600'">
-                                                <Check v-if="vocalBoost" class="w-3 h-3" />
-                                            </div>
-                                        </button>
-
-                                        <!-- Cinema Bass Boost -->
-                                        <button
-                                            @click="toggleBassBoost"
-                                            class="p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer text-left"
-                                            :class="bassBoost ? 'bg-cyan-500/20 border-cyan-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'"
-                                        >
-                                            <div>
-                                                <div class="text-xs font-bold text-cyan-300">{{ t('player.cinema_bass_boost') }}</div>
-                                                <div class="text-[10px] text-slate-400">{{ t('player.deepen_sub_frequencies') }}</div>
-                                            </div>
-                                            <div class="w-4 h-4 rounded-full border flex items-center justify-center shrink-0" :class="bassBoost ? 'border-cyan-400 bg-cyan-400 text-slate-950' : 'border-slate-600'">
-                                                <Check v-if="bassBoost" class="w-3 h-3" />
-                                            </div>
-                                        </button>
-
-                                        <!-- Night Mode / Dynamic Compression -->
-                                        <button
-                                            @click="toggleNightMode"
-                                            class="p-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer text-left"
-                                            :class="nightMode ? 'bg-cyan-500/20 border-cyan-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'"
-                                        >
-                                            <div>
-                                                <div class="text-xs font-bold text-cyan-300">{{ t('player.night_mode') }}</div>
-                                                <div class="text-[10px] text-slate-400">{{ t('player.compress_dynamic_range') }}</div>
-                                            </div>
-                                            <div class="w-4 h-4 rounded-full border flex items-center justify-center shrink-0" :class="nightMode ? 'border-cyan-400 bg-cyan-400 text-slate-950' : 'border-slate-600'">
-                                                <Check v-if="nightMode" class="w-3 h-3" />
-                                            </div>
-                                        </button>
-
-                                        <!-- Audio / Video Sync Slider (Delay & Advance compensation) -->
-                                        <div class="border-t border-white/10 pt-2.5 flex flex-col gap-2">
-                                            <div class="flex items-center justify-between">
-                                                <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                                                    <Clock class="w-3.5 h-3.5 text-cyan-400" />
-                                                    <span>{{ t('player.audio_video_sync') }}</span>
-                                                </span>
-                                                <span class="text-xs font-mono font-bold" :class="audioDelayMs === 0 ? 'text-slate-400' : (audioDelayMs < 0 ? 'text-amber-400' : 'text-cyan-400')">
-                                                    {{ audioDelayMs > 0 ? `+${audioDelayMs}` : audioDelayMs }} ms
-                                                    <span class="text-[9px] font-sans font-normal opacity-80">
-                                                        {{ audioDelayMs === 0 ? t('player.synced') : (audioDelayMs < 0 ? t('player.advanced') : t('player.delayed')) }}
-                                                    </span>
-                                                </span>
-                                            </div>
-                                            <div class="text-[10px] text-slate-400 leading-tight">
-                                                {{ t('player.audio_sync_hint') }}
-                                            </div>
-
-                                            <!-- Slider & Nudge Buttons -->
-                                            <div class="flex items-center gap-1.5">
-                                                <button
-                                                    type="button"
-                                                    @click="nudgeAudioDelay(-50)"
-                                                    class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white font-mono text-[10px] font-bold transition-all cursor-pointer flex-shrink-0"
-                                                    :title="t('player.advance_audio_50ms')"
-                                                >
-                                                    -50ms
-                                                </button>
-                                                <input
-                                                    type="range"
-                                                    min="-3000"
-                                                    max="3000"
-                                                    step="25"
-                                                    :value="audioDelayMs"
-                                                    @input="applyAudioDelay(Number(($event.target as HTMLInputElement).value), false)"
-                                                    @change="applyAudioDelay(Number(($event.target as HTMLInputElement).value), true)"
-                                                    class="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    @click="nudgeAudioDelay(50)"
-                                                    class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white font-mono text-[10px] font-bold transition-all cursor-pointer flex-shrink-0"
-                                                    :title="t('player.delay_audio_50ms')"
-                                                >
-                                                    +50ms
-                                                </button>
-                                            </div>
-
-                                            <!-- Quick Presets -->
-                                            <div class="grid grid-cols-7 gap-1 pt-0.5">
-                                                <button
-                                                    v-for="preset in [-1000, -500, -250, 0, 250, 500, 1000]"
-                                                    :key="preset"
-                                                    type="button"
-                                                    @click="applyAudioDelay(preset, true)"
-                                                    class="px-1 py-1 rounded-lg text-[9px] font-mono font-bold transition-all cursor-pointer text-center"
-                                                    :class="audioDelayMs === preset ? (preset < 0 ? 'bg-amber-400 text-slate-950' : (preset > 0 ? 'bg-cyan-400 text-slate-950' : 'bg-white text-slate-950')) : 'bg-white/5 hover:bg-white/10 text-slate-400'"
-                                                >
-                                                    {{ preset === 0 ? '0' : (preset > 0 ? `+${preset}` : preset) }}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </transition>
-                        </div>
-
-                        <!-- Cinema Diagnostics HUD Button -->
-                        <button
-                            @click="showDiagnostics = !showDiagnostics"
-                            class="w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer"
-                            :class="showDiagnostics ? 'bg-cyan-500/30 text-cyan-300 border border-cyan-500/40' : 'text-slate-300 hover:text-white hover:bg-white/10'"
-                            title="Cinema Diagnostics (Stats for Nerds)"
-                        >
-                            <Activity class="w-4 h-4" />
-                        </button>
-
-                        <!-- Fullscreen Button -->
-                        <button
-                            @click="toggleFullscreen"
-                            class="w-9 h-9 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer"
-                            :title="isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'"
-                        >
-                            <Minimize2 v-if="isFullscreen" class="w-4 h-4" />
-                            <Maximize2 v-else class="w-4 h-4" />
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </transition>
-
-        <!-- In-Player Subtitle Search & Download Modal -->
-        <transition name="fade">
-            <div
-                v-if="showSubtitleSearchModal"
-                class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
-                @click.self="showSubtitleSearchModal = false"
-            >
-                <div class="relative w-full max-w-lg bg-slate-950 border border-purple-500/30 rounded-3xl p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col" dir="ltr">
-                    <div class="flex items-center justify-between border-b border-white/10 pb-3">
-                        <div class="flex items-center gap-2.5">
-                            <div class="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
-                                <Search class="w-4 h-4" />
-                            </div>
-                            <div>
-                                <h3 class="font-black text-sm text-white">
-                                    {{ t('player.search_download_subtitles_header') }}
-                                </h3>
-                                <p class="text-[11px] text-slate-400">
-                                    {{ t('player.search_subtitles_engine_subtitle') }}
-                                </p>
-                            </div>
-                        </div>
-                        <button
-                            @click="showSubtitleSearchModal = false"
-                            class="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer"
-                        >
-                            <X class="w-4 h-4" />
-                        </button>
-                    </div>
-
-                    <!-- Search Input & Lang Selector -->
-                    <div class="space-y-2.5">
-                        <div class="flex items-center gap-2">
-                            <input
-                                v-model="subtitleSearchQuery"
-                                @keyup.enter="performSubtitleSearch"
-                                type="text"
-                                :placeholder="t('player.search_subtitles_placeholder')"
-                                class="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/15 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
-                            />
-                            <button
-                                @click="performSubtitleSearch"
-                                :disabled="isSearchingSubtitles"
-                                class="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                            >
-                                <Loader2 v-if="isSearchingSubtitles" class="w-3.5 h-3.5 animate-spin" />
-                                <Search v-else class="w-3.5 h-3.5" />
-                                <span>{{ t('player.search') }}</span>
-                            </button>
-                        </div>
-
-                        <!-- Language Choice Pills -->
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs text-slate-400">{{ t('player.language') }}</span>
-                            <button
-                                v-for="l in [{ id: 'ar', label: 'العربية (AR)' }, { id: 'en', label: 'English (EN)' }]"
-                                :key="l.id"
-                                @click="subtitleSearchLang = l.id; performSubtitleSearch()"
-                                class="px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer"
-                                :class="subtitleSearchLang === l.id ? 'bg-purple-500 text-white' : 'bg-white/5 text-slate-400 hover:text-white'"
-                            >
-                                {{ l.label }}
-                            </button>
-                        </div>
-
-                        <!-- Instant Arabic AI Translation Card -->
-                        <div class="p-3 rounded-2xl bg-gradient-to-r from-emerald-950/60 via-teal-950/40 to-slate-900 border border-emerald-500/40 flex items-center justify-between gap-3 shadow-lg">
-                            <div class="flex items-center gap-2.5 min-w-0">
-                                <div class="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
-                                    <Sparkles class="w-4 h-4" />
-                                </div>
-                                <div class="min-w-0">
-                                    <div class="text-xs font-bold text-white truncate">{{ t('player.instant_arabic_translation') }}</div>
-                                    <div class="text-[10px] text-emerald-300/80 truncate">{{ t('player.ai_synthesized_arabic') }}</div>
-                                </div>
-                            </div>
-                            <button
-                                type="button"
-                                @click="translateSubtitleToArabic()"
-                                :disabled="isTranslatingSubtitle"
-                                class="shrink-0 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shadow-md shadow-emerald-500/20"
-                            >
-                                <Loader2 v-if="isTranslatingSubtitle" class="w-3.5 h-3.5 animate-spin" />
-                                <Sparkles v-else class="w-3.5 h-3.5" />
-                                <span>{{ isTranslatingSubtitle ? t('player.translating') : t('player.translate_now') }}</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Results List -->
-                    <div class="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar min-h-[160px]">
-                        <div v-if="isSearchingSubtitles" class="py-12 flex flex-col items-center justify-center gap-3 text-slate-400">
-                            <Loader2 class="w-7 h-7 text-purple-400 animate-spin" />
-                            <span class="text-xs">{{ t('player.scanning_providers') }}</span>
-                        </div>
-
-                        <div v-else-if="subtitleSearchResults.length === 0" class="py-10 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2.5">
-                            <div>{{ t('player.no_matching_subtitles_found') }}</div>
-                            <button
-                                type="button"
-                                @click="translateSubtitleToArabic()"
-                                :disabled="isTranslatingSubtitle"
-                                class="mt-1 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold inline-flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all"
-                            >
-                                <Loader2 v-if="isTranslatingSubtitle" class="w-3.5 h-3.5 animate-spin" />
-                                <Sparkles v-else class="w-3.5 h-3.5" />
-                                <span>{{ isTranslatingSubtitle ? t('player.translating_to_arabic') : t('player.generate_arabic_now') }}</span>
-                            </button>
-                        </div>
-
-                        <div
-                            v-else
-                            v-for="(sub, idx) in subtitleSearchResults"
-                            :key="idx"
-                            class="p-3 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-purple-500/40 transition-all flex items-center justify-between gap-3"
-                        >
-                            <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-2 mb-0.5">
-                                    <span class="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px] font-mono font-bold uppercase">
-                                        {{ sub.language || subtitleSearchLang }}
-                                    </span>
-                                    <span class="text-[11px] text-slate-400 truncate">
-                                        {{ sub.provider || 'SubDL' }}
-                                    </span>
-                                </div>
-                                <div class="text-xs font-bold text-white truncate" :title="sub.release || sub.file_name">
-                                    {{ sub.release || sub.file_name || 'Subtitle Release Track' }}
-                                </div>
-                            </div>
-
-                            <button
-                                @click="downloadAndApplySubtitle(sub)"
-                                :disabled="isDownloadingSubtitle"
-                                class="shrink-0 px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shadow-md shadow-purple-500/20"
-                            >
-                                <Download class="w-3.5 h-3.5" />
-                                <span>{{ t('player.get_and_apply') }}</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </transition>
-
-        <!-- Cinema Diagnostics HUD (Stats for Nerds) -->
-        <transition name="fade">
-            <div
-                v-if="showDiagnostics"
-                class="absolute top-16 right-6 z-50 p-4 rounded-2xl bg-black/85 backdrop-blur-xl border border-cyan-500/30 text-white font-mono text-xs shadow-2xl max-w-xs space-y-2 pointer-events-auto select-text"
-                dir="ltr"
-            >
-                <div class="flex items-center justify-between border-b border-white/10 pb-2">
-                    <div class="flex items-center gap-2 text-cyan-400 font-bold">
-                        <Activity class="w-4 h-4" />
-                        <span>Cinema Diagnostics</span>
-                    </div>
-                    <button @click="showDiagnostics = false" class="text-slate-400 hover:text-white cursor-pointer">
-                        <X class="w-3.5 h-3.5" />
-                    </button>
-                </div>
-                <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
-                    <span class="text-slate-400">Stream Mode:</span>
-                    <span class="text-cyan-300 truncate">{{ isRemuxStream ? (isServerCached ? 'Cached MP4 (206)' : 'Live Remux (AAC)') : 'Direct Stream (206)' }}</span>
-                    <span class="text-slate-400">Resolution:</span>
-                    <span>{{ activeItem.resolution || 'Auto' }} ({{ videoRef?.videoWidth || 0 }}x{{ videoRef?.videoHeight || 0 }})</span>
-                    <span class="text-slate-400">Video Codec:</span>
-                    <span class="truncate">{{ activeItem.video_codec || 'Auto' }}</span>
-                    <span class="text-slate-400">Audio Codec:</span>
-                    <span class="truncate">{{ activeItem.audio_codec || 'AAC' }}</span>
-                    <span class="text-slate-400">Buffer Health:</span>
-                    <span :class="bufferAheadSecs > 10 ? 'text-emerald-400' : (bufferAheadSecs > 3 ? 'text-amber-400' : 'text-red-400')">{{ bufferAheadSecs }}s ahead</span>
-                    <span class="text-slate-400">Dropped Frames:</span>
-                    <span :class="droppedFrames > 0 ? 'text-amber-400' : 'text-emerald-400'">{{ droppedFrames }}</span>
-                    <span class="text-slate-400">Audio Delay:</span>
-                    <span>{{ audioDelayMs > 0 ? `+${audioDelayMs}` : audioDelayMs }}ms</span>
-                    <span class="text-slate-400">Playback Rate:</span>
-                    <span>{{ playbackRate }}x</span>
-                </div>
-            </div>
-        </transition>
+        <CinemaDiagnosticsHud
+            :is-open="showDiagnosticsHud"
+            :item="playback.activeItem.value"
+            :is-remux-stream="playback.isRemuxStream.value"
+            :stream-url="playback.streamUrl.value"
+            :current-time="playback.currentTime.value"
+            :duration="playback.duration.value"
+            :buffered-percent="playback.bufferedPercent.value"
+            :live-resolution="playback.liveResolution.value"
+            :display-codec="playback.activeItem.value?.video_codec || playback.activeItem.value?.codec || 'H.264'"
+            :display-audio="playback.activeItem.value?.audio_codec || 'AAC'"
+            :remux-start-offset="playback.remuxStartOffset.value"
+            :audio-delay-ms="audioPipeline.audioDelayMs.value"
+            @close="showDiagnosticsHud = false"
+        />
     </div>
 </template>
-
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-    transition: opacity 0.25s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-    opacity: 0;
-}
-
-.scale-enter-active,
-.scale-leave-active {
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.scale-enter-from,
-.scale-leave-to {
-    opacity: 0;
-    transform: scale(0.92);
-}
-
-.slide-up-enter-active,
-.slide-up-leave-active {
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.slide-up-enter-from,
-.slide-up-leave-to {
-    opacity: 0;
-    transform: translateY(16px);
-}
-
-.subtitle-overlay-container {
-    z-index: 60 !important;
-    transform: translateZ(0);
-    will-change: transform;
-}
-
-.subtitle-pill {
-    transform: translateZ(0);
-    will-change: transform;
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-}
-
-:fullscreen,
-:-webkit-full-screen {
-    width: 100vw !important;
-    height: 100vh !important;
-    position: relative !important;
-    overflow: hidden !important;
-}
-
-:fullscreen .subtitle-overlay-container,
-:-webkit-full-screen .subtitle-overlay-container,
-.is-fullscreen .subtitle-overlay-container {
-    z-index: 2147483647 !important;
-    display: flex !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-}
-
-:fullscreen .subtitle-pill,
-:-webkit-full-screen .subtitle-pill,
-.is-fullscreen .subtitle-pill {
-    z-index: 2147483647 !important;
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    transform: translate3d(0, 0, 0) !important;
-}
-
-/* Native Track Subtitles (Suppressed when custom overlay is active to eliminate double rendering) */
-::cue,
-video::cue {
-    display: none !important;
-    opacity: 0 !important;
-    visibility: hidden !important;
-}
-</style>

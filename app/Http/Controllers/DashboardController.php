@@ -6,7 +6,9 @@ use App\Models\DownloadItem;
 use App\Models\Episode;
 use App\Models\MediaItem;
 use App\Models\Series;
+use App\Support\ByteFormatter;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -32,7 +34,12 @@ class DashboardController extends Controller
                 return $arr;
             });
 
-        $featuredSeries = Series::with(['genres', 'seasons.episodes.subtitles'])
+        $featuredSeries = Series::with([
+            'genres',
+            'seasons' => fn ($q) => $q->where('season_number', 1)->with([
+                'episodes' => fn ($eq) => $eq->where('episode_number', 1)->with('subtitles'),
+            ]),
+        ])
             ->where(function ($q) {
                 $q->whereNotNull('backdrop_path')
                     ->orWhereNotNull('poster_path');
@@ -41,8 +48,8 @@ class DashboardController extends Controller
             ->limit(3)
             ->get()
             ->map(function ($series) {
-                $firstSeason = $series->seasons->sortBy('season_number')->first();
-                $firstEpisode = $firstSeason?->episodes->sortBy('episode_number')->first();
+                $firstSeason = $series->seasons->first();
+                $firstEpisode = $firstSeason?->episodes->first();
                 $arr = $series->toArray();
                 $arr['type'] = 'series';
                 $arr['first_episode'] = $firstEpisode ? $firstEpisode->toArray() : null;
@@ -66,29 +73,21 @@ class DashboardController extends Controller
             ->limit(8)
             ->get();
 
-        // 5. Quick Stats
-        $totalBytes = MediaItem::sum('file_size_bytes') + Episode::sum('file_size_bytes');
-        if ($totalBytes >= 1099511627776) {
-            $totalStorageFormatted = round($totalBytes / 1099511627776, 2).' TB';
-        } elseif ($totalBytes >= 1073741824) {
-            $totalStorageFormatted = round($totalBytes / 1073741824, 2).' GB';
-        } elseif ($totalBytes > 0) {
-            $totalStorageFormatted = round($totalBytes / 1048576, 2).' MB';
-        } else {
-            $totalStorageFormatted = '0 GB';
-        }
+        // 5. Quick Stats (Cached for 60 seconds)
+        $stats = Cache::remember('dashboard.quick_stats', 60, function () {
+            $totalBytes = (int) MediaItem::sum('file_size_bytes') + (int) Episode::sum('file_size_bytes');
+            $missingSubsCount = MediaItem::whereDoesntHave('subtitles', fn ($q) => $q->where('language', 'ar'))->count();
+            $activeDownloadsCount = DownloadItem::whereIn('status', ['downloading', 'queued', 'extracting'])->count();
 
-        $missingSubsCount = MediaItem::whereDoesntHave('subtitles', fn ($q) => $q->where('language', 'ar'))->count();
-        $activeDownloadsCount = DownloadItem::whereIn('status', ['downloading', 'queued', 'extracting'])->count();
-
-        $stats = [
-            'total_movies' => MediaItem::count(),
-            'total_series' => Series::count(),
-            'total_episodes' => Episode::count(),
-            'storage_formatted' => $totalStorageFormatted,
-            'missing_subtitles_count' => $missingSubsCount,
-            'active_downloads_count' => $activeDownloadsCount,
-        ];
+            return [
+                'total_movies' => MediaItem::count(),
+                'total_series' => Series::count(),
+                'total_episodes' => Episode::count(),
+                'storage_formatted' => ByteFormatter::format($totalBytes),
+                'missing_subtitles_count' => $missingSubsCount,
+                'active_downloads_count' => $activeDownloadsCount,
+            ];
+        });
 
         // 6. Curated AI Mood Vibes with pre-fetched matches
         $vibesList = [

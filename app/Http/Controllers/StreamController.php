@@ -5,41 +5,33 @@ namespace App\Http\Controllers;
 use App\Models\Episode;
 use App\Models\MediaItem;
 use App\Models\Subtitle;
-use App\Models\WatchHistory;
 use App\Services\Media\FfmpegLocatorService;
-use App\Services\Subtitles\EmbeddedSubtitleDetectorService;
-use App\Services\Subtitles\SubtitleLanguageDetectorService;
+use App\Services\Streaming\StreamRemuxService;
+use App\Services\Streaming\SubtitleStreamService;
+use App\Services\Streaming\WatchHistoryService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Inertia\Inertia;
 use Inertia\Response;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StreamController extends Controller
 {
-    protected EmbeddedSubtitleDetectorService $embeddedSubDetector;
-
-    protected SubtitleLanguageDetectorService $subLanguageDetector;
-
     public function __construct(
-        EmbeddedSubtitleDetectorService $embeddedSubDetector,
-        SubtitleLanguageDetectorService $subLanguageDetector
-    ) {
-        $this->embeddedSubDetector = $embeddedSubDetector;
-        $this->subLanguageDetector = $subLanguageDetector;
-    }
+        protected StreamRemuxService $remuxService,
+        protected SubtitleStreamService $subtitleService,
+        protected WatchHistoryService $watchHistoryService
+    ) {}
 
     /**
-     * Direct high-performance streaming for movies.
-     * Uses pure HTTP 206 Byte-Range partial content without FFmpeg transcoding overhead.
+     * Stream movie directly via HTTP 206 Partial Content byte ranges.
      */
     public function streamMovie(MediaItem $mediaItem, Request $request)
     {
         $filePath = $mediaItem->file_path;
 
         if ($filePath && File::exists($filePath)) {
-            return $this->streamFileRange($filePath, $request);
+            return $this->remuxService->streamFileRange($filePath, $request);
         }
 
         $sampleUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
@@ -48,15 +40,14 @@ class StreamController extends Controller
     }
 
     /**
-     * Direct high-performance streaming for series episodes.
-     * Uses pure HTTP 206 Byte-Range partial content without FFmpeg transcoding overhead.
+     * Stream episode directly via HTTP 206 Partial Content byte ranges.
      */
     public function streamEpisode(Episode $episode, Request $request)
     {
         $filePath = $episode->file_path;
 
         if ($filePath && File::exists($filePath)) {
-            return $this->streamFileRange($filePath, $request);
+            return $this->remuxService->streamFileRange($filePath, $request);
         }
 
         $sampleUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
@@ -65,814 +56,152 @@ class StreamController extends Controller
     }
 
     /**
-     * Stream WebVTT subtitle track.
+     * Stream clean WebVTT subtitle track.
      */
     public function streamSubtitle(Subtitle $subtitle, Request $request)
     {
-        $path = $subtitle->file_path;
-        $startSeconds = max(0, (float) $request->query('start', 0));
-
-        // Check if subtitle is embedded inside video container
-        if ($subtitle->is_embedded || str_starts_with($path, 'embedded:')) {
-            $parts = explode(':', $path, 3);
-            $streamIndex = isset($parts[1]) ? (int) $parts[1] : 0;
-            $videoPath = $parts[2] ?? '';
-
-            if (! $videoPath || ! File::exists($videoPath)) {
-                $parentPath = $subtitle->subtitlable?->file_path;
-                if ($parentPath && File::exists($parentPath)) {
-                    $videoPath = str_replace('\\', '/', $parentPath);
-                    $subtitle->update(['file_path' => "embedded:{$streamIndex}:{$videoPath}"]);
-                }
-            }
-
-            if ($videoPath && File::exists($videoPath)) {
-                $rawVtt = $this->embeddedSubDetector->extractToWebVtt($videoPath, $streamIndex, $subtitle->format ?? 'srt');
-                $vtt = $this->convertToCleanWebVTT($rawVtt, $subtitle->format ?? 'srt', $startSeconds);
-
-                return response($vtt, 200, [
-                    'Content-Type' => 'text/vtt; charset=utf-8',
-                    'Access-Control-Allow-Origin' => '*',
-                    'Cache-Control' => 'no-cache, no-store, must-revalidate',
-                ]);
-            }
-        }
-
-        // External Subtitle File
-        if (! $path || ! File::exists($path)) {
-            if ($path) {
-                $dir = dirname(str_replace('\\', '/', $path));
-                $fn = basename($path);
-                $candidates = [
-                    $dir.'/'.preg_replace('/\.2\./', '.', $fn),
-                    $dir.'/'.preg_replace('/(\.[a-z]{2,3})\.srt$/i', '.2$1.srt', $fn),
-                ];
-                foreach ($candidates as $cand) {
-                    if (File::exists($cand)) {
-                        $path = $cand;
-                        $subtitle->update(['file_path' => $cand]);
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (! $path || ! File::exists($path)) {
-            return response("WEBVTT\n\n", 200, [
-                'Content-Type' => 'text/vtt; charset=utf-8',
-                'Cache-Control' => 'no-cache, no-store, must-revalidate',
-            ]);
-        }
-
-        $rawContent = File::get($path);
-        $cleanUtf8 = $this->subLanguageDetector->sanitizeToUtf8($rawContent);
-
-        // Self-heal file on disk if it was non-UTF-8 and is writable
-        if ($cleanUtf8 !== $rawContent && is_writable($path)) {
-            @file_put_contents($path, $cleanUtf8);
-        }
-
-        $vtt = $this->convertToCleanWebVTT($cleanUtf8, $subtitle->format ?? 'srt', $startSeconds);
-
-        return response($vtt, 200, [
-            'Content-Type' => 'text/vtt; charset=utf-8',
-            'Access-Control-Allow-Origin' => '*',
-            'Cache-Control' => 'no-cache, no-store, must-revalidate',
-        ]);
-    }
-
-    public function saveProgress(Request $request)
-    {
-        $prog = (int) $request->input('progress_seconds', $request->input('position_seconds', 0));
-        $dur = (int) $request->input('duration_seconds', 0);
-        $wId = (int) $request->input('watchable_id', $request->input('id', 0));
-        $wType = strtolower((string) $request->input('watchable_type', $request->input('type', 'movie')));
-
-        if ($wId <= 0 || $dur <= 0) {
-            return response()->json(['success' => false, 'message' => 'Invalid parameters'], 422);
-        }
-
-        $modelClass = ($wType === 'episode') ? Episode::class : MediaItem::class;
-        $isCompleted = ($prog / max(1, $dur)) >= 0.92;
-        $userId = $request->user()?->id;
-
-        // Clean up any stray duplicate rows if any exist
-        $duplicates = WatchHistory::where('watchable_type', $modelClass)
-            ->where('watchable_id', $wId)
-            ->when($userId, fn ($q) => $q->where('user_id', $userId))
-            ->orderByDesc('id')
-            ->get();
-
-        if ($duplicates->count() > 1) {
-            $keep = $duplicates->first();
-            WatchHistory::where('watchable_type', $modelClass)
-                ->where('watchable_id', $wId)
-                ->when($userId, fn ($q) => $q->where('user_id', $userId))
-                ->where('id', '!=', $keep->id)
-                ->delete();
-        }
-
-        $lookup = [
-            'watchable_type' => $modelClass,
-            'watchable_id' => $wId,
-        ];
-        if ($userId) {
-            $lookup['user_id'] = $userId;
-        }
-
-        $watchHistory = WatchHistory::updateOrCreate(
-            $lookup,
-            [
-                'user_id' => $userId,
-                'progress_seconds' => $prog,
-                'duration_seconds' => $dur,
-                'is_completed' => $isCompleted,
-                'last_watched_at' => now(),
-            ]
-        );
-
-        return response()->json([
-            'success' => true,
-            'progress' => $watchHistory,
-        ]);
-    }
-
-    public function getWatchHistory(Request $request)
-    {
-        $type = $request->input('type', 'all');
-        $userId = $request->user()?->id;
-
-        // Fetch all in-progress watch history items (scoped to active user profile if logged in)
-        $rawHistory = WatchHistory::query()
-            ->where('is_completed', false)
-            ->where('progress_seconds', '>', 3)
-            ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
-                $sub->where('user_id', $userId)->orWhereNull('user_id');
-            }))
-            ->orderByDesc('last_watched_at')
-            ->with(['watchable'])
-            ->get();
-
-        // 1. Deduplicate by watchable_type + watchable_id
-        $deduped = $rawHistory->unique(function ($h) {
-            return $h->watchable_type.'_'.$h->watchable_id;
-        });
-
-        // 2. Group episodes by series so only the latest watched episode of each series is shown
-        $seriesSeen = [];
-        $uniqueList = $deduped->filter(function ($h) use (&$seriesSeen) {
-            $item = $h->watchable;
-            if (! $item) {
-                return false;
-            }
-
-            if ($item instanceof Episode) {
-                $seriesId = $item->series_id ?? ($item->season?->series_id ?? 0);
-                if ($seriesId > 0) {
-                    if (isset($seriesSeen[$seriesId])) {
-                        return false; // Skip older episodes for this series
-                    }
-                    $seriesSeen[$seriesId] = true;
-                }
-            }
-
-            return true;
-        });
-
-        // 3. Compute accurate counts for category tabs
-        $counts = [
-            'all' => $uniqueList->count(),
-            'movies' => $uniqueList->filter(fn ($h) => $h->watchable instanceof MediaItem)->count(),
-            'series' => $uniqueList->filter(fn ($h) => $h->watchable instanceof Episode)->count(),
-            'collections' => $uniqueList->filter(fn ($h) => $h->watchable instanceof MediaItem && ! empty($h->watchable->collection_name))->count(),
-        ];
-
-        // 4. Filter by requested type if specified and not 'all'
-        $filtered = $uniqueList;
-        if ($type === 'movie' || $type === 'movies') {
-            $filtered = $filtered->filter(fn ($h) => $h->watchable instanceof MediaItem);
-        } elseif ($type === 'series' || $type === 'episode') {
-            $filtered = $filtered->filter(fn ($h) => $h->watchable instanceof Episode);
-        } elseif ($type === 'collection' || $type === 'collections') {
-            $filtered = $filtered->filter(fn ($h) => $h->watchable instanceof MediaItem && ! empty($h->watchable->collection_name));
-        }
-
-        // 5. Transform into rich UI objects
-        $formatTime = function ($sec) {
-            $hrs = floor($sec / 3600);
-            $mins = floor(($sec % 3600) / 60);
-            $secs = $sec % 60;
-
-            return $hrs > 0 ? sprintf('%d:%02d:%02d', $hrs, $mins, $secs) : sprintf('%02d:%02d', $mins, $secs);
-        };
-
-        $items = $filtered->map(function ($h) use ($formatTime) {
-            $item = $h->watchable;
-            if (! $item) {
-                return null;
-            }
-
-            $percent = $h->duration_seconds > 0 ? min(100, round(($h->progress_seconds / $h->duration_seconds) * 100)) : 0;
-            $remaining = max(0, $h->duration_seconds - $h->progress_seconds);
-
-            if ($item instanceof MediaItem) {
-                $item->loadMissing('subtitles');
-                $slug = $item->slug ?: "movie-{$item->id}";
-                $isCollection = ! empty($item->collection_name);
-
-                $playlist = [];
-                if ($isCollection) {
-                    $playlist = MediaItem::query()
-                        ->where('collection_name', $item->collection_name)
-                        ->orderBy('release_year', 'asc')
-                        ->orderBy('title', 'asc')
-                        ->with('subtitles')
-                        ->get()
-                        ->map(function ($m) {
-                            return [
-                                'id' => $m->id,
-                                'title' => $m->title,
-                                'title_ar' => $m->title_ar,
-                                'stream_url' => route('stream.movie', $m->id),
-                                'poster_path' => $m->poster_path,
-                                'backdrop_path' => $m->backdrop_path,
-                                'duration_seconds' => $m->duration_seconds,
-                                'subtitles' => $m->subtitles ?? [],
-                                'type' => 'movie',
-                            ];
-                        })->values()->all();
-                }
-
-                return [
-                    'history_id' => $h->id,
-                    'id' => $item->id,
-                    'watchable_id' => $item->id,
-                    'watchable_type' => 'movie',
-                    'category' => $isCollection ? 'collection' : 'movie',
-                    'collection_name' => $item->collection_name,
-                    'title' => $item->title,
-                    'title_ar' => $item->title_ar,
-                    'type' => 'movie',
-                    'slug' => $slug,
-                    'slug_url' => route('movies.show.slug', $slug),
-                    'poster_path' => $item->poster_path,
-                    'backdrop_path' => $item->backdrop_path,
-                    'progress_seconds' => $h->progress_seconds,
-                    'initial_progress' => $h->progress_seconds,
-                    'duration_seconds' => $h->duration_seconds,
-                    'progress_percent' => $percent,
-                    'percent' => $percent,
-                    'current_time_formatted' => $formatTime($h->progress_seconds),
-                    'duration_formatted' => $formatTime($h->duration_seconds),
-                    'remaining_formatted' => $formatTime($remaining),
-                    'subtitles' => $item->subtitles,
-                    'resolution' => $item->resolution,
-                    'video_codec' => $item->video_codec,
-                    'audio_codec' => $item->audio_codec,
-                    'last_watched_at' => $h->last_watched_at ? $h->last_watched_at->toIso8601String() : null,
-                    'stream_url' => route('stream.movie', $item->id),
-                    'playlist' => $playlist,
-                ];
-            }
-
-            if ($item instanceof Episode) {
-                $item->loadMissing(['series', 'season', 'subtitles']);
-                $series = $item->series ?? ($item->season->series ?? null);
-                $sNameEn = $series ? $series->title : 'Series';
-                $sNameAr = $series ? ($series->title_ar ?: $series->title) : 'مسلسل';
-                $sNum = $item->season_number ?? ($item->season->season_number ?? 1);
-                $eNum = $item->episode_number ?? 1;
-                $seriesSlug = $series ? ($series->slug ?: "series-{$series->id}") : "series-{$item->series_id}";
-
-                $cleanEpTitle = function (?string $rawTitle, ?string $sName): string {
-                    $t = trim($rawTitle ?? '');
-                    if ($t === '') {
-                        return '';
-                    }
-                    if ($sName && str_starts_with(mb_strtolower($t), mb_strtolower($sName))) {
-                        $t = trim(preg_replace('/^'.preg_quote($sName, '/').'[\s\-:]*/ui', '', $t));
-                    }
-                    $t = trim(preg_replace('/^S\d+\s*E\d+[\s\-:]*/i', '', $t));
-                    $t = trim(preg_replace('/^(?:Season|الموسم)\s*\d+.*?[-:]*(?:Episode|الحلقة)\s*\d+[\s\-:]*/ui', '', $t));
-                    $t = trim(preg_replace('/^[\s\-:]+/', '', $t));
-                    $t = trim(preg_replace('/[\s\-:]+$/', '', $t));
-                    if (preg_match('/^(?:Episode|الحلقة|Ep|Part)\s*\d+$/ui', $t) || preg_match('/^S\d+\s*E\d+$/i', $t)) {
-                        return '';
-                    }
-
-                    return $t;
-                };
-
-                $epTitleEn = $cleanEpTitle($item->title, $sNameEn);
-                $epTitleAr = $cleanEpTitle($item->title_ar, $sNameAr);
-                if (empty($epTitleAr) && ! empty($epTitleEn)) {
-                    $epTitleAr = $epTitleEn;
-                }
-
-                $fullTitleEn = "{$sNameEn} - Season {$sNum} - Episode {$eNum}".($epTitleEn ? " - {$epTitleEn}" : '');
-                $fullTitleAr = "{$sNameAr} - الموسم {$sNum} - الحلقة {$eNum}".($epTitleAr ? " - {$epTitleAr}" : '');
-
-                $seriesId = $series?->id ?? $item->series_id;
-                $allSeriesEpisodes = Episode::query()
-                    ->where('episodes.series_id', $seriesId)
-                    ->leftJoin('seasons', 'seasons.id', '=', 'episodes.season_id')
-                    ->orderBy('seasons.season_number', 'asc')
-                    ->orderBy('episodes.episode_number', 'asc')
-                    ->select('episodes.*', 'seasons.season_number as computed_season_number')
-                    ->with('subtitles')
-                    ->get();
-
-                if ($allSeriesEpisodes->isEmpty()) {
-                    $allSeriesEpisodes = Episode::query()
-                        ->where('season_id', $item->season_id)
-                        ->orderBy('episode_number', 'asc')
-                        ->with('subtitles')
-                        ->get();
-                }
-
-                $epPlaylist = $allSeriesEpisodes->map(function ($ep) use ($sNameEn, $sNameAr, $series, $cleanEpTitle) {
-                    $epSNum = $ep->computed_season_number ?? ($ep->season_number ?? 1);
-                    $epTitleClean = $cleanEpTitle($ep->title, $sNameEn);
-                    $epTitleArClean = $cleanEpTitle($ep->title_ar, $sNameAr);
-                    if (empty($epTitleArClean) && ! empty($epTitleClean)) {
-                        $epTitleArClean = $epTitleClean;
-                    }
-                    $pTitleEn = "{$sNameEn} - Season {$epSNum} - Episode {$ep->episode_number}".($epTitleClean ? " - {$epTitleClean}" : '');
-                    $pTitleAr = "{$sNameAr} - الموسم {$epSNum} - الحلقة {$ep->episode_number}".($epTitleArClean ? " - {$epTitleArClean}" : '');
-
-                    return [
-                        'id' => $ep->id,
-                        'title' => $pTitleEn,
-                        'title_ar' => $pTitleAr,
-                        'episode_title' => $epTitleClean,
-                        'episode_title_ar' => $epTitleArClean,
-                        'stream_url' => route('stream.episode', $ep->id),
-                        'still_path' => $ep->still_path ?: ($series ? $series->poster_path : null),
-                        'poster_path' => $ep->still_path ?: ($series ? $series->poster_path : null),
-                        'duration_seconds' => $ep->duration_seconds,
-                        'season_number' => $epSNum,
-                        'episode_number' => $ep->episode_number,
-                        'subtitles' => $ep->subtitles ?? [],
-                        'type' => 'episode',
-                    ];
-                })->values()->all();
-
-                return [
-                    'history_id' => $h->id,
-                    'id' => $item->id,
-                    'watchable_id' => $item->id,
-                    'watchable_type' => 'episode',
-                    'category' => 'series',
-                    'series' => $series,
-                    'series_id' => $series?->id ?? $item->series_id,
-                    'series_title' => $sNameEn,
-                    'series_title_ar' => $sNameAr,
-                    'season_number' => $sNum,
-                    'episode_number' => $eNum,
-                    'episode_title' => $epTitleEn,
-                    'episode_title_ar' => $epTitleAr,
-                    'title' => $fullTitleEn,
-                    'title_ar' => $fullTitleAr,
-                    'type' => 'episode',
-                    'series_slug' => $seriesSlug,
-                    'slug_url' => route('series.episode.show', [$seriesSlug, $sNum, $eNum]),
-                    'poster_path' => $item->still_path ?: ($series ? $series->poster_path : null),
-                    'backdrop_path' => $series ? $series->backdrop_path : null,
-                    'progress_seconds' => $h->progress_seconds,
-                    'initial_progress' => $h->progress_seconds,
-                    'duration_seconds' => $h->duration_seconds,
-                    'progress_percent' => $percent,
-                    'percent' => $percent,
-                    'current_time_formatted' => $formatTime($h->progress_seconds),
-                    'duration_formatted' => $formatTime($h->duration_seconds),
-                    'remaining_formatted' => $formatTime($remaining),
-                    'subtitles' => $item->subtitles,
-                    'resolution' => $item->resolution,
-                    'video_codec' => $item->video_codec,
-                    'audio_codec' => $item->audio_codec,
-                    'last_watched_at' => $h->last_watched_at ? $h->last_watched_at->toIso8601String() : null,
-                    'stream_url' => route('stream.episode', $item->id),
-                    'playlist' => $epPlaylist,
-                ];
-            }
-
-            return null;
-        })->filter()->values();
-
-        return response()->json([
-            'success' => true,
-            'counts' => $counts,
-            'items' => $items,
-        ]);
+        return $this->subtitleService->streamSubtitle($subtitle, $request);
     }
 
     /**
-     * Get dynamic playlist for a given episode or collection movie.
+     * Stream movie with real-time FFmpeg remuxing / AAC audio transcode.
      */
-    public function getPlaylist(Request $request)
+    public function streamRemuxMovie(MediaItem $mediaItem, Request $request)
     {
-        $type = $request->input('type', 'episode');
-        $id = (int) $request->input('id');
-
-        if ($id <= 0) {
-            return response()->json(['playlist' => []]);
-        }
-
-        if ($type === 'episode') {
-            $ep = Episode::with(['season.series', 'series'])->find($id);
-            if (! $ep) {
-                return response()->json(['playlist' => []]);
-            }
-
-            $series = $ep->series ?? $ep->season?->series;
-            $sNameEn = $series ? $series->title : 'Series';
-            $sNameAr = $series ? ($series->title_ar ?: $series->title) : '';
-            $seriesId = $series?->id ?? $ep->series_id;
-
-            $episodes = Episode::query()
-                ->where('episodes.series_id', $seriesId)
-                ->leftJoin('seasons', 'seasons.id', '=', 'episodes.season_id')
-                ->orderBy('seasons.season_number', 'asc')
-                ->orderBy('episodes.episode_number', 'asc')
-                ->select('episodes.*', 'seasons.season_number as computed_season_number')
-                ->with('subtitles')
-                ->get();
-
-            if ($episodes->isEmpty()) {
-                $episodes = Episode::query()
-                    ->where('season_id', $ep->season_id)
-                    ->orderBy('episode_number', 'asc')
-                    ->with('subtitles')
-                    ->get();
-            }
-
-            $cleanEpTitle = function (?string $rawTitle, ?string $sName): string {
-                $t = trim($rawTitle ?? '');
-                if ($t === '') {
-                    return '';
-                }
-                if ($sName && str_starts_with(mb_strtolower($t), mb_strtolower($sName))) {
-                    $t = trim(preg_replace('/^'.preg_quote($sName, '/').'[\s\-:]*/ui', '', $t));
-                }
-                $t = trim(preg_replace('/^S\d+\s*E\d+[\s\-:]*/i', '', $t));
-                $t = trim(preg_replace('/^(?:Season|الموسم)\s*\d+.*?[-:]*(?:Episode|الحلقة)\s*\d+[\s\-:]*/ui', '', $t));
-                $t = trim(preg_replace('/^[\s\-:]+/', '', $t));
-                $t = trim(preg_replace('/[\s\-:]+$/', '', $t));
-                if (preg_match('/^(?:Episode|الحلقة|Ep|Part)\s*\d+$/ui', $t) || preg_match('/^S\d+\s*E\d+$/i', $t)) {
-                    return '';
-                }
-
-                return $t;
-            };
-
-            $playlist = $episodes->map(function ($e) use ($series, $sNameEn, $sNameAr, $cleanEpTitle) {
-                $epSNum = $e->computed_season_number ?? ($e->season_number ?? 1);
-                $epTitleClean = $cleanEpTitle($e->title, $sNameEn);
-                $epTitleArClean = $cleanEpTitle($e->title_ar, $sNameAr);
-                if (empty($epTitleArClean) && ! empty($epTitleClean)) {
-                    $epTitleArClean = $epTitleClean;
-                }
-                $pTitleEn = "{$sNameEn} - Season {$epSNum} - Episode {$e->episode_number}".($epTitleClean ? " - {$epTitleClean}" : '');
-                $pTitleAr = "{$sNameAr} - الموسم {$epSNum} - الحلقة {$e->episode_number}".($epTitleArClean ? " - {$epTitleArClean}" : '');
-
-                return [
-                    'id' => $e->id,
-                    'title' => $pTitleEn,
-                    'title_ar' => $pTitleAr,
-                    'episode_title' => $epTitleClean,
-                    'episode_title_ar' => $epTitleArClean,
-                    'stream_url' => route('stream.episode', $e->id),
-                    'still_path' => $e->still_path ?: ($series ? $series->poster_path : null),
-                    'poster_path' => $e->still_path ?: ($series ? $series->poster_path : null),
-                    'duration_seconds' => $e->duration_seconds,
-                    'season_number' => $epSNum,
-                    'episode_number' => $e->episode_number,
-                    'subtitles' => $e->subtitles ?? [],
-                    'type' => 'episode',
-                ];
-            })->values()->all();
-
-            return response()->json([
-                'playlist' => $playlist,
-                'series' => $series ? [
-                    'id' => $series->id,
-                    'title' => $series->title,
-                    'title_ar' => $series->title_ar,
-                ] : null,
-            ]);
-        }
-
-        if ($type === 'movie') {
-            $movie = MediaItem::find($id);
-            if ($movie && ! empty($movie->collection_name)) {
-                $movies = MediaItem::where('collection_name', $movie->collection_name)
-                    ->orderBy('release_year', 'asc')
-                    ->orderBy('title', 'asc')
-                    ->with('subtitles')
-                    ->get();
-
-                $playlist = $movies->map(function ($m) {
-                    return [
-                        'id' => $m->id,
-                        'title' => $m->title,
-                        'title_ar' => $m->title_ar,
-                        'stream_url' => route('stream.movie', $m->id),
-                        'poster_path' => $m->poster_path,
-                        'backdrop_path' => $m->backdrop_path,
-                        'duration_seconds' => $m->duration_seconds,
-                        'subtitles' => $m->subtitles ?? [],
-                        'type' => 'movie',
-                    ];
-                })->values()->all();
-
-                return response()->json([
-                    'playlist' => $playlist,
-                    'collection_name' => $movie->collection_name,
-                ]);
-            }
-        }
-
-        return response()->json(['playlist' => []]);
+        return $this->remuxService->streamRemuxFile(
+            $mediaItem->file_path,
+            $request,
+            $mediaItem->video_codec,
+            $mediaItem->audio_codec,
+            'media',
+            $mediaItem->id
+        );
     }
 
-    public function getContinueWatching(Request $request)
+    /**
+     * Stream episode with real-time FFmpeg remuxing / AAC audio transcode.
+     */
+    public function streamRemuxEpisode(Episode $episode, Request $request)
     {
-        return $this->getWatchHistory($request);
+        return $this->remuxService->streamRemuxFile(
+            $episode->file_path,
+            $request,
+            $episode->video_codec,
+            $episode->audio_codec,
+            'episode',
+            $episode->id
+        );
     }
 
-    public function deleteWatchHistory(Request $request, $id)
+    /**
+     * Save playback progress.
+     */
+    public function saveProgress(Request $request): JsonResponse
     {
-        $rawType = strtolower((string) $request->input('type', ''));
-        $isSeriesRequest = ($rawType === 'series' || $request->boolean('is_series'));
-        $isEpisodeRequest = ($rawType === 'episode' || $rawType === 'episodes');
-        $isMovieRequest = ($rawType === 'movie' || $rawType === 'movies' || $rawType === 'collection' || $rawType === 'collections');
-
-        $explicitWatchableType = $request->input('watchable_type');
-        $seriesId = $request->input('series_id');
-        $explicitWatchableId = $request->input('watchable_id');
-        $userId = $request->user()?->id;
-
-        if ($explicitWatchableType) {
-            $modelClass = in_array(strtolower((string) $explicitWatchableType), ['episode', 'episodes', Episode::class])
-                ? Episode::class
-                : MediaItem::class;
-        } elseif ($isSeriesRequest || $isEpisodeRequest) {
-            $modelClass = Episode::class;
-        } elseif ($isMovieRequest) {
-            $modelClass = MediaItem::class;
-        } else {
-            $modelClass = null;
-        }
-
-        // 1. If explicit series_id provided, remove all watched episodes for that series
-        if (! empty($seriesId)) {
-            $epIds = Episode::where('series_id', $seriesId)->pluck('id');
-            WatchHistory::where('watchable_type', Episode::class)
-                ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
-                    $sub->where('user_id', $userId)->orWhereNull('user_id');
-                }))
-                ->whereIn('watchable_id', $epIds)
-                ->delete();
-        }
-
-        // 2. If caller explicitly passed watchable_id or watchable_type, prioritize deleting by watchable entity
-        $targetWatchableId = $explicitWatchableId ?: ($explicitWatchableType ? $id : null);
-        if ($targetWatchableId) {
-            $targetClass = $modelClass ?? (($isSeriesRequest || $isEpisodeRequest) ? Episode::class : MediaItem::class);
-
-            if ($targetClass === Episode::class) {
-                $ep = Episode::find($targetWatchableId);
-                $resolvedSeriesId = $ep?->series_id ?? ($ep?->season?->series_id ?? 0);
-                if ($resolvedSeriesId > 0 && $isSeriesRequest) {
-                    $epIds = Episode::where('series_id', $resolvedSeriesId)->pluck('id');
-                    WatchHistory::where('watchable_type', Episode::class)
-                        ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
-                            $sub->where('user_id', $userId)->orWhereNull('user_id');
-                        }))
-                        ->whereIn('watchable_id', $epIds)
-                        ->delete();
-                }
-
-                WatchHistory::where('watchable_type', Episode::class)
-                    ->where('watchable_id', $targetWatchableId)
-                    ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
-                        $sub->where('user_id', $userId)->orWhereNull('user_id');
-                    }))
-                    ->delete();
-            } else {
-                WatchHistory::where('watchable_type', MediaItem::class)
-                    ->where('watchable_id', $targetWatchableId)
-                    ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
-                        $sub->where('user_id', $userId)->orWhereNull('user_id');
-                    }))
-                    ->delete();
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Item removed from watch history',
-            ]);
-        }
-
-        // 3. Check if $id matches a WatchHistory primary ID (with type collision guard)
-        $record = WatchHistory::when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
-            $sub->where('user_id', $userId)->orWhereNull('user_id');
-        }))->find($id);
-
-        if ($record && ($modelClass === null || $record->watchable_type === $modelClass)) {
-            if ($record->watchable_type === Episode::class) {
-                $ep = $record->watchable ?? Episode::find($record->watchable_id);
-                $resolvedSeriesId = $ep?->series_id ?? ($ep?->season?->series_id ?? 0);
-                if ($resolvedSeriesId > 0 && ($isSeriesRequest || ! empty($seriesId))) {
-                    $epIds = Episode::where('series_id', $resolvedSeriesId)->pluck('id');
-                    WatchHistory::where('watchable_type', Episode::class)
-                        ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
-                            $sub->where('user_id', $userId)->orWhereNull('user_id');
-                        }))
-                        ->whereIn('watchable_id', $epIds)
-                        ->delete();
-                }
-            }
-
-            $record->delete();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Item removed from watch history',
-            ]);
-        }
-
-        // 4. Fallback: treat $id as entity primary key
-        $fallbackClass = $modelClass ?? (($isSeriesRequest || $isEpisodeRequest) ? Episode::class : MediaItem::class);
-        if ($fallbackClass === Episode::class) {
-            $ep = Episode::find($id);
-            $resolvedSeriesId = $ep?->series_id ?? ($ep?->season?->series_id ?? 0);
-            if ($resolvedSeriesId > 0 && $isSeriesRequest) {
-                $epIds = Episode::where('series_id', $resolvedSeriesId)->pluck('id');
-                WatchHistory::where('watchable_type', Episode::class)
-                    ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
-                        $sub->where('user_id', $userId)->orWhereNull('user_id');
-                    }))
-                    ->whereIn('watchable_id', $epIds)
-                    ->delete();
-            }
-
-            WatchHistory::where('watchable_type', Episode::class)
-                ->where('watchable_id', $id)
-                ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
-                    $sub->where('user_id', $userId)->orWhereNull('user_id');
-                }))
-                ->delete();
-        } else {
-            WatchHistory::where('watchable_type', MediaItem::class)
-                ->where('watchable_id', $id)
-                ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
-                    $sub->where('user_id', $userId)->orWhereNull('user_id');
-                }))
-                ->delete();
-        }
-
-        // 5. If caller passed a series ID directly when $isSeriesRequest is true
-        if ($isSeriesRequest) {
-            $epIds = Episode::where('series_id', $id)->pluck('id');
-            if ($epIds->isNotEmpty()) {
-                WatchHistory::where('watchable_type', Episode::class)
-                    ->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
-                        $sub->where('user_id', $userId)->orWhereNull('user_id');
-                    }))
-                    ->whereIn('watchable_id', $epIds)
-                    ->delete();
-            }
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Item removed from watch history',
-        ]);
+        return $this->watchHistoryService->saveProgress($request);
     }
 
-    public function clearWatchHistory(Request $request)
+    /**
+     * Get watch history / continue-watching items.
+     */
+    public function getWatchHistory(Request $request): JsonResponse
     {
-        $type = $request->input('type', 'all');
-        $userId = $request->user()?->id;
-
-        $baseQuery = WatchHistory::query()->when($userId, fn ($q) => $q->where(function ($sub) use ($userId) {
-            $sub->where('user_id', $userId)->orWhereNull('user_id');
-        }));
-
-        if ($type === 'movie' || $type === 'movies') {
-            $baseQuery->where('watchable_type', MediaItem::class)->delete();
-        } elseif ($type === 'series' || $type === 'episode') {
-            $baseQuery->where('watchable_type', Episode::class)->delete();
-        } elseif ($type === 'collection' || $type === 'collections') {
-            $colIds = MediaItem::whereNotNull('collection_name')->where('collection_name', '!=', '')->pluck('id');
-            $baseQuery->where('watchable_type', MediaItem::class)->whereIn('watchable_id', $colIds)->delete();
-        } else {
-            $baseQuery->delete();
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Watch history cleared successfully',
-        ]);
+        return $this->watchHistoryService->getWatchHistory($request);
     }
 
+    /**
+     * In-player playlist generator.
+     */
+    public function getPlaylist(Request $request): JsonResponse
+    {
+        return $this->watchHistoryService->getPlaylist($request);
+    }
+
+    /**
+     * Delete watch history entry.
+     */
+    public function deleteWatchHistory(Request $request, $id): JsonResponse
+    {
+        return $this->watchHistoryService->deleteWatchHistory($request, $id);
+    }
+
+    /**
+     * Clear all watch history.
+     */
+    public function clearWatchHistory(Request $request): JsonResponse
+    {
+        return $this->watchHistoryService->clearWatchHistory($request);
+    }
+
+    /**
+     * Watch history Inertia page.
+     */
     public function watchHistoryPage(Request $request): Response
     {
         return Inertia::render('WatchHistory/Index');
     }
 
-    public function getCacheStatus(Request $request)
+    /**
+     * Cache status of remuxed stream.
+     */
+    public function getCacheStatus(Request $request): JsonResponse
     {
         $type = $request->input('type', 'movie');
         $id = (int) $request->input('id');
 
         $model = $type === 'episode' ? Episode::find($id) : MediaItem::find($id);
-        if (! $model || ! $model->file_path || ! file_exists($model->file_path)) {
+        if (! $model || ! $model->file_path) {
             return response()->json(['is_cached' => false, 'cached_percent' => 0]);
         }
 
-        $mtime = filemtime($model->file_path);
-        $cacheDir = storage_path('app/cache/media_streams');
-        $cacheKey = "stream_{$type}_{$id}_{$mtime}";
-        $cachedFile = "{$cacheDir}/{$cacheKey}.mp4";
-        $completeFile = "{$cachedFile}.complete";
-        $partFile = "{$cacheDir}/{$cacheKey}.part.mp4";
+        $status = $this->remuxService->getCacheStatus($model->file_path, $type, $id);
 
-        if (file_exists($cachedFile) && file_exists($completeFile)) {
-            $streamRoute = $type === 'episode'
-                ? route('stream.remux.episode', $id)
-                : route('stream.remux.movie', $id);
-
-            return response()->json([
-                'is_cached' => true,
-                'cached_percent' => 100,
-                'file_size' => filesize($cachedFile),
-                'stream_url' => $streamRoute,
-            ]);
-        }
-
-        $activePart = file_exists($partFile) ? $partFile : null;
-        if ($activePart) {
-            $origSize = filesize($model->file_path);
-            $partSize = filesize($activePart);
-            $pct = $origSize > 0 ? min(99, max(5, round(($partSize / $origSize) * 100))) : 0;
-
-            return response()->json([
-                'is_cached' => false,
-                'cached_percent' => $pct,
-                'part_size' => $partSize,
-            ]);
-        }
-
-        return response()->json(['is_cached' => false, 'cached_percent' => 0]);
+        return response()->json($status);
     }
 
-    public function stopStream(Request $request)
+    /**
+     * Stop active stream worker.
+     */
+    public function stopStream(Request $request): JsonResponse
     {
         $type = $request->input('type', 'movie');
         $id = (int) $request->input('id');
 
-        $cacheDir = storage_path('app/cache/media_streams');
-        if (is_dir($cacheDir)) {
-            $isWin = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
-
-            // Terminate any active background FFmpeg process for this item using PID files
-            $pidPattern = "{$cacheDir}/run_stream_{$type}_{$id}_*.pid";
-            foreach (glob($pidPattern) as $pidFile) {
-                $pid = (int) trim(@file_get_contents($pidFile));
-                if ($pid > 0) {
-                    if ($isWin) {
-                        @exec("taskkill /F /T /PID {$pid} > NUL 2>&1");
-                    } else {
-                        @posix_kill($pid, SIGTERM);
-                    }
-                }
-                @unlink($pidFile);
-            }
-
-            // Clean up locks and incomplete parts if .complete sentinel is missing
-            $lockPattern = "{$cacheDir}/stream_{$type}_{$id}_*.lock";
-            foreach (glob($lockPattern) as $lock) {
-                $base = preg_replace('/\.lock$/', '', $lock);
-                if (! file_exists("{$base}.complete")) {
-                    @unlink("{$base}.part.mp4");
-                    @unlink("{$base}.mp4.part");
-                }
-                @unlink($lock);
-            }
-
-            // Remove any temporary batch files
-            $batPattern = "{$cacheDir}/run_stream_{$type}_{$id}_*.bat";
-            foreach (glob($batPattern) as $bat) {
-                @unlink($bat);
-            }
-        }
+        $this->remuxService->stopStream($type, $id);
 
         return response()->json(['success' => true]);
     }
 
-    public function getMediaDuration(Request $request)
+    /**
+     * Seek keyframe alignment endpoint.
+     */
+    public function getSeekKeyframe(Request $request): JsonResponse
+    {
+        $type = $request->input('type', 'movie');
+        $id = (int) $request->input('id');
+        $time = max(0, (float) $request->input('time', 0));
+
+        if ($time <= 2.0) {
+            return response()->json(['keyframe' => 0.0, 'requested' => $time]);
+        }
+
+        $model = $type === 'episode' ? Episode::find($id) : MediaItem::find($id);
+        if (! $model || ! $model->file_path || ! file_exists($model->file_path)) {
+            return response()->json(['keyframe' => $time, 'requested' => $time]);
+        }
+
+        $keyframe = $this->remuxService->findPrecedingKeyframe($model->file_path, $time);
+
+        return response()->json([
+            'keyframe' => $keyframe,
+            'requested' => $time,
+        ]);
+    }
+
+    /**
+     * Get or probe media duration.
+     */
+    public function getMediaDuration(Request $request): JsonResponse
     {
         $type = $request->input('type', 'movie');
         $id = (int) $request->input('id');
@@ -882,7 +211,6 @@ class StreamController extends Controller
             return response()->json(['duration_seconds' => 0, 'runtime_minutes' => 0, 'resolution' => null]);
         }
 
-        // Return cached exact duration from database if present
         if (! empty($model->duration_seconds) && $model->duration_seconds > 0) {
             return response()->json([
                 'duration_seconds' => (float) $model->duration_seconds,
@@ -901,7 +229,6 @@ class StreamController extends Controller
             ]);
         }
 
-        // Directly probe the ORIGINAL video file on disk for exact seconds & technical specs
         $ffprobe = FfmpegLocatorService::getFfprobePath();
         if ($ffprobe) {
             $escaped = escapeshellarg($model->file_path);
@@ -916,13 +243,12 @@ class StreamController extends Controller
                         $model->duration_seconds = (int) round($secs);
                         $model->runtime_minutes = $mins;
 
-                        // Check resolution if missing or Unknown
                         if (empty($model->resolution) || $model->resolution === 'Unknown') {
                             foreach ($data['streams'] ?? [] as $st) {
                                 if (($st['codec_type'] ?? '') === 'video') {
                                     $w = (int) ($st['width'] ?? 0);
                                     $h = (int) ($st['height'] ?? 0);
-                                    if ($h > 0) {
+                                    if ($w > 0 && $h > 0) {
                                         $model->resolution = $this->calculateProbeResolution($w, $h);
                                         break;
                                     }
@@ -930,7 +256,7 @@ class StreamController extends Controller
                             }
                         }
 
-                        $model->save();
+                        $model->saveQuietly();
 
                         return response()->json([
                             'duration_seconds' => $secs,
@@ -942,497 +268,63 @@ class StreamController extends Controller
             }
         }
 
-        $fallbackMins = $model->runtime_minutes ?: 45;
-
         return response()->json([
-            'duration_seconds' => $fallbackMins * 60,
-            'runtime_minutes' => $fallbackMins,
+            'duration_seconds' => ($model->runtime_minutes ?: 45) * 60,
+            'runtime_minutes' => $model->runtime_minutes ?: 45,
             'resolution' => $model->resolution,
         ]);
     }
 
     protected function calculateProbeResolution(int $width, int $height): string
     {
-        $resolutions = [
-            4320 => '8K UHD',
-            2160 => '4K UHD',
-            1440 => '1440p 2K',
-            1080 => '1080p FHD',
-            720 => '720p HD',
-            576 => '576p SD',
-            480 => '480p SD',
-            360 => '360p',
-            240 => '240p',
-        ];
+        $maxDim = max($width, $height);
+        $minDim = min($width, $height);
 
-        foreach ($resolutions as $minHeight => $label) {
-            if ($height >= $minHeight) {
-                return $label;
-            }
+        if ($maxDim >= 3800 || $minDim >= 2100) {
+            return '4K UHD';
+        }
+        if ($maxDim >= 2500 || $minDim >= 1400) {
+            return '1440p 2K';
+        }
+        if ($maxDim >= 1900 || $minDim >= 1000) {
+            return '1080p FHD';
+        }
+        if ($maxDim >= 1200 || $minDim >= 700) {
+            return '720p HD';
+        }
+        if ($minDim >= 540) {
+            return '576p SD';
+        }
+        if ($minDim >= 450) {
+            return '480p SD';
         }
 
         return "{$width}x{$height}";
     }
 
-    public function getSeekKeyframe(Request $request)
-    {
-        $type = $request->input('type', 'movie');
-        $id = (int) $request->input('id');
-        $time = max(0, (float) $request->input('time', 0));
-
-        if ($time <= 2.0) {
-            return response()->json(['keyframe' => 0.0, 'requested' => $time]);
-        }
-
-        $model = $type === 'episode' ? Episode::find($id) : MediaItem::find($id);
-        if (! $model || ! $model->file_path || ! file_exists($model->file_path)) {
-            return response()->json(['keyframe' => $time, 'requested' => $time]);
-        }
-
-        $cacheKey = "seek_kf_{$type}_{$id}_".round($time, 1);
-        $keyframe = Cache::remember($cacheKey, 3600, function () use ($model, $time) {
-            return $this->findPrecedingKeyframe($model->file_path, $time);
-        });
-
-        return response()->json([
-            'keyframe' => $keyframe,
-            'requested' => $time,
-        ]);
-    }
-
+    // Compatibility proxies
     public function findPrecedingKeyframe(string $filePath, float $time): float
     {
-        if ($time <= 2.0) {
-            return 0.0;
-        }
-
-        $ffprobe = FfmpegLocatorService::getFfprobePath();
-        if (! $ffprobe) {
-            return $time;
-        }
-
-        $tMin = max(0, (float) $time - 15.0);
-        $tMax = (float) $time + 0.25;
-        $interval = $tMin.'%'.$tMax;
-        $escapedFile = escapeshellarg($filePath);
-        $escapedFfprobe = escapeshellarg($ffprobe);
-
-        // Probe packets in interval [time - 15, time + 0.25] for video keyframes
-        $cmd = "{$escapedFfprobe} -v error -select_streams v:0 -show_packets -show_entries packet=pts_time,flags -read_intervals \"{$interval}\" -of csv=p=0 {$escapedFile}";
-
-        $out = @shell_exec($cmd);
-        if ($out) {
-            $lines = explode("\n", trim($out));
-            for ($i = count($lines) - 1; $i >= 0; $i--) {
-                $line = trim($lines[$i]);
-                if (str_contains($line, 'K')) {
-                    $parts = explode(',', $line);
-                    if (isset($parts[0]) && is_numeric($parts[0])) {
-                        $kf = (float) $parts[0];
-                        if ($kf <= ($time + 0.15)) {
-                            return round($kf, 3);
-                        }
-                    }
-                }
-            }
-        }
-
-        return $time;
+        return $this->remuxService->findPrecedingKeyframe($filePath, $time);
     }
 
-    /**
-     * High-speed direct byte-range file streaming.
-     * Complies with HTTP 206 Partial Content for native browser hardware playback and instant seeking.
-     */
-    protected function streamFileRange(string $path, Request $request)
+    public function buildPlaylistForWatchable($item): array
     {
-        $size = filesize($path);
-        $file = fopen($path, 'rb');
-
-        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-        $contentType = match ($ext) {
-            'mp4', 'm4v' => 'video/mp4',
-            'mkv' => 'video/mp4', // Serving as video/mp4 enables direct hardware decoding in modern browsers
-            'webm' => 'video/webm',
-            'ogv', 'ogg' => 'video/ogg',
-            'mov' => 'video/quicktime',
-            'avi' => 'video/x-msvideo',
-            default => 'video/mp4',
-        };
-
-        $start = 0;
-        $end = $size - 1;
-        $status = 200;
-
-        $headers = [
-            'Content-Type' => $contentType,
-            'Accept-Ranges' => 'bytes',
-            'Access-Control-Allow-Origin' => '*',
-            'Access-Control-Allow-Methods' => 'GET, HEAD, OPTIONS',
-            'Access-Control-Allow-Headers' => 'Range, Content-Type, Accept',
-            'Access-Control-Expose-Headers' => 'Content-Length, Content-Range, Accept-Ranges',
-            'Cache-Control' => 'public, max-age=3600',
-        ];
-
-        if ($request->header('Range')) {
-            $range = $request->header('Range');
-            if (preg_match('/bytes=(\d+)-(\d+)?/', $range, $matches)) {
-                $start = (int) $matches[1];
-                if (! empty($matches[2])) {
-                    $end = (int) $matches[2];
-                }
-                $status = 206;
-                $headers['Content-Range'] = "bytes {$start}-{$end}/{$size}";
-            }
-        }
-
-        $length = $end - $start + 1;
-        $headers['Content-Length'] = (string) $length;
-
-        fseek($file, $start);
-
-        return new StreamedResponse(function () use ($file, $length) {
-            $remaining = $length;
-            $chunkSize = 1024 * 256; // 256KB buffer for ultra-smooth throughput
-
-            while (! feof($file) && $remaining > 0 && (connection_status() === CONNECTION_NORMAL)) {
-                $bytesToRead = min($chunkSize, $remaining);
-                $buffer = fread($file, $bytesToRead);
-                if ($buffer === false) {
-                    break;
-                }
-
-                echo $buffer;
-                flush();
-                $remaining -= strlen($buffer);
-            }
-
-            fclose($file);
-        }, $status, $headers);
+        return $this->watchHistoryService->buildPlaylistForWatchable($item);
     }
 
-    protected function convertToCleanWebVTT(string $content, string $format = 'srt', float $startSeconds = 0.0): string
+    public function convertToCleanWebVTT(string $content, string $format = 'srt', float $startSeconds = 0.0): string
     {
-        $content = $this->subLanguageDetector->sanitizeToUtf8($content);
-        $vtt = "WEBVTT\n\n";
-        $content = str_replace(["\r\n", "\r"], "\n", $content);
-
-        // Strip existing WEBVTT header and initial comments to prevent duplicate WEBVTT\n\nWEBVTT\n\n
-        $content = preg_replace('/^WEBVTT[^\n]*\n+/i', '', trim($content));
-
-        $timeRegex = '/(?:(\d{1,2}):)?(\d{2}):(\d{2})[,\.](\d{2,3})\s*-->\s*(?:(\d{1,2}):)?(\d{2}):(\d{2})[,\.](\d{2,3})/';
-
-        if ($startSeconds <= 0) {
-            // Normalize timestamps to standard WebVTT format (HH:MM:SS.mmm)
-            $normalized = preg_replace_callback(
-                $timeRegex,
-                function ($m) {
-                    $h1 = ! empty($m[1]) ? str_pad($m[1], 2, '0', STR_PAD_LEFT) : '00';
-                    $m1 = $m[2];
-                    $s1 = $m[3];
-                    $ms1 = str_pad($m[4], 3, '0', STR_PAD_RIGHT);
-
-                    $h2 = ! empty($m[5]) ? str_pad($m[5], 2, '0', STR_PAD_LEFT) : '00';
-                    $m2 = $m[6];
-                    $s2 = $m[7];
-                    $ms2 = str_pad($m[8], 3, '0', STR_PAD_RIGHT);
-
-                    return "{$h1}:{$m1}:{$s1}.{$ms1} --> {$h2}:{$m2}:{$s2}.{$ms2}";
-                },
-                $content
-            );
-
-            return $vtt.trim($normalized)."\n";
-        }
-
-        // Split into subtitle blocks and shift by $startSeconds
-        $blocks = preg_split('/\n\s*\n/', trim($content));
-        $outputBlocks = [];
-
-        foreach ($blocks as $block) {
-            $block = trim($block);
-            if (empty($block) || str_starts_with($block, 'WEBVTT') || str_starts_with($block, 'NOTE')) {
-                continue;
-            }
-
-            if (preg_match($timeRegex, $block, $m)) {
-                $h1 = ! empty($m[1]) ? (int) $m[1] : 0;
-                $m1 = (int) $m[2];
-                $s1 = (int) $m[3];
-                $ms1 = (float) str_pad($m[4], 3, '0', STR_PAD_RIGHT);
-
-                $h2 = ! empty($m[5]) ? (int) $m[5] : 0;
-                $m2 = (int) $m[6];
-                $s2 = (int) $m[7];
-                $ms2 = (float) str_pad($m[8], 3, '0', STR_PAD_RIGHT);
-
-                $start = ($h1 * 3600) + ($m1 * 60) + $s1 + ($ms1 / 1000.0);
-                $end = ($h2 * 3600) + ($m2 * 60) + $s2 + ($ms2 / 1000.0);
-
-                if ($end <= $startSeconds) {
-                    continue; // Cue finished before seek point
-                }
-
-                $newStart = max(0, $start - $startSeconds);
-                $newEnd = max(0.1, $end - $startSeconds);
-
-                $formatTime = function ($sec) {
-                    $h = floor($sec / 3600);
-                    $m = floor(($sec % 3600) / 60);
-                    $s = floor($sec % 60);
-                    $ms = round(($sec - floor($sec)) * 1000);
-
-                    return sprintf('%02d:%02d:%02d.%03d', $h, $m, $s, $ms);
-                };
-
-                $newTimecode = $formatTime($newStart).' --> '.$formatTime($newEnd);
-                $adjustedBlock = preg_replace($timeRegex, $newTimecode, $block, 1);
-                $outputBlocks[] = $adjustedBlock;
-            }
-        }
-
-        return $vtt.implode("\n\n", $outputBlocks)."\n";
+        return $this->subtitleService->convertToCleanWebVTT($content, $format, $startSeconds);
     }
 
-    public function streamRemuxMovie(MediaItem $mediaItem, Request $request)
+    public function streamFileRange(string $path, Request $request)
     {
-        return $this->streamRemuxFile($mediaItem->file_path, $request, $mediaItem->video_codec, $mediaItem->audio_codec, 'movie', $mediaItem->id);
+        return $this->remuxService->streamFileRange($path, $request);
     }
 
-    public function streamRemuxEpisode(Episode $episode, Request $request)
+    public function streamRemuxFile(string $filePath, Request $request, ?string $videoCodec = null, ?string $audioCodec = null, string $modelType = 'media', int $modelId = 0)
     {
-        return $this->streamRemuxFile($episode->file_path, $request, $episode->video_codec, $episode->audio_codec, 'episode', $episode->id);
-    }
-
-    protected function streamRemuxFile(string $filePath, Request $request, ?string $videoCodec = null, ?string $audioCodec = null, string $modelType = 'media', int $modelId = 0)
-    {
-        if (! file_exists($filePath)) {
-            abort(404, 'Media file not found');
-        }
-
-        $ffmpegPath = FfmpegLocatorService::getFfmpegPath() ?? 'ffmpeg';
-        $startSeconds = max(0, (float) $request->query('start', 0));
-
-        $isWin = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
-        $nullDevice = $isWin ? 'NUL' : '/dev/null';
-
-        $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
-        $vc = strtolower($videoCodec ?? '');
-        $ac = strtolower($audioCodec ?? '');
-
-        // Native H.264 (AVC) in MP4 or MKV can be copied directly with 0 CPU overhead.
-        // All legacy formats (AVI, MPEG-4 / XviD, DivX, WMV, VC-1, MPEG-2) and 10-bit HEVC (H.265)
-        // must be transcoded to standard 8-bit H.264 (yuv420p) so every browser can render video frames.
-        $isNativeH264 = (
-            str_contains($vc, 'h.264') ||
-            str_contains($vc, 'h264') ||
-            str_contains($vc, 'avc')
-        ) && ! str_contains($vc, 'hevc') && ($ext !== 'avi');
-
-        if ($isNativeH264 && $request->query('transcode') !== '1') {
-            $videoArgs = ['-c:v', 'copy'];
-        } else {
-            $videoArgs = [
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-tune', 'zerolatency',
-                '-crf', '22',
-                '-pix_fmt', 'yuv420p',
-            ];
-        }
-
-        $cacheDir = storage_path('app/cache/media_streams');
-        if (! is_dir($cacheDir)) {
-            @mkdir($cacheDir, 0777, true);
-        }
-
-        $mtime = file_exists($filePath) ? filemtime($filePath) : 0;
-        $cacheKey = "stream_{$modelType}_{$modelId}_{$mtime}";
-        $cachedFile = "{$cacheDir}/{$cacheKey}.mp4";
-        $completeFile = "{$cachedFile}.complete";
-        $lockFile = "{$cacheDir}/{$cacheKey}.lock";
-        $pidFile = "{$cacheDir}/run_{$cacheKey}.pid";
-
-        $audioDelayMs = (int) $request->query('audio_delay', 0);
-
-        // If complete cached file is ready on disk and no audio delay was requested, stream directly via HTTP 206 Byte Ranges!
-        // This enables instant, 0ms native seeking to any timestamp with zero audio/video desync.
-        if (file_exists($cachedFile) && file_exists($completeFile) && $audioDelayMs == 0) {
-            return $this->streamFileRange($cachedFile, $request);
-        }
-
-        // Launch background transcode worker to cache the full file to disk so caching completes seamlessly
-        $partFile = "{$cacheDir}/{$cacheKey}.part.mp4";
-        if (! file_exists($lockFile) && ! file_exists($completeFile)) {
-            @file_put_contents($lockFile, date('Y-m-d H:i:s'));
-            $bgCmd = array_merge(
-                [
-                    escapeshellarg($ffmpegPath),
-                    '-nostdin',
-                    '-hide_banner',
-                    '-loglevel', 'error',
-                    '-y',
-                    '-i', escapeshellarg($filePath),
-                    '-map', '0:v:0',
-                    '-map', '0:a:0?',
-                ],
-                $videoArgs,
-                [
-                    '-af', 'aresample=async=1000:min_hard_comp=0.100000',
-                    '-c:a', 'aac',
-                    '-b:a', '192k',
-                    '-ac', '2',
-                    '-sn',
-                    '-avoid_negative_ts', 'make_zero',
-                    '-max_muxing_queue_size', '1024',
-                    '-movflags', '+faststart',
-                    '-f', 'mp4',
-                    escapeshellarg($partFile),
-                ]
-            );
-
-            $bgCmdStr = implode(' ', $bgCmd);
-            if ($isWin) {
-                $batFile = "{$cacheDir}/run_{$cacheKey}.bat";
-                $batWinCached = str_replace('/', '\\', $cachedFile);
-                $batWinComplete = str_replace('/', '\\', $completeFile);
-                $batWinPart = str_replace('/', '\\', $partFile);
-                $batWinLock = str_replace('/', '\\', $lockFile);
-                $batWinBat = str_replace('/', '\\', $batFile);
-                $batWinPid = str_replace('/', '\\', $pidFile);
-
-                $batContent = "@echo off\r\n"
-                    ."echo %$! > \"{$batWinPid}\"\r\n"
-                    .$bgCmdStr."\r\n"
-                    ."if %ERRORLEVEL% EQU 0 (\r\n"
-                    ."  move /Y \"{$batWinPart}\" \"{$batWinCached}\" > NUL 2>&1\r\n"
-                    ."  echo complete > \"{$batWinComplete}\"\r\n"
-                    .") else (\r\n"
-                    ."  del /F /Q \"{$batWinPart}\" > NUL 2>&1\r\n"
-                    .")\r\n"
-                    ."del /F /Q \"{$batWinLock}\" \"{$batWinBat}\" \"{$batWinPid}\" > NUL 2>&1\r\n";
-
-                @file_put_contents($batFile, $batContent);
-                @pclose(popen("start \"\" /B cmd /c \"\"{$batFile}\"\"", 'r'));
-            } else {
-                $finalBgCmd = "({$bgCmdStr} && mv '{$partFile}' '{$cachedFile}' && touch '{$completeFile}' && rm -f '{$lockFile}') > /dev/null 2>&1 &";
-                @exec($finalBgCmd);
-            }
-        }
-
-        $isNativeAac = (str_contains($ac, 'aac') || str_contains($ac, 'mp4a')) && $audioDelayMs == 0;
-
-        if ($isNativeAac) {
-            $audioArgs = [
-                '-c:a', 'copy',
-                '-sn',
-            ];
-        } else {
-            // Build audio filter chain supporting audio-to-video delay compensation
-            $audioFilters = [];
-            if ($audioDelayMs > 0) {
-                // Audio leads video -> delay audio by $audioDelayMs
-                $audioFilters[] = "adelay={$audioDelayMs}|{$audioDelayMs}";
-            } elseif ($audioDelayMs < 0) {
-                // Audio lags behind video -> advance audio by trimming the start
-                $trimSec = abs($audioDelayMs) / 1000.0;
-                $audioFilters[] = "atrim=start={$trimSec},asetpts=PTS-STARTPTS";
-            }
-            $audioFilters[] = 'aresample=async=1000:min_hard_comp=0.100000';
-            $audioFilterStr = implode(',', $audioFilters);
-
-            $audioArgs = [
-                '-af', $audioFilterStr,
-                '-c:a', 'aac',
-                '-b:a', '192k',
-                '-ac', '2',
-                '-sn',
-            ];
-        }
-
-        if ($startSeconds > 0 && in_array('copy', $videoArgs)) {
-            $cacheKey = "seek_kf_{$modelType}_{$modelId}_".round($startSeconds, 1);
-            $keyframe = Cache::remember($cacheKey, 3600, function () use ($filePath, $startSeconds) {
-                return $this->findPrecedingKeyframe($filePath, $startSeconds);
-            });
-            if (abs($keyframe - $startSeconds) > 0.15) {
-                $startSeconds = $keyframe;
-            }
-        }
-
-        $seekArgs = [];
-        if ($startSeconds > 0) {
-            $seekArgs = ['-noaccurate_seek', '-ss', (string) $startSeconds];
-        }
-
-        $cmd = array_merge(
-            [
-                $ffmpegPath,
-                '-nostdin',
-                '-hide_banner',
-                '-loglevel', 'error',
-            ],
-            $seekArgs,
-            [
-                '-i', $filePath,
-                '-map', '0:v:0',
-                '-map', '0:a:0?',
-            ],
-            $videoArgs,
-            $audioArgs,
-            [
-                '-avoid_negative_ts', 'make_zero',
-                '-max_muxing_queue_size', '1024',
-                '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-                '-flush_packets', '1',
-                '-f', 'mp4',
-                'pipe:1',
-            ]
-        );
-
-        return response()->stream(function () use ($cmd, $nullDevice) {
-            $descriptors = [
-                0 => ['pipe', 'r'],
-                1 => ['pipe', 'w'],
-                2 => ['file', $nullDevice, 'w'],
-            ];
-
-            // Increase PHP execution time limit for long video playback streams
-            @set_time_limit(0);
-            if (function_exists('apache_setenv')) {
-                @apache_setenv('no-gzip', '1');
-            }
-            @ini_set('zlib.output_compression', 'Off');
-
-            $process = proc_open($cmd, $descriptors, $pipes);
-            if (is_resource($process)) {
-                fclose($pipes[0]);
-
-                while (! feof($pipes[1])) {
-                    $chunk = fread($pipes[1], 65536);
-                    if ($chunk !== false && strlen($chunk) > 0) {
-                        echo $chunk;
-                        flush();
-                    }
-                    if (connection_aborted()) {
-                        break;
-                    }
-                }
-
-                fclose($pipes[1]);
-                proc_terminate($process);
-                proc_close($process);
-            }
-        }, 200, [
-            'Content-Type' => 'video/mp4',
-            'Cache-Control' => 'no-cache, no-store, must-revalidate',
-            'X-Accel-Buffering' => 'no',
-            'Accept-Ranges' => 'bytes',
-            'Access-Control-Allow-Origin' => '*',
-            'Access-Control-Allow-Methods' => 'GET, HEAD, OPTIONS',
-            'Access-Control-Allow-Headers' => 'Range, Content-Type, Accept',
-            'X-Stream-Start-Offset' => (string) $startSeconds,
-            'Access-Control-Expose-Headers' => 'Content-Length, Content-Range, Accept-Ranges, X-Stream-Start-Offset',
-        ]);
+        return $this->remuxService->streamRemuxFile($filePath, $request, $videoCodec, $audioCodec, $modelType, $modelId);
     }
 }

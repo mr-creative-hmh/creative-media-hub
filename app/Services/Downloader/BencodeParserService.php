@@ -66,7 +66,7 @@ class BencodeParserService
                     // Normalize path parts
                     $cleanParts = [];
                     foreach ($pathParts as $part) {
-                        $partStr = trim((string) $part, "/\\ ");
+                        $partStr = trim((string) $part, '/\\ ');
                         if ($partStr !== '') {
                             $cleanParts[] = $partStr;
                         }

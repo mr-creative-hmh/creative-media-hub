@@ -2,10 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Models\MediaItem;
-use App\Models\Series;
-use App\Models\Season;
 use App\Models\Episode;
+use App\Models\Season;
+use App\Models\Series;
 use App\Services\Metadata\LibraryMasterIndexService;
 use App\Services\Metadata\TmdbProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;

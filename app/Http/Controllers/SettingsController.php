@@ -3,15 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\AppSetting;
+use App\Services\Database\DatabaseBackupService;
 use App\Services\Metadata\AniListProvider;
 use App\Services\Metadata\TvMazeProvider;
 use App\Services\Metadata\WikipediaProvider;
 use App\Services\Subtitles\OpenSubtitlesService;
 use App\Services\Subtitles\SubDlService;
-use App\Services\Database\DatabaseBackupService;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
 use Inertia\Response;

@@ -94,7 +94,7 @@ class YtsSubsService
                 return [];
             }
 
-            $dom = new DOMDocument();
+            $dom = new DOMDocument;
             @$dom->loadHTML($html);
             $xpath = new DOMXPath($dom);
 

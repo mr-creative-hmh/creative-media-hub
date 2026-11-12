@@ -13,7 +13,19 @@ use Illuminate\Support\Facades\Http;
 
 class LibraryGapService
 {
-    protected const CACHE_TTL = 3600; // 1 hour
+    protected const CACHE_TTL = 86400; // 24 hours
+
+    protected ?array $memoizedEpisodes = null;
+
+    protected ?array $memoizedSeasons = null;
+
+    protected ?array $memoizedCollections = null;
+
+    protected ?array $memoizedGroupedCollections = null;
+
+    protected ?array $memoizedSeriesGaps = null;
+
+    protected ?array $memoizedMetrics = null;
 
     public function __construct(
         protected TmdbProvider $tmdbProvider
@@ -24,11 +36,15 @@ class LibraryGapService
      */
     public function getMissingEpisodesSummary(bool $forceRefresh = false): array
     {
+        if (! $forceRefresh && $this->memoizedEpisodes !== null) {
+            return $this->memoizedEpisodes;
+        }
+
         if ($forceRefresh) {
             Cache::forget('scout_missing_episodes');
         }
 
-        return Cache::remember('scout_missing_episodes', self::CACHE_TTL, function () {
+        $result = Cache::remember('scout_missing_episodes', self::CACHE_TTL, function () {
             $today = Carbon::today()->format('Y-m-d');
             $candidateGaps = [];
 
@@ -113,6 +129,10 @@ class LibraryGapService
 
             return $missing;
         });
+
+        $this->memoizedEpisodes = $result;
+
+        return $result;
     }
 
     /**
@@ -120,11 +140,15 @@ class LibraryGapService
      */
     public function getMissingSeasonsSummary(bool $forceRefresh = false): array
     {
+        if (! $forceRefresh && $this->memoizedSeasons !== null) {
+            return $this->memoizedSeasons;
+        }
+
         if ($forceRefresh) {
             Cache::forget('scout_missing_seasons');
         }
 
-        return Cache::remember('scout_missing_seasons', self::CACHE_TTL, function () {
+        $result = Cache::remember('scout_missing_seasons', self::CACHE_TTL, function () {
             $today = Carbon::today()->format('Y-m-d');
             $missing = [];
 
@@ -135,11 +159,11 @@ class LibraryGapService
                         ->orWhere('status', 'like', '%Returning%')
                         ->orWhereNull('status');
                 })
-                ->limit(40)
+                ->limit(25)
                 ->get();
 
             foreach ($seriesList as $series) {
-                $tmdbDetails = Cache::remember("scout_tmdb_series_{$series->tmdb_id}", 86400, function () use ($series) {
+                $tmdbDetails = Cache::remember("scout_tmdb_series_{$series->tmdb_id}", 86400 * 7, function () use ($series) {
                     return $this->tmdbProvider->getSeriesDetails($series->tmdb_id);
                 });
 
@@ -187,6 +211,10 @@ class LibraryGapService
 
             return $missing;
         });
+
+        $this->memoizedSeasons = $result;
+
+        return $result;
     }
 
     /**
@@ -194,11 +222,15 @@ class LibraryGapService
      */
     public function getMissingCollectionMoviesSummary(bool $forceRefresh = false): array
     {
+        if (! $forceRefresh && $this->memoizedCollections !== null) {
+            return $this->memoizedCollections;
+        }
+
         if ($forceRefresh) {
             Cache::forget('scout_missing_collections');
         }
 
-        return Cache::remember('scout_missing_collections', self::CACHE_TTL, function () use ($forceRefresh) {
+        $result = Cache::remember('scout_missing_collections', self::CACHE_TTL, function () use ($forceRefresh) {
             $grouped = $this->getGroupedCollectionGaps($forceRefresh);
             $flat = [];
             foreach ($grouped as $col) {
@@ -209,6 +241,10 @@ class LibraryGapService
 
             return $flat;
         });
+
+        $this->memoizedCollections = $result;
+
+        return $result;
     }
 
     /**
@@ -216,12 +252,16 @@ class LibraryGapService
      */
     public function getGroupedCollectionGaps(bool $forceRefresh = false): array
     {
+        if (! $forceRefresh && $this->memoizedGroupedCollections !== null) {
+            return $this->memoizedGroupedCollections;
+        }
+
         if ($forceRefresh) {
             Cache::forget('scout_grouped_collections');
             Cache::forget('scout_missing_collections');
         }
 
-        return Cache::remember('scout_grouped_collections', self::CACHE_TTL, function () {
+        $result = Cache::remember('scout_grouped_collections', self::CACHE_TTL, function () {
             $today = Carbon::today()->format('Y-m-d');
 
             // Genuine collections having 1 or more movies in local library (Media Scout tracks franchise gaps even from a single owned movie)
@@ -271,18 +311,22 @@ class LibraryGapService
                 }
 
                 if (! empty($toFetch) && ! empty($apiKey)) {
-                    $responses = Http::pool(function ($pool) use ($toFetch, $apiKey) {
-                        return array_map(function ($id) use ($pool, $apiKey) {
-                            return $pool->as("col_{$id}")->timeout(6)->get("https://api.themoviedb.org/3/collection/{$id}", [
-                                'api_key' => $apiKey,
-                            ]);
-                        }, $toFetch);
-                    });
+                    try {
+                        $responses = Http::pool(function ($pool) use ($toFetch, $apiKey) {
+                            return array_map(function ($id) use ($pool, $apiKey) {
+                                return $pool->as("col_{$id}")->timeout(2.5)->get("https://api.themoviedb.org/3/collection/{$id}", [
+                                    'api_key' => $apiKey,
+                                ]);
+                            }, $toFetch);
+                        });
 
-                    foreach ($toFetch as $id) {
-                        if (isset($responses["col_{$id}"]) && $responses["col_{$id}"]->successful()) {
-                            Cache::put("scout_tmdb_col_{$id}", $responses["col_{$id}"]->json(), 86400 * 7);
+                        foreach ($toFetch as $id) {
+                            if (isset($responses["col_{$id}"]) && $responses["col_{$id}"]->successful()) {
+                                Cache::put("scout_tmdb_col_{$id}", $responses["col_{$id}"]->json(), 86400 * 7);
+                            }
                         }
+                    } catch (\Throwable $e) {
+                        // Fail silently and continue using local database info
                     }
                 }
             }
@@ -428,6 +472,10 @@ class LibraryGapService
 
             return $groupedCollections;
         });
+
+        $this->memoizedGroupedCollections = $result;
+
+        return $result;
     }
 
     /**
@@ -435,11 +483,15 @@ class LibraryGapService
      */
     public function getGroupedSeriesGaps(bool $forceRefresh = false): array
     {
+        if (! $forceRefresh && $this->memoizedSeriesGaps !== null) {
+            return $this->memoizedSeriesGaps;
+        }
+
         if ($forceRefresh) {
             Cache::forget('scout_grouped_series');
         }
 
-        return Cache::remember('scout_grouped_series', self::CACHE_TTL, function () use ($forceRefresh) {
+        $result = Cache::remember('scout_grouped_series', self::CACHE_TTL, function () use ($forceRefresh) {
             $episodes = $this->getMissingEpisodesSummary($forceRefresh);
             $seasons = $this->getMissingSeasonsSummary($forceRefresh);
 
@@ -480,6 +532,10 @@ class LibraryGapService
 
             return $seriesGaps;
         });
+
+        $this->memoizedSeriesGaps = $result;
+
+        return $result;
     }
 
     /**
@@ -487,9 +543,15 @@ class LibraryGapService
      */
     public function getMetrics(bool $forceRefresh = false): array
     {
+        if (! $forceRefresh && $this->memoizedMetrics !== null) {
+            return $this->memoizedMetrics;
+        }
+
         $episodes = $this->getMissingEpisodesSummary($forceRefresh);
         $seasons = $this->getMissingSeasonsSummary($forceRefresh);
         $groupedCollections = $this->getGroupedCollectionGaps($forceRefresh);
+        $seriesGaps = $this->getGroupedSeriesGaps($forceRefresh);
+
         $missingMoviesCount = 0;
         foreach ($groupedCollections as $col) {
             $missingMoviesCount += $col['missing_count'];
@@ -509,12 +571,12 @@ class LibraryGapService
             $collectionsCompletionRate = round(array_sum($rates) / count($rates), 1);
         }
 
-        return [
+        $metrics = [
             'missing_episodes_count' => count($episodes),
             'missing_seasons_count' => count($seasons),
             'missing_movies_count' => $missingMoviesCount,
             'incomplete_franchises_count' => count($groupedCollections),
-            'incomplete_series_count' => count($this->getGroupedSeriesGaps($forceRefresh)),
+            'incomplete_series_count' => count($seriesGaps),
             'total_gaps_count' => count($episodes) + count($seasons) + $missingMoviesCount,
             'series_completion_rate' => $seriesCompletionRate,
             'collections_completion_rate' => $collectionsCompletionRate,
@@ -522,6 +584,10 @@ class LibraryGapService
             'total_library_movies' => $totalLocalMovies,
             'last_scanned_at' => Carbon::now()->toIso8601String(),
         ];
+
+        $this->memoizedMetrics = $metrics;
+
+        return $metrics;
     }
 
     /**
@@ -529,6 +595,13 @@ class LibraryGapService
      */
     public function clearCache(): void
     {
+        $this->memoizedEpisodes = null;
+        $this->memoizedSeasons = null;
+        $this->memoizedCollections = null;
+        $this->memoizedGroupedCollections = null;
+        $this->memoizedSeriesGaps = null;
+        $this->memoizedMetrics = null;
+
         Cache::forget('scout_missing_episodes');
         Cache::forget('scout_missing_seasons');
         Cache::forget('scout_missing_collections');

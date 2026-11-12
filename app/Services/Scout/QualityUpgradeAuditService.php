@@ -8,15 +8,22 @@ use App\Models\DownloadItem;
 use App\Models\Episode;
 use App\Models\MediaItem;
 use App\Services\Media\FfmpegLocatorService;
+use App\Support\ByteFormatter;
 use Illuminate\Support\Facades\Cache;
 
 class QualityUpgradeAuditService
 {
-    protected const CACHE_TTL = 3600; // 1 hour
+    protected const CACHE_TTL = 86400; // 24 hours
 
     protected ?string $ffprobePath = null;
 
     protected ?string $ffmpegPath = null;
+
+    protected ?array $memoizedLowRes = null;
+
+    protected ?array $memoizedPoorQuality = null;
+
+    protected ?array $memoizedUpgradeMetrics = null;
 
     public function __construct()
     {
@@ -32,11 +39,15 @@ class QualityUpgradeAuditService
      */
     public function getLowResolutionMedia(bool $forceRefresh = false): array
     {
+        if (! $forceRefresh && $this->memoizedLowRes !== null) {
+            return $this->memoizedLowRes;
+        }
+
         if ($forceRefresh) {
             Cache::forget('scout_low_res_media');
         }
 
-        return Cache::remember('scout_low_res_media', self::CACHE_TTL, function () {
+        $result = Cache::remember('scout_low_res_media', self::CACHE_TTL, function () {
             // 1. Movies below 720p
             $movies = MediaItem::query()
                 ->whereNotNull('file_path')
@@ -75,7 +86,7 @@ class QualityUpgradeAuditService
                     'audio_channels' => $m->audio_channels,
                     'file_path' => $m->file_path,
                     'file_size_bytes' => $m->file_size_bytes ?: ($m->file_path && file_exists($m->file_path) ? filesize($m->file_path) : 0),
-                    'file_size_human' => $this->formatBytes($m->file_size_bytes ?: ($m->file_path && file_exists($m->file_path) ? filesize($m->file_path) : 0)),
+                    'file_size_human' => ByteFormatter::format((int) ($m->file_size_bytes ?: ($m->file_path && file_exists($m->file_path) ? filesize($m->file_path) : 0))),
                     'collection_name' => $m->collection_name,
                 ];
             }
@@ -128,7 +139,7 @@ class QualityUpgradeAuditService
                     'audio_channels' => $ep->audio_channels,
                     'file_path' => $ep->file_path,
                     'file_size_bytes' => $ep->file_size_bytes ?: ($ep->file_path && file_exists($ep->file_path) ? filesize($ep->file_path) : 0),
-                    'file_size_human' => $this->formatBytes($ep->file_size_bytes ?: ($ep->file_path && file_exists($ep->file_path) ? filesize($ep->file_path) : 0)),
+                    'file_size_human' => ByteFormatter::format((int) ($ep->file_size_bytes ?: ($ep->file_path && file_exists($ep->file_path) ? filesize($ep->file_path) : 0))),
                 ];
             }
 
@@ -138,6 +149,10 @@ class QualityUpgradeAuditService
                 'total_count' => count($formattedMovies) + count($formattedEpisodes),
             ];
         });
+
+        $this->memoizedLowRes = $result;
+
+        return $result;
     }
 
     /**
@@ -148,11 +163,15 @@ class QualityUpgradeAuditService
      */
     public function getPoorQualityMedia(bool $forceRefresh = false): array
     {
+        if (! $forceRefresh && $this->memoizedPoorQuality !== null) {
+            return $this->memoizedPoorQuality;
+        }
+
         if ($forceRefresh) {
             Cache::forget('scout_poor_quality_media');
         }
 
-        return Cache::remember('scout_poor_quality_media', self::CACHE_TTL, function () {
+        $result = Cache::remember('scout_poor_quality_media', self::CACHE_TTL, function () {
             $flaggedItems = [];
             $categoriesCount = [
                 'cam_recorded' => 0,
@@ -207,7 +226,7 @@ class QualityUpgradeAuditService
                         'audio_codec' => $m->audio_codec ?: 'Unknown',
                         'file_path' => $m->file_path,
                         'file_size_bytes' => $m->file_size_bytes ?: ($m->file_path && file_exists($m->file_path) ? filesize($m->file_path) : 0),
-                        'file_size_human' => $this->formatBytes($m->file_size_bytes ?: ($m->file_path && file_exists($m->file_path) ? filesize($m->file_path) : 0)),
+                        'file_size_human' => ByteFormatter::format((int) ($m->file_size_bytes ?: ($m->file_path && file_exists($m->file_path) ? filesize($m->file_path) : 0))),
                         'flag_category' => $category,
                         'badge_en' => $inspection['badge_en'],
                         'badge_ar' => $inspection['badge_ar'],
@@ -280,7 +299,7 @@ class QualityUpgradeAuditService
                         'audio_codec' => $ep->audio_codec ?: 'Unknown',
                         'file_path' => $ep->file_path,
                         'file_size_bytes' => $ep->file_size_bytes ?: ($ep->file_path && file_exists($ep->file_path) ? filesize($ep->file_path) : 0),
-                        'file_size_human' => $this->formatBytes($ep->file_size_bytes ?: ($ep->file_path && file_exists($ep->file_path) ? filesize($ep->file_path) : 0)),
+                        'file_size_human' => ByteFormatter::format((int) ($ep->file_size_bytes ?: ($ep->file_path && file_exists($ep->file_path) ? filesize($ep->file_path) : 0))),
                         'flag_category' => $category,
                         'badge_en' => $inspection['badge_en'],
                         'badge_ar' => $inspection['badge_ar'],
@@ -296,6 +315,10 @@ class QualityUpgradeAuditService
                 'by_category' => $categoriesCount,
             ];
         });
+
+        $this->memoizedPoorQuality = $result;
+
+        return $result;
     }
 
     /**
@@ -453,6 +476,10 @@ class QualityUpgradeAuditService
      */
     public function getUpgradeMetrics(bool $forceRefresh = false): array
     {
+        if (! $forceRefresh && $this->memoizedUpgradeMetrics !== null) {
+            return $this->memoizedUpgradeMetrics;
+        }
+
         $lowRes = $this->getLowResolutionMedia($forceRefresh);
         $poor = $this->getPoorQualityMedia($forceRefresh);
 
@@ -461,7 +488,7 @@ class QualityUpgradeAuditService
         $lowAudioCount = $poor['by_category']['watermarked_or_low_audio'] ?? 0;
         $wmCount = $poor['by_category']['watermarked_rip'] ?? 0;
 
-        return [
+        $metrics = [
             'total_low_res' => $lowRes['total_count'],
             'low_res_movies' => count($lowRes['movies']),
             'low_res_episodes' => count($lowRes['episodes']),
@@ -480,6 +507,10 @@ class QualityUpgradeAuditService
             'hardcoded_subs_count' => $hcCount,
             'watermarked_count' => $wmCount,
         ];
+
+        $this->memoizedUpgradeMetrics = $metrics;
+
+        return $metrics;
     }
 
     /**
@@ -487,6 +518,10 @@ class QualityUpgradeAuditService
      */
     public function clearCache(): void
     {
+        $this->memoizedLowRes = null;
+        $this->memoizedPoorQuality = null;
+        $this->memoizedUpgradeMetrics = null;
+
         Cache::forget('scout_low_res_media');
         Cache::forget('scout_poor_quality_media');
     }
@@ -509,21 +544,5 @@ class QualityUpgradeAuditService
             || str_contains($res, '4k')
             || str_contains($res, '2160p')
             || str_contains($res, '8k');
-    }
-
-    /**
-     * Format bytes into human-readable string.
-     */
-    protected function formatBytes(int $bytes): string
-    {
-        if ($bytes <= 0) {
-            return '0 B';
-        }
-
-        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        $i = (int) floor(log($bytes, 1024));
-        $i = min($i, count($units) - 1);
-
-        return round($bytes / pow(1024, $i), 2).' '.$units[$i];
     }
 }

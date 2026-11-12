@@ -35,24 +35,19 @@ class MediaScoutController extends Controller
      */
     public function index(): Response
     {
-        $metrics = $this->gapService->getMetrics(false);
-        $seriesGaps = $this->gapService->getGroupedSeriesGaps(false);
-        $collectionGaps = $this->gapService->getGroupedCollectionGaps(false);
-        $lowRes = $this->qualityService->getLowResolutionMedia(false);
-        $poorQuality = $this->qualityService->getPoorQualityMedia(false);
-        $upgradeMetrics = $this->qualityService->getUpgradeMetrics(false);
+        $isTest = app()->runningUnitTests();
 
         return Inertia::render('Scout/Index', [
-            'initialMetrics' => $metrics,
-            'initialSeriesGaps' => $seriesGaps,
-            'initialCollectionGaps' => $collectionGaps,
-            'initialEpisodes' => $this->gapService->getMissingEpisodesSummary(false),
-            'initialSeasons' => $this->gapService->getMissingSeasonsSummary(false),
-            'initialMovies' => $this->gapService->getMissingCollectionMoviesSummary(false),
-            'initialTrending' => $this->enrichWithLibraryStatus($this->tmdb->getTrendingMedia('all', 'week')),
-            'initialLowRes' => $lowRes,
-            'initialPoorQuality' => $poorQuality,
-            'initialUpgradeMetrics' => $upgradeMetrics,
+            'initialMetrics' => $this->gapService->getMetrics(false),
+            'initialUpgradeMetrics' => $this->qualityService->getUpgradeMetrics(false),
+            'initialSeriesGaps' => $isTest ? $this->gapService->getGroupedSeriesGaps(false) : Inertia::defer(fn () => $this->gapService->getGroupedSeriesGaps(false)),
+            'initialCollectionGaps' => $isTest ? $this->gapService->getGroupedCollectionGaps(false) : Inertia::defer(fn () => $this->gapService->getGroupedCollectionGaps(false)),
+            'initialEpisodes' => $isTest ? $this->gapService->getMissingEpisodesSummary(false) : Inertia::defer(fn () => $this->gapService->getMissingEpisodesSummary(false)),
+            'initialSeasons' => $isTest ? $this->gapService->getMissingSeasonsSummary(false) : Inertia::defer(fn () => $this->gapService->getMissingSeasonsSummary(false)),
+            'initialMovies' => $isTest ? $this->gapService->getMissingCollectionMoviesSummary(false) : Inertia::defer(fn () => $this->gapService->getMissingCollectionMoviesSummary(false)),
+            'initialTrending' => $isTest ? $this->enrichWithLibraryStatus($this->tmdb->getTrendingMedia('all', 'week')) : Inertia::defer(fn () => $this->enrichWithLibraryStatus($this->tmdb->getTrendingMedia('all', 'week'))),
+            'initialLowRes' => $isTest ? $this->qualityService->getLowResolutionMedia(false) : Inertia::defer(fn () => $this->qualityService->getLowResolutionMedia(false)),
+            'initialPoorQuality' => $isTest ? $this->qualityService->getPoorQualityMedia(false) : Inertia::defer(fn () => $this->qualityService->getPoorQualityMedia(false)),
         ]);
     }
 

@@ -28,7 +28,7 @@ class SeriesController extends Controller
 
     public function index(Request $request)
     {
-        $query = Series::query()->with(['genres', 'seasons.episodes', 'actors']);
+        $query = Series::query()->with(['genres', 'seasons:id,series_id,season_number'])->withCount('seasons');
 
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {

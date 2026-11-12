@@ -2,10 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\AppSetting;
-use App\Models\Episode;
 use App\Models\MediaItem;
-use App\Models\Season;
 use App\Models\Series;
 use App\Services\Database\DatabaseBackupService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -80,7 +77,7 @@ class DatabaseBackupAndRestoreTest extends TestCase
         $service = app(DatabaseBackupService::class);
         $exportData = $service->exportData();
 
-        $tempJson = tempnam(sys_get_temp_dir(), 'test_restore_') . '.json';
+        $tempJson = tempnam(sys_get_temp_dir(), 'test_restore_').'.json';
         file_put_contents($tempJson, json_encode($exportData));
 
         $uploadedFile = new UploadedFile(
@@ -136,7 +133,7 @@ class DatabaseBackupAndRestoreTest extends TestCase
 
         // Restore ONLY movies with overwrite mode
         $restoreResult = $service->restoreFromFile(
-            $service->getBackupPath() . '/test_selective_backup.json',
+            $service->getBackupPath().'/test_selective_backup.json',
             'overwrite',
             ['movies']
         );
@@ -185,7 +182,7 @@ class DatabaseBackupAndRestoreTest extends TestCase
 
         // Restore ONLY series
         $restoreResult = $service->restoreFromFile(
-            $service->getBackupPath() . '/test_series_backup.json',
+            $service->getBackupPath().'/test_series_backup.json',
             'overwrite',
             ['series']
         );

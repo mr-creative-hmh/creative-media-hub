@@ -13,7 +13,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-                // 0. Users Table
+        // 0. Users Table
         if (! Schema::hasTable('users')) {
             Schema::create('users', function (Blueprint $table) {
                 $table->id();

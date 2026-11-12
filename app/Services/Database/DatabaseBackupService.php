@@ -2,7 +2,6 @@
 
 namespace App\Services\Database;
 
-use App\Models\AppSetting;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -33,6 +32,7 @@ class DatabaseBackupService
     {
         $path = storage_path('app/backups');
         File::ensureDirectoryExists($path);
+
         return str_replace('\\', '/', $path);
     }
 
@@ -69,7 +69,7 @@ class DatabaseBackupService
      */
     public function streamJsonDownload(): StreamedResponse
     {
-        $filename = 'creative_media_hub_backup_' . date('Y-m-d_His') . '.json';
+        $filename = 'creative_media_hub_backup_'.date('Y-m-d_His').'.json';
         $data = $this->exportData();
 
         return response()->streamDownload(function () use ($data) {
@@ -175,10 +175,10 @@ class DatabaseBackupService
                 }
             } elseif (in_array($ext, ['sqlite', 'db'])) {
                 try {
-                    $pdo = new \PDO("sqlite:" . $file->getRealPath());
-                    $mediaCount = (int) $pdo->query("SELECT COUNT(*) FROM media_items")->fetchColumn();
-                    $seriesCount = (int) $pdo->query("SELECT COUNT(*) FROM series")->fetchColumn();
-                    $subCount = (int) $pdo->query("SELECT COUNT(*) FROM subtitles")->fetchColumn();
+                    $pdo = new \PDO('sqlite:'.$file->getRealPath());
+                    $mediaCount = (int) $pdo->query('SELECT COUNT(*) FROM media_items')->fetchColumn();
+                    $seriesCount = (int) $pdo->query('SELECT COUNT(*) FROM series')->fetchColumn();
+                    $subCount = (int) $pdo->query('SELECT COUNT(*) FROM subtitles')->fetchColumn();
                     $item['summary'] = [
                         'media_items' => $mediaCount,
                         'series' => $seriesCount,
@@ -204,7 +204,7 @@ class DatabaseBackupService
     public function deleteLocalBackup(string $filename): bool
     {
         $clean = basename($filename);
-        $path = $this->getBackupPath() . '/' . $clean;
+        $path = $this->getBackupPath().'/'.$clean;
 
         if (File::exists($path)) {
             return File::delete($path);
@@ -219,7 +219,7 @@ class DatabaseBackupService
     public function downloadLocalBackup(string $filename): BinaryFileResponse
     {
         $clean = basename($filename);
-        $path = $this->getBackupPath() . '/' . $clean;
+        $path = $this->getBackupPath().'/'.$clean;
 
         if (! File::exists($path)) {
             abort(404, "Backup file {$clean} not found.");
@@ -230,7 +230,7 @@ class DatabaseBackupService
 
     /**
      * Restore database from an uploaded file or local file with selective section support.
-     * 
+     *
      * Supported sections: 'movies', 'series', 'subtitles', 'settings', 'watch_history'
      */
     public function restoreFromFile(string $filePath, string $mode = 'overwrite', array $includeSections = ['movies', 'series', 'subtitles', 'settings', 'watch_history']): array
@@ -245,7 +245,7 @@ class DatabaseBackupService
         try {
             $this->createLocalBackup('auto_pre_restore_safety_backup');
         } catch (\Throwable $e) {
-            Log::warning("Could not create pre-restore safety backup: " . $e->getMessage());
+            Log::warning('Could not create pre-restore safety backup: '.$e->getMessage());
         }
 
         if ($ext === 'json') {
@@ -254,6 +254,7 @@ class DatabaseBackupService
             if (! is_array($data) || ! isset($data['tables'])) {
                 throw new \InvalidArgumentException("Invalid JSON backup structure: missing 'tables' payload.");
             }
+
             return $this->restoreFromJson($data, $mode, $includeSections);
         } elseif (in_array($ext, ['sqlite', 'db'])) {
             // If full restore of all sections is requested, do fast binary swap
@@ -525,7 +526,7 @@ class DatabaseBackupService
      */
     protected function restoreFromSqliteSelective(string $sqliteFilePath, string $mode, array $includeSections): array
     {
-        $pdo = new \PDO("sqlite:" . $sqliteFilePath);
+        $pdo = new \PDO('sqlite:'.$sqliteFilePath);
         $tables = [];
 
         foreach ($this->libraryTables as $table) {
@@ -548,7 +549,7 @@ class DatabaseBackupService
     protected function restoreFromSqliteBinary(string $sqliteFilePath): array
     {
         if (config('database.default') !== 'sqlite') {
-            throw new \RuntimeException("Cannot restore SQLite binary file when database driver is not sqlite.");
+            throw new \RuntimeException('Cannot restore SQLite binary file when database driver is not sqlite.');
         }
 
         $targetDb = config('database.connections.sqlite.database');
@@ -559,7 +560,7 @@ class DatabaseBackupService
         fclose($handle);
 
         if (! str_starts_with($header, "SQLite format 3\0")) {
-            throw new \InvalidArgumentException("Invalid SQLite database file header.");
+            throw new \InvalidArgumentException('Invalid SQLite database file header.');
         }
 
         // Close active connections
@@ -588,9 +589,12 @@ class DatabaseBackupService
 
     protected function formatBytes(int $bytes): string
     {
-        if ($bytes <= 0) return '0 B';
+        if ($bytes <= 0) {
+            return '0 B';
+        }
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
         $i = (int) floor(log($bytes, 1024));
-        return round($bytes / pow(1024, $i), 2) . ' ' . $units[$i];
+
+        return round($bytes / pow(1024, $i), 2).' '.$units[$i];
     }
 }

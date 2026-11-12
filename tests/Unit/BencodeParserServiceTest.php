@@ -12,7 +12,7 @@ class BencodeParserServiceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->parser = new BencodeParserService();
+        $this->parser = new BencodeParserService;
     }
 
     public function test_multi_file_torrent_builds_hierarchical_folder_tree(): void

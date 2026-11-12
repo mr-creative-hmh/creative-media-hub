@@ -7,6 +7,7 @@ use App\Models\Genre;
 use App\Models\MediaItem;
 use App\Models\Series;
 use App\Models\WatchHistory;
+use App\Support\ByteFormatter;
 use Inertia\Inertia;
 
 class AnalyticsController extends Controller
@@ -20,23 +21,6 @@ class AnalyticsController extends Controller
         $movieBytes = (int) MediaItem::sum('file_size_bytes');
         $episodeBytes = (int) Episode::sum('file_size_bytes');
         $totalStorageBytes = $movieBytes + $episodeBytes;
-
-        $formatBytes = function (int|float $bytes): string {
-            if ($bytes >= 1099511627776) {
-                return round($bytes / 1099511627776, 2).' TB';
-            }
-            if ($bytes >= 1073741824) {
-                return round($bytes / 1073741824, 2).' GB';
-            }
-            if ($bytes >= 1048576) {
-                return round($bytes / 1048576, 2).' MB';
-            }
-            if ($bytes > 0) {
-                return round($bytes / 1024, 2).' KB';
-            }
-
-            return '0 GB';
-        };
 
         // 1. Physical Host Drives Detection
         $detectedDriveLetters = ['C:', 'H:'];
@@ -60,9 +44,9 @@ class AnalyticsController extends Controller
                     $usedPct = round(($used / $totalVal) * 100, 1);
                     $hostDrives[] = [
                         'drive' => $letter,
-                        'total_formatted' => $formatBytes($totalVal),
-                        'free_formatted' => $formatBytes($freeVal),
-                        'used_formatted' => $formatBytes($used),
+                        'total_formatted' => ByteFormatter::format((int) $totalVal),
+                        'free_formatted' => ByteFormatter::format((int) $freeVal),
+                        'used_formatted' => ByteFormatter::format((int) $used),
                         'total_bytes' => $totalVal,
                         'free_bytes' => $freeVal,
                         'used_bytes' => $used,
@@ -102,7 +86,7 @@ class AnalyticsController extends Controller
             $resolutions[$cat]['bytes'] += (int) $row->total_bytes;
         }
         foreach ($resolutions as $k => $data) {
-            $resolutions[$k]['formatted'] = $formatBytes($data['bytes']);
+            $resolutions[$k]['formatted'] = ByteFormatter::format($data['bytes']);
             $resolutions[$k]['percent'] = $totalStorageBytes > 0 ? round(($data['bytes'] / $totalStorageBytes) * 100, 1) : 0;
         }
 
@@ -130,7 +114,7 @@ class AnalyticsController extends Controller
             $codecs[$cat]['bytes'] += (int) $row->total_bytes;
         }
         foreach ($codecs as $k => $data) {
-            $codecs[$k]['formatted'] = $formatBytes($data['bytes']);
+            $codecs[$k]['formatted'] = ByteFormatter::format($data['bytes']);
             $codecs[$k]['percent'] = $totalStorageBytes > 0 ? round(($data['bytes'] / $totalStorageBytes) * 100, 1) : 0;
         }
 
@@ -167,7 +151,7 @@ class AnalyticsController extends Controller
             'title_ar' => $m->title_ar,
             'type' => 'movie',
             'size_bytes' => (int) $m->file_size_bytes,
-            'size_formatted' => $formatBytes((int) $m->file_size_bytes),
+            'size_formatted' => ByteFormatter::format((int) $m->file_size_bytes),
             'resolution' => $m->resolution ?: 'Unknown',
             'video_codec' => $m->video_codec ?: 'Unknown',
             'audio_codec' => $m->audio_codec ?: 'Unknown',
@@ -179,7 +163,7 @@ class AnalyticsController extends Controller
             'title_ar' => ($e->series?->title_ar ?? $e->series?->title ?? 'مسلسل')." م{$e->season_number} ح{$e->episode_number}",
             'type' => 'episode',
             'size_bytes' => (int) $e->file_size_bytes,
-            'size_formatted' => $formatBytes((int) $e->file_size_bytes),
+            'size_formatted' => ByteFormatter::format((int) $e->file_size_bytes),
             'resolution' => $e->resolution ?: 'Unknown',
             'video_codec' => $e->video_codec ?: 'Unknown',
             'audio_codec' => $e->audio_codec ?: 'Unknown',
@@ -217,22 +201,22 @@ class AnalyticsController extends Controller
                 'total_series' => $totalSeries,
                 'total_episodes' => $totalEpisodes,
                 'total_storage_bytes' => $totalStorageBytes,
-                'total_storage_formatted' => $formatBytes($totalStorageBytes),
+                'total_storage_formatted' => ByteFormatter::format($totalStorageBytes),
                 'movie_storage_bytes' => $movieBytes,
-                'movie_storage_formatted' => $formatBytes($movieBytes),
+                'movie_storage_formatted' => ByteFormatter::format($movieBytes),
                 'movie_storage_percent' => $totalStorageBytes > 0 ? round(($movieBytes / $totalStorageBytes) * 100, 1) : 0,
                 'episode_storage_bytes' => $episodeBytes,
-                'episode_storage_formatted' => $formatBytes($episodeBytes),
+                'episode_storage_formatted' => ByteFormatter::format($episodeBytes),
                 'episode_storage_percent' => $totalStorageBytes > 0 ? round(($episodeBytes / $totalStorageBytes) * 100, 1) : 0,
-                'avg_movie_formatted' => $formatBytes($avgMovieBytes),
-                'avg_episode_formatted' => $formatBytes($avgEpisodeBytes),
-                'avg_series_formatted' => $formatBytes($avgSeriesBytes),
+                'avg_movie_formatted' => ByteFormatter::format($avgMovieBytes),
+                'avg_episode_formatted' => ByteFormatter::format($avgEpisodeBytes),
+                'avg_series_formatted' => ByteFormatter::format($avgSeriesBytes),
                 'total_watch_hours' => $totalWatchHours,
                 'host_drives' => $hostDrives,
                 'resolutions' => $resolutions,
                 'codecs' => $codecs,
                 'modern_adoption_percent' => $modernAdoptionPercent,
-                'potential_savings_formatted' => $formatBytes($potentialSavingsBytes),
+                'potential_savings_formatted' => ByteFormatter::format($potentialSavingsBytes),
                 'audio' => [
                     'surround_count' => $surroundCount,
                     'stereo_count' => $stereoCount,
@@ -240,8 +224,8 @@ class AnalyticsController extends Controller
                 ],
                 'heavyweights' => $heavyweights,
                 'recent_inflow' => [
-                    'days_7_formatted' => $formatBytes($recent7DaysBytes),
-                    'days_30_formatted' => $formatBytes($recent30DaysBytes),
+                    'days_7_formatted' => ByteFormatter::format($recent7DaysBytes),
+                    'days_30_formatted' => ByteFormatter::format($recent30DaysBytes),
                 ],
                 'top_genres' => $genres,
             ],

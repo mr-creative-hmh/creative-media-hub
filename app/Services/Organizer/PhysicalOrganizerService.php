@@ -12,6 +12,7 @@ use App\Services\Metadata\LibraryMasterIndexService;
 use App\Services\Metadata\MediaCollectionResolverService;
 use App\Services\Metadata\TmdbProvider;
 use App\Services\Subtitles\SubtitleLanguageDetectorService;
+use App\Support\ByteFormatter;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -1167,6 +1168,28 @@ class PhysicalOrganizerService
             return ! empty($item['selected']) && ($item['status'] ?? 'ready') !== 'identical';
         }));
 
+        // Sanitize destination paths and validate against directory traversal
+        foreach ($selected as &$item) {
+            if (! empty($item['destination_path'])) {
+                $cleanDest = str_replace('\\', '/', $item['destination_path']);
+                $cleanDest = preg_replace('#/\.{1,2}/#', '/', $cleanDest);
+                $cleanDest = preg_replace('#/\.{1,2}$#', '', $cleanDest);
+                $item['destination_path'] = $cleanDest;
+            }
+            if (! empty($item['subtitles']) && is_array($item['subtitles'])) {
+                foreach ($item['subtitles'] as &$sub) {
+                    if (! empty($sub['destination'])) {
+                        $cleanSub = str_replace('\\', '/', $sub['destination']);
+                        $cleanSub = preg_replace('#/\.{1,2}/#', '/', $cleanSub);
+                        $cleanSub = preg_replace('#/\.{1,2}$#', '', $cleanSub);
+                        $sub['destination'] = $cleanSub;
+                    }
+                }
+                unset($sub);
+            }
+        }
+        unset($item);
+
         $totalBytes = array_sum(array_column($selected, 'size_bytes'));
 
         $state = [
@@ -1177,7 +1200,7 @@ class PhysicalOrganizerService
             'cleanup_empty_folders' => $cleanupEmptyFolders,
             'total_items' => count($selected),
             'total_bytes' => $totalBytes,
-            'total_bytes_formatted' => $this->formatBytes($totalBytes),
+            'total_bytes_formatted' => ByteFormatter::format((int) $totalBytes),
             'processed_count' => 0,
             'successful_count' => 0,
             'failed_count' => 0,
@@ -1191,7 +1214,7 @@ class PhysicalOrganizerService
                 [
                     'time' => date('H:i:s'),
                     'type' => 'info',
-                    'message' => "Initialized {$mode} queue with ".count($selected).' files ('.$this->formatBytes($totalBytes).')'.($cleanupEmptyFolders ? ' [Auto-Cleanup Enabled]' : ''),
+                    'message' => "Initialized {$mode} queue with ".count($selected).' files ('.ByteFormatter::format((int) $totalBytes).')'.($cleanupEmptyFolders ? ' [Auto-Cleanup Enabled]' : ''),
                 ],
             ],
             'queue' => $selected,
@@ -1881,16 +1904,6 @@ class PhysicalOrganizerService
 
     protected function formatBytes(int $bytes): string
     {
-        if ($bytes >= 1073741824 * 1024) {
-            return round($bytes / (1073741824 * 1024), 2).' TB';
-        }
-        if ($bytes >= 1073741824) {
-            return round($bytes / 1073741824, 2).' GB';
-        }
-        if ($bytes >= 1048576) {
-            return round($bytes / 1048576, 1).' MB';
-        }
-
-        return round($bytes / 1024, 1).' KB';
+        return ByteFormatter::format($bytes);
     }
 }

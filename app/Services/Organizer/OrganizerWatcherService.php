@@ -4,7 +4,6 @@ namespace App\Services\Organizer;
 
 use App\Models\AppSetting;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Log;
 
 class OrganizerWatcherService
 {
@@ -86,6 +85,7 @@ class OrganizerWatcherService
             $this->getWatchedFolders(),
             function ($f) use ($normalizedTarget) {
                 $norm = strtolower(rtrim(str_replace('\\', '/', trim($f)), '/'));
+
                 return $norm !== $normalizedTarget;
             }
         ));
@@ -131,6 +131,7 @@ class OrganizerWatcherService
         $now = time();
         $stableFiles = array_values(array_filter($allScanned, function ($f) use ($now) {
             $mtime = $f['modified_at'] ?? 0;
+
             return ($now - $mtime) >= 15;
         }));
 

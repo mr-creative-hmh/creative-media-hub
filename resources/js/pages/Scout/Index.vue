@@ -74,6 +74,18 @@ const lowResData = ref<any>(props.initialLowRes || { movies: [], episodes: [], t
 const poorQualityData = ref<any>(props.initialPoorQuality || { items: [], total_count: 0, by_category: {} });
 const upgradesLoading = ref(false);
 
+// Reactive synchronization for deferred Inertia props
+watch(() => props.initialSeriesGaps, (val) => { if (val) seriesGaps.value = val; }, { immediate: true });
+watch(() => props.initialCollectionGaps, (val) => { if (val) collectionGaps.value = val; }, { immediate: true });
+watch(() => props.initialEpisodes, (val) => { if (val) flatEpisodes.value = val; }, { immediate: true });
+watch(() => props.initialSeasons, (val) => { if (val) flatSeasons.value = val; }, { immediate: true });
+watch(() => props.initialMovies, (val) => { if (val) flatMovies.value = val; }, { immediate: true });
+watch(() => props.initialTrending, (val) => { if (val) discoverResults.value = val; }, { immediate: true });
+watch(() => props.initialLowRes, (val) => { if (val) lowResData.value = val; }, { immediate: true });
+watch(() => props.initialPoorQuality, (val) => { if (val) poorQualityData.value = val; }, { immediate: true });
+watch(() => props.initialMetrics, (val) => { if (val) metrics.value = val; }, { immediate: true });
+watch(() => props.initialUpgradeMetrics, (val) => { if (val) upgradeMetrics.value = val; }, { immediate: true });
+
 // Upgrade Tab Specific Filters
 const lowResMediaType = ref<'all' | 'movie' | 'episode'>('all');
 const lowResResolution = ref<string>('all');

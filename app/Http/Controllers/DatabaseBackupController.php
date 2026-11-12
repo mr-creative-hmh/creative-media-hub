@@ -64,6 +64,7 @@ class DatabaseBackupController extends Controller
     public function deleteLocal(string $filename): JsonResponse
     {
         $deleted = $this->backupService->deleteLocalBackup($filename);
+
         return response()->json([
             'success' => $deleted,
             'message' => $deleted ? 'Backup deleted successfully.' : 'Backup not found.',
@@ -89,18 +90,20 @@ class DatabaseBackupController extends Controller
         $originalExt = strtolower($file->getClientOriginalExtension());
 
         // Ensure temp file has extension for format detection
-        $storedTemp = tempnam(sys_get_temp_dir(), 'restore_') . '.' . $originalExt;
+        $storedTemp = tempnam(sys_get_temp_dir(), 'restore_').'.'.$originalExt;
         copy($tempPath, $storedTemp);
 
         try {
             $result = $this->backupService->restoreFromFile($storedTemp, $mode, $sections);
             @unlink($storedTemp);
+
             return response()->json($result);
         } catch (\Throwable $e) {
             @unlink($storedTemp);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Restoration failed: ' . $e->getMessage(),
+                'message' => 'Restoration failed: '.$e->getMessage(),
             ], 422);
         }
     }
@@ -119,7 +122,7 @@ class DatabaseBackupController extends Controller
         $filename = basename($validated['filename']);
         $mode = $validated['mode'] ?? 'overwrite';
         $sections = $this->parseSections($request->input('sections'));
-        $path = $this->backupService->getBackupPath() . '/' . $filename;
+        $path = $this->backupService->getBackupPath().'/'.$filename;
 
         if (! file_exists($path)) {
             return response()->json([
@@ -130,11 +133,12 @@ class DatabaseBackupController extends Controller
 
         try {
             $result = $this->backupService->restoreFromFile($path, $mode, $sections);
+
             return response()->json($result);
         } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Restoration failed: ' . $e->getMessage(),
+                'message' => 'Restoration failed: '.$e->getMessage(),
             ], 422);
         }
     }
@@ -154,6 +158,7 @@ class DatabaseBackupController extends Controller
             if (is_array($decoded)) {
                 return array_values(array_filter($decoded, 'is_string'));
             }
+
             return array_values(array_filter(array_map('trim', explode(',', $sections))));
         }
 
