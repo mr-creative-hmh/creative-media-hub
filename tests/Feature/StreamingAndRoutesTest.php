@@ -8,7 +8,9 @@ use App\Models\Season;
 use App\Models\Series;
 use App\Models\Subtitle;
 use App\Models\WatchHistory;
+use App\Services\Streaming\StreamMseService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Tests\TestCase;
 
 class StreamingAndRoutesTest extends TestCase
@@ -558,5 +560,68 @@ class StreamingAndRoutesTest extends TestCase
         $resFallback = $this->getJson(route('api.media.seek-keyframe', ['type' => 'movie', 'id' => $movie->id, 'time' => 45.0]));
         $resFallback->assertStatus(200);
         $resFallback->assertJson(['keyframe' => 45.0, 'requested' => 45.0]);
+    }
+
+    public function test_mse_stream_seek_command_aligns_audio_and_video_timestamps(): void
+    {
+        $service = app(StreamMseService::class);
+        $request = Request::create('/api/stream/mse/movie/1', 'GET', ['start' => 320]);
+
+        $built = $service->buildFfmpegCommand('dummy.mkv', $request, 'h264', 'ac3');
+        $cmd = $built['command'];
+
+        $this->assertContains('-fflags', $cmd);
+        $this->assertContains('+nobuffer+genpts+discardcorrupt', $cmd);
+        $this->assertContains('-probesize', $cmd);
+        $this->assertContains('1000000', $cmd);
+        $this->assertContains('-analyzeduration', $cmd);
+        $this->assertContains('-noaccurate_seek', $cmd);
+        $this->assertContains('-ss', $cmd);
+        $this->assertContains('320', $cmd);
+
+        $afIndex = array_search('-af', $cmd, true);
+        $this->assertNotFalse($afIndex);
+        $afValue = $cmd[$afIndex + 1];
+        $this->assertStringContainsString('aresample=async=1', $afValue);
+        $this->assertStringNotContainsString('first_pts=0', $afValue);
+
+        // When starting at 0 or transcoding video, first_pts=0 stays enabled
+        $startZeroRequest = Request::create('/api/stream/mse/movie/1', 'GET', ['start' => 0]);
+        $builtZero = $service->buildFfmpegCommand('dummy.mkv', $startZeroRequest, 'hevc', 'ac3');
+        $afZeroIndex = array_search('-af', $builtZero['command'], true);
+        $this->assertNotFalse($afZeroIndex);
+        $this->assertStringContainsString('first_pts=0', $builtZero['command'][$afZeroIndex + 1]);
+    }
+
+    public function test_mse_stream_copies_hevc_and_av1_when_browser_supports_them(): void
+    {
+        $service = app(StreamMseService::class);
+
+        $hevcRequest = Request::create('/api/stream/mse/movie/1', 'GET', ['cap_hevc' => '1']);
+        $builtHevc = $service->buildFfmpegCommand('movie.mkv', $hevcRequest, 'hevc', 'aac');
+        $hevcCmd = $builtHevc['command'];
+        $cvHevcIdx = array_search('-c:v', $hevcCmd, true);
+        $this->assertNotFalse($cvHevcIdx);
+        $this->assertEquals('copy', $hevcCmd[$cvHevcIdx + 1]);
+        $this->assertContains('-tag:v', $hevcCmd);
+        $this->assertContains('hvc1', $hevcCmd);
+        $this->assertStringContainsString('hvc1.1.6.L93.B0', $builtHevc['mime_type']);
+
+        $av1Request = Request::create('/api/stream/mse/movie/1', 'GET', ['cap_av1' => '1']);
+        $builtAv1 = $service->buildFfmpegCommand('movie.mkv', $av1Request, 'av1', 'aac');
+        $av1Cmd = $builtAv1['command'];
+        $cvAv1Idx = array_search('-c:v', $av1Cmd, true);
+        $this->assertNotFalse($cvAv1Idx);
+        $this->assertEquals('copy', $av1Cmd[$cvAv1Idx + 1]);
+        $this->assertStringContainsString('av01.0.04M.08', $builtAv1['mime_type']);
+
+        // Without cap_hevc capability, HEVC falls back to H.264 encode
+        $noCapRequest = Request::create('/api/stream/mse/movie/1', 'GET');
+        $builtNoCap = $service->buildFfmpegCommand('movie.mkv', $noCapRequest, 'hevc', 'aac');
+        $noCapCmd = $builtNoCap['command'];
+        $cvNoCapIdx = array_search('-c:v', $noCapCmd, true);
+        $this->assertNotFalse($cvNoCapIdx);
+        $this->assertNotEquals('copy', $noCapCmd[$cvNoCapIdx + 1]);
+        $this->assertStringContainsString('avc1.42e01e', $builtNoCap['mime_type']);
     }
 }

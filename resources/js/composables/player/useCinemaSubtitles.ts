@@ -29,6 +29,7 @@ export function useCinemaSubtitles(options?: UseCinemaSubtitlesOptions) {
     const activeCueText = ref<string>('');
     const isFetchingSubtitle = ref<boolean>(false);
     const isTranslatingSubtitle = ref<boolean>(false);
+    let lastKnownTime = 0;
 
     const subtitleFontSize = ref<'sm' | 'md' | 'lg' | 'xl'>(
         (localStorage.getItem('cinema_subtitle_size') as any) || 'md'
@@ -127,6 +128,7 @@ export function useCinemaSubtitles(options?: UseCinemaSubtitlesOptions) {
     };
 
     const updateActiveCue = (timeSec: number) => {
+        lastKnownTime = timeSec;
         if (selectedSubtitleId.value === 'off' || !parsedCues.value.length) {
             activeCueText.value = '';
             return;
@@ -155,6 +157,7 @@ export function useCinemaSubtitles(options?: UseCinemaSubtitlesOptions) {
             const res = await fetch(`/stream/subtitles/${subId}`);
             const content = await res.text();
             parsedCues.value = parseWebVTTContent(content);
+            updateActiveCue(lastKnownTime);
             const foundSub = availableSubtitles.value.find(s => String(s.id) === String(subId));
             if (foundSub?.language) {
                 try {
@@ -170,10 +173,12 @@ export function useCinemaSubtitles(options?: UseCinemaSubtitlesOptions) {
 
     const adjustSubtitleDelay = (delta: number) => {
         subtitleDelay.value = parseFloat((subtitleDelay.value + delta).toFixed(2));
+        updateActiveCue(lastKnownTime);
     };
 
     const resetSubtitleDelay = () => {
         subtitleDelay.value = 0;
+        updateActiveCue(lastKnownTime);
     };
 
     const findBestSubtitle = (tracks: SubtitleItem[]): SubtitleItem | null => {

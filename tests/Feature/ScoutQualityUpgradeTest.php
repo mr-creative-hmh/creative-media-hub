@@ -241,4 +241,80 @@ class ScoutQualityUpgradeTest extends TestCase
         $this->assertStringNotContainsString('HC', $cleanTorrents[0]['title']);
         $this->assertStringNotContainsString('CAM', $cleanTorrents[0]['title']);
     }
+
+    /**
+     * Test filename resolution overrides, series grouping, bitrate starvation, and Mr. Robot whitelist.
+     */
+    public function test_filename_tag_override_series_grouping_and_false_positive_whitelist(): void
+    {
+        $series = Series::create([
+            'title' => 'Mr. Robot',
+            'release_year' => 2015,
+        ]);
+
+        $season = Season::create([
+            'series_id' => $series->id,
+            'season_number' => 1,
+        ]);
+
+        // Should NOT trigger HC false positive for .tc / .hc style Mr Robot episode code
+        $mrRobotEp = Episode::create([
+            'series_id' => $series->id,
+            'season_id' => $season->id,
+            'episode_number' => 1,
+            'title' => 'eps1.0_hellofriend.mov',
+            'resolution' => '1080p Full HD',
+            'video_codec' => 'h264',
+            'audio_channels' => 6,
+            'file_path' => 'H:/Entertainment/Series/Mr. Robot/Season 1/Mr.Robot.S01E01.eps1.0.tc.1080p.mkv',
+        ]);
+
+        // Mismatched DB resolution '720p HD' with [480p] in filename must be overridden to 480p and grouped
+        $arcaneSeries = Series::create([
+            'title' => 'Arcane',
+            'release_year' => 2021,
+        ]);
+
+        $arcaneSeason = Season::create([
+            'series_id' => $arcaneSeries->id,
+            'season_number' => 1,
+        ]);
+
+        $mismatchedEp = Episode::create([
+            'series_id' => $arcaneSeries->id,
+            'season_id' => $arcaneSeason->id,
+            'episode_number' => 1,
+            'title' => 'Welcome to the Playground',
+            'resolution' => '720p HD',
+            'video_codec' => 'h264',
+            'file_size_bytes' => 150 * 1024 * 1024,
+            'file_path' => 'H:/Entertainment/Series/Arcane/Season 1/Arcane - S01E01 [480p].mp4',
+        ]);
+
+        // Bitrate-starved modern movie (500 MB for a 1080p movie)
+        $starvedMovie = MediaItem::create([
+            'title' => 'Starved Rip Film',
+            'release_year' => 2023,
+            'resolution' => '1080p Full HD',
+            'video_codec' => 'h264',
+            'duration_seconds' => 6000,
+            'file_size_bytes' => 450 * 1024 * 1024,
+            'audio_channels' => 2,
+            'file_path' => 'H:/Entertainment/Movies/Starved Rip Film (2023)/film.1080p.mkv',
+        ]);
+
+        /** @var QualityUpgradeAuditService $auditService */
+        $auditService = app(QualityUpgradeAuditService::class);
+        $lowRes = $auditService->getLowResolutionMedia(true);
+        $poorQuality = $auditService->getPoorQualityMedia(true);
+
+        $flaggedEpIds = collect($lowRes['episodes'])->pluck('local_id')->all();
+        $this->assertContains($mismatchedEp->id, $flaggedEpIds);
+        $this->assertNotEmpty($lowRes['series_groups']);
+
+        $poorMovieIds = collect($poorQuality['items'])->where('type', 'movie')->pluck('local_id')->all();
+        $poorEpisodeIds = collect($poorQuality['items'])->where('type', 'episode')->pluck('local_id')->all();
+        $this->assertContains($starvedMovie->id, $poorMovieIds);
+        $this->assertNotContains($mrRobotEp->id, $poorEpisodeIds);
+    }
 }

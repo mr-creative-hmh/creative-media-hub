@@ -108,13 +108,7 @@ class StreamRemuxService
         if ($isNativeH264 && $request->query('transcode') !== '1') {
             $videoArgs = ['-c:v', 'copy'];
         } else {
-            $videoArgs = [
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-tune', 'zerolatency',
-                '-crf', '22',
-                '-pix_fmt', 'yuv420p',
-            ];
+            $videoArgs = FfmpegLocatorService::getVideoEncodeArgs();
         }
 
         $cacheDir = storage_path('app/cache/media_streams');

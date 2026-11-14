@@ -3,12 +3,15 @@
 namespace App\Services\Media;
 
 use App\Models\AppSetting;
+use Illuminate\Support\Facades\Cache;
 
 class FfmpegLocatorService
 {
     protected static ?string $cachedFfmpegPath = null;
 
     protected static ?string $cachedFfprobePath = null;
+
+    protected static ?string $cachedH264Encoder = null;
 
     /**
      * Get the absolute path for FFmpeg.
@@ -19,12 +22,37 @@ class FfmpegLocatorService
             return self::$cachedFfmpegPath;
         }
 
+        try {
+            $cached = Cache::get('cmh_locator_ffmpeg_path');
+            if (is_string($cached) && $cached !== '' && ($cached === 'ffmpeg' || file_exists($cached))) {
+                return self::$cachedFfmpegPath = $cached;
+            }
+        } catch (\Throwable $e) {
+        }
+
+        $resolved = self::resolveFfmpegPath();
+
+        try {
+            if ($resolved) {
+                Cache::forever('cmh_locator_ffmpeg_path', $resolved);
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return self::$cachedFfmpegPath = $resolved;
+    }
+
+    /**
+     * Resolve FFmpeg path from database setting, known locations, or system PATH.
+     */
+    protected static function resolveFfmpegPath(): string
+    {
         // 1. Check database setting
         try {
             if (class_exists(AppSetting::class)) {
                 $custom = AppSetting::where('key', 'ffmpeg_path')->value('value');
                 if ($custom && file_exists($custom)) {
-                    return self::$cachedFfmpegPath = $custom;
+                    return $custom;
                 }
             }
         } catch (\Throwable $e) {
@@ -51,7 +79,7 @@ class FfmpegLocatorService
 
         foreach ($candidates as $cand) {
             if ($cand && file_exists($cand)) {
-                return self::$cachedFfmpegPath = $cand;
+                return $cand;
             }
         }
 
@@ -61,7 +89,7 @@ class FfmpegLocatorService
             if (is_dir($packagesDir)) {
                 $files = self::findFileRecursive($packagesDir, 'ffmpeg.exe');
                 if (! empty($files)) {
-                    return self::$cachedFfmpegPath = $files[0];
+                    return $files[0];
                 }
             }
         }
@@ -72,10 +100,10 @@ class FfmpegLocatorService
         $out = [];
         @exec($testCmd, $out, $code);
         if ($code === 0 && ! empty($out[0]) && trim($out[0]) !== '' && file_exists(trim($out[0]))) {
-            return self::$cachedFfmpegPath = trim($out[0]);
+            return trim($out[0]);
         }
 
-        return self::$cachedFfmpegPath = 'ffmpeg';
+        return 'ffmpeg';
     }
 
     /**
@@ -88,10 +116,35 @@ class FfmpegLocatorService
         }
 
         try {
+            $cached = Cache::get('cmh_locator_ffprobe_path');
+            if (is_string($cached) && $cached !== '' && ($cached === 'ffprobe' || file_exists($cached))) {
+                return self::$cachedFfprobePath = $cached;
+            }
+        } catch (\Throwable $e) {
+        }
+
+        $resolved = self::resolveFfprobePath();
+
+        try {
+            if ($resolved) {
+                Cache::forever('cmh_locator_ffprobe_path', $resolved);
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return self::$cachedFfprobePath = $resolved;
+    }
+
+    /**
+     * Resolve FFprobe path from database setting, sibling binary, or known locations.
+     */
+    protected static function resolveFfprobePath(): string
+    {
+        try {
             if (class_exists(AppSetting::class)) {
                 $custom = AppSetting::where('key', 'ffprobe_path')->value('value');
                 if ($custom && file_exists($custom)) {
-                    return self::$cachedFfprobePath = $custom;
+                    return $custom;
                 }
             }
         } catch (\Throwable $e) {
@@ -101,7 +154,7 @@ class FfmpegLocatorService
         if ($ffmpeg && $ffmpeg !== 'ffmpeg' && file_exists($ffmpeg)) {
             $ffprobe = str_replace('ffmpeg.exe', 'ffprobe.exe', $ffmpeg);
             if (file_exists($ffprobe)) {
-                return self::$cachedFfprobePath = $ffprobe;
+                return $ffprobe;
             }
         }
 
@@ -125,11 +178,11 @@ class FfmpegLocatorService
 
         foreach ($candidates as $cand) {
             if ($cand && file_exists($cand)) {
-                return self::$cachedFfprobePath = $cand;
+                return $cand;
             }
         }
 
-        return self::$cachedFfprobePath = 'ffprobe';
+        return 'ffprobe';
     }
 
     protected static function findFileRecursive(string $dir, string $filename): array
@@ -154,5 +207,92 @@ class FfmpegLocatorService
     public static function isAvailable(): bool
     {
         return self::getFfmpegPath() !== null;
+    }
+
+    /**
+     * Probe and persistently cache the fastest available H.264 encoder (NVENC -> QSV -> MediaFoundation -> libx264).
+     */
+    public static function getBestH264Encoder(): string
+    {
+        if (self::$cachedH264Encoder !== null) {
+            return self::$cachedH264Encoder;
+        }
+
+        $validEncoders = ['h264_nvenc', 'h264_qsv', 'h264_mf', 'libx264'];
+
+        try {
+            $cached = Cache::get('cmh_hw_h264_encoder');
+            if (is_string($cached) && in_array($cached, $validEncoders, true)) {
+                return self::$cachedH264Encoder = $cached;
+            }
+        } catch (\Throwable $e) {
+        }
+
+        $ffmpeg = self::getFfmpegPath();
+        $selected = 'libx264';
+
+        if ($ffmpeg) {
+            $isWin = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+            $nullDevice = $isWin ? 'NUL' : '/dev/null';
+            $escapedFfmpeg = escapeshellarg($ffmpeg);
+
+            foreach (['h264_nvenc', 'h264_qsv', 'h264_mf'] as $candidate) {
+                $cmd = "{$escapedFfmpeg} -hide_banner -loglevel error -f lavfi -i color=black:s=64x64:d=0.1 -c:v {$candidate} -f null {$nullDevice} 2>&1";
+                $out = [];
+                $code = 1;
+                @exec($cmd, $out, $code);
+                if ($code === 0) {
+                    $selected = $candidate;
+                    break;
+                }
+            }
+        }
+
+        try {
+            Cache::forever('cmh_hw_h264_encoder', $selected);
+        } catch (\Throwable $e) {
+        }
+
+        return self::$cachedH264Encoder = $selected;
+    }
+
+    /**
+     * Return low-latency FFmpeg encoding flags for the selected H.264 encoder.
+     *
+     * @return array<int, string>
+     */
+    public static function getVideoEncodeArgs(?string $encoder = null): array
+    {
+        $resolved = $encoder ?? self::getBestH264Encoder();
+
+        return match ($resolved) {
+            'h264_nvenc' => [
+                '-c:v', 'h264_nvenc',
+                '-preset', 'p1',
+                '-tune', 'll',
+                '-rc', 'vbr',
+                '-cq', '23',
+                '-pix_fmt', 'yuv420p',
+            ],
+            'h264_qsv' => [
+                '-c:v', 'h264_qsv',
+                '-preset', 'veryfast',
+                '-global_quality', '23',
+                '-pix_fmt', 'yuv420p',
+            ],
+            'h264_mf' => [
+                '-c:v', 'h264_mf',
+                '-rate_control', 'quality',
+                '-quality', '75',
+                '-pix_fmt', 'yuv420p',
+            ],
+            default => [
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',
+                '-tune', 'zerolatency',
+                '-crf', '22',
+                '-pix_fmt', 'yuv420p',
+            ],
+        };
     }
 }

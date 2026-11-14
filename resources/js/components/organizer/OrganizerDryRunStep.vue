@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
-    Filter, Search, CheckSquare, Square, Edit3, RotateCcw,
+    Search, CheckSquare, Square, Edit3, RotateCcw,
     CheckCircle2, AlertTriangle, XCircle, ArrowRight, ArrowLeft,
-    Film, Tv, HardDrive, Play, Sparkles
+    Play
 } from 'lucide-vue-next';
 import type { PlanItem } from '@/components/organizer/OrganizerItemCorrectionModal.vue';
 
 const props = defineProps<{
     planItems: PlanItem[];
-    actionType: 'move' | 'copy';
 }>();
 
 const emit = defineEmits<{
@@ -21,13 +20,17 @@ const emit = defineEmits<{
     (e: 'batch-edit', items: PlanItem[]): void;
 }>();
 
-const { t, isRTL } = useI18n();
+const { isRTL } = useI18n();
 
 const searchQuery = ref('');
 const statusFilter = ref<'all' | 'ready' | 'conflict' | 'warning' | 'skipped'>('all');
-const selectedRowIndices = ref<Set<number>>(new Set());
+const selectedPaths = ref<Set<string>>(new Set());
 const currentPage = ref(1);
 const rowsPerPage = ref(15);
+
+watch([statusFilter, searchQuery], () => {
+    currentPage.value = 1;
+});
 
 // Filtered and Searched Plan Items
 const filteredItems = computed(() => {
@@ -69,29 +72,33 @@ const paginatedItems = computed(() => {
     return filteredItems.value.slice(start, start + rowsPerPage.value);
 });
 
-// Selection helpers
+// Selection helpers keyed by source_path so selections hold across pagination & filters
 const isAllSelected = computed(() => {
-    return filteredItems.value.length > 0 && selectedRowIndices.value.size === filteredItems.value.length;
+    return filteredItems.value.length > 0 && filteredItems.value.every(i => selectedPaths.value.has(i.source_path));
 });
 
 const toggleSelectAll = () => {
+    const next = new Set(selectedPaths.value);
     if (isAllSelected.value) {
-        selectedRowIndices.value.clear();
+        filteredItems.value.forEach(i => next.delete(i.source_path));
     } else {
-        selectedRowIndices.value = new Set(filteredItems.value.map((_, idx) => idx));
+        filteredItems.value.forEach(i => next.add(i.source_path));
     }
+    selectedPaths.value = next;
 };
 
-const toggleSelectRow = (idx: number) => {
-    if (selectedRowIndices.value.has(idx)) {
-        selectedRowIndices.value.delete(idx);
+const toggleSelectRow = (sourcePath: string) => {
+    const next = new Set(selectedPaths.value);
+    if (next.has(sourcePath)) {
+        next.delete(sourcePath);
     } else {
-        selectedRowIndices.value.add(idx);
+        next.add(sourcePath);
     }
+    selectedPaths.value = next;
 };
 
 const handleBatchEdit = () => {
-    const selected = Array.from(selectedRowIndices.value).map(idx => filteredItems.value[idx]).filter(Boolean);
+    const selected = filteredItems.value.filter(i => selectedPaths.value.has(i.source_path));
     if (selected.length > 0) {
         emit('batch-edit', selected);
     }
@@ -175,26 +182,40 @@ const handleBatchEdit = () => {
                 >
                     {{ isRTL ? 'تعارضات' : 'Conflicts' }} ({{ conflictCount }})
                 </button>
+                <button
+                    @click="statusFilter = 'warning'"
+                    class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all border whitespace-nowrap"
+                    :class="statusFilter === 'warning' ? 'bg-orange-500/20 text-orange-300 border-orange-500/40 shadow-sm' : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/10'"
+                >
+                    {{ isRTL ? 'تحذيرات' : 'Warnings' }} ({{ warningCount }})
+                </button>
+                <button
+                    @click="statusFilter = 'skipped'"
+                    class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all border whitespace-nowrap"
+                    :class="statusFilter === 'skipped' ? 'bg-slate-500/20 text-slate-200 border-slate-500/40 shadow-sm' : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/10'"
+                >
+                    {{ isRTL ? 'مستبعدة' : 'Skipped' }} ({{ skippedCount }})
+                </button>
             </div>
 
             <!-- Search Bar & Batch Edit Trigger -->
             <div class="flex items-center gap-2">
                 <button
-                    v-if="selectedRowIndices.size > 0"
+                    v-if="selectedPaths.size > 0"
                     @click="handleBatchEdit"
                     class="px-3 py-2 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/40 font-bold text-xs hover:bg-purple-500/30 transition-all flex items-center gap-1.5"
                 >
                     <Edit3 class="w-3.5 h-3.5" />
-                    {{ isRTL ? `تعديل (${selectedRowIndices.size}) محدد` : `Batch Edit (${selectedRowIndices.size})` }}
+                    {{ isRTL ? `تعديل (${selectedPaths.size}) محدد` : `Batch Edit (${selectedPaths.size})` }}
                 </button>
 
                 <div class="relative w-full sm:w-64">
-                    <Search class="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 left-3" />
+                    <Search class="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3" />
                     <input
                         v-model="searchQuery"
                         type="text"
                         :placeholder="isRTL ? 'بحث بالاسم أو المسار...' : 'Search title or path...'"
-                        class="w-full pl-9 pr-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                        class="w-full ps-9 pe-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-cyan-400"
                     />
                 </div>
             </div>
@@ -221,15 +242,15 @@ const handleBatchEdit = () => {
                     </thead>
                     <tbody class="divide-y divide-white/5">
                         <tr
-                            v-for="(item, idx) in paginatedItems"
-                            :key="idx"
+                            v-for="item in paginatedItems"
+                            :key="item.source_path"
                             class="hover:bg-white/[0.02] transition-colors group"
-                            :class="{ 'bg-cyan-500/[0.04]': selectedRowIndices.has(idx) }"
+                            :class="{ 'bg-cyan-500/[0.04]': selectedPaths.has(item.source_path) }"
                         >
                             <!-- Select checkbox -->
                             <td class="p-3 text-center">
-                                <button @click="toggleSelectRow(idx)" class="text-slate-500 hover:text-white">
-                                    <CheckSquare v-if="selectedRowIndices.has(idx)" class="w-4 h-4 text-cyan-400" />
+                                <button @click="toggleSelectRow(item.source_path)" class="text-slate-500 hover:text-white">
+                                    <CheckSquare v-if="selectedPaths.has(item.source_path)" class="w-4 h-4 text-cyan-400" />
                                     <Square v-else class="w-4 h-4" />
                                 </button>
                             </td>
@@ -279,6 +300,13 @@ const handleBatchEdit = () => {
                                 >
                                     <AlertTriangle class="w-3 h-3" />
                                     Conflict
+                                </span>
+                                <span
+                                    v-else-if="item.status === 'warning'"
+                                    class="px-2 py-1 rounded-lg text-[10px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/30 inline-flex items-center gap-1"
+                                >
+                                    <AlertTriangle class="w-3 h-3" />
+                                    Warning
                                 </span>
                                 <span
                                     v-else

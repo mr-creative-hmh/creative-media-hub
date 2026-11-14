@@ -203,10 +203,15 @@ class MediaScoutController extends Controller
         $resolution = $request->query('resolution', 'all');
         $category = $request->query('category', 'all');
         $query = strtolower(trim($request->query('query', '')));
+        $forceRefresh = $request->boolean('refresh') || $request->query('refresh') === '1';
 
-        $lowRes = $this->qualityService->getLowResolutionMedia();
-        $poorQuality = $this->qualityService->getPoorQualityMedia();
-        $metrics = $this->qualityService->getUpgradeMetrics();
+        if ($forceRefresh) {
+            $this->qualityService->clearCache();
+        }
+
+        $lowRes = $this->qualityService->getLowResolutionMedia($forceRefresh);
+        $poorQuality = $this->qualityService->getPoorQualityMedia($forceRefresh);
+        $metrics = $this->qualityService->getUpgradeMetrics($forceRefresh);
 
         $items = [];
         if ($tab === 'low_resolution') {
@@ -697,6 +702,8 @@ class MediaScoutController extends Controller
             $parsed = $this->parserService->parse($filePath);
             $detectedType = $request->input('media_type') ?: ($parsed['type'] === 'series' ? 'series' : 'movie');
             $res = $this->acquisitionService->organizeAndScanFile($filePath, $detectedType, $metadata);
+            $this->qualityService->clearCache();
+            $this->gapService->clearCache();
 
             return response()->json($res);
         }
@@ -728,6 +735,9 @@ class MediaScoutController extends Controller
                 }
             }
         }
+
+        $this->qualityService->clearCache();
+        $this->gapService->clearCache();
 
         return response()->json([
             'success' => true,

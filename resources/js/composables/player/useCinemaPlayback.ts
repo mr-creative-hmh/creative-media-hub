@@ -1,5 +1,6 @@
 import { ref, computed, nextTick, type Ref } from 'vue';
 import { MseBackendClient } from '@/lib/player/webEngine/mseBackendClient';
+import { canDirectPlayMedia } from '@/lib/player/codecCapabilities';
 
 export interface UseCinemaPlaybackOptions {
     item: Ref<any>;
@@ -67,20 +68,9 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
             const savedMode = localStorage.getItem(`stream_mode_${type}_${targetId}`);
             if (savedMode === 'direct') return false;
             if (savedMode === 'remux') return true;
-        } catch {}
+        } catch { }
 
-        const path = (mediaItem?.file_path || '').toLowerCase();
-        const video = (mediaItem?.video_codec || mediaItem?.codec || '').toLowerCase();
-        const audio = (mediaItem?.audio_codec || '').toLowerCase();
-
-        const isUnsupportedContainer = path.endsWith('.avi') || path.endsWith('.ts') || path.endsWith('.m2ts') || path.endsWith('.wmv');
-        const isUnsupportedAudio = audio.includes('ac3') || audio.includes('ac-3') || audio.includes('eac3') || audio.includes('dts') || audio.includes('truehd') || audio.includes('flac');
-        const isUnsupportedVideo = video.includes('mpeg') || video.includes('xvid') || video.includes('divx') || video.includes('vc1') || video.includes('wmv');
-        const isMkvWithNonWebAudio = path.endsWith('.mkv') && (
-            !audio || (!audio.includes('aac') && !audio.includes('mp3') && !audio.includes('opus') && !audio.includes('vorbis'))
-        );
-
-        return isUnsupportedContainer || isUnsupportedAudio || isUnsupportedVideo || isMkvWithNonWebAudio;
+        return !canDirectPlayMedia(mediaItem);
     };
 
     const getInitialEngineMode = (): 'web' | 'remux' | 'direct' => {
@@ -91,7 +81,7 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
             if (savedEngine === 'web' || savedEngine === 'remux' || savedEngine === 'direct') {
                 return savedEngine;
             }
-        } catch {}
+        } catch { }
         return checkNeedsRemux(options.item.value) ? 'web' : 'direct';
     };
 
@@ -102,6 +92,7 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
     const isServerCached = ref(false);
     const cachedStreamUrl = ref('');
     const webEngineInstance = ref<MseBackendClient | null>(null);
+    const isSeekPending = ref(false);
 
     const destroyWebEngine = () => {
         if (webEngineInstance.value) {
@@ -126,17 +117,37 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
             onBuffering: (buffering) => {
                 isBuffering.value = buffering;
             },
+            onOffsetResolved: (actualStartSeconds) => {
+                remuxStartOffset.value = actualStartSeconds;
+                const raw = videoRef.value?.currentTime || 0;
+                currentTime.value = actualStartSeconds + raw;
+                if (options.onTimeUpdateCallback) {
+                    options.onTimeUpdateCallback(currentTime.value);
+                }
+            },
             onError: (err) => {
                 console.warn('[CinemaPlayback] MSE backend client error, falling back:', err);
             },
         });
 
         const startAt = pendingInitialSeek.value > 0 ? pendingInitialSeek.value : currentTime.value;
+        isRemuxStream.value = true;
+        remuxStartOffset.value = startAt;
+        currentTime.value = startAt;
+        if (pendingInitialSeek.value > 0) {
+            isSeekPending.value = true;
+            pendingInitialSeek.value = 0;
+        }
+
         const success = await engine.start(startAt);
+        isSeekPending.value = false;
         isBuffering.value = false;
 
         if (success) {
             webEngineInstance.value = engine;
+            if (videoRef.value && playbackRate.value !== 1.0) {
+                videoRef.value.playbackRate = playbackRate.value;
+            }
             return true;
         } else {
             console.warn('[CinemaPlayback] MseBackendClient start failed, smoothly falling back to server remux');
@@ -148,7 +159,8 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
             if (videoRef.value) {
                 videoRef.value.src = streamUrl.value;
                 videoRef.value.load();
-                videoRef.value.play().catch(() => {});
+                videoRef.value.playbackRate = playbackRate.value;
+                videoRef.value.play().catch(() => { });
             }
             return false;
         }
@@ -219,7 +231,7 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
     const togglePlay = () => {
         if (!videoRef.value) return;
         if (videoRef.value.paused) {
-            videoRef.value.play().catch(() => {});
+            videoRef.value.play().catch(() => { });
         } else {
             videoRef.value.pause();
         }
@@ -247,10 +259,10 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
         const el = playerContainerRef.value;
         if (!el) return;
         if (!document.fullscreenElement) {
-            el.requestFullscreen().catch(() => {});
+            el.requestFullscreen().catch(() => { });
             isFullscreen.value = true;
         } else {
-            document.exitFullscreen().catch(() => {});
+            document.exitFullscreen().catch(() => { });
             isFullscreen.value = false;
         }
     };
@@ -275,7 +287,7 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
             const targetId = activeItem.value?.watchable_id || activeItem.value?.id;
             localStorage.setItem(`stream_engine_${type}_${targetId}`, engineMode.value);
             localStorage.setItem(`stream_mode_${type}_${targetId}`, isRemuxStream.value ? 'remux' : 'direct');
-        } catch {}
+        } catch { }
 
         if (options.onToast) {
             const label = engineMode.value === 'web'
@@ -291,14 +303,14 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
                 if (videoRef.value) {
                     videoRef.value.src = streamUrl.value;
                     videoRef.value.load();
-                    videoRef.value.play().catch(() => {});
+                    videoRef.value.playbackRate = playbackRate.value;
+                    videoRef.value.play().catch(() => { });
                 }
             });
         }
     };
 
     let currentSeekToken = 0;
-    const isSeekPending = ref(false);
 
     const executeSeek = async (targetSecs: number) => {
         const clamped = Math.max(0, Math.min(duration.value || 3600, targetSecs));
@@ -309,14 +321,23 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
 
         if (engineMode.value === 'web' && webEngineInstance.value) {
             isBuffering.value = true;
+            isRemuxStream.value = true;
+            isSeekPending.value = true;
+            remuxStartOffset.value = clamped;
             try {
                 await webEngineInstance.value.seekTo(clamped);
-                if (videoRef.value && videoRef.value.paused) {
-                    videoRef.value.play().catch(() => {});
+                if (videoRef.value) {
+                    if (playbackRate.value !== 1.0) {
+                        videoRef.value.playbackRate = playbackRate.value;
+                    }
+                    if (videoRef.value.paused) {
+                        videoRef.value.play().catch(() => { });
+                    }
                 }
             } catch (e) {
                 console.warn('[CinemaPlayback] MseBackendClient seek error:', e);
             } finally {
+                isSeekPending.value = false;
                 isBuffering.value = false;
             }
             return;
@@ -338,7 +359,7 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
                             actualTarget = data.keyframe;
                         }
                     }
-                } catch (e) {}
+                } catch (e) { }
             }
 
             if (seekToken !== currentSeekToken) return;
@@ -350,14 +371,20 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
                 options.onTimeUpdateCallback(actualTarget);
             }
 
+            await nextTick();
+            if (seekToken !== currentSeekToken) return;
+
             if (videoRef.value) {
-                videoRef.value.currentTime = 0;
-                videoRef.value.play().catch(() => {});
+                videoRef.value.src = streamUrl.value;
+                videoRef.value.load();
+                videoRef.value.playbackRate = playbackRate.value;
+                videoRef.value.play().catch(() => { });
             }
         } else if (videoRef.value) {
             videoRef.value.currentTime = clamped;
+            videoRef.value.playbackRate = playbackRate.value;
             if (videoRef.value.paused) {
-                videoRef.value.play().catch(() => {});
+                videoRef.value.play().catch(() => { });
             }
         }
     };
@@ -409,13 +436,13 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
             isSeekPending.value = false;
         }
 
-        if (isRemuxStream.value && remuxStartOffset.value > 0) {
+        if ((isRemuxStream.value || engineMode.value === 'web') && remuxStartOffset.value > 0) {
             currentTime.value = remuxStartOffset.value + rawCurrent;
         } else {
             currentTime.value = rawCurrent;
         }
 
-        if (!isDurationLocked.value && !isRemuxStream.value) {
+        if (!isDurationLocked.value && !isRemuxStream.value && engineMode.value !== 'web') {
             const d = videoRef.value.duration;
             if (d && isFinite(d) && !isNaN(d) && d > 0) {
                 duration.value = d;
@@ -450,14 +477,16 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
         updateLiveResolution();
         if (!videoRef.value) return;
 
-        if (!isDurationLocked.value && !isRemuxStream.value) {
+        videoRef.value.playbackRate = playbackRate.value;
+
+        if (!isDurationLocked.value && !isRemuxStream.value && engineMode.value !== 'web') {
             const d = videoRef.value.duration;
             if (d && isFinite(d) && !isNaN(d) && d > 0) {
                 duration.value = d;
             }
         }
 
-        if (pendingInitialSeek.value > 0 && !isRemuxStream.value) {
+        if (pendingInitialSeek.value > 0 && !isRemuxStream.value && engineMode.value !== 'web') {
             videoRef.value.currentTime = pendingInitialSeek.value;
         }
 
@@ -490,7 +519,7 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
                     is_completed: completed,
                 }),
             });
-        } catch (e) {}
+        } catch (e) { }
     };
 
     const formatTime = (seconds: number) => {

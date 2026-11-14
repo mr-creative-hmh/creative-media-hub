@@ -82,7 +82,6 @@ const strategies: OrganizerStrategy[] = [
 const selectedStrategyId = ref('cmh');
 const movieTemplate = ref(props.defaultMovieTemplate || strategies[0].movie);
 const seriesTemplate = ref(props.defaultSeriesTemplate || strategies[0].series);
-const actionType = ref<'move' | 'copy'>('move');
 const conflictStrategy = ref<'skip' | 'overwrite' | 'rename' | 'keep_higher_quality'>('skip');
 const omitEpisodeTitle = ref(false);
 const fetchEpisodeTitles = ref(true);
@@ -92,6 +91,9 @@ const titleLanguage = ref<'original' | 'english' | 'arabic'>('original');
 const {
     startPlanJob,
     fetchPlanStatus,
+    pausePlanJob,
+    resumePlanJob,
+    cancelPlanJob,
     planJobStatus,
     isAnalyzing,
 } = useOrganizerPlan();
@@ -432,7 +434,6 @@ onUnmounted(() => {
                 v-model:selected-strategy-id="selectedStrategyId"
                 v-model:movie-template="movieTemplate"
                 v-model:series-template="seriesTemplate"
-                v-model:action-type="actionType"
                 v-model:conflict-strategy="conflictStrategy"
                 v-model:title-language="titleLanguage"
                 :strategies="strategies"
@@ -440,16 +441,19 @@ onUnmounted(() => {
                 :fetch-episode-titles="fetchEpisodeTitles"
                 :watcher="props.watcherStatus"
                 :is-generating-plan="isAnalyzing"
+                :plan-job-status="planJobStatus"
                 @toggle-omit-episode-title="omitEpisodeTitle = !omitEpisodeTitle"
                 @toggle-fetch-episode-titles="fetchEpisodeTitles = !fetchEpisodeTitles"
                 @start-dry-run="startDryRun"
+                @pause-plan="pausePlanJob"
+                @resume-plan="resumePlanJob"
+                @cancel-plan="cancelPlanJob"
             />
 
             <!-- Step 2: Dry Run Review & Manual Corrections -->
             <OrganizerDryRunStep
                 v-else-if="step === 2"
                 :plan-items="localPlanItems"
-                :action-type="actionType"
                 @back="step = 1"
                 @execute="openExecutionConfirmation"
                 @edit-item="openEditModal"

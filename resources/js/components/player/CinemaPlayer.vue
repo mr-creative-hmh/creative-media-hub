@@ -278,6 +278,7 @@ const handleVideoEnded = () => {
 // Lifecycle
 let progressInterval: any = null;
 onMounted(() => {
+    subtitles.updateActiveCue(playback.currentTime.value);
     const type = playback.isEpisode.value ? 'episode' : 'movie';
     const id = playback.activeItem.value?.watchable_id || playback.activeItem.value?.id;
     if (id) {

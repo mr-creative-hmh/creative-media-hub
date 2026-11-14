@@ -86,35 +86,42 @@ watch(() => props.initialPoorQuality, (val) => { if (val) poorQualityData.value 
 watch(() => props.initialMetrics, (val) => { if (val) metrics.value = val; }, { immediate: true });
 watch(() => props.initialUpgradeMetrics, (val) => { if (val) upgradeMetrics.value = val; }, { immediate: true });
 
-// Upgrade Tab Specific Filters
+// Upgrade Tab Specific Filters & View State
 const lowResMediaType = ref<'all' | 'movie' | 'episode'>('all');
 const lowResResolution = ref<string>('all');
+const lowResEpisodeView = ref<'grouped' | 'individual'>('grouped');
+const expandedLowResSeries = ref<Record<string, boolean>>({});
+const individualEpisodesLimit = ref(60);
 const poorQualityCategory = ref<string>('all');
 const poorQualityMediaType = ref<'all' | 'movie' | 'episode'>('all');
 
-const activeTab = ref<'all' | 'discover' | 'series' | 'collections' | 'episodes' | 'movies' | 'low_resolution' | 'poor_quality'>('all');
+const activeTab = ref<'all' | 'discover' | 'series' | 'collections' | 'episodes' | 'movies' | 'all_upgrades' | 'low_resolution' | 'poor_quality'>('all');
 
 // Primary Navigation Mode: 'gaps' | 'upgrades' | 'discover'
 const navMode = computed<'gaps' | 'upgrades' | 'discover'>({
     get: () => {
         if (activeTab.value === 'discover') return 'discover';
-        if (activeTab.value === 'low_resolution' || activeTab.value === 'poor_quality') return 'upgrades';
+        if (activeTab.value === 'all_upgrades' || activeTab.value === 'low_resolution' || activeTab.value === 'poor_quality') return 'upgrades';
         return 'gaps';
     },
     set: (mode: 'gaps' | 'upgrades' | 'discover') => {
         if (mode === 'discover') {
             activeTab.value = 'discover';
         } else if (mode === 'upgrades') {
-            if (activeTab.value !== 'low_resolution' && activeTab.value !== 'poor_quality') {
-                activeTab.value = 'low_resolution';
+            if (activeTab.value !== 'all_upgrades' && activeTab.value !== 'low_resolution' && activeTab.value !== 'poor_quality') {
+                activeTab.value = 'all_upgrades';
             }
         } else {
-            if (activeTab.value === 'discover' || activeTab.value === 'low_resolution' || activeTab.value === 'poor_quality') {
+            if (activeTab.value === 'discover' || activeTab.value === 'all_upgrades' || activeTab.value === 'low_resolution' || activeTab.value === 'poor_quality') {
                 activeTab.value = 'all';
             }
         }
     }
 });
+
+const toggleLowResSeries = (id: string) => {
+    expandedLowResSeries.value[id] = !expandedLowResSeries.value[id];
+};
 
 const searchQuery = ref('');
 const loading = ref(false);
@@ -329,6 +336,33 @@ const openUpgradeTorrentModal = (item: any, category: 'low_resolution' | 'poor_q
     openTorrentModal(gapPayload);
 };
 
+const openSeriesUpgradeTorrentModal = (group: any) => {
+    const gapPayload = {
+        id: `upgrade_series_${group.series_id || group.id}`,
+        type: 'series',
+        title: group.series_title,
+        series_title: group.series_title,
+        series_title_ar: group.series_title_ar,
+        release_year: group.release_year,
+        year: group.release_year,
+        poster_path: group.poster_path,
+        tmdb_id: group.tmdb_id,
+        imdb_id: group.imdb_id || null,
+        season_number: group.episodes?.[0]?.season_number || 1,
+        upgrade_mode: true,
+        clean_only: true,
+        upgrade_category: 'low_resolution',
+    };
+    openTorrentModal(gapPayload);
+};
+
+const formatBytesShort = (bytes: number): string => {
+    if (!bytes || bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    return `${(bytes / Math.pow(1024, i)).toFixed(i >= 3 ? 2 : 1)} ${units[i]}`;
+};
+
 const fetchUpgrades = async (forceRefresh = false) => {
     upgradesLoading.value = true;
     try {
@@ -385,6 +419,47 @@ const filteredLowResEpisodes = computed(() => {
     return list;
 });
 
+const visibleLowResEpisodes = computed(() => {
+    return filteredLowResEpisodes.value.slice(0, individualEpisodesLimit.value);
+});
+
+const filteredLowResSeriesGroups = computed(() => {
+    const groupsMap: Record<string, any> = {};
+    for (const ep of filteredLowResEpisodes.value) {
+        const key = ep.series_id ? `series_${ep.series_id}` : `title_${ep.series_title || 'TV Series'}`;
+        if (!groupsMap[key]) {
+            groupsMap[key] = {
+                id: key,
+                series_id: ep.series_id,
+                series_title: ep.series_title || 'TV Series',
+                series_title_ar: ep.series_title_ar,
+                poster_path: ep.series_poster_path || ep.poster_path,
+                release_year: ep.release_year,
+                tmdb_id: ep.tmdb_id,
+                imdb_id: ep.imdb_id,
+                episodes_count: 0,
+                resolutions: [] as string[],
+                total_size_bytes: 0,
+                episodes: [] as any[],
+            };
+        }
+        groupsMap[key].episodes_count++;
+        groupsMap[key].total_size_bytes += Number(ep.file_size_bytes || 0);
+        const res = ep.current_resolution || ep.resolution || 'SD';
+        if (!groupsMap[key].resolutions.includes(res)) {
+            groupsMap[key].resolutions.push(res);
+        }
+        groupsMap[key].episodes.push(ep);
+    }
+
+    return Object.values(groupsMap)
+        .map((g: any) => ({
+            ...g,
+            total_size_human: formatBytesShort(g.total_size_bytes),
+        }))
+        .sort((a: any, b: any) => b.episodes_count - a.episodes_count);
+});
+
 const filteredPoorQualityItems = computed(() => {
     let list = poorQualityData.value.items || [];
     if (searchQuery.value) {
@@ -421,14 +496,14 @@ watch(searchQuery, () => {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
         fetchGaps();
-        if (activeTab.value === 'low_resolution' || activeTab.value === 'poor_quality') {
+        if (activeTab.value === 'all_upgrades' || activeTab.value === 'low_resolution' || activeTab.value === 'poor_quality') {
             fetchUpgrades();
         }
     }, 300);
 });
 
 watch(activeTab, (tab) => {
-    if ((tab === 'low_resolution' || tab === 'poor_quality') && (!lowResData.value.movies?.length && !poorQualityData.value.items?.length)) {
+    if ((tab === 'all_upgrades' || tab === 'low_resolution' || tab === 'poor_quality') && (!lowResData.value.movies?.length && !poorQualityData.value.items?.length)) {
         fetchUpgrades();
     }
 });
@@ -777,18 +852,18 @@ onMounted(() => {
                 <!-- B. Quality Upgrades Sub-Tabs -->
                 <div v-if="navMode === 'upgrades'" class="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                     <button
-                        @click="activeTab = 'low_resolution'"
+                        @click="activeTab = 'all_upgrades'"
                         :class="[
                             'px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer border',
-                            activeTab === 'low_resolution'
-                                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20 font-black'
-                                : 'text-amber-400 hover:text-white bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20'
+                            activeTab === 'all_upgrades'
+                                ? 'bg-gradient-to-r from-rose-500 to-amber-500 text-white border-amber-400/60 shadow-md shadow-amber-500/20 font-black'
+                                : 'text-slate-300 hover:text-white bg-white/5 border-white/10 hover:bg-white/10'
                         ]"
                     >
-                        <ArrowDownUp class="w-3.5 h-3.5" />
-                        <span>{{ isRTL ? 'ترقية الجودات الضعيفة (<720p)' : 'Low Resolution (<720p)' }}</span>
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-black" :class="activeTab === 'low_resolution' ? 'bg-black/20 text-slate-950' : 'bg-amber-500/20 text-amber-300'">
-                            {{ lowResData.total_count || 0 }}
+                        <Flame class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'كافة ترقيات الجودة والأعطال' : 'All Quality Upgrades' }}</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-black" :class="activeTab === 'all_upgrades' ? 'bg-black/30 text-white' : 'bg-white/10 text-slate-300'">
+                            {{ (poorQualityData.total_count || 0) + (lowResData.total_count || 0) }}
                         </span>
                     </button>
 
@@ -802,9 +877,25 @@ onMounted(() => {
                         ]"
                     >
                         <AlertTriangle class="w-3.5 h-3.5" />
-                        <span>{{ isRTL ? 'استبدال نسخ السينما والترجمة المدمجة (CAM & HC)' : 'CAM & Hardcoded Subs' }}</span>
+                        <span>{{ isRTL ? 'نسخ السينما والترجمة المدمجة (CAM & HC)' : 'CAM, HC & Forensic Rips' }}</span>
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-black" :class="activeTab === 'poor_quality' ? 'bg-black/30 text-white' : 'bg-rose-500/20 text-rose-300'">
                             {{ poorQualityData.total_count || 0 }}
+                        </span>
+                    </button>
+
+                    <button
+                        @click="activeTab = 'low_resolution'"
+                        :class="[
+                            'px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer border',
+                            activeTab === 'low_resolution'
+                                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20 font-black'
+                                : 'text-amber-400 hover:text-white bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20'
+                        ]"
+                    >
+                        <ArrowDownUp class="w-3.5 h-3.5" />
+                        <span>{{ isRTL ? 'ترقية الجودات الضعيفة (<720p)' : 'Low Resolution (<720p)' }}</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-black" :class="activeTab === 'low_resolution' ? 'bg-black/20 text-slate-950' : 'bg-amber-500/20 text-amber-300'">
+                            {{ lowResData.total_count || 0 }}
                         </span>
                     </button>
                 </div>
@@ -1031,12 +1122,32 @@ onMounted(() => {
                 </div>
             </div>
 
-            <!-- Loading Spinner for Gap Audits & Quality Upgrades -->
-            <div v-else-if="loading || (upgradesLoading && (activeTab === 'low_resolution' || activeTab === 'poor_quality'))" class="py-16 text-center space-y-3">
-                <Loader2 class="w-8 h-8 text-cyan-400 animate-spin mx-auto" />
-                <p class="text-xs text-slate-400 font-medium">
-                    {{ isRTL ? 'جارٍ فحص وتحليل الوسائط وجودات الملفات...' : 'Auditing media library and analyzing video quality...' }}
-                </p>
+            <!-- Loading Skeletons & Spinner for Gap Audits & Quality Upgrades -->
+            <div v-else-if="loading || (upgradesLoading && navMode === 'upgrades')" class="space-y-6 py-6">
+                <div class="flex items-center justify-center gap-3 text-center">
+                    <Loader2 class="w-6 h-6 text-cyan-400 animate-spin" />
+                    <p class="text-xs text-slate-300 font-semibold">
+                        {{ isRTL ? 'جارٍ فحص وتحليل الوسائط وجودات الملفات...' : 'Auditing media library and running deep forensic checks...' }}
+                    </p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div
+                        v-for="n in 6"
+                        :key="n"
+                        class="p-5 rounded-3xl glass-panel border border-white/10 bg-slate-900/40 animate-pulse space-y-4"
+                    >
+                        <div class="flex items-center gap-3">
+                            <div class="w-14 h-20 rounded-xl bg-white/10 shrink-0"></div>
+                            <div class="flex-1 space-y-2">
+                                <div class="h-4 w-3/4 rounded bg-white/10"></div>
+                                <div class="h-3 w-1/2 rounded bg-white/5"></div>
+                                <div class="h-3 w-1/3 rounded bg-white/5"></div>
+                            </div>
+                        </div>
+                        <div class="h-12 rounded-xl bg-white/5"></div>
+                        <div class="h-9 rounded-xl bg-white/10"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- MAIN CONTENT SECTIONS (LIBRARY GAPS) -->
@@ -1445,8 +1556,230 @@ onMounted(() => {
                     </div>
                 </div>
 
-                <!-- SECTION 5: LOW RESOLUTION (<720p) UPGRADES -->
-                <div v-if="activeTab === 'low_resolution'" class="space-y-6">
+                <!-- SECTION 5 & 6: QUALITY UPGRADES WORKSPACE (FORENSIC ALERTS FIRST, THEN LOW-RES) -->
+                <div v-if="activeTab === 'all_upgrades' || activeTab === 'poor_quality'" class="space-y-6">
+                    <!-- Forensic CAM / HC Header Card -->
+                    <div class="glass-panel border border-rose-500/30 rounded-3xl p-6 bg-gradient-to-r from-rose-950/40 via-slate-900/60 to-slate-900/80 space-y-4">
+                        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                            <div class="flex items-start gap-4">
+                                <div class="p-3.5 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
+                                    <ShieldAlert class="w-6 h-6" />
+                                </div>
+                                <div class="space-y-1">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <h2 class="text-xl font-black text-white tracking-tight">
+                                            {{ isRTL ? 'تنبيهات الجودة الجنائية: نسخ CAM والترجمات المدمجة (HC)' : 'Forensic Alerts: CAM & Hardcoded Subs (HC)' }}
+                                        </h2>
+                                        <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                            {{ filteredPoorQualityItems.length }} {{ isRTL ? 'نسخة رديئة مرصودة' : 'flagged releases' }}
+                                        </span>
+                                    </div>
+                                    <p class="text-xs text-slate-300 leading-relaxed max-w-3xl">
+                                        {{ isRTL 
+                                            ? 'نظام تدقيق جنائي عميق يرصد التسجيلات السينمائية (CAM / Telesync) والنسخ التي تحتوي على ترجمات أجنبية مطبوعة داخل الفيديو (HC / Korean / Chinese / Arabic) أو شعارات مواقع القرصنة وضغط البث المنخفض وصوت Mono، حتى لو أعيدت تسمية الملفات. استبدلها بنقرة واحدة بنسخ 1080p/4K نقية.' 
+                                            : 'Multi-layer forensic engine detecting cinema recordings (CAM/TS), burned-in foreign subtitles (KORSUB, HC, watermarks), anomalous mono audio, and severe bitrate starvation—even on renamed library files. Use 1-click replacement for pristine WEB-DL/BluRay copies.' 
+                                        }}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <button
+                                @click="fetchUpgrades(true)"
+                                :disabled="upgradesLoading"
+                                class="px-4 py-2 rounded-xl text-xs font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 flex items-center gap-2 cursor-pointer shrink-0 disabled:opacity-50"
+                            >
+                                <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': upgradesLoading }" />
+                                <span>{{ isRTL ? 'إعادة الفحص الجنائي' : 'Re-run Forensics' }}</span>
+                            </button>
+                        </div>
+
+                        <!-- Filter Sub-bar -->
+                        <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/10">
+                            <!-- Issue Category Filter -->
+                            <div class="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10 flex-wrap">
+                                <button
+                                    @click="poorQualityCategory = 'all'"
+                                    :class="[
+                                        'px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer',
+                                        poorQualityCategory === 'all' ? 'bg-rose-500 text-white font-black shadow' : 'text-slate-400 hover:text-white'
+                                    ]"
+                                >
+                                    {{ isRTL ? 'الكل' : 'All Issues' }} ({{ poorQualityData.total_count || 0 }})
+                                </button>
+                                <button
+                                    @click="poorQualityCategory = 'hardcoded_subs'"
+                                    :class="[
+                                        'px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer',
+                                        poorQualityCategory === 'hardcoded_subs' ? 'bg-rose-500 text-white font-black shadow' : 'text-slate-400 hover:text-white'
+                                    ]"
+                                >
+                                    <Subtitles class="w-3.5 h-3.5 inline mr-1" />
+                                    {{ isRTL ? 'ترجمات مدمجة (HC)' : 'Hardcoded Subs (HC)' }} ({{ poorQualityData.by_category?.hardcoded_subs || 0 }})
+                                </button>
+                                <button
+                                    @click="poorQualityCategory = 'cam_recorded'"
+                                    :class="[
+                                        'px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer',
+                                        poorQualityCategory === 'cam_recorded' ? 'bg-rose-500 text-white font-black shadow' : 'text-slate-400 hover:text-white'
+                                    ]"
+                                >
+                                    🎥 {{ isRTL ? 'تسجيلات سينما (CAM)' : 'CAM Recordings' }} ({{ poorQualityData.by_category?.cam_recorded || 0 }})
+                                </button>
+                                <button
+                                    @click="poorQualityCategory = 'watermarked_or_low_audio'"
+                                    :class="[
+                                        'px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer',
+                                        poorQualityCategory === 'watermarked_or_low_audio' ? 'bg-rose-500 text-white font-black shadow' : 'text-slate-400 hover:text-white'
+                                    ]"
+                                >
+                                    <Volume2 class="w-3.5 h-3.5 inline mr-1" />
+                                    {{ isRTL ? 'شعارات / بيت-ريت / مونو' : 'Watermark / Bitrate / Mono' }} ({{ poorQualityData.by_category?.watermarked_or_low_audio || 0 }})
+                                </button>
+                            </div>
+
+                            <!-- Media Type Filter -->
+                            <div class="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10">
+                                <button
+                                    @click="poorQualityMediaType = 'all'"
+                                    :class="[
+                                        'px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer',
+                                        poorQualityMediaType === 'all' ? 'bg-rose-500/30 text-rose-300 font-bold border border-rose-500/40' : 'text-slate-400 hover:text-white'
+                                    ]"
+                                >
+                                    {{ isRTL ? 'الكل' : 'All' }}
+                                </button>
+                                <button
+                                    @click="poorQualityMediaType = 'movie'"
+                                    :class="[
+                                        'px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer',
+                                        poorQualityMediaType === 'movie' ? 'bg-rose-500/30 text-rose-300 font-bold border border-rose-500/40' : 'text-slate-400 hover:text-white'
+                                    ]"
+                                >
+                                    🎬 {{ isRTL ? 'أفلام' : 'Movies' }}
+                                </button>
+                                <button
+                                    @click="poorQualityMediaType = 'episode'"
+                                    :class="[
+                                        'px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer',
+                                        poorQualityMediaType === 'episode' ? 'bg-rose-500/30 text-rose-300 font-bold border border-rose-500/40' : 'text-slate-400 hover:text-white'
+                                    ]"
+                                >
+                                    📺 {{ isRTL ? 'مسلسلات' : 'Series' }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Forensic Items Grid -->
+                    <div v-if="filteredPoorQualityItems.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div
+                            v-for="it in filteredPoorQualityItems"
+                            :key="it.id"
+                            class="p-5 rounded-3xl glass-panel border border-rose-500/25 hover:border-rose-500/60 bg-slate-900/60 transition-all flex flex-col justify-between gap-4 group hover:shadow-xl hover:shadow-rose-500/10"
+                        >
+                            <div class="space-y-3">
+                                <!-- Top Row: Issue Badges -->
+                                <div class="flex items-center justify-between gap-2 flex-wrap">
+                                    <span
+                                        class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 border"
+                                        :class="it.flag_category === 'cam_recorded' ? 'bg-red-500/20 text-red-300 border-red-500/30' : (it.flag_category === 'hardcoded_subs' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/30')"
+                                    >
+                                        <AlertCircle class="w-3 h-3" />
+                                        <span>{{ isRTL && it.badge_ar ? it.badge_ar : it.badge_en }}</span>
+                                    </span>
+
+                                    <span
+                                        class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase"
+                                        :class="it.severity === 'high' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'"
+                                    >
+                                        {{ it.severity }} {{ isRTL ? 'أهمية' : 'priority' }}
+                                    </span>
+                                </div>
+
+                                <!-- Media Info Row -->
+                                <div class="flex items-start gap-3.5">
+                                    <div class="relative shrink-0">
+                                        <img
+                                            v-if="it.poster_path"
+                                            :src="it.poster_path"
+                                            :alt="it.title"
+                                            class="w-14 h-20 object-cover rounded-xl border border-white/10 shadow-md"
+                                            loading="lazy"
+                                            @error="(e: any) => (e.target.style.display = 'none')"
+                                        />
+                                        <div v-else class="w-14 h-20 rounded-xl bg-slate-950 border border-white/10 flex items-center justify-center text-slate-600">
+                                            <Film v-if="it.type === 'movie'" class="w-6 h-6" />
+                                            <Tv v-else class="w-6 h-6" />
+                                        </div>
+                                        <span
+                                            v-if="it.current_resolution"
+                                            class="absolute -bottom-1.5 -right-1.5 px-1.5 py-0.2 rounded text-[9px] font-black bg-rose-600 text-white shadow border border-white/10"
+                                        >
+                                            {{ it.current_resolution }}
+                                        </span>
+                                    </div>
+
+                                    <div class="space-y-1 min-w-0 flex-1">
+                                        <h4 class="text-sm font-black text-white truncate" :title="it.title">
+                                            {{ it.title }}
+                                        </h4>
+                                        <p v-if="it.series_title && it.type === 'episode'" class="text-xs text-purple-300 font-semibold truncate">
+                                            {{ it.series_title }}
+                                        </p>
+                                        <div class="flex items-center gap-1.5 text-[11px] text-slate-400 flex-wrap">
+                                            <span v-if="it.release_year">{{ it.release_year }}</span>
+                                            <span v-if="it.release_year">•</span>
+                                            <span class="text-rose-300 font-semibold">{{ it.current_resolution }}</span>
+                                            <span v-if="it.file_size_human">•</span>
+                                            <span v-if="it.file_size_human">{{ it.file_size_human }}</span>
+                                            <span v-if="it.video_codec && it.video_codec !== 'Unknown'" class="px-1.5 py-0.2 rounded bg-white/5 font-mono text-[10px] text-slate-300 border border-white/10">
+                                                {{ it.video_codec }}
+                                            </span>
+                                        </div>
+                                        <p v-if="it.file_path" class="text-[10px] text-slate-500 font-mono truncate" :title="it.file_path">
+                                            {{ it.file_path }}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Forensic Evidence Box -->
+                                <div class="p-2.5 rounded-xl bg-black/50 border border-white/10 space-y-1 font-mono text-[11px]">
+                                    <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                                        <Eye class="w-3 h-3 text-rose-400" />
+                                        <span>{{ isRTL ? 'دليل الفحص والتحليل:' : 'Forensic Evidence:' }}</span>
+                                    </div>
+                                    <p class="text-slate-200 leading-snug text-xs break-words">
+                                        {{ it.evidence }}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Action Button -->
+                            <button
+                                @click="openUpgradeTorrentModal(it, 'poor_quality')"
+                                class="w-full py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-400 hover:to-red-500 text-white shadow-lg shadow-rose-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer mt-1"
+                                :title="isRTL ? 'البحث عن نسخة نقية واستبعاد أي ترجمة مدمجة' : 'Find clean 1080p/4K WEB-DL or BluRay release'"
+                            >
+                                <ShieldCheck class="w-4 h-4 text-white" />
+                                <span>{{ isRTL ? 'استبدال بنسخة نقية (WEB-DL / BluRay)' : 'Find Clean Replacement' }}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Empty State (Only in dedicated poor_quality tab or when all_upgrades has nothing) -->
+                    <div v-else-if="activeTab === 'poor_quality'" class="text-center py-16 px-4 rounded-3xl glass-panel border border-emerald-500/20 bg-emerald-950/10 space-y-3">
+                        <ShieldCheck class="w-12 h-12 text-emerald-400 mx-auto" />
+                        <h3 class="text-lg font-black text-white">
+                            {{ isRTL ? 'مكتبتك نظيفة وخالية من نسخ CAM والترجمات المدمجة!' : 'Pristine Library! No CAM or Hardcoded Subs Detected' }}
+                        </h3>
+                        <p class="text-xs text-slate-400 max-w-md mx-auto">
+                            {{ isRTL ? 'تم فحص وسائط مكتبتك المنظمة، ولم يتم العثور على أي تسجيلات سينمائية رديئة أو ترجمات كورية/صينية مطبوعة.' : 'All audited files in your organized media folders are confirmed clean with proper audio tracks and no burned-in foreign subtitles.' }}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- LOW RESOLUTION (<720p) UPGRADES -->
+                <div v-if="activeTab === 'all_upgrades' || activeTab === 'low_resolution'" class="space-y-6">
                     <!-- Header Card -->
                     <div class="glass-panel border border-amber-500/30 rounded-3xl p-6 bg-gradient-to-r from-amber-950/40 via-slate-900/60 to-slate-900/80 space-y-4">
                         <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -1465,8 +1798,8 @@ onMounted(() => {
                                     </div>
                                     <p class="text-xs text-slate-300 leading-relaxed max-w-3xl">
                                         {{ isRTL 
-                                            ? 'يعرض فقط الملفات القديمة أو الضعيفة في مكتبتك ذات الدقة الأقل من 720p (مثل 480p SD، 360p، 576p SD). جودات 720p و 1080p و 4K مستثناة تماماً. يمكنك بنقرة واحدة استبدالها بنسخ نقية 1080p أو 4K.' 
-                                            : 'Strictly audits media in your library below 720p (480p SD, 360p, 576p SD, Unknown). Standard 720p, 1080p, and 4K media are excluded. Use 1-click upgrade to fetch pristine 1080p/4K releases.' 
+                                            ? 'يعرض فقط الملفات القديمة أو الضعيفة في مكتبتك ذات الدقة الأقل من 720p (مثل 480p SD، 360p، 576p SD). جودات 720p و 1080p و 4K مستثناة تماماً. يمكنك ترقية المسلسلات بالكامل أو الحلقات فردياً بنقرة واحدة.' 
+                                            : 'Strictly audits media below 720p (480p SD, 360p, 576p SD, Unknown) using both probed height and filename tags. Standard 720p/1080p/4K files are excluded. Upgrade full seasons or individual items in one click.' 
                                         }}
                                     </p>
                                 </div>
@@ -1549,7 +1882,7 @@ onMounted(() => {
                                 :key="m.id"
                                 class="p-4 rounded-2xl glass-panel border border-amber-500/20 hover:border-amber-500/50 bg-slate-900/50 transition-all flex items-center justify-between gap-4 group hover:shadow-lg hover:shadow-amber-500/5"
                             >
-                                <div class="flex items-center gap-3.5 min-w-0">
+                                <div class="flex items-center gap-3.5 min-w-0 flex-1">
                                     <div class="relative shrink-0">
                                         <img
                                             v-if="m.poster_path"
@@ -1567,17 +1900,20 @@ onMounted(() => {
                                         </span>
                                     </div>
 
-                                    <div class="space-y-1 min-w-0">
+                                    <div class="space-y-1 min-w-0 flex-1">
                                         <h4 class="text-sm font-bold text-white truncate" :title="m.title">
                                             {{ isRTL && m.title_ar ? m.title_ar : m.title }}
                                         </h4>
                                         <div class="flex items-center gap-2 text-xs text-slate-400 flex-wrap">
                                             <span v-if="m.release_year">{{ m.release_year }}</span>
-                                            <span>•</span>
+                                            <span v-if="m.release_year">•</span>
                                             <span class="text-amber-300 font-semibold">{{ m.file_size_human }}</span>
-                                            <span v-if="m.video_codec !== 'Unknown'">•</span>
-                                            <span v-if="m.video_codec !== 'Unknown'" class="font-mono text-[10px]">{{ m.video_codec }}</span>
+                                            <span v-if="m.video_codec && m.video_codec !== 'Unknown'">•</span>
+                                            <span v-if="m.video_codec && m.video_codec !== 'Unknown'" class="font-mono text-[10px]">{{ m.video_codec }}</span>
                                         </div>
+                                        <p v-if="m.file_path" class="text-[10px] text-slate-500 font-mono truncate" :title="m.file_path">
+                                            {{ m.file_path }}
+                                        </p>
                                         <div class="flex items-center gap-1.5 pt-0.5">
                                             <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
                                                 {{ isRTL ? 'الترقية المقترحة: 1080p BluRay' : 'Target: 1080p BluRay' }}
@@ -1598,288 +1934,222 @@ onMounted(() => {
                         </div>
                     </div>
 
-                    <!-- Episodes Grid -->
-                    <div v-if="(lowResMediaType === 'all' || lowResMediaType === 'episode') && filteredLowResEpisodes.length > 0" class="space-y-3">
-                        <h3 class="text-sm font-black text-amber-400 uppercase tracking-wider flex items-center gap-2">
-                            <Tv class="w-4 h-4" />
-                            <span>{{ isRTL ? 'حلقات المسلسلات بدقة أقل من 720p' : 'TV Episodes Below 720p' }}</span>
-                            <span class="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30">{{ filteredLowResEpisodes.length }}</span>
-                        </h3>
+                    <!-- Episodes Section (Grouped by Series vs Individual Paginated) -->
+                    <div v-if="(lowResMediaType === 'all' || lowResMediaType === 'episode') && filteredLowResEpisodes.length > 0" class="space-y-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <h3 class="text-sm font-black text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                                <Tv class="w-4 h-4" />
+                                <span>{{ isRTL ? 'حلقات المسلسلات بدقة أقل من 720p' : 'TV Episodes Below 720p' }}</span>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30">{{ filteredLowResEpisodes.length }}</span>
+                            </h3>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <!-- Grouped vs Individual View Toggle -->
+                            <div class="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10 self-start sm:self-auto">
+                                <button
+                                    @click="lowResEpisodeView = 'grouped'"
+                                    :class="[
+                                        'px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
+                                        lowResEpisodeView === 'grouped' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
+                                    ]"
+                                >
+                                    <Layers class="w-3.5 h-3.5" />
+                                    <span>{{ isRTL ? 'تجميع حسب المسلسل' : 'Grouped by Series' }} ({{ filteredLowResSeriesGroups.length }})</span>
+                                </button>
+                                <button
+                                    @click="lowResEpisodeView = 'individual'"
+                                    :class="[
+                                        'px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
+                                        lowResEpisodeView === 'individual' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
+                                    ]"
+                                >
+                                    <Tv class="w-3.5 h-3.5" />
+                                    <span>{{ isRTL ? 'حلقات منفردة' : 'Individual Episodes' }}</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Grouped by Series Cards -->
+                        <div v-if="lowResEpisodeView === 'grouped'" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div
-                                v-for="ep in filteredLowResEpisodes"
-                                :key="ep.id"
-                                class="p-4 rounded-2xl glass-panel border border-amber-500/20 hover:border-amber-500/50 bg-slate-900/50 transition-all flex items-center justify-between gap-4 group hover:shadow-lg hover:shadow-amber-500/5"
+                                v-for="group in filteredLowResSeriesGroups"
+                                :key="group.id"
+                                class="rounded-3xl glass-panel border border-amber-500/25 hover:border-amber-500/50 bg-slate-900/60 overflow-hidden transition-all"
                             >
-                                <div class="flex items-center gap-3.5 min-w-0">
-                                    <div class="relative shrink-0">
-                                        <img
-                                            v-if="ep.poster_path || ep.still_path"
-                                            :src="ep.still_path || ep.poster_path"
-                                            :alt="ep.title"
-                                            class="w-12 h-18 object-cover rounded-xl border border-white/10 shadow-md"
-                                            loading="lazy"
-                                            @error="(e: any) => (e.target.style.display = 'none')"
-                                        />
-                                        <div v-else class="w-12 h-18 rounded-xl bg-slate-950 border border-white/10 flex items-center justify-center text-slate-600">
-                                            <Tv class="w-6 h-6" />
+                                <div class="p-4 flex items-center justify-between gap-4">
+                                    <div class="flex items-center gap-3.5 min-w-0 flex-1">
+                                        <div class="relative shrink-0">
+                                            <img
+                                                v-if="group.poster_path"
+                                                :src="group.poster_path"
+                                                :alt="group.series_title"
+                                                class="w-12 h-18 object-cover rounded-xl border border-white/10 shadow-md"
+                                                loading="lazy"
+                                                @error="(e: any) => (e.target.style.display = 'none')"
+                                            />
+                                            <div v-else class="w-12 h-18 rounded-xl bg-slate-950 border border-white/10 flex items-center justify-center text-slate-600">
+                                                <Tv class="w-6 h-6" />
+                                            </div>
+                                            <span class="absolute -bottom-1.5 -right-1.5 px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-500 text-slate-950 shadow">
+                                                {{ group.worst_resolution }}
+                                            </span>
                                         </div>
-                                        <span class="absolute -bottom-1.5 -right-1.5 px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-500 text-slate-950 shadow">
-                                            {{ ep.current_resolution }}
-                                        </span>
+
+                                        <div class="space-y-1 min-w-0 flex-1">
+                                            <h4 class="text-sm font-black text-white truncate" :title="group.series_title">
+                                                {{ group.series_title }}
+                                            </h4>
+                                            <div class="flex items-center gap-2 text-xs text-slate-400 flex-wrap">
+                                                <span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                                    {{ group.episode_count }} {{ isRTL ? 'حلقة ضعيفة' : 'episodes' }}
+                                                </span>
+                                                <span>•</span>
+                                                <span class="text-slate-300 font-semibold">{{ formatBytesShort(group.total_size) }}</span>
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    <div class="space-y-1 min-w-0">
-                                        <div class="flex items-center gap-1.5">
-                                            <span class="px-1.5 py-0.2 rounded text-[10px] font-black bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                    <div class="flex items-center gap-2 shrink-0">
+                                        <button
+                                            @click="openSeriesUpgradeTorrentModal(group)"
+                                            class="px-3 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-amber-400 text-slate-950 hover:from-amber-400 hover:to-amber-300 shadow-md shadow-amber-500/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                                            :title="isRTL ? 'البحث عن موسم كامل 1080p/4K' : 'Search 1080p/4K Season Pack'"
+                                        >
+                                            <Compass class="w-3.5 h-3.5" />
+                                            <span>{{ isRTL ? 'ترقية الموسم' : 'Upgrade Pack' }}</span>
+                                        </button>
+
+                                        <button
+                                            @click="toggleLowResSeries(group.id)"
+                                            class="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 transition-all cursor-pointer"
+                                            :title="isRTL ? 'عرض/إخفاء الحلقات' : 'Toggle episodes'"
+                                        >
+                                            <ChevronUp v-if="expandedLowResSeries[group.id]" class="w-4 h-4" />
+                                            <ChevronDown v-else class="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Expandable Episodes List -->
+                                <div v-if="expandedLowResSeries[group.id]" class="border-t border-white/10 bg-black/30 divide-y divide-white/5 max-h-72 overflow-y-auto">
+                                    <div
+                                        v-for="ep in group.episodes"
+                                        :key="ep.id"
+                                        class="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-white/5 transition-colors"
+                                    >
+                                        <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                                            <span class="px-1.5 py-0.5 rounded text-[10px] font-black bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0">
                                                 {{ ep.episode_code }}
                                             </span>
-                                            <span class="text-xs font-bold text-white truncate" :title="ep.series_title">
-                                                {{ ep.series_title }}
+                                            <div class="min-w-0 flex-1">
+                                                <p class="text-xs font-semibold text-slate-200 truncate" :title="ep.episode_title">
+                                                    {{ ep.episode_title }}
+                                                </p>
+                                                <p class="text-[10px] text-slate-400 font-mono truncate" :title="ep.file_path">
+                                                    {{ ep.current_resolution }} • {{ ep.file_size_human }} <span v-if="ep.video_codec && ep.video_codec !== 'Unknown'">• {{ ep.video_codec }}</span>
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            @click="openUpgradeTorrentModal(ep, 'low_resolution')"
+                                            class="px-2.5 py-1 rounded-lg text-[11px] font-black bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 cursor-pointer shrink-0 transition-all"
+                                        >
+                                            {{ isRTL ? 'ترقية' : 'Upgrade' }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Individual Episodes Grid (Capped + Show More) -->
+                        <div v-else class="space-y-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <div
+                                    v-for="ep in visibleLowResEpisodes"
+                                    :key="ep.id"
+                                    class="p-4 rounded-2xl glass-panel border border-amber-500/20 hover:border-amber-500/50 bg-slate-900/50 transition-all flex items-center justify-between gap-4 group hover:shadow-lg hover:shadow-amber-500/5"
+                                >
+                                    <div class="flex items-center gap-3.5 min-w-0 flex-1">
+                                        <div class="relative shrink-0">
+                                            <img
+                                                v-if="ep.poster_path || ep.still_path"
+                                                :src="ep.still_path || ep.poster_path"
+                                                :alt="ep.title"
+                                                class="w-12 h-18 object-cover rounded-xl border border-white/10 shadow-md"
+                                                loading="lazy"
+                                                @error="(e: any) => (e.target.style.display = 'none')"
+                                            />
+                                            <div v-else class="w-12 h-18 rounded-xl bg-slate-950 border border-white/10 flex items-center justify-center text-slate-600">
+                                                <Tv class="w-6 h-6" />
+                                            </div>
+                                            <span class="absolute -bottom-1.5 -right-1.5 px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-500 text-slate-950 shadow">
+                                                {{ ep.current_resolution }}
                                             </span>
                                         </div>
-                                        <h4 class="text-xs text-slate-300 truncate" :title="ep.episode_title">
-                                            {{ ep.episode_title }}
-                                        </h4>
-                                        <div class="flex items-center gap-2 text-xs text-slate-400">
-                                            <span class="text-amber-300 font-semibold">{{ ep.file_size_human }}</span>
-                                            <span>•</span>
-                                            <span class="text-[10px] font-mono">{{ ep.video_codec }}</span>
+
+                                        <div class="space-y-1 min-w-0 flex-1">
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="px-1.5 py-0.2 rounded text-[10px] font-black bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0">
+                                                    {{ ep.episode_code }}
+                                                </span>
+                                                <span class="text-xs font-bold text-white truncate" :title="ep.series_title">
+                                                    {{ ep.series_title }}
+                                                </span>
+                                            </div>
+                                            <h4 class="text-xs text-slate-300 truncate" :title="ep.episode_title">
+                                                {{ ep.episode_title }}
+                                            </h4>
+                                            <div class="flex items-center gap-2 text-xs text-slate-400">
+                                                <span class="text-amber-300 font-semibold">{{ ep.file_size_human }}</span>
+                                                <span v-if="ep.video_codec && ep.video_codec !== 'Unknown'">•</span>
+                                                <span v-if="ep.video_codec && ep.video_codec !== 'Unknown'" class="text-[10px] font-mono">{{ ep.video_codec }}</span>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
 
+                                    <button
+                                        @click="openUpgradeTorrentModal(ep, 'low_resolution')"
+                                        class="px-3.5 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-amber-400 text-slate-950 hover:from-amber-400 hover:to-amber-300 shadow-md shadow-amber-500/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                                        :title="isRTL ? 'البحث عن حلقة 1080p نقية' : 'Search 1080p upgrade episode'"
+                                    >
+                                        <Compass class="w-3.5 h-3.5" />
+                                        <span>{{ isRTL ? 'ترقية' : 'Upgrade' }}</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Load More Button -->
+                            <div v-if="visibleLowResEpisodes.length < filteredLowResEpisodes.length" class="flex justify-center pt-2">
                                 <button
-                                    @click="openUpgradeTorrentModal(ep, 'low_resolution')"
-                                    class="px-3.5 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-amber-400 text-slate-950 hover:from-amber-400 hover:to-amber-300 shadow-md shadow-amber-500/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
-                                    :title="isRTL ? 'البحث عن حلقة 1080p نقية' : 'Search 1080p upgrade episode'"
+                                    @click="individualEpisodesLimit += 60"
+                                    class="px-6 py-2.5 rounded-xl text-xs font-black bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 transition-all cursor-pointer flex items-center gap-2"
                                 >
-                                    <Compass class="w-3.5 h-3.5" />
-                                    <span>{{ isRTL ? 'ترقية' : 'Upgrade' }}</span>
+                                    <span>
+                                        {{ isRTL 
+                                            ? `عرض 60 حلقة إضافية (${visibleLowResEpisodes.length} من أصل ${filteredLowResEpisodes.length})` 
+                                            : `Load More Episodes (${visibleLowResEpisodes.length} of ${filteredLowResEpisodes.length})` 
+                                        }}
+                                    </span>
+                                    <ChevronDown class="w-4 h-4" />
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Empty State -->
-                    <div v-if="filteredLowResMovies.length === 0 && filteredLowResEpisodes.length === 0" class="text-center py-16 px-4 rounded-3xl glass-panel border border-emerald-500/20 bg-emerald-950/10 space-y-3">
+                    <!-- Empty State for Low Resolution -->
+                    <div
+                        v-if="filteredLowResMovies.length === 0 && filteredLowResEpisodes.length === 0 && (activeTab === 'low_resolution' || filteredPoorQualityItems.length === 0)"
+                        class="text-center py-16 px-4 rounded-3xl glass-panel border border-emerald-500/20 bg-emerald-950/10 space-y-3"
+                    >
                         <CheckCircle2 class="w-12 h-12 text-emerald-400 mx-auto" />
                         <h3 class="text-lg font-black text-white">
-                            {{ isRTL ? 'رائع! لا توجد وسائط بدقة ضعيفة في مكتبتك' : 'All Media Meets HD Quality Standard!' }}
+                            {{ activeTab === 'all_upgrades'
+                                ? (isRTL ? 'مكتبتك في قمة النقاء! لا توجد ترقيات أو تنبيهات' : 'Library Audit Clean! No Upgrades Needed')
+                                : (isRTL ? 'رائع! لا توجد وسائط بدقة ضعيفة في مكتبتك' : 'All Media Meets HD Quality Standard!')
+                            }}
                         </h3>
                         <p class="text-xs text-slate-400 max-w-md mx-auto">
-                            {{ isRTL ? 'كافة الأفلام والحلقات في مكتبتك بدقة 720p HD أو 1080p أو 4K ولا توجد أي ملفات بدقة منخفضة.' : 'Every movie and episode in your library is 720p HD, 1080p Full HD, or 4K Ultra HD. No sub-720p files found.' }}
-                        </p>
-                    </div>
-                </div>
-
-                <!-- SECTION 6: CAM & HARDCODED SUBTITLES (HC) REPLACEMENTS -->
-                <div v-if="activeTab === 'poor_quality'" class="space-y-6">
-                    <!-- Header Card -->
-                    <div class="glass-panel border border-rose-500/30 rounded-3xl p-6 bg-gradient-to-r from-rose-950/40 via-slate-900/60 to-slate-900/80 space-y-4">
-                        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                            <div class="flex items-start gap-4">
-                                <div class="p-3.5 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
-                                    <AlertTriangle class="w-6 h-6" />
-                                </div>
-                                <div class="space-y-1">
-                                    <div class="flex items-center gap-2 flex-wrap">
-                                        <h2 class="text-xl font-black text-white tracking-tight">
-                                            {{ isRTL ? 'استبدال نسخ السينما (CAM) والترجمات الأجنبية المدمجة (HC)' : 'CAM & Hardcoded Subtitle Rips (HC)' }}
-                                        </h2>
-                                        <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                                            {{ filteredPoorQualityItems.length }} {{ isRTL ? 'نسخة رديئة مرصودة' : 'flagged releases' }}
-                                        </span>
-                                    </div>
-                                    <p class="text-xs text-slate-300 leading-relaxed max-w-3xl">
-                                        {{ isRTL 
-                                            ? 'نظام تدقيق جنائي عميق يرصد التسجيلات السينمائية (CAM / Telesync) والنسخ التي تحتوي على ترجمات أجنبية مطبوعة داخل الفيديو (HC / Korean / Chinese / Arabic) أو شعارات مواقع القرصنة وصوت Mono المشبوه، حتى لو كانت ملفاتك منظمة ومعاد تسميتها في H:\\Entertainment. يمكنك بضغطة واحدة استبدالها بنسخ نقية وخالية من الترجمات المطبوعة.' 
-                                            : 'Multi-layer forensics detecting cinema recordings (CAM/TS), hardcoded foreign subtitles (KORSUB, Chinese HC, watermarks), and anomalous mono audio on already-organized library files. 1-click replacement locates clean 1080p/4K WEB-DL/BluRay copies without burned-in text.' 
-                                        }}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <button
-                                @click="fetchUpgrades(true)"
-                                :disabled="upgradesLoading"
-                                class="px-4 py-2 rounded-xl text-xs font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 flex items-center gap-2 cursor-pointer shrink-0 disabled:opacity-50"
-                            >
-                                <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': upgradesLoading }" />
-                                <span>{{ isRTL ? 'إعادة الفحص الجنائي' : 'Re-run Forensics' }}</span>
-                            </button>
-                        </div>
-
-                        <!-- Filter Sub-bar -->
-                        <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/10">
-                            <!-- Issue Category Filter -->
-                            <div class="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10 flex-wrap">
-                                <button
-                                    @click="poorQualityCategory = 'all'"
-                                    :class="[
-                                        'px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer',
-                                        poorQualityCategory === 'all' ? 'bg-rose-500 text-white font-black shadow' : 'text-slate-400 hover:text-white'
-                                    ]"
-                                >
-                                    {{ isRTL ? 'الكل' : 'All Issues' }} ({{ poorQualityData.total_count || 0 }})
-                                </button>
-                                <button
-                                    @click="poorQualityCategory = 'hardcoded_subs'"
-                                    :class="[
-                                        'px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer',
-                                        poorQualityCategory === 'hardcoded_subs' ? 'bg-rose-500 text-white font-black shadow' : 'text-slate-400 hover:text-white'
-                                    ]"
-                                >
-                                    <Subtitles class="w-3.5 h-3.5 inline mr-1" />
-                                    {{ isRTL ? 'ترجمات مدمجة (HC)' : 'Hardcoded Subs (HC)' }} ({{ poorQualityData.by_category?.hardcoded_subs || 0 }})
-                                </button>
-                                <button
-                                    @click="poorQualityCategory = 'cam_recorded'"
-                                    :class="[
-                                        'px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer',
-                                        poorQualityCategory === 'cam_recorded' ? 'bg-rose-500 text-white font-black shadow' : 'text-slate-400 hover:text-white'
-                                    ]"
-                                >
-                                    🎥 {{ isRTL ? 'تسجيلات سينما (CAM)' : 'CAM Recordings' }} ({{ poorQualityData.by_category?.cam_recorded || 0 }})
-                                </button>
-                                <button
-                                    @click="poorQualityCategory = 'watermarked_or_low_audio'"
-                                    :class="[
-                                        'px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer',
-                                        poorQualityCategory === 'watermarked_or_low_audio' ? 'bg-rose-500 text-white font-black shadow' : 'text-slate-400 hover:text-white'
-                                    ]"
-                                >
-                                    <Volume2 class="w-3.5 h-3.5 inline mr-1" />
-                                    {{ isRTL ? 'شعارات / صوت مونو' : 'Watermark / Mono Audio' }} ({{ poorQualityData.by_category?.watermarked_or_low_audio || 0 }})
-                                </button>
-                            </div>
-
-                            <!-- Media Type Filter -->
-                            <div class="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10">
-                                <button
-                                    @click="poorQualityMediaType = 'all'"
-                                    :class="[
-                                        'px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer',
-                                        poorQualityMediaType === 'all' ? 'bg-rose-500/30 text-rose-300 font-bold border border-rose-500/40' : 'text-slate-400 hover:text-white'
-                                    ]"
-                                >
-                                    {{ isRTL ? 'الكل' : 'All' }}
-                                </button>
-                                <button
-                                    @click="poorQualityMediaType = 'movie'"
-                                    :class="[
-                                        'px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer',
-                                        poorQualityMediaType === 'movie' ? 'bg-rose-500/30 text-rose-300 font-bold border border-rose-500/40' : 'text-slate-400 hover:text-white'
-                                    ]"
-                                >
-                                    🎬 {{ isRTL ? 'أفلام' : 'Movies' }}
-                                </button>
-                                <button
-                                    @click="poorQualityMediaType = 'episode'"
-                                    :class="[
-                                        'px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer',
-                                        poorQualityMediaType === 'episode' ? 'bg-rose-500/30 text-rose-300 font-bold border border-rose-500/40' : 'text-slate-400 hover:text-white'
-                                    ]"
-                                >
-                                    📺 {{ isRTL ? 'مسلسلات' : 'Series' }}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Items Grid -->
-                    <div v-if="filteredPoorQualityItems.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <div
-                            v-for="it in filteredPoorQualityItems"
-                            :key="it.id"
-                            class="p-5 rounded-3xl glass-panel border border-rose-500/25 hover:border-rose-500/60 bg-slate-900/60 transition-all flex flex-col justify-between gap-4 group hover:shadow-xl hover:shadow-rose-500/10"
-                        >
-                            <div class="space-y-3">
-                                <!-- Top Row: Issue Badges -->
-                                <div class="flex items-center justify-between gap-2 flex-wrap">
-                                    <span
-                                        class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 border"
-                                        :class="it.flag_category === 'cam_recorded' ? 'bg-red-500/20 text-red-300 border-red-500/30' : (it.flag_category === 'hardcoded_subs' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/30')"
-                                    >
-                                        <AlertCircle class="w-3 h-3" />
-                                        <span>{{ isRTL && it.badge_ar ? it.badge_ar : it.badge_en }}</span>
-                                    </span>
-
-                                    <span
-                                        class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase"
-                                        :class="it.severity === 'high' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'"
-                                    >
-                                        {{ it.severity }} {{ isRTL ? 'أهمية' : 'priority' }}
-                                    </span>
-                                </div>
-
-                                <!-- Media Info Row -->
-                                <div class="flex items-start gap-3.5">
-                                    <div class="relative shrink-0">
-                                        <img
-                                            v-if="it.poster_path"
-                                            :src="it.poster_path"
-                                            :alt="it.title"
-                                            class="w-14 h-20 object-cover rounded-xl border border-white/10 shadow-md"
-                                            loading="lazy"
-                                            @error="(e: any) => (e.target.style.display = 'none')"
-                                        />
-                                        <div v-else class="w-14 h-20 rounded-xl bg-slate-950 border border-white/10 flex items-center justify-center text-slate-600">
-                                            <Film v-if="it.type === 'movie'" class="w-6 h-6" />
-                                            <Tv v-else class="w-6 h-6" />
-                                        </div>
-                                    </div>
-
-                                    <div class="space-y-1 min-w-0">
-                                        <h4 class="text-sm font-black text-white truncate" :title="it.title">
-                                            {{ it.title }}
-                                        </h4>
-                                        <p v-if="it.series_title && it.type === 'episode'" class="text-xs text-purple-300 font-semibold truncate">
-                                            {{ it.series_title }}
-                                        </p>
-                                        <div class="flex items-center gap-2 text-xs text-slate-400 flex-wrap">
-                                            <span v-if="it.release_year">{{ it.release_year }}</span>
-                                            <span>•</span>
-                                            <span class="text-rose-300 font-semibold">{{ it.current_resolution }}</span>
-                                            <span v-if="it.file_size_human">•</span>
-                                            <span v-if="it.file_size_human">{{ it.file_size_human }}</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Forensic Evidence Box -->
-                                <div class="p-2.5 rounded-xl bg-black/50 border border-white/10 space-y-1 font-mono text-[11px]">
-                                    <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                                        <Eye class="w-3 h-3 text-rose-400" />
-                                        <span>{{ isRTL ? 'دليل الفحص والتحليل:' : 'Forensic Evidence:' }}</span>
-                                    </div>
-                                    <p class="text-slate-200 leading-snug text-xs break-words">
-                                        {{ it.evidence }}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <!-- Action Button -->
-                            <button
-                                @click="openUpgradeTorrentModal(it, 'poor_quality')"
-                                class="w-full py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-400 hover:to-red-500 text-white shadow-lg shadow-rose-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer mt-1"
-                                :title="isRTL ? 'البحث عن نسخة نقية واستبعاد أي ترجمة مدمجة' : 'Find clean 1080p/4K WEB-DL or BluRay release'"
-                            >
-                                <ShieldCheck class="w-4 h-4 text-white" />
-                                <span>{{ isRTL ? 'استبدال بنسخة نقية (WEB-DL / BluRay)' : 'Find Clean Replacement' }}</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Empty State -->
-                    <div v-else class="text-center py-16 px-4 rounded-3xl glass-panel border border-emerald-500/20 bg-emerald-950/10 space-y-3">
-                        <ShieldCheck class="w-12 h-12 text-emerald-400 mx-auto" />
-                        <h3 class="text-lg font-black text-white">
-                            {{ isRTL ? 'مكتبتك نظيفة وخالية من نسخ CAM والترجمات المدمجة!' : 'Pristine Library! No CAM or Hardcoded Subs Detected' }}
-                        </h3>
-                        <p class="text-xs text-slate-400 max-w-md mx-auto">
-                            {{ isRTL ? 'تم فحص وسائط مكتبتك المنظمة، ولم يتم العثور على أي تسجيلات سينمائية رديئة أو ترجمات كورية/صينية مطبوعة.' : 'All audited files in your organized media folders are confirmed clean with proper audio tracks and no burned-in foreign subtitles.' }}
+                            {{ isRTL ? 'كافة الأفلام والحلقات في مكتبتك بدقة 720p HD أو 1080p أو 4K وخالية من نسخ السينما والترجمات المدمجة.' : 'Every movie and episode in your library is 720p HD, 1080p Full HD, or 4K Ultra HD with clean audio and no burned-in foreign subtitles.' }}
                         </p>
                     </div>
                 </div>
