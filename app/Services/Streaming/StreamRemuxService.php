@@ -81,6 +81,44 @@ class StreamRemuxService
     }
 
     /**
+     * Resolve FFmpeg video stream arguments for remuxing, enabling copy for H.264 and browser-supported HEVC/AV1.
+     *
+     * @return array<int, string>
+     */
+    public function resolveVideoEncodeArgs(?string $videoCodec, string $ext, Request $request): array
+    {
+        $vc = strtolower($videoCodec ?? '');
+        $capHevc = $request->query('cap_hevc') === '1';
+        $capAv1 = $request->query('cap_av1') === '1';
+
+        $isNativeH264 = (
+            str_contains($vc, 'h.264') ||
+            str_contains($vc, 'h264') ||
+            str_contains($vc, 'avc')
+        ) && ! str_contains($vc, 'hevc') && ! str_contains($vc, '265') && ($ext !== 'avi');
+
+        $isNativeHevc = $capHevc && (
+            str_contains($vc, 'hevc') ||
+            str_contains($vc, 'h265') ||
+            str_contains($vc, 'h.265')
+        );
+
+        $isNativeAv1 = $capAv1 && str_contains($vc, 'av1');
+
+        if ($request->query('transcode') !== '1' && ($isNativeH264 || $isNativeHevc || $isNativeAv1)) {
+            $videoArgs = ['-c:v', 'copy'];
+            if ($isNativeHevc) {
+                $videoArgs[] = '-tag:v';
+                $videoArgs[] = 'hvc1';
+            }
+
+            return $videoArgs;
+        }
+
+        return FfmpegLocatorService::getVideoEncodeArgs();
+    }
+
+    /**
      * Stream media file with real-time FFmpeg remuxing / transcoding to fragmented MP4.
      */
     public function streamRemuxFile(string $filePath, Request $request, ?string $videoCodec = null, ?string $audioCodec = null, string $modelType = 'media', int $modelId = 0)
@@ -96,20 +134,9 @@ class StreamRemuxService
         $nullDevice = $isWin ? 'NUL' : '/dev/null';
 
         $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
-        $vc = strtolower($videoCodec ?? '');
         $ac = strtolower($audioCodec ?? '');
 
-        $isNativeH264 = (
-            str_contains($vc, 'h.264') ||
-            str_contains($vc, 'h264') ||
-            str_contains($vc, 'avc')
-        ) && ! str_contains($vc, 'hevc') && ($ext !== 'avi');
-
-        if ($isNativeH264 && $request->query('transcode') !== '1') {
-            $videoArgs = ['-c:v', 'copy'];
-        } else {
-            $videoArgs = FfmpegLocatorService::getVideoEncodeArgs();
-        }
+        $videoArgs = $this->resolveVideoEncodeArgs($videoCodec, $ext, $request);
 
         $cacheDir = storage_path('app/cache/media_streams');
         if (! is_dir($cacheDir)) {
@@ -150,7 +177,10 @@ class StreamRemuxService
             $audioArgs = [
                 '-af', $audioFilterStr,
                 '-c:a', 'aac',
-                '-b:a', '192k',
+                '-center_mix_level', '0.707',
+                '-surround_mix_level', '0.707',
+                '-lfe_mix_level', '0.0',
+                '-b:a', '256k',
                 '-ac', '2',
                 '-sn',
             ];
@@ -190,7 +220,9 @@ class StreamRemuxService
             [
                 '-avoid_negative_ts', 'make_zero',
                 '-max_muxing_queue_size', '1024',
-                '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+                '-movflags', 'frag_keyframe+empty_moov+default_base_moof+separate_moof',
+                '-frag_duration', '500000',
+                '-min_frag_duration', '200000',
                 '-flush_packets', '1',
                 '-f', 'mp4',
                 'pipe:1',

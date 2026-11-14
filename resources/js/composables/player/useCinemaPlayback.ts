@@ -1,6 +1,6 @@
 import { ref, computed, nextTick, type Ref } from 'vue';
 import { MseBackendClient } from '@/lib/player/webEngine/mseBackendClient';
-import { canDirectPlayMedia } from '@/lib/player/codecCapabilities';
+import { getBrowserCodecCapabilities, selectOptimalEngineMode } from '@/lib/player/codecCapabilities';
 
 export interface UseCinemaPlaybackOptions {
     item: Ref<any>;
@@ -60,29 +60,18 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
         return `${type}_${targetId}`;
     });
 
-    const checkNeedsRemux = (mediaItem: any): boolean => {
-        if (!mediaItem) return false;
-        try {
-            const type = isEpisode.value ? 'episode' : 'movie';
-            const targetId = mediaItem?.watchable_id || mediaItem?.id;
-            const savedMode = localStorage.getItem(`stream_mode_${type}_${targetId}`);
-            if (savedMode === 'direct') return false;
-            if (savedMode === 'remux') return true;
-        } catch { }
+    const manualEngineOverride = ref(false);
 
-        return !canDirectPlayMedia(mediaItem);
+    const selectOptimalEngine = (mediaItem: any): 'web' | 'remux' | 'direct' => {
+        return selectOptimalEngineMode(mediaItem);
+    };
+
+    const checkNeedsRemux = (mediaItem: any): boolean => {
+        return selectOptimalEngineMode(mediaItem) !== 'direct';
     };
 
     const getInitialEngineMode = (): 'web' | 'remux' | 'direct' => {
-        try {
-            const type = isEpisode.value ? 'episode' : 'movie';
-            const targetId = options.item.value?.watchable_id || options.item.value?.id;
-            const savedEngine = localStorage.getItem(`stream_engine_${type}_${targetId}`);
-            if (savedEngine === 'web' || savedEngine === 'remux' || savedEngine === 'direct') {
-                return savedEngine;
-            }
-        } catch { }
-        return checkNeedsRemux(options.item.value) ? 'web' : 'direct';
+        return selectOptimalEngineMode(options.item.value);
     };
 
     const isRemuxStream = ref(checkNeedsRemux(options.item.value));
@@ -94,10 +83,67 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
     const webEngineInstance = ref<MseBackendClient | null>(null);
     const isSeekPending = ref(false);
 
+    let audioWatchdogTimer: any = null;
+    let fallbackAttemptedForItemKey = '';
+    let mseSeekDebounceTimer: any = null;
+    let resolvePendingMseDebounce: (() => void) | null = null;
+
+    const clearAudioWatchdog = () => {
+        if (audioWatchdogTimer) {
+            clearTimeout(audioWatchdogTimer);
+            audioWatchdogTimer = null;
+        }
+    };
+
     const destroyWebEngine = () => {
+        clearAudioWatchdog();
+        if (mseSeekDebounceTimer) {
+            clearTimeout(mseSeekDebounceTimer);
+            mseSeekDebounceTimer = null;
+        }
+        if (resolvePendingMseDebounce) {
+            resolvePendingMseDebounce();
+            resolvePendingMseDebounce = null;
+        }
         if (webEngineInstance.value) {
             webEngineInstance.value.destroy();
             webEngineInstance.value = null;
+        }
+    };
+
+    const hotSwapEngineFallback = async (reason: string) => {
+        if (engineMode.value === 'remux') return;
+        const key = itemKey.value;
+        if (fallbackAttemptedForItemKey === key) return;
+        fallbackAttemptedForItemKey = key;
+
+        clearAudioWatchdog();
+        const resumeAt = engineMode.value === 'web'
+            ? currentTime.value
+            : (videoRef.value && videoRef.value.currentTime > 0 ? videoRef.value.currentTime : currentTime.value);
+
+        destroyWebEngine();
+        engineMode.value = 'remux';
+        isRemuxStream.value = true;
+        remuxStartOffset.value = resumeAt;
+        pendingInitialSeek.value = 0;
+
+        if (options.onToast) {
+            options.onToast(reason);
+        }
+
+        await nextTick();
+        if (videoRef.value) {
+            videoRef.value.src = streamUrl.value;
+            videoRef.value.load();
+            videoRef.value.playbackRate = playbackRate.value;
+            videoRef.value.play().catch(() => { });
+        }
+    };
+
+    const handleDirectVideoError = () => {
+        if (engineMode.value === 'direct') {
+            hotSwapEngineFallback('Switching to Server Remux (K-Lite Pipeline)');
         }
     };
 
@@ -126,7 +172,8 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
                 }
             },
             onError: (err) => {
-                console.warn('[CinemaPlayback] MSE backend client error, falling back:', err);
+                console.warn('[CinemaPlayback] MSE backend client error, falling back to Server Remux:', err);
+                hotSwapEngineFallback('Web Media Engine interrupted — switching to Server Remux');
             },
         });
 
@@ -149,21 +196,11 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
                 videoRef.value.playbackRate = playbackRate.value;
             }
             return true;
-        } else {
-            console.warn('[CinemaPlayback] MseBackendClient start failed, smoothly falling back to server remux');
-            engineMode.value = 'remux';
-            isRemuxStream.value = true;
-            if (options.onToast) {
-                options.onToast('Falling back to Server Remux (AAC)');
-            }
-            if (videoRef.value) {
-                videoRef.value.src = streamUrl.value;
-                videoRef.value.load();
-                videoRef.value.playbackRate = playbackRate.value;
-                videoRef.value.play().catch(() => { });
-            }
-            return false;
         }
+        if (engineMode.value === 'web') {
+            await hotSwapEngineFallback('Falling back to Server Remux (AAC)');
+        }
+        return false;
     };
 
     const setPlaybackRate = (rate: number) => {
@@ -188,6 +225,13 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
             if (remuxStartOffset.value > 0) {
                 params.push(`start=${Math.round(remuxStartOffset.value * 1000) / 1000}`);
             }
+            const caps = getBrowserCodecCapabilities();
+            if (caps.nativeHevcMp4) {
+                params.push('cap_hevc=1');
+            }
+            if (caps.nativeAv1Mp4) {
+                params.push('cap_av1=1');
+            }
             const queryString = params.length > 0 ? `?${params.join('&')}` : '';
             if (isEpisode.value) {
                 return `/stream/mse/episode/${targetId}${queryString}`;
@@ -202,6 +246,13 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
             const params: string[] = [];
             if (remuxStartOffset.value > 0) {
                 params.push(`start=${Math.round(remuxStartOffset.value * 1000) / 1000}`);
+            }
+            const caps = getBrowserCodecCapabilities();
+            if (caps.nativeHevcMp4) {
+                params.push('cap_hevc=1');
+            }
+            if (caps.nativeAv1Mp4) {
+                params.push('cap_av1=1');
             }
             const queryString = params.length > 0 ? `?${params.join('&')}` : '';
             if (isEpisode.value) {
@@ -268,6 +319,7 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
     };
 
     const toggleStreamEngine = async () => {
+        manualEngineOverride.value = true;
         destroyWebEngine();
 
         if (engineMode.value === 'web') {
@@ -320,30 +372,88 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
         }
 
         if (engineMode.value === 'web' && webEngineInstance.value) {
+            if (webEngineInstance.value.canSeekInBuffer(clamped)) {
+                clearTimeout(mseSeekDebounceTimer);
+                if (resolvePendingMseDebounce) {
+                    resolvePendingMseDebounce();
+                    resolvePendingMseDebounce = null;
+                }
+                try {
+                    await webEngineInstance.value.seekTo(clamped);
+                    if (videoRef.value) {
+                        if (playbackRate.value !== 1.0) {
+                            videoRef.value.playbackRate = playbackRate.value;
+                        }
+                        if (videoRef.value.paused) {
+                            videoRef.value.play().catch(() => { });
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[CinemaPlayback] In-buffer MSE seek error:', e);
+                }
+                return;
+            }
+
+            const seekToken = ++currentSeekToken;
             isBuffering.value = true;
             isRemuxStream.value = true;
-            isSeekPending.value = true;
-            remuxStartOffset.value = clamped;
-            try {
-                await webEngineInstance.value.seekTo(clamped);
-                if (videoRef.value) {
-                    if (playbackRate.value !== 1.0) {
-                        videoRef.value.playbackRate = playbackRate.value;
-                    }
-                    if (videoRef.value.paused) {
-                        videoRef.value.play().catch(() => { });
-                    }
-                }
-            } catch (e) {
-                console.warn('[CinemaPlayback] MseBackendClient seek error:', e);
-            } finally {
-                isSeekPending.value = false;
-                isBuffering.value = false;
+            clearTimeout(mseSeekDebounceTimer);
+            if (resolvePendingMseDebounce) {
+                resolvePendingMseDebounce();
+                resolvePendingMseDebounce = null;
             }
+
+            await new Promise<void>((resolve) => {
+                resolvePendingMseDebounce = resolve;
+                mseSeekDebounceTimer = setTimeout(async () => {
+                    resolvePendingMseDebounce = null;
+                    if (seekToken !== currentSeekToken || !webEngineInstance.value) {
+                        resolve();
+                        return;
+                    }
+                    isSeekPending.value = true;
+                    remuxStartOffset.value = clamped;
+                    try {
+                        await webEngineInstance.value.seekTo(clamped);
+                        if (videoRef.value) {
+                            if (playbackRate.value !== 1.0) {
+                                videoRef.value.playbackRate = playbackRate.value;
+                            }
+                            if (videoRef.value.paused) {
+                                videoRef.value.play().catch(() => { });
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('[CinemaPlayback] MseBackendClient seek error:', e);
+                    } finally {
+                        if (seekToken === currentSeekToken) {
+                            isSeekPending.value = false;
+                            isBuffering.value = false;
+                        }
+                        resolve();
+                    }
+                }, 120);
+            });
             return;
         }
 
         if (isRemuxStream.value && !isServerCached.value) {
+            if (videoRef.value) {
+                const localTarget = clamped - remuxStartOffset.value;
+                if (localTarget >= 0) {
+                    const buffered = videoRef.value.buffered;
+                    for (let i = 0; i < buffered.length; i++) {
+                        if (localTarget >= buffered.start(i) && buffered.end(i) - localTarget >= 0.25) {
+                            videoRef.value.currentTime = localTarget;
+                            videoRef.value.playbackRate = playbackRate.value;
+                            if (videoRef.value.paused) {
+                                videoRef.value.play().catch(() => { });
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
             isBuffering.value = true;
             const seekToken = ++currentSeekToken;
             let actualTarget = clamped;
@@ -490,6 +600,17 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
             videoRef.value.currentTime = pendingInitialSeek.value;
         }
 
+        clearAudioWatchdog();
+        if (engineMode.value === 'direct' && !manualEngineOverride.value && fallbackAttemptedForItemKey !== itemKey.value) {
+            audioWatchdogTimer = setTimeout(() => {
+                const v = videoRef.value as any;
+                if (!v || engineMode.value !== 'direct' || manualEngineOverride.value) return;
+                if (!v.paused && v.readyState >= 2 && typeof v.webkitAudioDecodedByteCount === 'number' && v.webkitAudioDecodedByteCount === 0) {
+                    hotSwapEngineFallback('Unsupported audio track detected — switching to Server Remux');
+                }
+            }, 2200);
+        }
+
         videoRef.value.play().then(() => {
             isPlaying.value = true;
         }).catch((err) => {
@@ -576,6 +697,8 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
         savePlaybackProgress,
         formatTime,
         checkNeedsRemux,
+        selectOptimalEngine,
+        handleDirectVideoError,
         effectiveVideoSrc,
         initWebEngine,
         destroyWebEngine,

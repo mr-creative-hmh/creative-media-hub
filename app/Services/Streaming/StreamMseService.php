@@ -4,7 +4,6 @@ namespace App\Services\Streaming;
 
 use App\Services\Media\FfmpegLocatorService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StreamMseService
@@ -61,7 +60,7 @@ class StreamMseService
 
                 $chunksSent = 0;
                 while (! feof($pipes[1])) {
-                    $readSize = $chunksSent < 4 ? 4096 : 65536;
+                    $readSize = $chunksSent < 16 ? 65536 : 262144;
                     $chunk = fread($pipes[1], $readSize);
                     if ($chunk !== false && strlen($chunk) > 0) {
                         echo $chunk;
@@ -161,18 +160,6 @@ class StreamMseService
             $mimeVideoCodec = 'avc1.42e01e';
         }
 
-        if ($startSeconds > 2.0 && $isCopyVideo && file_exists($filePath)) {
-            $cacheKey = "seek_kf_{$modelType}_{$modelId}_".round($startSeconds, 1);
-            $resolvedKf = Cache::remember($cacheKey, 3600, function () use ($filePath, $startSeconds): float {
-                $remux = $this->remuxService ?? app(StreamRemuxService::class);
-
-                return $remux->findPrecedingKeyframe($filePath, $startSeconds);
-            });
-            if ($resolvedKf >= 0.0 && $resolvedKf <= $startSeconds && ($startSeconds - $resolvedKf) <= 30.0) {
-                $startSeconds = $resolvedKf;
-            }
-        }
-
         $audioDelayMs = (int) $request->query('audio_delay', 0);
         $isNativeAac = (str_contains($ac, 'aac') || str_contains($ac, 'mp4a')) && $audioDelayMs == 0;
 
@@ -201,7 +188,10 @@ class StreamMseService
             $audioArgs = [
                 '-af', $audioFilterStr,
                 '-c:a', 'aac',
-                '-b:a', '192k',
+                '-center_mix_level', '0.707',
+                '-surround_mix_level', '0.707',
+                '-lfe_mix_level', '0.0',
+                '-b:a', '256k',
                 '-ac', '2',
                 '-sn',
             ];
@@ -237,7 +227,9 @@ class StreamMseService
             [
                 '-avoid_negative_ts', 'make_zero',
                 '-max_muxing_queue_size', '2048',
-                '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+                '-movflags', 'frag_keyframe+empty_moov+default_base_moof+separate_moof',
+                '-frag_duration', '500000',
+                '-min_frag_duration', '200000',
                 '-flush_packets', '1',
                 '-f', 'mp4',
                 'pipe:1',

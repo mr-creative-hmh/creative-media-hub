@@ -105,10 +105,12 @@ export function canDirectPlayMedia(mediaItem: any): boolean {
         audio.includes('ac3') ||
         audio.includes('ac-3') ||
         audio.includes('eac3') ||
+        audio.includes('ec-3') ||
         audio.includes('dolby') ||
         audio.includes('dts') ||
         audio.includes('truehd') ||
-        audio.includes('flac');
+        audio.includes('mlp') ||
+        audio.includes('pcm');
 
     if (isUnsupportedAudio) {
         return false;
@@ -135,5 +137,37 @@ export function canDirectPlayMedia(mediaItem: any): boolean {
     }
 
     return !video;
+}
+
+/**
+ * Select the optimal playback engine mode for a media file:
+ *  1. 'direct' -> Native MP4/M4V/WebM with browser-supported video and stereo audio (0% server CPU).
+ *  2. 'web'    -> HEVC/AV1/VP9 videos supported only via MediaSource Extensions (zero-copy fMP4 MSE).
+ *  3. 'remux'  -> Default server remux + LAV BS.775 stereo downmix for MKV/AVI/TS or surround audio.
+ */
+export function selectOptimalEngineMode(mediaItem: any): 'direct' | 'remux' | 'web' {
+    if (canDirectPlayMedia(mediaItem)) {
+        return 'direct';
+    }
+
+    if (!mediaItem) {
+        return 'remux';
+    }
+
+    const caps = getBrowserCodecCapabilities();
+    const video = String(mediaItem.video_codec || mediaItem.codec || '').toLowerCase();
+
+    if (
+        caps.mseSupported &&
+        (
+            ((video.includes('hevc') || video.includes('h.265') || video.includes('h265')) && caps.mseHevc && !caps.nativeHevcMp4) ||
+            (video.includes('av1') && caps.mseAv1 && !caps.nativeAv1Mp4) ||
+            (video.includes('vp9') && caps.mseVp9 && !caps.nativeVp9Webm)
+        )
+    ) {
+        return 'web';
+    }
+
+    return 'remux';
 }
 

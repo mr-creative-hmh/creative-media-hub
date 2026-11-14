@@ -131,6 +131,47 @@ const subtitles = useCinemaSubtitles({
     onToast: (msg) => toast.info(msg),
 });
 
+// K-Lite MPC-HC Shader Presets
+type ShaderPreset = 'standard' | 'clarity' | 'vivid' | 'night';
+const SHADER_ORDER: ShaderPreset[] = ['standard', 'clarity', 'vivid', 'night'];
+const SHADER_LABELS: Record<ShaderPreset, string> = {
+    standard: 'Standard (Native)',
+    clarity: 'K-Lite Clarity (Sharpen)',
+    vivid: 'HDR Vivid',
+    night: 'Night Vision',
+};
+const initialShader = (() => {
+    try {
+        const saved = localStorage.getItem('cinema_shader_preset') as ShaderPreset | null;
+        if (saved && SHADER_ORDER.includes(saved)) return saved;
+    } catch { }
+    return 'standard' as ShaderPreset;
+})();
+const shaderPreset = ref<ShaderPreset>(initialShader);
+
+const cycleShaderPreset = () => {
+    const idx = SHADER_ORDER.indexOf(shaderPreset.value);
+    const next = SHADER_ORDER[(idx + 1) % SHADER_ORDER.length];
+    shaderPreset.value = next;
+    try {
+        localStorage.setItem('cinema_shader_preset', next);
+    } catch { }
+    toast.info(`Shader: ${SHADER_LABELS[next]}`);
+};
+
+const videoShaderStyle = computed(() => {
+    switch (shaderPreset.value) {
+        case 'clarity':
+            return { filter: 'url(#klite-luma-sharpen) contrast(1.04) saturate(1.05)' };
+        case 'vivid':
+            return { filter: 'contrast(1.12) saturate(1.18) brightness(1.03)' };
+        case 'night':
+            return { filter: 'brightness(1.18) contrast(1.08) saturate(1.04)' };
+        default:
+            return undefined;
+    }
+});
+
 const handleTogglePlay = () => {
     playback.togglePlay();
     triggerCenterPlayIndicator();
@@ -184,7 +225,9 @@ const changeActiveMedia = (newItem: any) => {
     const fallbackDur = Number(newItem?.runtime_minutes) ? Number(newItem.runtime_minutes) * 60 : 0;
     playback.duration.value = exactDur > 0 ? exactDur : fallbackDur;
     playback.isDurationLocked.value = exactDur > 0;
-    playback.isRemuxStream.value = playback.checkNeedsRemux(newItem);
+    const nextMode = playback.selectOptimalEngine(newItem);
+    playback.engineMode.value = nextMode;
+    playback.isRemuxStream.value = nextMode !== 'direct';
 
     subtitles.selectedSubtitleId.value = 'off';
     subtitles.parsedCues.value = [];
@@ -322,10 +365,24 @@ onBeforeUnmount(() => {
         class="fixed inset-0 z-50 bg-black flex items-center justify-center select-none overflow-hidden font-sans group/player"
         :class="{ 'cursor-none': !playback.isControlsVisible.value && playback.isPlaying.value }"
     >
+        <!-- Inline SVG K-Lite MPC-HC Luma Sharpen Shader -->
+        <svg aria-hidden="true" class="absolute w-0 h-0 pointer-events-none" focusable="false">
+            <defs>
+                <filter id="klite-luma-sharpen">
+                    <feConvolveMatrix
+                        order="3"
+                        kernelMatrix="0 -0.22 0 -0.22 1.88 -0.22 0 -0.22 0"
+                        preserveAlpha="true"
+                    />
+                </filter>
+            </defs>
+        </svg>
+
         <!-- Video Viewport -->
         <video
             ref="videoRef"
             :src="playback.effectiveVideoSrc.value"
+            :style="videoShaderStyle"
             class="w-full h-full object-contain cursor-pointer"
             autoplay
             playsinline
@@ -336,6 +393,7 @@ onBeforeUnmount(() => {
             @pause="handlePause"
             @timeupdate="playback.onTimeUpdate"
             @ended="handleVideoEnded"
+            @error="playback.handleDirectVideoError"
             @waiting="playback.isBuffering.value = true"
             @playing="playback.isBuffering.value = false; playback.updateLiveResolution()"
             @click="handleTogglePlay"
@@ -430,10 +488,12 @@ onBeforeUnmount(() => {
             :is-episode="playback.isEpisode.value"
             :is-remux-stream="playback.isRemuxStream.value"
             :engine-mode="playback.engineMode.value"
+            :shader-preset="shaderPreset"
             :live-resolution="playback.liveResolution.value"
             :is-controls-visible="playback.isControlsVisible.value"
             @close="emit('close')"
             @toggle-stream="playback.toggleStreamEngine"
+            @toggle-shader="cycleShaderPreset"
         />
 
         <!-- Bottom Controls Dock -->
@@ -507,10 +567,10 @@ onBeforeUnmount(() => {
             :is-translating="subtitles.isTranslatingSubtitle.value"
             @close="showSubtitleSearchModal = false"
             @translate="handleTranslate"
-            @downloaded="() => {
+            @downloaded="(downloadedSub) => {
                 const type = playback.isEpisode.value ? 'episode' : 'movie';
                 const id = playback.activeItem.value?.watchable_id || playback.activeItem.value?.id;
-                subtitles.fetchSubtitlesForMedia(type, id);
+                subtitles.fetchSubtitlesForMedia(type, id, downloadedSub?.id);
             }"
         />
 

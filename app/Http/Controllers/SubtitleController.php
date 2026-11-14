@@ -169,16 +169,88 @@ class SubtitleController extends Controller
         }
 
         $hasApiKey = ! empty($this->openSubtitles->getApiKey());
+        $requestedLangs = array_values(array_filter(array_map('trim', explode(',', strtolower((string) $lang)))));
+        $arRequestedFirst = empty($requestedLangs) || in_array('ar', $requestedLangs, true) || in_array('ara', $requestedLangs, true);
+
+        // Normalize fields across all subtitle providers so every modal reads consistent keys
+        $normalizedResults = array_map(function (array $item): array {
+            $id = (string) ($item['subtitle_id'] ?? $item['id'] ?? uniqid('sub_'));
+            $provider = (string) ($item['provider'] ?? 'OpenSubtitles');
+            $providerLower = strtolower($provider);
+            $source = (string) ($item['source'] ?? match (true) {
+                str_contains($providerLower, 'yts') => 'yts-subs',
+                str_contains($providerLower, 'subdl') => 'subdl',
+                str_contains($providerLower, 'subsense') => 'opensubtitles',
+                default => 'opensubtitles',
+            });
+
+            $rawLang = strtolower(trim((string) ($item['language'] ?? 'en')));
+            $lang2 = match ($rawLang) {
+                'ara', 'arabic' => 'ar',
+                'eng', 'english' => 'en',
+                default => substr($rawLang, 0, 2) ?: 'en',
+            };
+
+            $release = (string) ($item['release'] ?? $item['release_name'] ?? $item['title'] ?? $item['file_name'] ?? 'Unknown Release');
+            $fileName = (string) ($item['file_name'] ?? ($release.'.srt'));
+            $format = strtolower((string) ($item['format'] ?? 'srt'));
+
+            return array_merge($item, [
+                'id' => $id,
+                'subtitle_id' => $id,
+                'provider' => $provider,
+                'source' => $source,
+                'language' => $lang2,
+                'release' => $release,
+                'release_name' => $release,
+                'file_name' => $fileName,
+                'format' => $format,
+                'rating' => (float) ($item['rating'] ?? 0),
+                'downloads' => (int) ($item['downloads'] ?? 0),
+                'download_url' => $item['download_url'] ?? null,
+            ]);
+        }, $allResults);
+
+        // Sort Arabic first (or English first when explicitly filtered to EN only), then by rating & downloads
+        usort($normalizedResults, function (array $a, array $b) use ($arRequestedFirst): int {
+            $rankLang = function (string $code) use ($arRequestedFirst): int {
+                if ($arRequestedFirst) {
+                    return match ($code) {
+                        'ar' => 0,
+                        'en' => 1,
+                        default => 2,
+                    };
+                }
+
+                return match ($code) {
+                    'en' => 0,
+                    'ar' => 1,
+                    default => 2,
+                };
+            };
+
+            $langCmp = $rankLang($a['language']) <=> $rankLang($b['language']);
+            if ($langCmp !== 0) {
+                return $langCmp;
+            }
+
+            $ratingCmp = $b['rating'] <=> $a['rating'];
+            if ($ratingCmp !== 0) {
+                return $ratingCmp;
+            }
+
+            return $b['downloads'] <=> $a['downloads'];
+        });
 
         return response()->json([
-            'results' => $allResults,
+            'results' => $normalizedResults,
             'meta' => [
                 'engine_used' => empty($enginesUsed) ? 'none' : implode(', ', array_unique($enginesUsed)),
                 'imdb_id' => $imdbId,
                 'api_key_configured' => $hasApiKey,
                 'query' => $query,
                 'language' => $lang,
-                'count' => count($allResults),
+                'count' => count($normalizedResults),
             ],
         ]);
     }
@@ -440,9 +512,44 @@ class SubtitleController extends Controller
 
         $subtitles = Subtitle::where('subtitlable_id', $model->id)
             ->where('subtitlable_type', get_class($model))
-            ->orderBy('is_default', 'desc')
-            ->orderBy('is_embedded', 'asc')
-            ->get();
+            ->get()
+            ->map(function (Subtitle $sub): Subtitle {
+                $pathLower = strtolower((string) $sub->file_path);
+                $sourceType = $sub->is_embedded
+                    ? 'embedded'
+                    : (str_contains($pathLower, '.ai_ar.') || str_contains($pathLower, 'ai_translated') ? 'ai_translated' : 'external');
+                $sub->setAttribute('source_type', $sourceType);
+
+                return $sub;
+            })
+            ->sort(function (Subtitle $a, Subtitle $b): int {
+                $langRank = function (Subtitle $sub): int {
+                    $code = strtolower(trim((string) $sub->language));
+                    $name = strtolower(trim((string) $sub->language_name));
+                    if (in_array($code, ['ar', 'ara', 'arabic'], true) || str_contains($name, 'arab') || str_contains($name, 'عرب')) {
+                        return 0;
+                    }
+                    if (in_array($code, ['en', 'eng', 'english'], true) || str_contains($name, 'eng')) {
+                        return 1;
+                    }
+
+                    return 2;
+                };
+
+                $cmp = $langRank($a) <=> $langRank($b);
+                if ($cmp !== 0) {
+                    return $cmp;
+                }
+
+                // Prefer external/downloaded tracks first within the same language, then default tracks
+                $embCmp = ((int) $a->is_embedded) <=> ((int) $b->is_embedded);
+                if ($embCmp !== 0) {
+                    return $embCmp;
+                }
+
+                return ((int) $b->is_default) <=> ((int) $a->is_default);
+            })
+            ->values();
 
         return response()->json(['subtitles' => $subtitles]);
     }

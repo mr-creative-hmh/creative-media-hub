@@ -8,7 +8,9 @@ use App\Models\Season;
 use App\Models\Series;
 use App\Models\Subtitle;
 use App\Models\WatchHistory;
+use App\Services\Media\FfmpegLocatorService;
 use App\Services\Streaming\StreamMseService;
+use App\Services\Streaming\StreamRemuxService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Tests\TestCase;
@@ -578,6 +580,16 @@ class StreamingAndRoutesTest extends TestCase
         $this->assertContains('-noaccurate_seek', $cmd);
         $this->assertContains('-ss', $cmd);
         $this->assertContains('320', $cmd);
+        $this->assertContains('-frag_duration', $cmd);
+        $this->assertContains('500000', $cmd);
+        $this->assertContains('-min_frag_duration', $cmd);
+        $this->assertContains('200000', $cmd);
+        $this->assertContains('-center_mix_level', $cmd);
+        $this->assertContains('0.707', $cmd);
+        $this->assertContains('-surround_mix_level', $cmd);
+        $this->assertContains('-lfe_mix_level', $cmd);
+        $this->assertContains('0.0', $cmd);
+        $this->assertContains('frag_keyframe+empty_moov+default_base_moof+separate_moof', $cmd);
 
         $afIndex = array_search('-af', $cmd, true);
         $this->assertNotFalse($afIndex);
@@ -623,5 +635,91 @@ class StreamingAndRoutesTest extends TestCase
         $this->assertNotFalse($cvNoCapIdx);
         $this->assertNotEquals('copy', $noCapCmd[$cvNoCapIdx + 1]);
         $this->assertStringContainsString('avc1.42e01e', $builtNoCap['mime_type']);
+    }
+
+    public function test_subtitle_for_media_prioritizes_arabic_then_english(): void
+    {
+        $movie = MediaItem::create([
+            'title' => 'Dune Part Two',
+            'release_year' => 2024,
+            'file_path' => null,
+        ]);
+
+        Subtitle::create([
+            'subtitlable_id' => $movie->id,
+            'subtitlable_type' => MediaItem::class,
+            'language' => 'fr',
+            'language_name' => 'French',
+            'format' => 'srt',
+            'file_path' => 'C:/Subs/dune.fr.srt',
+            'is_embedded' => false,
+            'is_default' => false,
+        ]);
+
+        Subtitle::create([
+            'subtitlable_id' => $movie->id,
+            'subtitlable_type' => MediaItem::class,
+            'language' => 'en',
+            'language_name' => 'English',
+            'format' => 'srt',
+            'file_path' => 'C:/Subs/dune.en.srt',
+            'is_embedded' => false,
+            'is_default' => true,
+        ]);
+
+        Subtitle::create([
+            'subtitlable_id' => $movie->id,
+            'subtitlable_type' => MediaItem::class,
+            'language' => 'ar',
+            'language_name' => 'Arabic (Embedded)',
+            'format' => 'ass',
+            'file_path' => 'embedded:2:C:/Movies/dune.mkv',
+            'is_embedded' => true,
+            'is_default' => true,
+        ]);
+
+        Subtitle::create([
+            'subtitlable_id' => $movie->id,
+            'subtitlable_type' => MediaItem::class,
+            'language' => 'ar',
+            'language_name' => 'Arabic',
+            'format' => 'srt',
+            'file_path' => 'C:/Subs/dune.ar.srt',
+            'is_embedded' => false,
+            'is_default' => false,
+        ]);
+
+        $response = $this->getJson(route('api.subtitles.for-media', ['type' => 'movie', 'id' => $movie->id]));
+        $response->assertStatus(200);
+
+        $subs = $response->json('subtitles');
+        $this->assertCount(4, $subs);
+        $this->assertEquals('ar', $subs[0]['language']);
+        $this->assertEquals('external', $subs[0]['source_type']);
+        $this->assertEquals('ar', $subs[1]['language']);
+        $this->assertEquals('embedded', $subs[1]['source_type']);
+        $this->assertEquals('en', $subs[2]['language']);
+        $this->assertEquals('fr', $subs[3]['language']);
+    }
+
+    public function test_mediainfo_locator_returns_valid_path_or_null(): void
+    {
+        $path = FfmpegLocatorService::getMediaInfoPath();
+        $this->assertTrue($path === null || (is_string($path) && file_exists($path)));
+    }
+
+    public function test_remux_service_copies_hevc_and_av1_when_capabilities_present(): void
+    {
+        $service = app(StreamRemuxService::class);
+
+        $hevcRequest = Request::create('/stream/remux/movie/1', 'GET', ['cap_hevc' => '1']);
+        $this->assertEquals(['-c:v', 'copy', '-tag:v', 'hvc1'], $service->resolveVideoEncodeArgs('hevc', 'mkv', $hevcRequest));
+
+        $av1Request = Request::create('/stream/remux/movie/1', 'GET', ['cap_av1' => '1']);
+        $this->assertEquals(['-c:v', 'copy'], $service->resolveVideoEncodeArgs('av1', 'mkv', $av1Request));
+
+        $noCapRequest = Request::create('/stream/remux/movie/1', 'GET');
+        $fallbackArgs = $service->resolveVideoEncodeArgs('hevc', 'mkv', $noCapRequest);
+        $this->assertNotContains('copy', $fallbackArgs);
     }
 }

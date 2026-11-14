@@ -83,11 +83,34 @@ const { t } = useI18n();
                             : 'bg-white/5 text-slate-300 border-white/5 hover:bg-white/10'"
                     >
                         <div class="flex items-center gap-2 truncate">
-                            <span>{{ sub.language_name || sub.language || 'Subtitle' }}</span>
-                            <span v-if="sub.is_embedded" class="px-1.5 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                            <span
+                                class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border shrink-0"
+                                :class="['ar', 'ara', 'arabic'].includes((sub.language || '').toLowerCase())
+                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                    : 'bg-sky-500/20 text-sky-300 border-sky-500/30'"
+                            >
+                                {{ sub.language || 'sub' }}
+                            </span>
+                            <span class="truncate">{{ sub.language_name || sub.language || 'Subtitle' }}</span>
+                            <span
+                                v-if="sub.source_type === 'ai_translated'"
+                                class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0"
+                            >
+                                AI Arabic
+                            </span>
+                            <span
+                                v-else-if="sub.is_embedded || sub.source_type === 'embedded'"
+                                class="px-1.5 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0"
+                            >
                                 {{ t('player.embedded') || 'Embedded' }}
                             </span>
-                            <span v-if="sub.format" class="px-1.5 py-0.5 rounded text-[10px] bg-white/10 text-slate-300 uppercase">
+                            <span
+                                v-else
+                                class="px-1.5 py-0.5 rounded text-[10px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 shrink-0"
+                            >
+                                {{ t('player.downloaded') || 'Downloaded' }}
+                            </span>
+                            <span v-if="sub.format" class="px-1.5 py-0.5 rounded text-[10px] bg-white/10 text-slate-300 uppercase shrink-0">
                                 {{ sub.format }}
                             </span>
                         </div>

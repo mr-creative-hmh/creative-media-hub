@@ -11,6 +11,8 @@ class FfmpegLocatorService
 
     protected static ?string $cachedFfprobePath = null;
 
+    protected static ?string $cachedMediaInfoPath = null;
+
     protected static ?string $cachedH264Encoder = null;
 
     /**
@@ -207,6 +209,72 @@ class FfmpegLocatorService
     public static function isAvailable(): bool
     {
         return self::getFfmpegPath() !== null;
+    }
+
+    /**
+     * Get the absolute path for K-Lite Codec Pack MediaInfo CLI (if installed).
+     */
+    public static function getMediaInfoPath(): ?string
+    {
+        if (self::$cachedMediaInfoPath && file_exists(self::$cachedMediaInfoPath)) {
+            return self::$cachedMediaInfoPath;
+        }
+
+        try {
+            $cached = Cache::get('cmh_locator_mediainfo_path');
+            if (is_string($cached) && $cached !== '' && file_exists($cached)) {
+                return self::$cachedMediaInfoPath = $cached;
+            }
+        } catch (\Throwable $e) {
+        }
+
+        $resolved = self::resolveMediaInfoPath();
+
+        if ($resolved) {
+            try {
+                Cache::forever('cmh_locator_mediainfo_path', $resolved);
+            } catch (\Throwable $e) {
+            }
+        }
+
+        return self::$cachedMediaInfoPath = $resolved;
+    }
+
+    /**
+     * Resolve MediaInfo CLI path from K-Lite Codec Pack installations or system PATH.
+     */
+    protected static function resolveMediaInfoPath(): ?string
+    {
+        try {
+            if (class_exists(AppSetting::class)) {
+                $custom = AppSetting::where('key', 'mediainfo_path')->value('value');
+                if ($custom && file_exists($custom)) {
+                    return $custom;
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        $candidates = [
+            'C:\\Program Files (x86)\\K-Lite Codec Pack\\Tools\\mediainfo.exe',
+            'C:\\Program Files\\K-Lite Codec Pack\\Tools\\mediainfo.exe',
+        ];
+
+        foreach ($candidates as $cand) {
+            if (file_exists($cand)) {
+                return $cand;
+            }
+        }
+
+        $isWin = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+        $testCmd = $isWin ? 'where.exe mediainfo 2>NUL' : 'which mediainfo 2>/dev/null';
+        $out = [];
+        @exec($testCmd, $out, $code);
+        if ($code === 0 && ! empty($out[0]) && trim($out[0]) !== '' && file_exists(trim($out[0]))) {
+            return trim($out[0]);
+        }
+
+        return null;
     }
 
     /**

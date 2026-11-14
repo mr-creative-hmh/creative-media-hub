@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { ArrowLeft, X, Sparkles, Tv, Film } from 'lucide-vue-next';
+import { ArrowLeft, X, Sparkles, Tv, Film, Wand2 } from 'lucide-vue-next';
 import { useI18n } from '@/i18n/useI18n';
 import { formatEpisodeTitle } from '@/lib/mediaTitle';
 
@@ -9,6 +9,7 @@ const props = defineProps<{
     isEpisode: boolean;
     isRemuxStream: boolean;
     engineMode?: 'web' | 'remux' | 'direct';
+    shaderPreset?: 'standard' | 'clarity' | 'vivid' | 'night';
     liveResolution?: string;
     displayResolution?: string;
     displayCodec?: string;
@@ -19,6 +20,7 @@ const props = defineProps<{
 const emit = defineEmits<{
     (e: 'close'): void;
     (e: 'toggle-stream'): void;
+    (e: 'toggle-shader'): void;
 }>();
 
 const { isRTL, t } = useI18n();
@@ -83,6 +85,29 @@ const displayYear = computed(() => {
             >
                 {{ liveResolution || displayResolution }}
             </span>
+
+            <!-- K-Lite Shader Preset Toggle -->
+            <button
+                @click="emit('toggle-shader')"
+                class="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl text-[10px] sm:text-xs font-bold transition-all border flex items-center gap-1.5 backdrop-blur-md cursor-pointer"
+                :class="shaderPreset && shaderPreset !== 'standard'
+                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30 shadow-md shadow-purple-500/10'
+                    : 'bg-white/10 text-slate-300 border-white/15 hover:bg-white/20'"
+                title="Cycle K-Lite Visual Shader Preset (Standard / Clarity / HDR Vivid / Night Vision)"
+            >
+                <Wand2 class="w-3 h-3" />
+                <span class="hidden md:inline">
+                    {{
+                        shaderPreset === 'clarity'
+                            ? 'Sharpen'
+                            : shaderPreset === 'vivid'
+                                ? 'HDR Vivid'
+                                : shaderPreset === 'night'
+                                    ? 'Night'
+                                    : 'Shader'
+                    }}
+                </span>
+            </button>
 
             <!-- Stream Engine Mode Toggle -->
             <button

@@ -8,6 +8,7 @@ export interface SubtitleItem {
     is_embedded?: boolean;
     file_path?: string;
     is_default?: boolean | number;
+    source_type?: 'external' | 'ai_translated' | 'embedded';
     url?: string;
 }
 
@@ -140,14 +141,16 @@ export function useCinemaSubtitles(options?: UseCinemaSubtitlesOptions) {
         activeCueText.value = active ? active.text : '';
     };
 
-    const loadSubtitleTrack = async (subId: number | string) => {
+    const loadSubtitleTrack = async (subId: number | string, isManualSelection: boolean = true) => {
         if (subId === 'off') {
             selectedSubtitleId.value = 'off';
             parsedCues.value = [];
             activeCueText.value = '';
-            try {
-                localStorage.setItem('cinema_subtitle_pref', 'off');
-            } catch {}
+            if (isManualSelection) {
+                try {
+                    localStorage.setItem('cinema_subtitle_pref', 'off');
+                } catch {}
+            }
             return;
         }
 
@@ -158,10 +161,10 @@ export function useCinemaSubtitles(options?: UseCinemaSubtitlesOptions) {
             const content = await res.text();
             parsedCues.value = parseWebVTTContent(content);
             updateActiveCue(lastKnownTime);
-            const foundSub = availableSubtitles.value.find(s => String(s.id) === String(subId));
-            if (foundSub?.language) {
+            // Clear explicit 'off' preference only on manual selection; never pollute with English fallback
+            if (isManualSelection) {
                 try {
-                    localStorage.setItem('cinema_subtitle_pref', foundSub.language);
+                    localStorage.setItem('cinema_subtitle_pref', 'auto');
                 } catch {}
             }
         } catch (e) {
@@ -181,6 +184,18 @@ export function useCinemaSubtitles(options?: UseCinemaSubtitlesOptions) {
         updateActiveCue(lastKnownTime);
     };
 
+    const isArabicSubtitle = (s: SubtitleItem): boolean => {
+        const lang = (s.language || '').toLowerCase().trim();
+        const langName = (s.language_name || '').toLowerCase();
+        return lang === 'ar' || lang === 'ara' || lang === 'arabic' || langName.includes('arab') || langName.includes('عرب');
+    };
+
+    const isEnglishSubtitle = (s: SubtitleItem): boolean => {
+        const lang = (s.language || '').toLowerCase().trim();
+        const langName = (s.language_name || '').toLowerCase();
+        return lang === 'en' || lang === 'eng' || lang === 'english' || langName.includes('eng');
+    };
+
     const findBestSubtitle = (tracks: SubtitleItem[]): SubtitleItem | null => {
         if (!tracks || tracks.length === 0) return null;
 
@@ -189,41 +204,28 @@ export function useCinemaSubtitles(options?: UseCinemaSubtitlesOptions) {
             savedPref = localStorage.getItem('cinema_subtitle_pref');
         } catch {}
 
+        // Only stay silent if the user explicitly turned subtitles Off
         if (savedPref === 'off') {
             return null;
         }
 
-        if (savedPref && savedPref !== 'auto') {
-            const prefLower = savedPref.toLowerCase();
-            const prefTrack = tracks.find(s => {
-                const lang = (s.language || '').toLowerCase();
-                const langName = (s.language_name || '').toLowerCase();
-                return lang === prefLower ||
-                    (prefLower === 'ar' && (lang === 'ara' || langName.includes('arab') || langName.includes('عرب'))) ||
-                    (prefLower === 'en' && (lang === 'eng' || langName.includes('eng')));
-            });
-            if (prefTrack) return prefTrack;
-        }
+        // 1. Strict Arabic priority (prefer external/downloaded or AI-translated Arabic first)
+        const arabicExternal = tracks.find(s => isArabicSubtitle(s) && !s.is_embedded);
+        if (arabicExternal) return arabicExternal;
 
-        // Arabic priority
-        const arabicTrack = tracks.find(s => {
-            const lang = (s.language || '').toLowerCase();
-            const langName = (s.language_name || '').toLowerCase();
-            return lang === 'ar' || lang === 'ara' || langName.includes('arab') || langName.includes('عرب');
-        });
+        const arabicTrack = tracks.find(s => isArabicSubtitle(s));
         if (arabicTrack) return arabicTrack;
 
-        // Default flag
+        // 2. English fallback priority when Arabic is unavailable
+        const englishExternal = tracks.find(s => isEnglishSubtitle(s) && !s.is_embedded);
+        if (englishExternal) return englishExternal;
+
+        const englishTrack = tracks.find(s => isEnglishSubtitle(s));
+        if (englishTrack) return englishTrack;
+
+        // 3. Default flag or first track
         const defaultTrack = tracks.find(s => s.is_default);
         if (defaultTrack) return defaultTrack;
-
-        // English fallback
-        const englishTrack = tracks.find(s => {
-            const lang = (s.language || '').toLowerCase();
-            const langName = (s.language_name || '').toLowerCase();
-            return lang === 'en' || lang === 'eng' || langName.includes('eng');
-        });
-        if (englishTrack) return englishTrack;
 
         return tracks[0];
     };
@@ -231,7 +233,7 @@ export function useCinemaSubtitles(options?: UseCinemaSubtitlesOptions) {
     const autoSelectAndLoadSubtitle = async (tracks: SubtitleItem[]) => {
         const best = findBestSubtitle(tracks);
         if (best) {
-            await loadSubtitleTrack(best.id);
+            await loadSubtitleTrack(best.id, false);
         } else {
             selectedSubtitleId.value = 'off';
             parsedCues.value = [];
@@ -239,12 +241,20 @@ export function useCinemaSubtitles(options?: UseCinemaSubtitlesOptions) {
         }
     };
 
-    const fetchSubtitlesForMedia = async (type: 'movie' | 'episode', id: number | string) => {
+    const fetchSubtitlesForMedia = async (type: 'movie' | 'episode', id: number | string, forceSelectId?: number | string) => {
         try {
             const res = await fetch(`/api/subtitles/for-media?type=${type}&id=${id}`);
             const data = await res.json();
             if (data.subtitles && Array.isArray(data.subtitles)) {
                 availableSubtitles.value = data.subtitles;
+
+                // Auto-select newly downloaded or translated subtitle immediately
+                if (forceSelectId !== undefined && forceSelectId !== null && forceSelectId !== '') {
+                    const matched = data.subtitles.find((s: SubtitleItem) => String(s.id) === String(forceSelectId));
+                    await loadSubtitleTrack(matched ? matched.id : forceSelectId, true);
+                    return;
+                }
+
                 if (selectedSubtitleId.value !== 'off') {
                     const stillExists = data.subtitles.some((s: SubtitleItem) => String(s.id) === String(selectedSubtitleId.value));
                     if (!stillExists) {

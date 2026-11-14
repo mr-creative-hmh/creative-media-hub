@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-import { X, Search, Download, Loader2, Check, Sparkles } from 'lucide-vue-next';
+import { ref, computed, watch } from 'vue';
+import { X, Search, Download, Loader2, Sparkles, Star } from 'lucide-vue-next';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
 
@@ -13,17 +13,79 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     (e: 'close'): void;
-    (e: 'downloaded'): void;
+    (e: 'downloaded', subtitle?: any): void;
     (e: 'translate'): void;
 }>();
 
-const { t } = useI18n();
+const { isRTL, t } = useI18n();
 const toast = useToast();
 
 const searchQuery = ref('');
 const isSearching = ref(false);
 const searchResults = ref<any[]>([]);
 const downloadingId = ref<string | number | null>(null);
+const selectedLangFilter = ref<'ar,en' | 'ar' | 'en'>('ar,en');
+const selectedSourceFilter = ref<'all' | 'subsense' | 'opensubtitles' | 'subdl' | 'yts'>('all');
+
+const normalizeLangCode = (lang: unknown): string => {
+    const l = String(lang || '').toLowerCase().trim();
+    if (l === 'ara' || l.includes('arab') || l === 'ar') return 'ar';
+    if (l === 'eng' || l.includes('engl') || l === 'en') return 'en';
+    return l || 'en';
+};
+
+const getItemId = (res: any): string => String(res?.subtitle_id ?? res?.id ?? '');
+
+const languageFilteredResults = computed(() => {
+    const list = Array.isArray(searchResults.value) ? [...searchResults.value] : [];
+    const filtered = list.filter((res) => {
+        const l = normalizeLangCode(res.language);
+        if (selectedLangFilter.value === 'ar') return l === 'ar';
+        if (selectedLangFilter.value === 'en') return l === 'en';
+        return true;
+    });
+
+    // Always enforce Arabic-first sorting when showing All (AR First)
+    if (selectedLangFilter.value === 'ar,en') {
+        filtered.sort((a, b) => {
+            const rank = (code: string) => (code === 'ar' ? 0 : code === 'en' ? 1 : 2);
+            const cmp = rank(normalizeLangCode(a.language)) - rank(normalizeLangCode(b.language));
+            if (cmp !== 0) return cmp;
+            return (Number(b.rating) || 0) - (Number(a.rating) || 0) || (Number(b.downloads) || 0) - (Number(a.downloads) || 0);
+        });
+    }
+
+    return filtered;
+});
+
+const matchesSourceFilter = (res: any, filterKey: 'subsense' | 'opensubtitles' | 'subdl' | 'yts'): boolean => {
+    const provider = String(res?.provider || '').toLowerCase();
+    const source = String(res?.source || '').toLowerCase();
+    if (filterKey === 'subsense') return provider.includes('subsense');
+    if (filterKey === 'opensubtitles') return source === 'opensubtitles' || provider.includes('opensubtitles');
+    if (filterKey === 'subdl') return source === 'subdl' || provider.includes('subdl');
+    if (filterKey === 'yts') return source.includes('yts') || provider.includes('yts');
+    return true;
+};
+
+const sourceCounts = computed(() => {
+    const items = languageFilteredResults.value;
+    return {
+        all: items.length,
+        subsense: items.filter((r) => matchesSourceFilter(r, 'subsense')).length,
+        opensubtitles: items.filter((r) => matchesSourceFilter(r, 'opensubtitles')).length,
+        subdl: items.filter((r) => matchesSourceFilter(r, 'subdl')).length,
+        yts: items.filter((r) => matchesSourceFilter(r, 'yts')).length,
+    };
+});
+
+const filteredResults = computed(() => {
+    const items = languageFilteredResults.value;
+    if (selectedSourceFilter.value === 'all') {
+        return items;
+    }
+    return items.filter((r) => matchesSourceFilter(r, selectedSourceFilter.value as any));
+});
 
 const initQuery = () => {
     if (props.isEpisode) {
@@ -35,12 +97,20 @@ const initQuery = () => {
 
 watch(() => props.isOpen, (open) => {
     if (open) {
+        selectedLangFilter.value = 'ar,en';
+        selectedSourceFilter.value = 'all';
         initQuery();
         performSearch();
     } else {
         searchResults.value = [];
     }
 });
+
+const setLangFilter = (langFilter: 'ar,en' | 'ar' | 'en') => {
+    selectedLangFilter.value = langFilter;
+    selectedSourceFilter.value = 'all';
+    performSearch();
+};
 
 const performSearch = async () => {
     if (!searchQuery.value.trim()) return;
@@ -55,6 +125,8 @@ const performSearch = async () => {
             id: String(id),
             query: searchQuery.value,
             q: searchQuery.value,
+            language: selectedLangFilter.value,
+            languages: selectedLangFilter.value,
         });
         const res = await fetch(`/api/subtitles/search?${qParams.toString()}`);
         const data = await res.json();
@@ -67,14 +139,18 @@ const performSearch = async () => {
 };
 
 const downloadSubtitle = async (result: any) => {
-    downloadingId.value = result.id;
+    const itemId = getItemId(result);
+    downloadingId.value = itemId;
     try {
         const type = props.isEpisode ? 'episode' : 'movie';
         const id = props.item?.watchable_id || props.item?.id;
+        const releaseLabel = result.release || result.release_name || result.title || result.file_name || 'Downloaded';
+        const fileName = result.file_name || `${releaseLabel}.srt`;
         const res = await fetch('/api/subtitles/download', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Accept': 'application/json',
                 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
             },
             body: JSON.stringify({
@@ -82,27 +158,38 @@ const downloadSubtitle = async (result: any) => {
                 type,
                 media_id: id,
                 id,
-                subtitle_id: result.id,
+                subtitle_id: itemId,
+                file_id: String(result.file_id ?? itemId),
                 download_url: result.download_url,
-                language: result.language || 'ar',
-                release: result.release_name || result.title,
-                release_name: result.release_name || result.title,
-                file_id: result.file_id || result.id,
+                language: normalizeLangCode(result.language || 'ar'),
+                release: releaseLabel,
+                release_name: releaseLabel,
+                file_name: fileName,
+                source: result.source || 'opensubtitles',
             }),
         });
 
-        if (res.ok) {
-            toast.success(t('player.subtitle_downloaded') || 'Subtitle downloaded successfully!');
-            emit('downloaded');
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data?.subtitle) {
+            toast.success(t('player.subtitle_downloaded') || (isRTL.value ? 'تم تحميل وتفعيل الترجمة تلقائياً!' : 'Subtitle downloaded & activated!'));
+            emit('downloaded', data.subtitle);
             emit('close');
         } else {
-            toast.error(t('player.subtitle_download_failed') || 'Download failed');
+            toast.error(data?.message || t('player.subtitle_download_failed') || 'Download failed');
         }
     } catch (e) {
         toast.error(t('player.subtitle_download_failed') || 'Download failed');
     } finally {
         downloadingId.value = null;
     }
+};
+
+const getProviderBadgeClass = (res: any): string => {
+    const provider = String(res?.provider || res?.source || '').toLowerCase();
+    if (provider.includes('yts')) return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+    if (provider.includes('subdl')) return 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30';
+    if (provider.includes('subsense')) return 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30';
+    return 'bg-purple-500/15 text-purple-300 border-purple-500/30';
 };
 </script>
 
@@ -112,7 +199,7 @@ const downloadSubtitle = async (result: any) => {
         class="absolute inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
         @click.self="emit('close')"
     >
-        <div class="w-full max-w-lg rounded-3xl bg-slate-900/95 border border-white/10 shadow-2xl p-6 space-y-4">
+        <div class="w-full max-w-2xl rounded-3xl bg-slate-900/95 border border-white/10 shadow-2xl p-6 space-y-4">
             <!-- Header -->
             <div class="flex items-center justify-between pb-3 border-b border-white/10">
                 <div class="flex items-center gap-2">
@@ -171,15 +258,104 @@ const downloadSubtitle = async (result: any) => {
                 </button>
             </form>
 
-            <!-- Results List -->
-            <div class="max-h-60 overflow-y-auto space-y-2 pr-1">
-                <div v-if="isSearching" class="py-8 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
-                    <Loader2 class="w-4 h-4 animate-spin text-cyan-400" />
-                    Searching providers...
+            <!-- Language & Source Filters -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                <!-- Language Filter Pills -->
+                <div class="flex items-center gap-1.5 bg-white/5 p-1 rounded-xl border border-white/10">
+                    <button
+                        type="button"
+                        @click="setLangFilter('ar,en')"
+                        class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                        :class="selectedLangFilter === 'ar,en' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-300 hover:text-white'"
+                    >
+                        {{ isRTL ? 'الكل (العربية أولاً)' : 'All (AR First)' }}
+                    </button>
+                    <button
+                        type="button"
+                        @click="setLangFilter('ar')"
+                        class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                        :class="selectedLangFilter === 'ar' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-300 hover:text-white'"
+                    >
+                        {{ isRTL ? 'العربية (AR)' : 'Arabic (AR)' }}
+                    </button>
+                    <button
+                        type="button"
+                        @click="setLangFilter('en')"
+                        class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                        :class="selectedLangFilter === 'en' ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-300 hover:text-white'"
+                    >
+                        {{ isRTL ? 'الإنجليزية (EN)' : 'English (EN)' }}
+                    </button>
                 </div>
 
-                <div v-else-if="searchResults.length === 0" class="py-8 text-center text-slate-500 text-xs flex flex-col items-center gap-2.5">
-                    <span>{{ t('player.no_subtitles_found') || 'No subtitles found. Try adjusting query.' }}</span>
+                <!-- Source Filter Pills -->
+                <div class="flex items-center flex-wrap gap-1.5">
+                    <button
+                        type="button"
+                        @click="selectedSourceFilter = 'all'"
+                        class="px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer"
+                        :class="selectedSourceFilter === 'all'
+                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                            : 'bg-white/5 text-slate-400 border-white/10 hover:text-white'"
+                    >
+                        {{ isRTL ? 'كل المصادر' : 'All Sources' }} ({{ sourceCounts.all }})
+                    </button>
+                    <button
+                        v-if="sourceCounts.subsense > 0"
+                        type="button"
+                        @click="selectedSourceFilter = 'subsense'"
+                        class="px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer"
+                        :class="selectedSourceFilter === 'subsense'
+                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                            : 'bg-white/5 text-slate-400 border-white/10 hover:text-white'"
+                    >
+                        SubSense ({{ sourceCounts.subsense }})
+                    </button>
+                    <button
+                        v-if="sourceCounts.opensubtitles > 0"
+                        type="button"
+                        @click="selectedSourceFilter = 'opensubtitles'"
+                        class="px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer"
+                        :class="selectedSourceFilter === 'opensubtitles'
+                            ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                            : 'bg-white/5 text-slate-400 border-white/10 hover:text-white'"
+                    >
+                        OpenSubtitles ({{ sourceCounts.opensubtitles }})
+                    </button>
+                    <button
+                        v-if="sourceCounts.subdl > 0"
+                        type="button"
+                        @click="selectedSourceFilter = 'subdl'"
+                        class="px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer"
+                        :class="selectedSourceFilter === 'subdl'
+                            ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                            : 'bg-white/5 text-slate-400 border-white/10 hover:text-white'"
+                    >
+                        SubDL ({{ sourceCounts.subdl }})
+                    </button>
+                    <button
+                        v-if="sourceCounts.yts > 0"
+                        type="button"
+                        @click="selectedSourceFilter = 'yts'"
+                        class="px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer"
+                        :class="selectedSourceFilter === 'yts'
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                            : 'bg-white/5 text-slate-400 border-white/10 hover:text-white'"
+                    >
+                        YTS ({{ sourceCounts.yts }})
+                    </button>
+                </div>
+            </div>
+
+            <!-- Results List -->
+            <div class="max-h-72 overflow-y-auto space-y-2 pr-1">
+                <div v-if="isSearching" class="py-8 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
+                    <Loader2 class="w-4 h-4 animate-spin text-cyan-400" />
+                    {{ isRTL ? 'جارٍ البحث في مزودات الترجمة...' : 'Searching providers...' }}
+                </div>
+
+                <div v-else-if="filteredResults.length === 0" class="py-8 text-center text-slate-500 text-xs flex flex-col items-center gap-2.5">
+                    <span>{{ t('player.no_subtitles_found') || 'No subtitles found. Try adjusting query or filters.' }}</span>
                     <button
                         type="button"
                         @click="emit('translate')"
@@ -193,32 +369,58 @@ const downloadSubtitle = async (result: any) => {
                 </div>
 
                 <div
-                    v-for="res in searchResults"
-                    :key="res.id"
-                    class="p-3 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-all flex items-center justify-between gap-3"
+                    v-for="res in filteredResults"
+                    :key="getItemId(res)"
+                    class="p-3 rounded-2xl bg-white/5 border border-white/5 hover:border-cyan-500/30 transition-all flex items-center justify-between gap-3"
                 >
                     <div class="min-w-0 flex-1">
-                        <div class="text-xs font-bold text-white truncate">
-                            {{ res.release_name || res.title || 'Subtitle' }}
+                        <div class="flex items-center flex-wrap gap-1.5 mb-1">
+                            <!-- Language Pill -->
+                            <span
+                                class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border"
+                                :class="normalizeLangCode(res.language) === 'ar'
+                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                    : 'bg-sky-500/20 text-sky-300 border-sky-500/30'"
+                            >
+                                {{ normalizeLangCode(res.language) }}
+                            </span>
+
+                            <!-- Provider / Source Pill -->
+                            <span
+                                class="px-1.5 py-0.5 rounded text-[10px] font-bold border uppercase"
+                                :class="getProviderBadgeClass(res)"
+                            >
+                                {{ res.provider || res.source || 'OpenSubtitles' }}
+                            </span>
+
+                            <!-- Format Badge -->
+                            <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-white/10 text-slate-300 uppercase">
+                                {{ res.format || 'srt' }}
+                            </span>
+
+                            <!-- Rating & Downloads -->
+                            <span v-if="res.rating && Number(res.rating) > 0" class="inline-flex items-center gap-0.5 text-[10px] text-amber-400 font-semibold">
+                                <Star class="w-3 h-3 fill-amber-400 text-amber-400" />
+                                {{ Number(res.rating).toFixed(1) }}
+                            </span>
+                            <span v-if="res.downloads && Number(res.downloads) > 0" class="text-[10px] text-slate-400">
+                                · {{ Number(res.downloads).toLocaleString() }}
+                            </span>
                         </div>
-                        <div class="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
-                            <span class="px-1.5 py-0.5 rounded text-[10px] bg-cyan-500/20 text-cyan-300 font-bold uppercase">
-                                {{ res.language || 'ar' }}
-                            </span>
-                            <span v-if="res.downloads" class="text-slate-500">
-                                {{ res.downloads }} downloads
-                            </span>
+                        <div class="text-xs font-medium text-white truncate font-mono" :title="res.release || res.file_name || res.release_name || res.title">
+                            {{ res.release || res.file_name || res.release_name || res.title || 'Subtitle' }}
                         </div>
                     </div>
 
                     <button
                         @click="downloadSubtitle(res)"
-                        :disabled="downloadingId === res.id"
-                        class="p-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-bold transition-all disabled:opacity-50 shrink-0"
-                        :title="t('player.download_subtitle') || 'Download'"
+                        :disabled="downloadingId === getItemId(res)"
+                        class="px-3 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 text-xs font-bold transition-all disabled:opacity-50 shrink-0 flex items-center gap-1.5 cursor-pointer"
+                        :title="t('player.download_subtitle') || 'Download & Activate'"
                     >
-                        <Loader2 v-if="downloadingId === res.id" class="w-4 h-4 animate-spin" />
+                        <Loader2 v-if="downloadingId === getItemId(res)" class="w-4 h-4 animate-spin" />
                         <Download v-else class="w-4 h-4" />
+                        <span class="hidden sm:inline">{{ isRTL ? 'تطبيق' : 'Apply' }}</span>
                     </button>
                 </div>
             </div>
