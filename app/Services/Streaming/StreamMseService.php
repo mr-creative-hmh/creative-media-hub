@@ -41,6 +41,10 @@ class StreamMseService
         $isWin = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
         $nullDevice = $isWin ? 'NUL' : '/dev/null';
 
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
+
         return new StreamedResponse(function () use ($cmd, $nullDevice) {
             $descriptors = [
                 0 => ['pipe', 'r'],

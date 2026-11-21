@@ -4,6 +4,7 @@ namespace App\Services\Metadata;
 
 use App\Models\AppSetting;
 use App\Services\Metadata\Contracts\MetadataProviderInterface;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -592,24 +593,26 @@ class TmdbProvider implements MetadataProviderInterface
         }
 
         try {
-            // 1. Fetch English details
-            $resEn = Http::retry(2, 250)->timeout(12)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
-                'api_key' => $key,
-                'language' => 'en-US',
+            // Fetch English and Arabic season details concurrently
+            $responses = Http::pool(fn ($pool) => [
+                $pool->as('en')->retry(2, 250)->timeout(12)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
+                    'api_key' => $key,
+                    'language' => 'en-US',
+                ]),
+                $pool->as('ar')->retry(2, 250)->timeout(12)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
+                    'api_key' => $key,
+                    'language' => 'ar-SA',
+                ]),
             ]);
 
-            if (! $resEn->successful()) {
+            $resEn = $responses['en'] ?? null;
+            if (! ($resEn instanceof Response) || ! $resEn->successful()) {
                 return [];
             }
 
-            // 2. Fetch Arabic details
-            $resAr = Http::retry(2, 250)->timeout(12)->get("{$this->baseUrl}/tv/{$seriesId}/season/{$seasonNumber}", [
-                'api_key' => $key,
-                'language' => 'ar-SA',
-            ]);
-
+            $resAr = $responses['ar'] ?? null;
             $arEps = [];
-            if ($resAr->successful()) {
+            if ($resAr instanceof Response && $resAr->successful()) {
                 foreach ($resAr->json('episodes', []) as $ep) {
                     $arEps[(int) $ep['episode_number']] = $ep;
                 }

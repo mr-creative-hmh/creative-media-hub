@@ -1,17 +1,32 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import {
+    ref,
+    computed,
+    watch,
+    onMounted,
+    onUnmounted,
+    defineAsyncComponent,
+} from 'vue';
 import { Head } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import OrganizerConfigStep, {
-    OrganizerStrategy,
+    type OrganizerStrategy,
 } from '@/components/organizer/OrganizerConfigStep.vue';
-import OrganizerDryRunStep from '@/components/organizer/OrganizerDryRunStep.vue';
-import OrganizerExecutionStep from '@/components/organizer/OrganizerExecutionStep.vue';
-import OrganizerItemCorrectionModal, {
-    PlanItem,
-} from '@/components/organizer/OrganizerItemCorrectionModal.vue';
-import OrganizerBatchCorrectionModal from '@/components/organizer/OrganizerBatchCorrectionModal.vue';
+import type { PlanItem } from '@/components/organizer/OrganizerItemCorrectionModal.vue';
+
+const OrganizerDryRunStep = defineAsyncComponent(
+    () => import('@/components/organizer/OrganizerDryRunStep.vue'),
+);
+const OrganizerExecutionStep = defineAsyncComponent(
+    () => import('@/components/organizer/OrganizerExecutionStep.vue'),
+);
+const OrganizerItemCorrectionModal = defineAsyncComponent(
+    () => import('@/components/organizer/OrganizerItemCorrectionModal.vue'),
+);
+const OrganizerBatchCorrectionModal = defineAsyncComponent(
+    () => import('@/components/organizer/OrganizerBatchCorrectionModal.vue'),
+);
 import { useOrganizerPlan } from '@/composables/useOrganizerPlan';
 import { useToast } from '@/composables/useToast';
 import {
@@ -622,6 +637,7 @@ onUnmounted(() => {
 
         <!-- Modals -->
         <OrganizerItemCorrectionModal
+            v-if="showCorrectionModal"
             :is-open="showCorrectionModal"
             :item="activeEditItem"
             :target-root="targetRoot"
@@ -632,6 +648,7 @@ onUnmounted(() => {
         />
 
         <OrganizerBatchCorrectionModal
+            v-if="showBatchModal"
             :is-open="showBatchModal"
             :selected-items="batchSelectedItems"
             :target-root="targetRoot"

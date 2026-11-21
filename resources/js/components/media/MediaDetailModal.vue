@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, defineAsyncComponent } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import {
@@ -10,7 +10,8 @@ import {
     SlidersHorizontal,
     Layers,
 } from 'lucide-vue-next';
-import FixMatchModal from './FixMatchModal.vue';
+
+const FixMatchModal = defineAsyncComponent(() => import('./FixMatchModal.vue'));
 
 const props = withDefaults(
     defineProps<{
@@ -333,6 +334,7 @@ const handleMetadataUpdated = (updatedItem: any) => {
 
         <!-- Fix Match Modal -->
         <FixMatchModal
+            v-if="showFixMatch"
             :show="showFixMatch"
             :item="currentItem"
             :initial-tab="fixMatchInitialTab"

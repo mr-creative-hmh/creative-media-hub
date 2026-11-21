@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, defineAsyncComponent } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/components/layout/AppLayout.vue';
-import FixMatchModal from '@/components/media/FixMatchModal.vue';
 import ConfirmModal from '@/components/common/ConfirmModal.vue';
+
+const FixMatchModal = defineAsyncComponent(
+    () => import('@/components/media/FixMatchModal.vue'),
+);
 import {
     Sparkles,
     Search,
@@ -1100,6 +1103,7 @@ const triggerBatchEnrich = async () => {
 
         <!-- Fix Match Studio Modal -->
         <FixMatchModal
+            v-if="showFixModal"
             :show="showFixModal"
             :item="selectedItemForFix"
             :type="selectedItemForFix?.type"

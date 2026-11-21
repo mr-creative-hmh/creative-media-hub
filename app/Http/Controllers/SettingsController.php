@@ -24,15 +24,27 @@ class SettingsController extends Controller
 
     public function index(): Response
     {
+        $keys = [
+            'tmdb_api_key',
+            'omdb_api_key',
+            'opensubtitles_api_key',
+            'ffmpeg_path',
+            'default_language',
+            'auto_fetch_metadata',
+            'auto_fetch_subtitles',
+            'preferred_providers',
+        ];
+        $stored = AppSetting::whereIn('key', $keys)->pluck('value', 'key');
+
         $settings = [
-            'tmdb_api_key' => AppSetting::where('key', 'tmdb_api_key')->value('value') ?? '',
-            'omdb_api_key' => AppSetting::where('key', 'omdb_api_key')->value('value') ?? '',
-            'opensubtitles_api_key' => AppSetting::where('key', 'opensubtitles_api_key')->value('value') ?? '',
-            'ffmpeg_path' => AppSetting::where('key', 'ffmpeg_path')->value('value') ?? 'ffmpeg',
-            'default_language' => AppSetting::where('key', 'default_language')->value('value') ?? 'ar',
-            'auto_fetch_metadata' => (bool) (AppSetting::where('key', 'auto_fetch_metadata')->value('value') ?? true),
-            'auto_fetch_subtitles' => (bool) (AppSetting::where('key', 'auto_fetch_subtitles')->value('value') ?? true),
-            'preferred_providers' => json_decode(AppSetting::where('key', 'preferred_providers')->value('value') ?? '["tvmaze","anilist","wikipedia","local_nfo","tmdb","omdb"]', true),
+            'tmdb_api_key' => $stored->get('tmdb_api_key') ?? '',
+            'omdb_api_key' => $stored->get('omdb_api_key') ?? '',
+            'opensubtitles_api_key' => $stored->get('opensubtitles_api_key') ?? '',
+            'ffmpeg_path' => $stored->get('ffmpeg_path') ?? 'ffmpeg',
+            'default_language' => $stored->get('default_language') ?? 'ar',
+            'auto_fetch_metadata' => (bool) ($stored->get('auto_fetch_metadata') ?? true),
+            'auto_fetch_subtitles' => (bool) ($stored->get('auto_fetch_subtitles') ?? true),
+            'preferred_providers' => json_decode($stored->get('preferred_providers') ?? '["tvmaze","anilist","wikipedia","local_nfo","tmdb","omdb"]', true),
         ];
 
         return Inertia::render('Settings/Index', [

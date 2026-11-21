@@ -3,6 +3,7 @@
 namespace App\Services\Subtitles;
 
 use App\Models\AppSetting;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -24,52 +25,98 @@ class SubDlService
         }
 
         try {
-            $params = [
-                'api_key' => $this->apiKey,
-                'film_name' => $title,
-                'type' => ($type === 'series' || $type === 'tv' || $type === 'episode') ? 'tv' : 'movie',
-                'languages' => implode(',', array_map('strtoupper', $languages)),
-            ];
-
-            if ($year) {
-                $params['year'] = $year;
-            }
-
-            if ($season !== null && $season > 0) {
-                $params['season_number'] = $season;
-            }
-
-            if ($episode !== null && $episode > 0) {
-                $params['episode_number'] = $episode;
+            $params = $this->buildSearchParams($title, $year, $languages, $type, $season, $episode);
+            if ($params === null) {
+                return [];
             }
 
             $response = Http::timeout(6)->get($this->baseUrl, $params);
 
-            if ($response->successful() && $response->json('status')) {
-                $subtitles = $response->json('subtitles', []);
-
-                return array_map(function ($s) {
-                    $dlUrl = $s['url'] ?? null;
-                    if ($dlUrl && ! str_starts_with($dlUrl, 'http')) {
-                        $dlUrl = 'https://dl.subdl.com'.$dlUrl;
-                    }
-
-                    return [
-                        'provider' => 'SubDL',
-                        'subtitle_id' => (string) ($s['id'] ?? uniqid()),
-                        'language' => strtolower($s['language'] ?? 'en'),
-                        'release' => $s['release_name'] ?? $s['name'] ?? '',
-                        'file_name' => $s['name'] ?? 'subtitle.srt',
-                        'download_url' => $dlUrl,
-                        'downloads' => (int) ($s['download_count'] ?? 0),
-                        'rating' => 9.5,
-                    ];
-                }, $subtitles);
-            }
+            return $this->parseSearchResponse($response);
         } catch (\Exception $e) {
             Log::warning('SubDL search failed: '.$e->getMessage());
         }
 
         return [];
+    }
+
+    public function getBaseUrl(): string
+    {
+        return $this->baseUrl;
+    }
+
+    /**
+     * Build query parameters for SubDL search or return null when no API key is configured.
+     *
+     * @param  array<int, string>  $languages
+     * @return array<string, mixed>|null
+     */
+    public function buildSearchParams(
+        string $title,
+        ?int $year = null,
+        array $languages = ['AR', 'EN'],
+        string $type = 'movie',
+        ?int $season = null,
+        ?int $episode = null
+    ): ?array {
+        if (empty($this->apiKey)) {
+            return null;
+        }
+
+        $params = [
+            'api_key' => $this->apiKey,
+            'film_name' => $title,
+            'type' => ($type === 'series' || $type === 'tv' || $type === 'episode') ? 'tv' : 'movie',
+            'languages' => implode(',', array_map('strtoupper', $languages)),
+        ];
+
+        if ($year) {
+            $params['year'] = $year;
+        }
+
+        if ($season !== null && $season > 0) {
+            $params['season_number'] = $season;
+        }
+
+        if ($episode !== null && $episode > 0) {
+            $params['episode_number'] = $episode;
+        }
+
+        return $params;
+    }
+
+    /**
+     * Parse a SubDL HTTP response into normalized subtitle items.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function parseSearchResponse(mixed $response): array
+    {
+        if (! ($response instanceof Response) || ! $response->successful() || ! $response->json('status')) {
+            return [];
+        }
+
+        $subtitles = $response->json('subtitles', []);
+        if (! is_array($subtitles)) {
+            return [];
+        }
+
+        return array_map(function ($s) {
+            $dlUrl = $s['url'] ?? null;
+            if ($dlUrl && ! str_starts_with($dlUrl, 'http')) {
+                $dlUrl = 'https://dl.subdl.com'.$dlUrl;
+            }
+
+            return [
+                'provider' => 'SubDL',
+                'subtitle_id' => (string) ($s['id'] ?? uniqid()),
+                'language' => strtolower($s['language'] ?? 'en'),
+                'release' => $s['release_name'] ?? $s['name'] ?? '',
+                'file_name' => $s['name'] ?? 'subtitle.srt',
+                'download_url' => $dlUrl,
+                'downloads' => (int) ($s['download_count'] ?? 0),
+                'rating' => 9.5,
+            ];
+        }, $subtitles);
     }
 }

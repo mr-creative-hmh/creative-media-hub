@@ -46,17 +46,17 @@ class SubtitleManagerService
         $missing = [];
 
         // 1. Movies
-        $movies = MediaItem::all();
-        foreach ($movies as $movie) {
-            $hasAr = Subtitle::where('subtitlable_id', $movie->id)
-                ->where('subtitlable_type', MediaItem::class)
-                ->whereIn('language', ['ar', 'ara'])
-                ->exists();
+        $movies = MediaItem::query()
+            ->select(['id', 'title', 'title_ar', 'release_year', 'file_path', 'imdb_id'])
+            ->withExists([
+                'subtitles as has_ar' => fn ($q) => $q->whereIn('language', ['ar', 'ara']),
+                'subtitles as has_en' => fn ($q) => $q->whereIn('language', ['en', 'eng']),
+            ])
+            ->get();
 
-            $hasEn = Subtitle::where('subtitlable_id', $movie->id)
-                ->where('subtitlable_type', MediaItem::class)
-                ->whereIn('language', ['en', 'eng'])
-                ->exists();
+        foreach ($movies as $movie) {
+            $hasAr = (bool) $movie->getAttribute('has_ar');
+            $hasEn = (bool) $movie->getAttribute('has_en');
 
             if (! $hasAr || ! $hasEn) {
                 $missing[] = [
@@ -74,26 +74,32 @@ class SubtitleManagerService
         }
 
         // 2. Episodes
-        $episodes = Episode::with('series')->get();
-        foreach ($episodes as $episode) {
-            $hasAr = Subtitle::where('subtitlable_id', $episode->id)
-                ->where('subtitlable_type', Episode::class)
-                ->whereIn('language', ['ar', 'ara'])
-                ->exists();
+        $episodes = Episode::query()
+            ->select(['id', 'series_id', 'season_id', 'episode_number', 'title', 'file_path'])
+            ->with([
+                'series:id,title,imdb_id',
+                'season:id,season_number',
+            ])
+            ->withExists([
+                'subtitles as has_ar' => fn ($q) => $q->whereIn('language', ['ar', 'ara']),
+                'subtitles as has_en' => fn ($q) => $q->whereIn('language', ['en', 'eng']),
+            ])
+            ->get();
 
-            $hasEn = Subtitle::where('subtitlable_id', $episode->id)
-                ->where('subtitlable_type', Episode::class)
-                ->whereIn('language', ['en', 'eng'])
-                ->exists();
+        foreach ($episodes as $episode) {
+            $hasAr = (bool) $episode->getAttribute('has_ar');
+            $hasEn = (bool) $episode->getAttribute('has_en');
 
             if (! $hasAr || ! $hasEn) {
+                $seasonNum = $episode->season?->season_number ?? 1;
+
                 $missing[] = [
                     'id' => $episode->id,
                     'type' => 'episode',
                     'title' => $episode->title,
                     'series_title' => $episode->series?->title,
-                    'season_info' => "S{$episode->season_number}E{$episode->episode_number}",
-                    'season_number' => $episode->season_number,
+                    'season_info' => "S{$seasonNum}E{$episode->episode_number}",
+                    'season_number' => $seasonNum,
                     'episode_number' => $episode->episode_number,
                     'file_path' => $episode->file_path,
                     'missing_ar' => ! $hasAr,

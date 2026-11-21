@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, defineAsyncComponent } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import WatchHistoryBar from '@/components/layout/WatchHistoryBar.vue';
-import CollectionManagementModal from '@/components/collections/CollectionManagementModal.vue';
 import { useI18n } from '@/i18n/useI18n';
+
+const CollectionManagementModal = defineAsyncComponent(
+    () => import('@/components/collections/CollectionManagementModal.vue'),
+);
 import {
     Layers,
     Search,
@@ -983,6 +986,7 @@ const filteredAndSortedCollections = computed(() => {
         </div>
 
         <CollectionManagementModal
+            v-if="showManagementModal"
             :show="showManagementModal"
             @close="showManagementModal = false"
             @changed="refreshCollections"

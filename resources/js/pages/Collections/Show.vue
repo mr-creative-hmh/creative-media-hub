@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, defineAsyncComponent } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
-import MediaDetailModal from '@/components/media/MediaDetailModal.vue';
-import CollectionManagementModal from '@/components/collections/CollectionManagementModal.vue';
 import { useI18n } from '@/i18n/useI18n';
+
+const MediaDetailModal = defineAsyncComponent(
+    () => import('@/components/media/MediaDetailModal.vue'),
+);
+const CollectionManagementModal = defineAsyncComponent(
+    () => import('@/components/collections/CollectionManagementModal.vue'),
+);
 import {
     Layers,
     Film,
@@ -635,6 +640,7 @@ const handleToggleFavorite = async (item: any) => {
 
             <!-- Collection Management Studio Modal -->
             <CollectionManagementModal
+                v-if="showManagementModal"
                 :show="showManagementModal"
                 :initial-collection-slug="collection.slug"
                 @close="showManagementModal = false"

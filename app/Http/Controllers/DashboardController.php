@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DownloadItem;
 use App\Models\Episode;
+use App\Models\Genre;
 use App\Models\MediaItem;
 use App\Models\Series;
 use App\Support\ByteFormatter;
@@ -138,18 +139,31 @@ class DashboardController extends Controller
             ],
         ];
 
-        // Attach matching items for each vibe
-        $vibes = array_map(function ($vibe) {
+        // Attach matching items for each vibe using a single preloaded genre lookup
+        $allGenres = Genre::all(['id', 'slug', 'name_en']);
+        $vibes = array_map(function ($vibe) use ($allGenres) {
             $genreSlug = strtolower($vibe['genre']);
+            $matchedGenreIds = $allGenres
+                ->filter(fn (Genre $g) => str_contains(strtolower((string) $g->slug), $genreSlug) || stripos((string) $g->name_en, $vibe['genre']) !== false)
+                ->pluck('id')
+                ->all();
+
+            if (empty($matchedGenreIds)) {
+                $vibe['matches'] = [];
+                $vibe['match_count'] = 0;
+
+                return $vibe;
+            }
+
             $movies = MediaItem::with(['genres', 'subtitles'])
-                ->whereHas('genres', fn ($q) => $q->where('slug', 'like', "%{$genreSlug}%")->orWhere('name_en', 'like', "%{$vibe['genre']}%"))
+                ->whereHas('genres', fn ($q) => $q->whereIn('genres.id', $matchedGenreIds))
                 ->orderByDesc('rating')
                 ->limit(6)
                 ->get()
                 ->map(fn ($m) => array_merge($m->toArray(), ['type' => 'movie']));
 
             $series = Series::with(['genres'])
-                ->whereHas('genres', fn ($q) => $q->where('slug', 'like', "%{$genreSlug}%")->orWhere('name_en', 'like', "%{$vibe['genre']}%"))
+                ->whereHas('genres', fn ($q) => $q->whereIn('genres.id', $matchedGenreIds))
                 ->orderByDesc('rating')
                 ->limit(4)
                 ->get()

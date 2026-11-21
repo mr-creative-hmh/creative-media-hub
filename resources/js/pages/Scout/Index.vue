@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useI18n } from '@/i18n/useI18n';
-import TorrentSuggestionsModal from '@/components/scout/TorrentSuggestionsModal.vue';
-import FastOrganizeModal from '@/components/scout/FastOrganizeModal.vue';
+
+const TorrentSuggestionsModal = defineAsyncComponent(
+    () => import('@/components/scout/TorrentSuggestionsModal.vue'),
+);
+const FastOrganizeModal = defineAsyncComponent(
+    () => import('@/components/scout/FastOrganizeModal.vue'),
+);
 import {
     Compass,
     RefreshCw,
@@ -3732,6 +3737,7 @@ onMounted(() => {
 
         <!-- Modals -->
         <TorrentSuggestionsModal
+            v-if="isTorrentModalOpen"
             :is-open="isTorrentModalOpen"
             :gap-item="selectedGap"
             @close="isTorrentModalOpen = false"
@@ -3739,6 +3745,7 @@ onMounted(() => {
         />
 
         <FastOrganizeModal
+            v-if="isFastOrganizeOpen"
             :is-open="isFastOrganizeOpen"
             @close="isFastOrganizeOpen = false"
             @organized="onFastOrganized"

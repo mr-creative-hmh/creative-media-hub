@@ -51,8 +51,8 @@ class MetadataManagementController extends Controller
         $filter = $request->input('filter', 'all'); // all, unmatched, missing_posters, missing_arabic, movies, series
         $search = $request->input('search');
 
-        $moviesQuery = MediaItem::query()->with(['genres', 'subtitles']);
-        $seriesQuery = Series::query()->with(['genres', 'seasons.episodes.subtitles']);
+        $moviesQuery = MediaItem::query()->withCount('subtitles');
+        $seriesQuery = Series::query()->withCount(['seasons', 'episodes']);
 
         if ($search) {
             $moviesQuery->where(function ($q) use ($search) {
@@ -116,14 +116,12 @@ class MetadataManagementController extends Controller
                 'has_poster' => ! empty($m->poster_path),
                 'has_arabic' => ! empty($m->title_ar) || ! empty($m->overview_ar),
                 'is_matched' => ! empty($m->tmdb_id),
-                'subtitles_count' => $m->subtitles->count(),
+                'subtitles_count' => (int) ($m->subtitles_count ?? 0),
                 'file_path' => $m->file_path,
             ];
         });
 
         $seriesList = $seriesQuery->orderByDesc('created_at')->limit(50)->get()->map(function ($s) {
-            $episodesCount = $s->seasons->sum(fn ($sea) => $sea->episodes->count());
-
             return [
                 'id' => $s->id,
                 'title' => $s->title,
@@ -141,21 +139,24 @@ class MetadataManagementController extends Controller
                 'has_poster' => ! empty($s->poster_path),
                 'has_arabic' => ! empty($s->title_ar) || ! empty($s->overview_ar),
                 'is_matched' => ! empty($s->tmdb_id),
-                'seasons_count' => $s->seasons->count(),
-                'episodes_count' => $episodesCount,
+                'seasons_count' => (int) ($s->seasons_count ?? 0),
+                'episodes_count' => (int) ($s->episodes_count ?? 0),
                 'file_path' => $s->folder_path,
             ];
         });
 
         $combined = $movies->concat($seriesList)->values();
 
+        $moviesCount = MediaItem::count();
+        $seriesCount = Series::count();
+
         $stats = [
-            'total_items' => MediaItem::count() + Series::count(),
+            'total_items' => $moviesCount + $seriesCount,
             'unmatched_count' => MediaItem::whereNull('tmdb_id')->count() + Series::whereNull('tmdb_id')->count(),
             'missing_posters_count' => MediaItem::whereNull('poster_path')->count() + Series::whereNull('poster_path')->count(),
             'missing_arabic_count' => MediaItem::whereNull('overview_ar')->count() + Series::whereNull('overview_ar')->count(),
-            'movies_count' => MediaItem::count(),
-            'series_count' => Series::count(),
+            'movies_count' => $moviesCount,
+            'series_count' => $seriesCount,
         ];
 
         return Inertia::render('Metadata/Index', [
@@ -1067,15 +1068,15 @@ class MetadataManagementController extends Controller
     {
         $collections = MediaItem::whereNotNull('collection_name')
             ->where('collection_name', '!=', '')
-            ->select('collection_name', 'collection_id', 'collection_id_source')
-            ->distinct()
+            ->selectRaw('collection_name, MAX(collection_id) as collection_id, MAX(collection_id_source) as collection_id_source, COUNT(*) as items_count')
+            ->groupBy('collection_name')
             ->orderBy('collection_name')
             ->get()
             ->map(fn ($c) => [
                 'name' => $c->collection_name,
                 'id' => $c->collection_id,
                 'source' => $c->collection_id_source ?: 'tmdb',
-                'count' => MediaItem::where('collection_name', $c->collection_name)->count(),
+                'count' => (int) ($c->getAttribute('items_count') ?? 0),
             ]);
 
         return response()->json($collections);

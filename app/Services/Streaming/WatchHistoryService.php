@@ -6,6 +6,7 @@ use App\Models\Episode;
 use App\Models\MediaItem;
 use App\Models\Series;
 use App\Models\WatchHistory;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -28,22 +29,6 @@ class WatchHistoryService
         $modelClass = ($wType === 'episode') ? Episode::class : MediaItem::class;
         $isCompleted = ($prog / max(1, $dur)) >= 0.92;
         $userId = $request->user()?->id;
-
-        // Clean up duplicate rows if any exist
-        $duplicates = WatchHistory::where('watchable_type', $modelClass)
-            ->where('watchable_id', $wId)
-            ->when($userId, fn ($q) => $q->where('user_id', $userId))
-            ->orderByDesc('id')
-            ->get();
-
-        if ($duplicates->count() > 1) {
-            $keep = $duplicates->first();
-            WatchHistory::where('watchable_type', $modelClass)
-                ->where('watchable_id', $wId)
-                ->when($userId, fn ($q) => $q->where('user_id', $userId))
-                ->where('id', '!=', $keep->id)
-                ->delete();
-        }
 
         $lookup = [
             'watchable_type' => $modelClass,
@@ -95,6 +80,17 @@ class WatchHistoryService
         });
 
         // 2. Group episodes by series so only the latest watched episode of each series is shown
+        $dedupedEpisodesMissingSeriesId = new Collection(
+            $deduped
+                ->map(fn ($h) => $h->watchable)
+                ->filter(fn ($w) => $w instanceof Episode && empty($w->series_id))
+                ->values()
+                ->all()
+        );
+        if ($dedupedEpisodesMissingSeriesId->isNotEmpty()) {
+            $dedupedEpisodesMissingSeriesId->loadMissing('season:id,series_id');
+        }
+
         $seriesSeen = [];
         $uniqueList = $deduped->filter(function ($h) use (&$seriesSeen) {
             $item = $h->watchable;
@@ -133,6 +129,51 @@ class WatchHistoryService
             $filtered = $filtered->filter(fn ($h) => $h->watchable instanceof MediaItem && ! empty($h->watchable->collection_name));
         }
 
+        // Batch-load relations and playlists for all filtered items ahead of mapping (0 N+1 queries inside map)
+        $movieWatchables = new Collection(
+            $filtered->map(fn ($h) => $h->watchable)->filter(fn ($w) => $w instanceof MediaItem)->values()->all()
+        );
+        if ($movieWatchables->isNotEmpty()) {
+            $movieWatchables->loadMissing('subtitles');
+        }
+
+        $collectionNames = $movieWatchables->pluck('collection_name')->filter()->unique()->values()->all();
+        $collectionMoviesByName = ! empty($collectionNames)
+            ? MediaItem::query()
+                ->whereIn('collection_name', $collectionNames)
+                ->orderBy('release_year', 'asc')
+                ->orderBy('title', 'asc')
+                ->with('subtitles')
+                ->get()
+                ->groupBy('collection_name')
+            : collect();
+
+        $episodeWatchables = new Collection(
+            $filtered->map(fn ($h) => $h->watchable)->filter(fn ($w) => $w instanceof Episode)->values()->all()
+        );
+        if ($episodeWatchables->isNotEmpty()) {
+            $episodeWatchables->loadMissing(['series', 'season.series', 'subtitles']);
+        }
+
+        $watchedSeriesIds = $episodeWatchables
+            ->map(fn (Episode $ep) => $ep->series?->id ?? $ep->season?->series?->id ?? $ep->series_id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $allEpisodesBySeries = ! empty($watchedSeriesIds)
+            ? Episode::query()
+                ->whereIn('episodes.series_id', $watchedSeriesIds)
+                ->leftJoin('seasons', 'seasons.id', '=', 'episodes.season_id')
+                ->orderBy('seasons.season_number', 'asc')
+                ->orderBy('episodes.episode_number', 'asc')
+                ->select('episodes.*', 'seasons.season_number as computed_season_number')
+                ->with('subtitles')
+                ->get()
+                ->groupBy('series_id')
+            : collect();
+
         // 5. Transform into rich UI objects
         $formatTime = function ($sec) {
             $hrs = floor($sec / 3600);
@@ -142,7 +183,7 @@ class WatchHistoryService
             return $hrs > 0 ? sprintf('%d:%02d:%02d', $hrs, $mins, $secs) : sprintf('%02d:%02d', $mins, $secs);
         };
 
-        $items = $filtered->map(function ($h) use ($formatTime) {
+        $items = $filtered->map(function ($h) use ($formatTime, $collectionMoviesByName, $allEpisodesBySeries) {
             $item = $h->watchable;
             if (! $item) {
                 return null;
@@ -152,31 +193,25 @@ class WatchHistoryService
             $remaining = max(0, $h->duration_seconds - $h->progress_seconds);
 
             if ($item instanceof MediaItem) {
-                $item->loadMissing('subtitles');
                 $slug = $item->slug ?: "movie-{$item->id}";
                 $isCollection = ! empty($item->collection_name);
 
                 $playlist = [];
                 if ($isCollection) {
-                    $playlist = MediaItem::query()
-                        ->where('collection_name', $item->collection_name)
-                        ->orderBy('release_year', 'asc')
-                        ->orderBy('title', 'asc')
-                        ->with('subtitles')
-                        ->get()
-                        ->map(function ($m) {
-                            return [
-                                'id' => $m->id,
-                                'title' => $m->title,
-                                'title_ar' => $m->title_ar,
-                                'stream_url' => route('stream.movie', $m->id),
-                                'poster_path' => $m->poster_path,
-                                'backdrop_path' => $m->backdrop_path,
-                                'duration_seconds' => $m->duration_seconds,
-                                'subtitles' => $m->subtitles ?? [],
-                                'type' => 'movie',
-                            ];
-                        })->values()->all();
+                    $colMovies = $collectionMoviesByName->get($item->collection_name, collect());
+                    $playlist = $colMovies->map(function ($m) {
+                        return [
+                            'id' => $m->id,
+                            'title' => $m->title,
+                            'title_ar' => $m->title_ar,
+                            'stream_url' => route('stream.movie', $m->id),
+                            'poster_path' => $m->poster_path,
+                            'backdrop_path' => $m->backdrop_path,
+                            'duration_seconds' => $m->duration_seconds,
+                            'subtitles' => $m->subtitles ?? [],
+                            'type' => 'movie',
+                        ];
+                    })->values()->all();
                 }
 
                 return [
@@ -212,7 +247,6 @@ class WatchHistoryService
             }
 
             if ($item instanceof Episode) {
-                $item->loadMissing(['series', 'season', 'subtitles']);
                 $series = $item->series ?? ($item->season->series ?? null);
                 $sNameEn = $series ? $series->title : 'Series';
                 $sNameAr = $series ? ($series->title_ar ?: $series->title) : 'مسلسل';
@@ -249,14 +283,7 @@ class WatchHistoryService
                 $fullTitleAr = "{$sNameAr} - الموسم {$sNum} - الحلقة {$eNum}".($epTitleAr ? " - {$epTitleAr}" : '');
 
                 $seriesId = $series?->id ?? $item->series_id;
-                $allSeriesEpisodes = Episode::query()
-                    ->where('episodes.series_id', $seriesId)
-                    ->leftJoin('seasons', 'seasons.id', '=', 'episodes.season_id')
-                    ->orderBy('seasons.season_number', 'asc')
-                    ->orderBy('episodes.episode_number', 'asc')
-                    ->select('episodes.*', 'seasons.season_number as computed_season_number')
-                    ->with('subtitles')
-                    ->get();
+                $allSeriesEpisodes = $seriesId ? $allEpisodesBySeries->get($seriesId, collect()) : collect();
 
                 if ($allSeriesEpisodes->isEmpty()) {
                     $allSeriesEpisodes = Episode::query()

@@ -11,18 +11,51 @@ class AppSetting extends Model
 
     protected $guarded = [];
 
+    /**
+     * Request-level memoized settings cache (`key => ['value' => ?string, 'type' => string]|null`).
+     *
+     * @var array<string, array{value: ?string, type: string}|null>
+     */
+    protected static array $memo = [];
+
+    protected static function booted(): void
+    {
+        static::saved(function (self $setting): void {
+            static::$memo[$setting->key] = [
+                'value' => $setting->value,
+                'type' => (string) ($setting->type ?: 'string'),
+            ];
+        });
+
+        static::deleted(function (self $setting): void {
+            unset(static::$memo[$setting->key]);
+        });
+    }
+
+    public static function flushMemo(): void
+    {
+        static::$memo = [];
+    }
+
     public static function get(string $key, $default = null)
     {
-        $setting = static::where('key', $key)->first();
-        if (! $setting) {
+        if (! array_key_exists($key, static::$memo)) {
+            $setting = static::where('key', $key)->first(['value', 'type']);
+            static::$memo[$key] = $setting
+                ? ['value' => $setting->value, 'type' => (string) ($setting->type ?: 'string')]
+                : null;
+        }
+
+        $cached = static::$memo[$key];
+        if ($cached === null) {
             return $default;
         }
 
-        return match ($setting->type) {
-            'boolean' => filter_var($setting->value, FILTER_VALIDATE_BOOLEAN),
-            'integer' => (int) $setting->value,
-            'json' => json_decode($setting->value, true),
-            default => $setting->value,
+        return match ($cached['type']) {
+            'boolean' => filter_var($cached['value'], FILTER_VALIDATE_BOOLEAN),
+            'integer' => (int) $cached['value'],
+            'json' => json_decode((string) $cached['value'], true),
+            default => $cached['value'],
         };
     }
 
@@ -33,5 +66,9 @@ class AppSetting extends Model
             ['key' => $key],
             ['value' => $storedValue, 'type' => $type]
         );
+        static::$memo[$key] = [
+            'value' => (string) $storedValue,
+            'type' => $type,
+        ];
     }
 }

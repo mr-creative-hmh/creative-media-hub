@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
@@ -12,7 +12,10 @@ import {
 } from '@/composables/useDownloader';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import TorrentTreeItem from '@/components/downloader/TorrentTreeItem.vue';
-import FastOrganizeModal from '@/components/scout/FastOrganizeModal.vue';
+
+const FastOrganizeModal = defineAsyncComponent(
+    () => import('@/components/scout/FastOrganizeModal.vue'),
+);
 import {
     DownloadCloud,
     Plus,
@@ -2435,6 +2438,7 @@ const handleSaveSettings = async () => {
             </div>
         </transition>
         <FastOrganizeModal
+            v-if="showFastOrganize"
             :is-open="showFastOrganize"
             @close="showFastOrganize = false"
             @organized="fetchDownloads"

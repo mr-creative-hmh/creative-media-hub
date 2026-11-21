@@ -1,24 +1,188 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-/* Local Bundled Fonts for 100% Offline Capability */
-@import '@fontsource/outfit/400.css';
-@import '@fontsource/outfit/600.css';
-@import '@fontsource/outfit/700.css';
+/* Local Bundled WOFF2-Only Fonts (Latin + Arabic Subsets for 100% Offline Capability) */
+@font-face {
+    font-family: 'Outfit';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 400;
+    src: url('@fontsource/outfit/files/outfit-latin-400-normal.woff2')
+        format('woff2');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: 'Outfit';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 600;
+    src: url('@fontsource/outfit/files/outfit-latin-600-normal.woff2')
+        format('woff2');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: 'Outfit';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 700;
+    src: url('@fontsource/outfit/files/outfit-latin-700-normal.woff2')
+        format('woff2');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
-@import '@fontsource/plus-jakarta-sans/400.css';
-@import '@fontsource/plus-jakarta-sans/600.css';
-@import '@fontsource/plus-jakarta-sans/700.css';
+@font-face {
+    font-family: 'Plus Jakarta Sans';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 400;
+    src: url('@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-400-normal.woff2')
+        format('woff2');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: 'Plus Jakarta Sans';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 600;
+    src: url('@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-600-normal.woff2')
+        format('woff2');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: 'Plus Jakarta Sans';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 700;
+    src: url('@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-700-normal.woff2')
+        format('woff2');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
-@import '@fontsource/cairo/400.css';
-@import '@fontsource/cairo/600.css';
-@import '@fontsource/cairo/700.css';
+@font-face {
+    font-family: 'Cairo';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 400;
+    src: url('@fontsource/cairo/files/cairo-arabic-400-normal.woff2')
+        format('woff2');
+    unicode-range:
+        U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1,
+        U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF,
+        U+FE70-FE74, U+FE76-FEFC, U+102E0-102FB, U+10E60-10E7E, U+10EC2-10EC4,
+        U+10EFC-10EFF, U+1EE00-1EE03, U+1EE05-1EE1F, U+1EE21-1EE22, U+1EE24,
+        U+1EE27, U+1EE29-1EE32, U+1EE34-1EE37, U+1EE39, U+1EE3B, U+1EE42,
+        U+1EE47, U+1EE49, U+1EE4B, U+1EE4D-1EE4F, U+1EE51-1EE52, U+1EE54,
+        U+1EE57, U+1EE59, U+1EE5B, U+1EE5D, U+1EE5F, U+1EE61-1EE62, U+1EE64,
+        U+1EE67-1EE6A, U+1EE6C-1EE72, U+1EE74-1EE77, U+1EE79-1EE7C, U+1EE7E,
+        U+1EE80-1EE89, U+1EE8B-1EE9B, U+1EEA1-1EEA3, U+1EEA5-1EEA9,
+        U+1EEAB-1EEBB, U+1EEF0-1EEF1;
+}
+@font-face {
+    font-family: 'Cairo';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 600;
+    src: url('@fontsource/cairo/files/cairo-arabic-600-normal.woff2')
+        format('woff2');
+    unicode-range:
+        U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1,
+        U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF,
+        U+FE70-FE74, U+FE76-FEFC, U+102E0-102FB, U+10E60-10E7E, U+10EC2-10EC4,
+        U+10EFC-10EFF, U+1EE00-1EE03, U+1EE05-1EE1F, U+1EE21-1EE22, U+1EE24,
+        U+1EE27, U+1EE29-1EE32, U+1EE34-1EE37, U+1EE39, U+1EE3B, U+1EE42,
+        U+1EE47, U+1EE49, U+1EE4B, U+1EE4D-1EE4F, U+1EE51-1EE52, U+1EE54,
+        U+1EE57, U+1EE59, U+1EE5B, U+1EE5D, U+1EE5F, U+1EE61-1EE62, U+1EE64,
+        U+1EE67-1EE6A, U+1EE6C-1EE72, U+1EE74-1EE77, U+1EE79-1EE7C, U+1EE7E,
+        U+1EE80-1EE89, U+1EE8B-1EE9B, U+1EEA1-1EEA3, U+1EEA5-1EEA9,
+        U+1EEAB-1EEBB, U+1EEF0-1EEF1;
+}
+@font-face {
+    font-family: 'Cairo';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 700;
+    src: url('@fontsource/cairo/files/cairo-arabic-700-normal.woff2')
+        format('woff2');
+    unicode-range:
+        U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1,
+        U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF,
+        U+FE70-FE74, U+FE76-FEFC, U+102E0-102FB, U+10E60-10E7E, U+10EC2-10EC4,
+        U+10EFC-10EFF, U+1EE00-1EE03, U+1EE05-1EE1F, U+1EE21-1EE22, U+1EE24,
+        U+1EE27, U+1EE29-1EE32, U+1EE34-1EE37, U+1EE39, U+1EE3B, U+1EE42,
+        U+1EE47, U+1EE49, U+1EE4B, U+1EE4D-1EE4F, U+1EE51-1EE52, U+1EE54,
+        U+1EE57, U+1EE59, U+1EE5B, U+1EE5D, U+1EE5F, U+1EE61-1EE62, U+1EE64,
+        U+1EE67-1EE6A, U+1EE6C-1EE72, U+1EE74-1EE77, U+1EE79-1EE7C, U+1EE7E,
+        U+1EE80-1EE89, U+1EE8B-1EE9B, U+1EEA1-1EEA3, U+1EEA5-1EEA9,
+        U+1EEAB-1EEBB, U+1EEF0-1EEF1;
+}
+@font-face {
+    font-family: 'Cairo';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 400;
+    src: url('@fontsource/cairo/files/cairo-latin-400-normal.woff2')
+        format('woff2');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: 'Cairo';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 600;
+    src: url('@fontsource/cairo/files/cairo-latin-600-normal.woff2')
+        format('woff2');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: 'Cairo';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 700;
+    src: url('@fontsource/cairo/files/cairo-latin-700-normal.woff2')
+        format('woff2');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
+@source not '../../graphify-out';
+@source not '../../.agents';
+@source not '../../.claude';
+@source not '../../.codex';
+@source not '../../.cursor';
+@source not '../../scratch';
 
 @theme {
-    --font-sans: 'Outfit', 'Plus Jakarta Sans', 'Cairo', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --font-sans:
+        'Outfit', 'Plus Jakarta Sans', 'Cairo', ui-sans-serif, system-ui,
+        -apple-system, sans-serif;
     --font-cairo: 'Cairo', system-ui, sans-serif;
     --font-outfit: 'Outfit', sans-serif;
     --color-accent-50: var(--accent-50);
@@ -44,7 +208,7 @@
    CINEMA ACCENT COLOR PALETTES (UI/UX PRO MAX - DARK CINEMA SPECIFICATION)
    ========================================================================== */
 :root,
-html[data-accent="cyan"] {
+html[data-accent='cyan'] {
     --accent-50: #ecfeff;
     --accent-100: #cffafe;
     --accent-200: #a5f3fc;
@@ -62,7 +226,7 @@ html[data-accent="cyan"] {
     --accent-glow-subtle: rgba(6, 182, 212, 0.15);
 }
 
-html[data-accent="red"] {
+html[data-accent='red'] {
     --accent-50: #fef2f2;
     --accent-100: #fee2e2;
     --accent-200: #fecaca;
@@ -80,7 +244,7 @@ html[data-accent="red"] {
     --accent-glow-subtle: rgba(239, 68, 68, 0.15);
 }
 
-html[data-accent="amber"] {
+html[data-accent='amber'] {
     --accent-50: #fffbeb;
     --accent-100: #fef3c7;
     --accent-200: #fde68a;
@@ -98,7 +262,7 @@ html[data-accent="amber"] {
     --accent-glow-subtle: rgba(245, 158, 11, 0.15);
 }
 
-html[data-accent="emerald"] {
+html[data-accent='emerald'] {
     --accent-50: #ecfdf5;
     --accent-100: #d1fae5;
     --accent-200: #a7f3d0;
@@ -116,7 +280,7 @@ html[data-accent="emerald"] {
     --accent-glow-subtle: rgba(16, 185, 129, 0.15);
 }
 
-html[data-accent="violet"] {
+html[data-accent='violet'] {
     --accent-50: #f5f3ff;
     --accent-100: #ede9fe;
     --accent-200: #ddd6fe;
@@ -134,7 +298,7 @@ html[data-accent="violet"] {
     --accent-glow-subtle: rgba(139, 92, 246, 0.15);
 }
 
-html[data-accent="rose"] {
+html[data-accent='rose'] {
     --accent-50: #fff1f2;
     --accent-100: #ffe4e6;
     --accent-200: #fecdd3;
@@ -152,7 +316,7 @@ html[data-accent="rose"] {
     --accent-glow-subtle: rgba(244, 63, 94, 0.15);
 }
 
-html[data-accent="orange"] {
+html[data-accent='orange'] {
     --accent-50: #fff7ed;
     --accent-100: #ffedd5;
     --accent-200: #fed7aa;
@@ -170,7 +334,7 @@ html[data-accent="orange"] {
     --accent-glow-subtle: rgba(249, 115, 22, 0.15);
 }
 
-html[data-accent="blue"] {
+html[data-accent='blue'] {
     --accent-50: #eff6ff;
     --accent-100: #dbeafe;
     --accent-200: #bfdbfe;
@@ -195,11 +359,16 @@ html[data-accent="blue"] {
         color-scheme: dark;
     }
 
-    [dir="rtl"],
-    [dir="rtl"] body,
-    [dir="rtl"] .font-sans,
-    [dir="rtl"] * {
-        font-family: 'Cairo', 'Tajawal', system-ui, -apple-system, sans-serif !important;
+    [dir='rtl'],
+    [dir='rtl'] body,
+    [dir='rtl'] .font-sans,
+    [dir='rtl'] * {
+        font-family:
+            'Cairo',
+            'Tajawal',
+            system-ui,
+            -apple-system,
+            sans-serif !important;
     }
 
     /* Light Theme Defaults */
@@ -207,8 +376,8 @@ html[data-accent="blue"] {
         color-scheme: light;
     }
     html:not(.dark) body {
-        background-color: #F8FAFC;
-        color: #0F172A;
+        background-color: #f8fafc;
+        color: #0f172a;
     }
 
     /* Dark Theme Defaults */
@@ -216,14 +385,16 @@ html[data-accent="blue"] {
         color-scheme: dark;
     }
     html.dark body {
-        background-color: #07090E;
-        color: #F1F5F9;
+        background-color: #07090e;
+        color: #f1f5f9;
     }
 
     body {
         font-family: var(--font-sans);
         overflow-x: hidden;
-        transition: background-color 0.3s ease, color 0.3s ease;
+        transition:
+            background-color 0.3s ease,
+            color 0.3s ease;
     }
 
     /* Custom Sleek Cinema Scrollbar */
@@ -293,27 +464,29 @@ html[data-accent="blue"] {
     font-family: 'Cairo', 'Outfit', system-ui, sans-serif;
     font-size: 1.25rem;
     line-height: 1.4;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9);
+    text-shadow:
+        0 2px 4px rgba(0, 0, 0, 0.9),
+        0 0 2px rgba(0, 0, 0, 0.9);
     border-radius: 4px;
     padding: 2px 8px;
 }
 
-::cue(font[color="#ffff00"]),
-::cue(font[color="yellow"]),
+::cue(font[color='#ffff00']),
+::cue(font[color='yellow']),
 ::cue(c.yellow) {
-    color: #FFD700 !important;
+    color: #ffd700 !important;
 }
 
-::cue(font[color="#00ffff"]),
-::cue(font[color="cyan"]),
+::cue(font[color='#00ffff']),
+::cue(font[color='cyan']),
 ::cue(c.cyan) {
-    color: #00FFFF !important;
+    color: #00ffff !important;
 }
 
-::cue(font[color="#00ff00"]),
-::cue(font[color="green"]),
+::cue(font[color='#00ff00']),
+::cue(font[color='green']),
 ::cue(c.green) {
-    color: #00FF7F !important;
+    color: #00ff7f !important;
 }
 
 ::cue(b) {
@@ -337,13 +510,19 @@ html[data-accent="blue"] {
 }
 
 #nprogress .bar {
-    background: linear-gradient(90deg, var(--accent-primary, #06b6d4) 0%, var(--accent-secondary, #3b82f6) 100%) !important;
+    background: linear-gradient(
+        90deg,
+        var(--accent-primary, #06b6d4) 0%,
+        var(--accent-secondary, #3b82f6) 100%
+    ) !important;
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
     width: 100% !important;
     height: 3.5px !important;
-    box-shadow: 0 0 12px var(--accent-glow, rgba(6, 182, 212, 0.9)), 0 0 24px var(--accent-glow, rgba(168, 85, 247, 0.6)) !important;
+    box-shadow:
+        0 0 12px var(--accent-glow, rgba(6, 182, 212, 0.9)),
+        0 0 24px var(--accent-glow, rgba(168, 85, 247, 0.6)) !important;
     z-index: 999999 !important;
 }
 
@@ -353,14 +532,16 @@ html[data-accent="blue"] {
     right: 0px !important;
     width: 120px !important;
     height: 100% !important;
-    box-shadow: 0 0 16px var(--accent-primary, #06b6d4), 0 0 28px var(--accent-secondary, #a855f7) !important;
+    box-shadow:
+        0 0 16px var(--accent-primary, #06b6d4),
+        0 0 28px var(--accent-secondary, #a855f7) !important;
     opacity: 1 !important;
     transform: rotate(3deg) translate(0px, -4px) !important;
 }
 
 /* RTL Page Transition Mirroring - Progress advances Right-to-Left */
-[dir="rtl"] #nprogress,
-html[dir="rtl"] #nprogress {
+[dir='rtl'] #nprogress,
+html[dir='rtl'] #nprogress {
     direction: ltr !important;
     transform: scaleX(-1) !important;
     transform-origin: 50% 50% !important;
@@ -370,4 +551,3 @@ html[dir="rtl"] #nprogress {
 #nprogress .spinner {
     display: none !important;
 }
-

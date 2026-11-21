@@ -266,34 +266,31 @@ class LibraryGapService
             $today = Carbon::today()->format('Y-m-d');
 
             // Genuine collections having 1 or more movies in local library (Media Scout tracks franchise gaps even from a single owned movie)
-            $collectionCounts = MediaItem::whereNotNull('collection_id')
-                ->where('collection_id', '>', 0)
-                ->groupBy('collection_id')
-                ->selectRaw('collection_id, count(*) as cnt')
-                ->having('cnt', '>=', 1)
-                ->pluck('cnt', 'collection_id');
+            $allLibraryMovies = MediaItem::all();
 
-            $collectionIds = $collectionCounts->keys()->toArray();
+            $collectionCounts = $allLibraryMovies
+                ->filter(fn ($m) => ! empty($m->collection_id) && (int) $m->collection_id > 0)
+                ->groupBy(fn ($m) => (int) $m->collection_id)
+                ->map(fn ($group) => $group->count());
+
+            $collectionIds = $collectionCounts->keys()->map(fn ($id) => (int) $id)->values()->all();
 
             // Also check for movies with collection_name where collection_id is null/0 and try to inherit from siblings
-            $namedWithoutId = MediaItem::whereNotNull('collection_name')
-                ->where('collection_name', '!=', '')
-                ->where(function ($q) {
-                    $q->whereNull('collection_id')->orWhere('collection_id', 0);
-                })
-                ->get(['id', 'collection_name', 'title']);
+            $namedWithIdByCollectionName = $allLibraryMovies
+                ->filter(fn ($m) => ! empty($m->collection_name) && ! empty($m->collection_id) && (int) $m->collection_id > 0)
+                ->keyBy('collection_name');
+
+            $namedWithoutId = $allLibraryMovies
+                ->filter(fn ($m) => ! empty($m->collection_name) && (empty($m->collection_id) || (int) $m->collection_id === 0));
 
             foreach ($namedWithoutId as $item) {
-                $sibling = MediaItem::where('collection_name', $item->collection_name)
-                    ->whereNotNull('collection_id')
-                    ->where('collection_id', '>', 0)
-                    ->first();
+                $sibling = $namedWithIdByCollectionName->get($item->collection_name);
                 if ($sibling && $sibling->collection_id) {
                     $item->update([
                         'collection_id' => $sibling->collection_id,
                         'collection_id_source' => $sibling->collection_id_source ?: 'tmdb',
                     ]);
-                    if (! in_array($sibling->collection_id, $collectionIds, true)) {
+                    if (! in_array((int) $sibling->collection_id, $collectionIds, true)) {
                         $collectionIds[] = (int) $sibling->collection_id;
                     }
                 }
@@ -334,6 +331,11 @@ class LibraryGapService
             }
 
             $groupedCollections = [];
+            $moviesByCollectionId = $allLibraryMovies->whereNotNull('collection_id')->groupBy(fn ($m) => (int) $m->collection_id);
+            $moviesByTmdbId = $allLibraryMovies->whereNotNull('tmdb_id')->keyBy(fn ($m) => (int) $m->tmdb_id);
+            $moviesByLowerTitle = $allLibraryMovies
+                ->filter(fn ($m) => strlen(trim((string) $m->title)) > 3)
+                ->keyBy(fn ($m) => strtolower(trim((string) $m->title)));
 
             foreach ($collectionIds as $colId) {
                 // Skip short cartoon anthologies (e.g. Tom and Jerry 1940s theatrical shorts)
@@ -346,7 +348,7 @@ class LibraryGapService
                     continue;
                 }
 
-                $localMovies = MediaItem::where('collection_id', $colId)->get();
+                $localMovies = $moviesByCollectionId->get((int) $colId, collect());
                 $localTmdbIds = $localMovies->pluck('tmdb_id')->filter()->map(fn ($id) => (int) $id)->toArray();
                 $localTitles = $localMovies->pluck('title')->map(fn ($t) => strtolower(trim($t)))->toArray();
 
@@ -367,14 +369,10 @@ class LibraryGapService
 
                     $isOwned = in_array($pId, $localTmdbIds, true) || in_array($pTitle, $localTitles, true);
 
-                    // Library-wide fallback check so NO owned movie on disk is ever falsely reported missing
+                    // Library-wide fallback check in memory so NO owned movie on disk is ever falsely reported missing
                     if (! $isOwned) {
-                        $globalOwned = MediaItem::where('tmdb_id', $pId)
-                            ->orWhere(function ($q) use ($pTitle) {
-                                if (strlen($pTitle) > 3) {
-                                    $q->whereRaw('LOWER(title) = ?', [$pTitle]);
-                                }
-                            })->first();
+                        $globalOwned = ($pId > 0 ? $moviesByTmdbId->get($pId) : null)
+                            ?? (strlen($pTitle) > 3 ? $moviesByLowerTitle->get($pTitle) : null);
 
                         if ($globalOwned) {
                             $isOwned = true;
@@ -384,6 +382,7 @@ class LibraryGapService
                                     'collection_id' => $colId,
                                     'collection_name' => $colDetails['name'] ?? $globalOwned->collection_name,
                                 ]);
+                                $localMovies->push($globalOwned);
                             }
                         }
                     }
@@ -499,16 +498,28 @@ class LibraryGapService
 
             $allMissingBySeries = collect($episodes)->groupBy('series_id');
             $seasonsBySeries = collect($seasons)->groupBy('series_id');
-            $seriesIds = $allMissingBySeries->keys()->merge($seasonsBySeries->keys())->unique();
+            $seriesIds = $allMissingBySeries->keys()->merge($seasonsBySeries->keys())->unique()->values()->all();
+
+            $seriesById = ! empty($seriesIds)
+                ? Series::whereIn('id', $seriesIds)->get()->keyBy('id')
+                : collect();
+
+            $localCountsBySeries = ! empty($seriesIds)
+                ? Episode::whereIn('series_id', $seriesIds)
+                    ->whereNotNull('file_path')
+                    ->selectRaw('series_id, count(*) as cnt')
+                    ->groupBy('series_id')
+                    ->pluck('cnt', 'series_id')
+                : collect();
 
             $seriesGaps = [];
             foreach ($seriesIds as $sid) {
-                $s = Series::find($sid);
+                $s = $seriesById->get($sid);
                 if (! $s) {
                     continue;
                 }
 
-                $localCount = Episode::where('series_id', $s->id)->whereNotNull('file_path')->count();
+                $localCount = (int) ($localCountsBySeries->get($s->id) ?? 0);
                 $missingEps = $allMissingBySeries->get($sid, collect())->values()->toArray();
                 $missingSeas = $seasonsBySeries->get($sid, collect())->values()->toArray();
                 $totalEps = $localCount + count($missingEps);

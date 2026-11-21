@@ -2,6 +2,7 @@
 
 namespace Tests;
 
+use App\Models\AppSetting;
 use App\Services\Organizer\PhysicalOrganizerService;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Laravel\Fortify\Features;
@@ -12,6 +13,7 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
         PhysicalOrganizerService::resetStaticCaches();
+        AppSetting::flushMemo();
     }
 
     protected function skipUnlessFortifyHas(string $feature, ?string $message = null): void

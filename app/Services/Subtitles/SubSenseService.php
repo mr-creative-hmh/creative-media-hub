@@ -2,6 +2,7 @@
 
 namespace App\Services\Subtitles;
 
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -84,12 +85,45 @@ class SubSenseService
             return [];
         }
 
-        // Standardize IMDb ID format (e.g. tt0241527)
+        $url = $this->buildSearchUrl($imdbId, $type, $season, $episode, $languages, $maxPerLang);
+        if ($url === null) {
+            return [];
+        }
+
+        try {
+            $response = Http::timeout(8)
+                ->withUserAgent('CreativeMediaHub/1.0 (Windows NT 10.0; Win64; x64)')
+                ->get($url);
+
+            return $this->parseSearchResponse($response);
+        } catch (\Throwable $e) {
+            Log::warning("SubSense search failed for '{$imdbId}': ".$e->getMessage());
+
+            return [];
+        }
+    }
+
+    /**
+     * Build the SubSense search URL for standalone or pooled HTTP requests.
+     *
+     * @param  string|array<int, string>  $languages
+     */
+    public function buildSearchUrl(
+        string $imdbId,
+        string $type = 'movie',
+        ?int $season = null,
+        ?int $episode = null,
+        string|array $languages = ['ar', 'en'],
+        int $maxPerLang = 20
+    ): ?string {
+        if (empty($imdbId)) {
+            return null;
+        }
+
         if (! str_starts_with($imdbId, 'tt') && is_numeric($imdbId)) {
             $imdbId = 'tt'.str_pad($imdbId, 7, '0', STR_PAD_LEFT);
         }
 
-        // Convert languages to array of 3-letter codes
         $langList = is_array($languages)
             ? $languages
             : array_map('trim', explode(',', strtolower($languages)));
@@ -109,12 +143,11 @@ class SubSenseService
             $lang3Codes = ['ara', 'eng'];
         }
 
-        // Construct SubSense encoded config
         $configObj = [
             'languages' => $lang3Codes,
             'maxSubtitles' => $maxPerLang,
         ];
-        $configStr = rawurlencode(json_encode($configObj));
+        $configStr = rawurlencode((string) json_encode($configObj));
 
         $isEpisode = ($type === 'series' || $type === 'episode' || $type === 'tv')
             && $season !== null && $episode !== null && $season > 0 && $episode > 0;
@@ -123,64 +156,61 @@ class SubSenseService
             ? "subtitles/series/{$imdbId}:{$season}:{$episode}.json"
             : "subtitles/movie/{$imdbId}.json";
 
-        $url = "{$this->baseUrl}/{$configStr}/{$path}";
+        return "{$this->baseUrl}/{$configStr}/{$path}";
+    }
 
-        try {
-            $response = Http::timeout(8)
-                ->withUserAgent('CreativeMediaHub/1.0 (Windows NT 10.0; Win64; x64)')
-                ->get($url);
-
-            if (! $response->successful()) {
-                return [];
-            }
-
-            $data = $response->json();
-            $subtitles = $data['subtitles'] ?? [];
-            $results = [];
-
-            foreach ($subtitles as $s) {
-                $rawLang = strtolower($s['lang'] ?? 'eng');
-                $code2 = self::$langMap3to2[$rawLang] ?? substr($rawLang, 0, 2);
-
-                $sourceName = $s['source'] ?? 'Aggregator';
-                // Clean source label
-                $displaySource = match (strtolower($sourceName)) {
-                    'opensubtitles' => 'OpenSubtitles',
-                    'subdl' => 'SubDL',
-                    'subsource' => 'SubSource',
-                    'yts-subs', 'yify' => 'YTS Subtitles',
-                    'gestdown' => 'Gestdown',
-                    'animetosho' => 'AnimeTosho',
-                    default => ucfirst($sourceName),
-                };
-
-                $rel = $s['releaseName'] ?? $s['label'] ?? $s['fileName'] ?? '';
-                $cleanRel = preg_replace('/^(OpenSubtitles|SubDL|SubSource|Yts-subs)\s*·\s*\[[A-Z]+\]\s*·\s*/i', '', $rel);
-
-                $isAss = str_contains(strtolower($s['url'] ?? ''), '.ass') || str_contains(strtolower($s['url'] ?? ''), '.ssa');
-                $isVtt = str_contains(strtolower($s['id'] ?? ''), 'vtt') || str_contains(strtolower($s['url'] ?? ''), '.vtt');
-
-                $results[] = [
-                    'provider' => "SubSense ({$displaySource})",
-                    'subtitle_id' => (string) ($s['id'] ?? uniqid('subsense_')),
-                    'language' => $code2,
-                    'language_raw' => $rawLang,
-                    'title' => $cleanRel ?: ($s['fileName'] ?? 'Subtitle Release'),
-                    'release' => $cleanRel ?: ($s['fileName'] ?? 'Subtitle Release'),
-                    'file_name' => $s['fileName'] ?? ($cleanRel ? "{$cleanRel}.srt" : 'subtitle.srt'),
-                    'download_url' => $s['url'] ?? null,
-                    'source' => $sourceName,
-                    'format' => $isVtt ? 'vtt' : ($isAss ? 'ass' : 'srt'),
-                    'downloads' => (int) ($s['downloads'] ?? 850),
-                    'rating' => 9.5,
-                ];
-            }
-
-            return $results;
-        } catch (\Throwable $e) {
-            Log::warning("SubSense search failed for '{$imdbId}': ".$e->getMessage());
-
+    /**
+     * Parse a SubSense HTTP response into normalized subtitle items.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function parseSearchResponse(mixed $response): array
+    {
+        if (! ($response instanceof Response) || ! $response->successful()) {
             return [];
         }
+
+        $data = $response->json();
+        $subtitles = is_array($data) ? ($data['subtitles'] ?? []) : [];
+        $results = [];
+
+        foreach ($subtitles as $s) {
+            $rawLang = strtolower($s['lang'] ?? 'eng');
+            $code2 = self::$langMap3to2[$rawLang] ?? substr($rawLang, 0, 2);
+
+            $sourceName = $s['source'] ?? 'Aggregator';
+            $displaySource = match (strtolower($sourceName)) {
+                'opensubtitles' => 'OpenSubtitles',
+                'subdl' => 'SubDL',
+                'subsource' => 'SubSource',
+                'yts-subs', 'yify' => 'YTS Subtitles',
+                'gestdown' => 'Gestdown',
+                'animetosho' => 'AnimeTosho',
+                default => ucfirst($sourceName),
+            };
+
+            $rel = $s['releaseName'] ?? $s['label'] ?? $s['fileName'] ?? '';
+            $cleanRel = preg_replace('/^(OpenSubtitles|SubDL|SubSource|Yts-subs)\s*·\s*\[[A-Z]+\]\s*·\s*/i', '', $rel);
+
+            $isAss = str_contains(strtolower($s['url'] ?? ''), '.ass') || str_contains(strtolower($s['url'] ?? ''), '.ssa');
+            $isVtt = str_contains(strtolower($s['id'] ?? ''), 'vtt') || str_contains(strtolower($s['url'] ?? ''), '.vtt');
+
+            $results[] = [
+                'provider' => "SubSense ({$displaySource})",
+                'subtitle_id' => (string) ($s['id'] ?? uniqid('subsense_')),
+                'language' => $code2,
+                'language_raw' => $rawLang,
+                'title' => $cleanRel ?: ($s['fileName'] ?? 'Subtitle Release'),
+                'release' => $cleanRel ?: ($s['fileName'] ?? 'Subtitle Release'),
+                'file_name' => $s['fileName'] ?? ($cleanRel ? "{$cleanRel}.srt" : 'subtitle.srt'),
+                'download_url' => $s['url'] ?? null,
+                'source' => $sourceName,
+                'format' => $isVtt ? 'vtt' : ($isAss ? 'ass' : 'srt'),
+                'downloads' => (int) ($s['downloads'] ?? 850),
+                'rating' => 9.5,
+            ];
+        }
+
+        return $results;
     }
 }

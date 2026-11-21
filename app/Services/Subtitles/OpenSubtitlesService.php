@@ -3,6 +3,7 @@
 namespace App\Services\Subtitles;
 
 use App\Models\AppSetting;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -73,6 +74,134 @@ class OpenSubtitlesService
     public function getApiKey(): ?string
     {
         return $this->apiKey;
+    }
+
+    public function getBaseUrl(): string
+    {
+        return $this->baseUrl;
+    }
+
+    public function buildV3Url(string $imdbId, ?int $season = null, ?int $episode = null): string
+    {
+        if (! str_starts_with($imdbId, 'tt') && is_numeric($imdbId)) {
+            $imdbId = 'tt'.str_pad($imdbId, 7, '0', STR_PAD_LEFT);
+        }
+
+        $isEpisode = ($season !== null && $episode !== null && $season > 0);
+        $path = $isEpisode
+            ? "series/{$imdbId}:{$season}:{$episode}.json"
+            : "movie/{$imdbId}.json";
+
+        return "{$this->v3BaseUrl}/{$path}";
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function parseV3Response(mixed $response, ?string $lang = null): array
+    {
+        if (! ($response instanceof Response) || ! $response->successful()) {
+            return [];
+        }
+
+        $subtitles = $response->json('subtitles', []);
+        if (! is_array($subtitles)) {
+            return [];
+        }
+
+        $results = [];
+        $targetLangs = null;
+        if ($lang) {
+            $targetLangs = array_map('strtolower', array_map('trim', explode(',', $lang)));
+        }
+
+        foreach ($subtitles as $s) {
+            $langCode3 = strtolower($s['lang'] ?? 'eng');
+            $langCode2 = self::$langMap3to2[$langCode3] ?? substr($langCode3, 0, 2);
+
+            if ($targetLangs) {
+                $matchFound = false;
+                foreach ($targetLangs as $target) {
+                    if ($langCode2 === $target || $langCode3 === $target) {
+                        $matchFound = true;
+                        break;
+                    }
+                }
+                if (! $matchFound) {
+                    continue;
+                }
+            }
+
+            $results[] = [
+                'provider' => 'OpenSubtitles',
+                'subtitle_id' => (string) ($s['id'] ?? uniqid()),
+                'language' => $langCode2,
+                'language_raw' => $langCode3,
+                'release' => $s['movieReleaseName'] ?? $s['subtitleFileName'] ?? '',
+                'file_name' => $s['subtitleFileName'] ?? 'subtitle.srt',
+                'download_url' => $s['url'] ?? null,
+                'downloads' => (int) ($s['g'] ?? 0),
+                'rating' => 9.0,
+            ];
+        }
+
+        return $results;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function buildRestQueryParams(string $imdbId, ?string $lang = null, ?int $season = null, ?int $episode = null, ?string $query = null): array
+    {
+        $queryParams = [
+            'languages' => $lang ?? 'ar,en',
+        ];
+
+        if (! empty($imdbId)) {
+            $queryParams['imdb_id'] = preg_replace('/[^0-9]/', '', $imdbId);
+        } elseif (! empty($query)) {
+            $queryParams['query'] = $query;
+        }
+
+        if ($season !== null && $season > 0) {
+            $queryParams['season_number'] = $season;
+        }
+        if ($episode !== null && $episode > 0) {
+            $queryParams['episode_number'] = $episode;
+        }
+
+        return $queryParams;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function parseRestResponse(mixed $response): array
+    {
+        if (! ($response instanceof Response) || ! $response->successful()) {
+            return [];
+        }
+
+        $data = $response->json('data', []);
+        if (! is_array($data)) {
+            return [];
+        }
+
+        return array_map(function ($item) {
+            $attr = $item['attributes'] ?? [];
+            $file = $attr['files'][0] ?? [];
+
+            return [
+                'provider' => 'OpenSubtitles REST',
+                'subtitle_id' => (string) ($file['file_id'] ?? $item['id']),
+                'language' => $attr['language'] ?? 'en',
+                'release' => $attr['release'] ?? '',
+                'downloads' => $attr['download_count'] ?? 0,
+                'rating' => $attr['ratings'] ?? 0,
+                'file_name' => $file['file_name'] ?? 'subtitle.srt',
+                'download_url' => isset($file['file_id']) ? "{$this->baseUrl}/download/{$file['file_id']}" : null,
+            ];
+        }, $data);
     }
 
     /**
@@ -377,25 +506,54 @@ class OpenSubtitlesService
 
         $allResults = [];
 
-        // 2. PRIMARY: Official OpenSubtitles REST API (best Arabic/multi-language coverage)
-        if (! empty($this->apiKey)) {
-            $restResults = $this->searchOpenSubtitlesREST(
-                $imdbId ?? '',
-                $lang,
-                $season,
-                $episode,
-                $params['query'] ?? null
-            );
-            if (! empty($restResults)) {
-                $allResults = array_merge($allResults, $restResults);
-            }
-        }
+        // Run REST API and Stremio v3 concurrently when both are applicable
+        if (! empty($this->apiKey) && ! empty($imdbId)) {
+            try {
+                $headers = [
+                    'User-Agent' => 'CreativeMediaCinema v1.0',
+                    'Api-Key' => $this->apiKey,
+                ];
+                $queryParams = $this->buildRestQueryParams($imdbId, $lang, $season, $episode, $params['query'] ?? null);
+                $v3Url = $this->buildV3Url($imdbId, $season, $episode);
 
-        // 3. SECONDARY: Stremio v3 free endpoint (supplements with direct download links)
-        if (! empty($imdbId)) {
-            $v3Results = $this->searchOpenSubtitlesV3($imdbId, $season, $episode, $lang);
-            if (! empty($v3Results)) {
-                $allResults = array_merge($allResults, $v3Results);
+                $responses = Http::pool(fn ($pool) => [
+                    $pool->as('rest')->timeout(8)->withHeaders($headers)->get("{$this->baseUrl}/subtitles", $queryParams),
+                    $pool->as('v3')->timeout(8)->get($v3Url),
+                ]);
+
+                $restRes = $responses['rest'] ?? null;
+                if ($restRes instanceof Response && $restRes->successful()) {
+                    $allResults = array_merge($allResults, $this->parseRestResponse($restRes));
+                }
+
+                $v3Res = $responses['v3'] ?? null;
+                if ($v3Res instanceof Response && $v3Res->successful()) {
+                    $allResults = array_merge($allResults, $this->parseV3Response($v3Res, $lang));
+                }
+            } catch (\Throwable $e) {
+                Log::warning('OpenSubtitles pooled search failed: '.$e->getMessage());
+            }
+        } else {
+            // 2. PRIMARY: Official OpenSubtitles REST API (best Arabic/multi-language coverage)
+            if (! empty($this->apiKey)) {
+                $restResults = $this->searchOpenSubtitlesREST(
+                    $imdbId ?? '',
+                    $lang,
+                    $season,
+                    $episode,
+                    $params['query'] ?? null
+                );
+                if (! empty($restResults)) {
+                    $allResults = array_merge($allResults, $restResults);
+                }
+            }
+
+            // 3. SECONDARY: Stremio v3 free endpoint (supplements with direct download links)
+            if (! empty($imdbId)) {
+                $v3Results = $this->searchOpenSubtitlesV3($imdbId, $season, $episode, $lang);
+                if (! empty($v3Results)) {
+                    $allResults = array_merge($allResults, $v3Results);
+                }
             }
         }
 

@@ -14,6 +14,7 @@ use App\Services\Scout\QualityUpgradeAuditService;
 use App\Services\Scout\TorrentDiscoveryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -415,41 +416,22 @@ class MediaScoutController extends Controller
             return [];
         }
 
-        $movieTmdbIds = [];
-        $movieImdbIds = [];
-        $seriesTmdbIds = [];
-        $seriesImdbIds = [];
+        $libraryMovies = MediaItem::query()
+            ->select(['id', 'tmdb_id', 'imdb_id', 'title', 'original_title', 'title_ar', 'release_year'])
+            ->get();
 
-        foreach ($items as $item) {
-            $mediaType = $item['media_type'] ?? (isset($item['first_air_date']) ? 'series' : 'movie');
-            $tmdbId = ! empty($item['tmdb_id']) ? (string) $item['tmdb_id'] : (! empty($item['id']) ? (string) $item['id'] : null);
-            $imdbId = ! empty($item['imdb_id']) ? (string) $item['imdb_id'] : null;
+        $librarySeries = Series::query()
+            ->select(['id', 'tmdb_id', 'imdb_id', 'title', 'original_title', 'title_ar', 'release_year'])
+            ->get();
 
-            if ($mediaType === 'movie') {
-                if ($tmdbId) {
-                    $movieTmdbIds[] = $tmdbId;
-                }
-                if ($imdbId) {
-                    $movieImdbIds[] = $imdbId;
-                }
-            } else {
-                if ($tmdbId) {
-                    $seriesTmdbIds[] = $tmdbId;
-                }
-                if ($imdbId) {
-                    $seriesImdbIds[] = $imdbId;
-                }
-            }
-        }
+        $moviesByTmdb = $libraryMovies->whereNotNull('tmdb_id')->keyBy(fn ($m) => (string) $m->tmdb_id);
+        $moviesByImdb = $libraryMovies->whereNotNull('imdb_id')->keyBy(fn ($m) => (string) $m->imdb_id);
+        $seriesByTmdb = $librarySeries->whereNotNull('tmdb_id')->keyBy(fn ($s) => (string) $s->tmdb_id);
+        $seriesByImdb = $librarySeries->whereNotNull('imdb_id')->keyBy(fn ($s) => (string) $s->imdb_id);
 
-        $moviesByTmdb = ! empty($movieTmdbIds) ? MediaItem::whereIn('tmdb_id', $movieTmdbIds)->get()->keyBy(fn ($m) => (string) $m->tmdb_id) : collect();
-        $moviesByImdb = ! empty($movieImdbIds) ? MediaItem::whereIn('imdb_id', $movieImdbIds)->get()->keyBy(fn ($m) => (string) $m->imdb_id) : collect();
-        $seriesByTmdb = ! empty($seriesTmdbIds) ? Series::whereIn('tmdb_id', $seriesTmdbIds)->get()->keyBy(fn ($s) => (string) $s->tmdb_id) : collect();
-        $seriesByImdb = ! empty($seriesImdbIds) ? Series::whereIn('imdb_id', $seriesImdbIds)->get()->keyBy(fn ($s) => (string) $s->imdb_id) : collect();
-
-        $matchedSeriesIds = $seriesByTmdb->pluck('id')->merge($seriesByImdb->pluck('id'))->unique()->values()->all();
-        $episodeCounts = ! empty($matchedSeriesIds)
-            ? Episode::whereIn('series_id', $matchedSeriesIds)
+        $allSeriesIds = $librarySeries->pluck('id')->all();
+        $episodeCounts = ! empty($allSeriesIds)
+            ? Episode::whereIn('series_id', $allSeriesIds)
                 ->whereNotNull('file_path')
                 ->selectRaw('series_id, count(*) as count')
                 ->groupBy('series_id')
@@ -457,7 +439,7 @@ class MediaScoutController extends Controller
                 ->all()
             : [];
 
-        return array_map(function ($item) use ($moviesByTmdb, $moviesByImdb, $seriesByTmdb, $seriesByImdb, $episodeCounts) {
+        return array_map(function ($item) use ($moviesByTmdb, $moviesByImdb, $seriesByTmdb, $seriesByImdb, $libraryMovies, $librarySeries, $episodeCounts) {
             $mediaType = $item['media_type'] ?? (isset($item['first_air_date']) ? 'series' : 'movie');
 
             // Normalize release_year and year for uniform access across views
@@ -471,7 +453,7 @@ class MediaScoutController extends Controller
             if ($mediaType === 'movie') {
                 $match = ($tmdbId ? $moviesByTmdb->get($tmdbId) : null)
                     ?? ($imdbId ? $moviesByImdb->get($imdbId) : null)
-                    ?? $this->findMatchingMovie($item);
+                    ?? $this->findMatchingMovieInCollection($item, $libraryMovies);
 
                 $item['in_library'] = (bool) $match;
                 $item['local_id'] = $match?->id;
@@ -479,18 +461,142 @@ class MediaScoutController extends Controller
             } else {
                 $match = ($tmdbId ? $seriesByTmdb->get($tmdbId) : null)
                     ?? ($imdbId ? $seriesByImdb->get($imdbId) : null)
-                    ?? $this->findMatchingSeries($item);
+                    ?? $this->findMatchingSeriesInCollection($item, $librarySeries);
 
                 $item['in_library'] = (bool) $match;
                 $item['local_id'] = $match?->id;
                 $item['media_type'] = 'series';
-                $item['owned_episodes_count'] = $match
-                    ? ($episodeCounts[$match->id] ?? Episode::where('series_id', $match->id)->whereNotNull('file_path')->count())
-                    : 0;
+                $item['owned_episodes_count'] = $match ? (int) ($episodeCounts[$match->id] ?? 0) : 0;
             }
 
             return $item;
         }, $items);
+    }
+
+    /**
+     * In-memory movie matcher against preloaded library movies (zero SQL queries per item).
+     *
+     * @param  array<string, mixed>  $item
+     * @param  Collection<int, MediaItem>  $libraryMovies
+     */
+    protected function findMatchingMovieInCollection(array $item, $libraryMovies): ?MediaItem
+    {
+        $title = trim((string) ($item['title'] ?? ''));
+        $originalTitle = trim((string) ($item['original_title'] ?? ''));
+        $year = ! empty($item['release_year']) ? (int) $item['release_year'] : (! empty($item['year']) ? (int) $item['year'] : null);
+
+        if ($title === '' && $originalTitle === '') {
+            return null;
+        }
+
+        $titleLower = mb_strtolower($title);
+        $origLower = mb_strtolower($originalTitle);
+
+        $candidates = $libraryMovies->filter(function (MediaItem $m) use ($titleLower, $origLower): bool {
+            $mTitle = mb_strtolower(trim((string) $m->title));
+            $mOrig = mb_strtolower(trim((string) ($m->original_title ?? '')));
+            $mAr = mb_strtolower(trim((string) ($m->title_ar ?? '')));
+
+            if ($titleLower !== '' && ($mTitle === $titleLower || $mOrig === $titleLower || $mAr === $titleLower)) {
+                return true;
+            }
+
+            if ($origLower !== '' && $origLower !== $titleLower && ($mTitle === $origLower || $mOrig === $origLower)) {
+                return true;
+            }
+
+            return false;
+        });
+
+        if ($candidates->isNotEmpty()) {
+            if ($year) {
+                $yearMatch = $candidates->first(fn (MediaItem $c) => $c->release_year && abs((int) $c->release_year - $year) <= 1);
+                if ($yearMatch) {
+                    return $yearMatch;
+                }
+            } elseif ($candidates->count() === 1) {
+                return $candidates->first();
+            }
+        }
+
+        $cleanTitle = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($title)) ?? '';
+        if (strlen($cleanTitle) >= 3) {
+            foreach ($libraryMovies as $m) {
+                if ($year && (! $m->release_year || abs((int) $m->release_year - $year) > 1)) {
+                    continue;
+                }
+                $mClean = preg_replace('/[^a-zA-Z0-9]/', '', strtolower((string) $m->title)) ?? '';
+                $mCleanOrig = preg_replace('/[^a-zA-Z0-9]/', '', strtolower((string) ($m->original_title ?? ''))) ?? '';
+                if ($mClean === $cleanTitle || ($mCleanOrig !== '' && $mCleanOrig === $cleanTitle)) {
+                    return $m;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * In-memory series matcher against preloaded library series (zero SQL queries per item).
+     *
+     * @param  array<string, mixed>  $item
+     * @param  Collection<int, Series>  $librarySeries
+     */
+    protected function findMatchingSeriesInCollection(array $item, $librarySeries): ?Series
+    {
+        $title = trim((string) ($item['title'] ?? ''));
+        $originalTitle = trim((string) ($item['original_title'] ?? ''));
+        $year = ! empty($item['release_year']) ? (int) $item['release_year'] : (! empty($item['year']) ? (int) $item['year'] : null);
+
+        if ($title === '' && $originalTitle === '') {
+            return null;
+        }
+
+        $titleLower = mb_strtolower($title);
+        $origLower = mb_strtolower($originalTitle);
+
+        $candidates = $librarySeries->filter(function (Series $s) use ($titleLower, $origLower): bool {
+            $sTitle = mb_strtolower(trim((string) $s->title));
+            $sOrig = mb_strtolower(trim((string) ($s->original_title ?? '')));
+            $sAr = mb_strtolower(trim((string) ($s->title_ar ?? '')));
+
+            if ($titleLower !== '' && ($sTitle === $titleLower || $sOrig === $titleLower || $sAr === $titleLower)) {
+                return true;
+            }
+
+            if ($origLower !== '' && $origLower !== $titleLower && ($sTitle === $origLower || $sOrig === $origLower)) {
+                return true;
+            }
+
+            return false;
+        });
+
+        if ($candidates->isNotEmpty()) {
+            if ($year) {
+                $yearMatch = $candidates->first(fn (Series $c) => $c->release_year && abs((int) $c->release_year - $year) <= 1);
+                if ($yearMatch) {
+                    return $yearMatch;
+                }
+            } elseif ($candidates->count() === 1) {
+                return $candidates->first();
+            }
+        }
+
+        $cleanTitle = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($title)) ?? '';
+        if (strlen($cleanTitle) >= 3) {
+            foreach ($librarySeries as $s) {
+                if ($year && (! $s->release_year || abs((int) $s->release_year - $year) > 1)) {
+                    continue;
+                }
+                $sClean = preg_replace('/[^a-zA-Z0-9]/', '', strtolower((string) $s->title)) ?? '';
+                $sCleanOrig = preg_replace('/[^a-zA-Z0-9]/', '', strtolower((string) ($s->original_title ?? ''))) ?? '';
+                if ($sClean === $cleanTitle || ($sCleanOrig !== '' && $sCleanOrig === $cleanTitle)) {
+                    return $s;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

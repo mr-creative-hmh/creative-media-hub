@@ -42,6 +42,13 @@ return [
             'journal_mode' => 'wal',
             'synchronous' => 'normal',
             'transaction_mode' => 'DEFERRED',
+            'pragmas' => [
+                'journal_mode' => 'WAL',
+                'synchronous' => 'NORMAL',
+                'cache_size' => -64000,
+                'temp_store' => 'MEMORY',
+                'mmap_size' => 268435456,
+            ],
         ],
 
         'mysql' => [

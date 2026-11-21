@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue';
 import { useSubtitleJob } from '@/composables/useSubtitleJob';
 import { Head } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
-import SubtitlePickerModal from '@/components/subtitles/SubtitlePickerModal.vue';
 import { useToast } from '@/composables/useToast';
+
+const SubtitlePickerModal = defineAsyncComponent(
+    () => import('@/components/subtitles/SubtitlePickerModal.vue'),
+);
 import {
     Subtitles,
     Download,
@@ -1592,6 +1595,7 @@ onMounted(() => {
         </div>
         <!-- Interactive Subtitle Search & Selection Modal -->
         <SubtitlePickerModal
+            v-if="isPickerOpen"
             :is-open="isPickerOpen"
             :media="selectedMediaForPicker"
             :initial-language="pickerLanguage"

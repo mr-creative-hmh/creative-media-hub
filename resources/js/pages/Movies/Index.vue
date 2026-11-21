@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, defineAsyncComponent } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -7,9 +7,12 @@ import HeroBanner from '@/components/media/HeroBanner.vue';
 import WatchHistoryBar from '@/components/layout/WatchHistoryBar.vue';
 import FilterBar from '@/components/media/FilterBar.vue';
 import MediaCard from '@/components/media/MediaCard.vue';
-import MediaDetailModal from '@/components/media/MediaDetailModal.vue';
 import Pagination from '@/components/common/Pagination.vue';
 import { Film, ScanLine, Plus } from 'lucide-vue-next';
+
+const MediaDetailModal = defineAsyncComponent(
+    () => import('@/components/media/MediaDetailModal.vue'),
+);
 
 const props = defineProps<{
     movies: {

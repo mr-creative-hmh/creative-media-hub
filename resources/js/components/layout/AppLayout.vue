@@ -1,20 +1,29 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, defineAsyncComponent } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import Navbar from './Navbar.vue';
 import Sidebar from './Sidebar.vue';
 import MobileBottomNav from './MobileBottomNav.vue';
-import CinemaPlayer from '@/components/player/CinemaPlayer.vue';
-import BandersnatchPlayer from '@/components/player/BandersnatchPlayer.vue';
-import UnifiedJobCenterModal from '@/components/activity/UnifiedJobCenterModal.vue';
 import PageTransitionLoader from '@/components/common/PageTransitionLoader.vue';
 import GlobalToaster from '@/components/common/GlobalToaster.vue';
 import { useScanner } from '@/composables/useScanner';
 import { useDownloader } from '@/composables/useDownloader';
+import { useActivityCenter } from '@/composables/useActivityCenter';
+
+const CinemaPlayer = defineAsyncComponent(
+    () => import('@/components/player/CinemaPlayer.vue'),
+);
+const BandersnatchPlayer = defineAsyncComponent(
+    () => import('@/components/player/BandersnatchPlayer.vue'),
+);
+const UnifiedJobCenterModal = defineAsyncComponent(
+    () => import('@/components/activity/UnifiedJobCenterModal.vue'),
+);
 
 const { t, isRTL } = useI18n();
 const { fetchStatus } = useScanner();
 const { startBackgroundWorker } = useDownloader();
+const { isActivityCenterOpen } = useActivityCenter();
 
 const activePlayerItem = ref<any | null>(null);
 const activeBandersnatchEpisode = ref<any | null>(null);
@@ -145,7 +154,7 @@ onUnmounted(() => {
         />
 
         <!-- Global Unified Universal Activity Center Modal -->
-        <UnifiedJobCenterModal />
+        <UnifiedJobCenterModal v-if="isActivityCenterOpen" />
 
         <!-- Global Cinema Page Transition Island Loader -->
         <PageTransitionLoader />

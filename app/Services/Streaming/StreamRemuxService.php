@@ -60,6 +60,10 @@ class StreamRemuxService
 
         fseek($file, $start);
 
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
+
         return new StreamedResponse(function () use ($file, $length) {
             $remaining = $length;
             $chunkSize = 1024 * 256;
@@ -228,6 +232,10 @@ class StreamRemuxService
                 'pipe:1',
             ]
         );
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
 
         return response()->stream(function () use ($cmd, $nullDevice) {
             $descriptors = [

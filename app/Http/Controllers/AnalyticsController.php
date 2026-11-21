@@ -145,29 +145,43 @@ class AnalyticsController extends Controller
         })->count();
 
         // 6. Top 10 Storage Heavyweights (Largest Files on Disk)
-        $heavyMovies = MediaItem::orderByDesc('file_size_bytes')->take(8)->get()->map(fn ($m) => [
-            'id' => $m->id,
-            'title' => $m->title,
-            'title_ar' => $m->title_ar,
-            'type' => 'movie',
-            'size_bytes' => (int) $m->file_size_bytes,
-            'size_formatted' => ByteFormatter::format((int) $m->file_size_bytes),
-            'resolution' => $m->resolution ?: 'Unknown',
-            'video_codec' => $m->video_codec ?: 'Unknown',
-            'audio_codec' => $m->audio_codec ?: 'Unknown',
-        ]);
+        $heavyMovies = MediaItem::query()
+            ->select(['id', 'title', 'title_ar', 'file_size_bytes', 'resolution', 'video_codec', 'audio_codec'])
+            ->orderByDesc('file_size_bytes')
+            ->take(8)
+            ->get()
+            ->map(fn ($m) => [
+                'id' => $m->id,
+                'title' => $m->title,
+                'title_ar' => $m->title_ar,
+                'type' => 'movie',
+                'size_bytes' => (int) $m->file_size_bytes,
+                'size_formatted' => ByteFormatter::format((int) $m->file_size_bytes),
+                'resolution' => $m->resolution ?: 'Unknown',
+                'video_codec' => $m->video_codec ?: 'Unknown',
+                'audio_codec' => $m->audio_codec ?: 'Unknown',
+            ]);
 
-        $heavyEpisodes = Episode::with('series:id,title,title_ar')->orderByDesc('file_size_bytes')->take(8)->get()->map(fn ($e) => [
-            'id' => $e->id,
-            'title' => ($e->series?->title ?? 'Series')." S{$e->season_number}E{$e->episode_number}".($e->title ? " - {$e->title}" : ''),
-            'title_ar' => ($e->series?->title_ar ?? $e->series?->title ?? 'مسلسل')." م{$e->season_number} ح{$e->episode_number}",
-            'type' => 'episode',
-            'size_bytes' => (int) $e->file_size_bytes,
-            'size_formatted' => ByteFormatter::format((int) $e->file_size_bytes),
-            'resolution' => $e->resolution ?: 'Unknown',
-            'video_codec' => $e->video_codec ?: 'Unknown',
-            'audio_codec' => $e->audio_codec ?: 'Unknown',
-        ]);
+        $heavyEpisodes = Episode::query()
+            ->select(['id', 'series_id', 'season_id', 'episode_number', 'title', 'file_size_bytes', 'resolution', 'video_codec', 'audio_codec'])
+            ->with([
+                'series:id,title,title_ar',
+                'season:id,season_number',
+            ])
+            ->orderByDesc('file_size_bytes')
+            ->take(8)
+            ->get()
+            ->map(fn ($e) => [
+                'id' => $e->id,
+                'title' => ($e->series?->title ?? 'Series')." S{$e->season_number}E{$e->episode_number}".($e->title ? " - {$e->title}" : ''),
+                'title_ar' => ($e->series?->title_ar ?? $e->series?->title ?? 'مسلسل')." م{$e->season_number} ح{$e->episode_number}",
+                'type' => 'episode',
+                'size_bytes' => (int) $e->file_size_bytes,
+                'size_formatted' => ByteFormatter::format((int) $e->file_size_bytes),
+                'resolution' => $e->resolution ?: 'Unknown',
+                'video_codec' => $e->video_codec ?: 'Unknown',
+                'audio_codec' => $e->audio_codec ?: 'Unknown',
+            ]);
 
         $heavyweights = $heavyMovies->concat($heavyEpisodes)->sortByDesc('size_bytes')->take(10)->values();
 

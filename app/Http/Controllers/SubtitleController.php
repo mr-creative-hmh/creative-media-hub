@@ -12,9 +12,11 @@ use App\Services\Subtitles\SubSenseService;
 use App\Services\Subtitles\SubtitleHealthCheckService;
 use App\Services\Subtitles\SubtitleManagerService;
 use App\Services\Subtitles\YtsSubsService;
+use Illuminate\Http\Client\Response as HttpResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -111,22 +113,102 @@ class SubtitleController extends Controller
         $allResults = [];
         $enginesUsed = [];
 
-        // 1. SubSense Stremio Aggregator (Fast, Free, OpenSubtitles/YTS/SubDL direct links)
-        if ($imdbId) {
-            $subSenseResults = $this->subSense->searchSubtitles([
-                'imdb_id' => $imdbId,
-                'type' => $mediaType,
-                'season_number' => $season,
-                'episode_number' => $episode,
-                'language' => $lang,
-            ]);
-            if (! empty($subSenseResults)) {
-                $allResults = array_merge($allResults, $subSenseResults);
-                $enginesUsed[] = 'subsense';
-            }
+        if (empty($imdbId) && ! empty($query)) {
+            $imdbId = $this->openSubtitles->resolveImdbId($query, $mediaType, $year ? (int) $year : null);
         }
 
-        // 2. YTS-Subs Direct Engine (Movies only, Free direct ZIPs, large Arabic/English database)
+        $normalizedLang = $lang ? strtolower(trim((string) $lang)) : null;
+        $subSenseUrl = $imdbId
+            ? $this->subSense->buildSearchUrl((string) $imdbId, (string) $mediaType, $season ? (int) $season : null, $episode ? (int) $episode : null, $lang)
+            : null;
+        $osApiKey = $this->openSubtitles->getApiKey();
+        $osRestParams = ! empty($osApiKey)
+            ? $this->openSubtitles->buildRestQueryParams((string) ($imdbId ?? ''), $normalizedLang, $season ? (int) $season : null, $episode ? (int) $episode : null, $query)
+            : null;
+        $osV3Url = ! empty($imdbId)
+            ? $this->openSubtitles->buildV3Url((string) $imdbId, $season ? (int) $season : null, $episode ? (int) $episode : null)
+            : null;
+        $subDlParams = $this->subDl->buildSearchParams(
+            (string) $query,
+            $year ? (int) $year : null,
+            array_map('strtoupper', explode(',', (string) $lang)),
+            (string) $mediaType,
+            $season ? (int) $season : null,
+            $episode ? (int) $episode : null
+        );
+
+        try {
+            $pooledResponses = Http::pool(function ($pool) use ($subSenseUrl, $osApiKey, $osRestParams, $osV3Url, $subDlParams) {
+                $requests = [];
+
+                if ($subSenseUrl !== null) {
+                    $requests[] = $pool->as('subsense')
+                        ->timeout(8)
+                        ->withUserAgent('CreativeMediaHub/1.0 (Windows NT 10.0; Win64; x64)')
+                        ->get($subSenseUrl);
+                }
+
+                if ($osRestParams !== null) {
+                    $requests[] = $pool->as('os_rest')
+                        ->timeout(8)
+                        ->withHeaders([
+                            'User-Agent' => 'CreativeMediaCinema v1.0',
+                            'Api-Key' => (string) $osApiKey,
+                        ])
+                        ->get($this->openSubtitles->getBaseUrl().'/subtitles', $osRestParams);
+                }
+
+                if ($osV3Url !== null) {
+                    $requests[] = $pool->as('os_v3')
+                        ->timeout(8)
+                        ->get($osV3Url);
+                }
+
+                if ($subDlParams !== null) {
+                    $requests[] = $pool->as('subdl')
+                        ->timeout(6)
+                        ->get($this->subDl->getBaseUrl(), $subDlParams);
+                }
+
+                return $requests;
+            });
+
+            $subSenseRes = $pooledResponses['subsense'] ?? null;
+            if ($subSenseRes instanceof HttpResponse) {
+                $subSenseResults = $this->subSense->parseSearchResponse($subSenseRes);
+                if (! empty($subSenseResults)) {
+                    $allResults = array_merge($allResults, $subSenseResults);
+                    $enginesUsed[] = 'subsense';
+                }
+            }
+
+            $openSubResults = [];
+            $osRestRes = $pooledResponses['os_rest'] ?? null;
+            if ($osRestRes instanceof HttpResponse) {
+                $openSubResults = array_merge($openSubResults, $this->openSubtitles->parseRestResponse($osRestRes));
+            }
+            $osV3Res = $pooledResponses['os_v3'] ?? null;
+            if ($osV3Res instanceof HttpResponse) {
+                $openSubResults = array_merge($openSubResults, $this->openSubtitles->parseV3Response($osV3Res, $normalizedLang));
+            }
+            if (! empty($openSubResults)) {
+                $allResults = array_merge($allResults, $openSubResults);
+                $enginesUsed[] = 'opensubtitles';
+            }
+
+            $subDlRes = $pooledResponses['subdl'] ?? null;
+            if ($subDlRes instanceof HttpResponse) {
+                $subDlResults = $this->subDl->parseSearchResponse($subDlRes);
+                if (! empty($subDlResults)) {
+                    $allResults = array_merge($allResults, $subDlResults);
+                    $enginesUsed[] = 'subdl';
+                }
+            }
+        } catch (\Throwable $e) {
+            // Continue with remaining providers if pool fails
+        }
+
+        // YTS-Subs Direct Engine (Movies only, HTML scrape / direct ZIPs)
         if ($mediaType === 'movie' && ($imdbId || $query)) {
             $ytsResults = $this->ytsSubs->searchSubtitles([
                 'imdb_id' => $imdbId,
@@ -137,35 +219,6 @@ class SubtitleController extends Controller
                 $allResults = array_merge($allResults, $ytsResults);
                 $enginesUsed[] = 'yts-subs';
             }
-        }
-
-        // 3. OpenSubtitles REST / v3 fallback
-        $openSubResults = $this->openSubtitles->searchSubtitles([
-            'query' => $query,
-            'imdb_id' => $imdbId,
-            'language' => $lang,
-            'type' => $mediaType,
-            'season_number' => $season,
-            'episode_number' => $episode,
-            'year' => $year,
-        ]);
-        if (! empty($openSubResults)) {
-            $allResults = array_merge($allResults, $openSubResults);
-            $enginesUsed[] = 'opensubtitles';
-        }
-
-        // 4. SubDL Engine
-        $subDlResults = $this->subDl->searchSubtitles(
-            $query,
-            $year ? (int) $year : null,
-            array_map('strtoupper', explode(',', (string) $lang)),
-            $mediaType,
-            $season ? (int) $season : null,
-            $episode ? (int) $episode : null
-        );
-        if (! empty($subDlResults)) {
-            $allResults = array_merge($allResults, $subDlResults);
-            $enginesUsed[] = 'subdl';
         }
 
         $hasApiKey = ! empty($this->openSubtitles->getApiKey());

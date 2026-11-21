@@ -1,6 +1,5 @@
-import { ref, computed } from 'vue';
+import { ref, shallowRef, computed } from 'vue';
 import en from './en.json';
-import ar from './ar.json';
 
 const getInitialLocale = (): string => {
     if (typeof window === 'undefined') {
@@ -24,10 +23,31 @@ const applyDocumentLocale = (localeCode: string): void => {
 const currentLocale = ref<string>(getInitialLocale());
 applyDocumentLocale(currentLocale.value);
 
-const translations: Record<string, any> = {
+const translations = shallowRef<Record<string, any>>({
     en,
-    ar,
+});
+
+let arLoadPromise: Promise<void> | null = null;
+
+const ensureLocaleLoaded = (localeCode: string): void => {
+    if (localeCode !== 'ar' || translations.value.ar || arLoadPromise) {
+        return;
+    }
+    arLoadPromise = import('./ar.json')
+        .then((mod) => {
+            translations.value = {
+                ...translations.value,
+                ar: mod.default ?? mod,
+            };
+        })
+        .catch(() => {
+            arLoadPromise = null;
+        });
 };
+
+if (currentLocale.value === 'ar') {
+    ensureLocaleLoaded('ar');
+}
 
 export function useI18n() {
     const locale = computed(() => currentLocale.value);
@@ -35,6 +55,7 @@ export function useI18n() {
 
     const setLocale = (newLocale: string) => {
         if (newLocale === 'ar' || newLocale === 'en') {
+            ensureLocaleLoaded(newLocale);
             currentLocale.value = newLocale;
             if (typeof window !== 'undefined') {
                 try {
@@ -49,15 +70,16 @@ export function useI18n() {
         key: string,
         params: Record<string, string | number> = {},
     ): string => {
+        const dict = translations.value;
         const keys = key.split('.');
-        let val: any = translations[currentLocale.value] || translations['en'];
+        let val: any = dict[currentLocale.value] || dict['en'];
 
         for (const k of keys) {
             if (val && typeof val === 'object' && k in val) {
                 val = val[k];
             } else {
                 // Fallback to English
-                let fallback: any = translations['en'];
+                let fallback: any = dict['en'];
                 for (const fk of keys) {
                     if (
                         fallback &&

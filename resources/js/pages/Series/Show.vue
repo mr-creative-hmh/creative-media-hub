@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, defineAsyncComponent } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
-import FixMatchModal from '@/components/media/FixMatchModal.vue';
 import { formatEpisodeTitle, getCleanEpisodeTitle } from '@/lib/mediaTitle';
 import { useI18n } from '@/i18n/useI18n';
+
+const FixMatchModal = defineAsyncComponent(
+    () => import('@/components/media/FixMatchModal.vue'),
+);
 import {
     Play,
     Star,
@@ -192,9 +195,6 @@ const playEpisode = (
 
 <template>
     <AppLayout v-slot="{ play }">
-        <Head
-            :title="isRTL && series.title_ar ? series.title_ar : series.title"
-        />
         <Head
             :title="isRTL && series.title_ar ? series.title_ar : series.title"
         />
@@ -497,6 +497,7 @@ const playEpisode = (
 
         <!-- Fix Match Modal -->
         <FixMatchModal
+            v-if="showFixMatch"
             :show="showFixMatch"
             :item="series"
             type="series"
