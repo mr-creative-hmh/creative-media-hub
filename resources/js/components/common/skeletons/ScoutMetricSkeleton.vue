@@ -3,13 +3,13 @@ import CinemaSkeleton from './CinemaSkeleton.vue';
 </script>
 
 <template>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div
             v-for="i in 4"
             :key="i"
-            class="relative overflow-hidden rounded-2xl bg-black/40 border border-white/[0.06] p-5 backdrop-blur-md"
+            class="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-black/40 p-5 backdrop-blur-md"
         >
-            <div class="flex items-center justify-between mb-4">
+            <div class="mb-4 flex items-center justify-between">
                 <CinemaSkeleton className="w-24 h-4" />
                 <CinemaSkeleton className="w-10 h-10" rounded="rounded-xl" />
             </div>
@@ -18,4 +18,3 @@ import CinemaSkeleton from './CinemaSkeleton.vue';
         </div>
     </div>
 </template>
-

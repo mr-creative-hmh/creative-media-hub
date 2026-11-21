@@ -9,7 +9,7 @@ withDefaults(
     {
         rows: 5,
         columns: 6,
-    }
+    },
 );
 </script>
 
@@ -18,22 +18,25 @@ withDefaults(
         <div
             v-for="r in rows"
             :key="r"
-            class="flex items-center gap-4 p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]"
+            class="flex items-center gap-4 rounded-xl border border-white/[0.04] bg-white/[0.02] p-4"
         >
             <div class="w-6 shrink-0">
                 <CinemaSkeleton className="w-5 h-5" rounded="rounded" />
             </div>
-            <div class="w-12 h-16 shrink-0">
-                <CinemaSkeleton className="w-full h-full" rounded="rounded-md" />
+            <div class="h-16 w-12 shrink-0">
+                <CinemaSkeleton
+                    className="w-full h-full"
+                    rounded="rounded-md"
+                />
             </div>
             <div class="flex-1 space-y-2">
                 <CinemaSkeleton className="w-1/3 h-4" />
                 <CinemaSkeleton className="w-2/3 h-3" />
             </div>
-            <div class="w-28 shrink-0 hidden md:block">
+            <div class="hidden w-28 shrink-0 md:block">
                 <CinemaSkeleton className="w-full h-6" rounded="rounded-full" />
             </div>
-            <div class="w-24 shrink-0 hidden sm:block">
+            <div class="hidden w-24 shrink-0 sm:block">
                 <CinemaSkeleton className="w-full h-4" />
             </div>
             <div class="w-20 shrink-0">
@@ -42,4 +45,3 @@ withDefaults(
         </div>
     </div>
 </template>
-

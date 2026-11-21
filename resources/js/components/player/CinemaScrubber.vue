@@ -39,7 +39,7 @@ const handleClick = (e: MouseEvent) => {
 <template>
     <div
         ref="scrubberRef"
-        class="relative py-3 group cursor-pointer select-none"
+        class="group relative cursor-pointer py-3 select-none"
         @mouseenter="isHovering = true"
         @mouseleave="isHovering = false"
         @mousemove="handleMouseMove"
@@ -48,32 +48,33 @@ const handleClick = (e: MouseEvent) => {
         <!-- Hover Time Tooltip -->
         <div
             v-if="isHovering && duration > 0"
-            class="absolute bottom-8 -translate-x-1/2 px-2.5 py-1 rounded-lg bg-slate-900/90 text-white text-xs font-mono font-bold border border-white/20 shadow-xl backdrop-blur-md pointer-events-none transition-opacity"
+            class="pointer-events-none absolute bottom-8 -translate-x-1/2 rounded-lg border border-white/20 bg-slate-900/90 px-2.5 py-1 font-mono text-xs font-bold text-white shadow-xl backdrop-blur-md transition-opacity"
             :style="{ left: `${hoverPercent}%` }"
         >
             {{ formatTime(hoverTime) }}
         </div>
 
         <!-- Scrubber Track Background -->
-        <div class="h-1.5 sm:h-2 w-full rounded-full bg-white/20 relative overflow-hidden transition-all group-hover:h-2.5 sm:group-hover:h-3">
+        <div
+            class="relative h-1.5 w-full overflow-hidden rounded-full bg-white/20 transition-all group-hover:h-2.5 sm:h-2 sm:group-hover:h-3"
+        >
             <!-- Buffered Progress -->
             <div
-                class="absolute inset-y-0 left-0 bg-white/30 rounded-full transition-all duration-300"
+                class="absolute inset-y-0 left-0 rounded-full bg-white/30 transition-all duration-300"
                 :style="{ width: `${bufferedPercent}%` }"
             />
 
             <!-- Played Progress -->
             <div
-                class="absolute inset-y-0 left-0 bg-gradient-to-r from-cyan-500 to-cyan-400 rounded-full"
+                class="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-cyan-500 to-cyan-400"
                 :style="{ width: `${progressPercent}%` }"
             />
         </div>
 
         <!-- Scrubber Scrubber Thumb -->
         <div
-            class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-white shadow-lg shadow-cyan-500/50 scale-0 group-hover:scale-100 transition-transform pointer-events-none border-2 border-cyan-400"
+            class="pointer-events-none absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 scale-0 rounded-full border-2 border-cyan-400 bg-white shadow-lg shadow-cyan-500/50 transition-transform group-hover:scale-100 sm:h-4 sm:w-4"
             :style="{ left: `${progressPercent}%` }"
         />
     </div>
 </template>
-

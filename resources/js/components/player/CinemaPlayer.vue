@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
+import {
+    ref,
+    computed,
+    onMounted,
+    onBeforeUnmount,
+    watch,
+    nextTick,
+} from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
 import CinemaLoader from '@/components/player/CinemaLoader.vue';
@@ -65,7 +72,13 @@ const triggerCenterPlayIndicator = () => {
 };
 
 const isAnyModalOpen = () => {
-    return showSubtitlesModal.value || showSubtitleSearchModal.value || showEqualizerModal.value || showPlaylistDrawer.value || showDiagnosticsHud.value;
+    return (
+        showSubtitlesModal.value ||
+        showSubtitleSearchModal.value ||
+        showEqualizerModal.value ||
+        showPlaylistDrawer.value ||
+        showDiagnosticsHud.value
+    );
 };
 
 const closeTopModal = () => {
@@ -142,9 +155,11 @@ const SHADER_LABELS: Record<ShaderPreset, string> = {
 };
 const initialShader = (() => {
     try {
-        const saved = localStorage.getItem('cinema_shader_preset') as ShaderPreset | null;
+        const saved = localStorage.getItem(
+            'cinema_shader_preset',
+        ) as ShaderPreset | null;
         if (saved && SHADER_ORDER.includes(saved)) return saved;
-    } catch { }
+    } catch {}
     return 'standard' as ShaderPreset;
 })();
 const shaderPreset = ref<ShaderPreset>(initialShader);
@@ -155,14 +170,16 @@ const cycleShaderPreset = () => {
     shaderPreset.value = next;
     try {
         localStorage.setItem('cinema_shader_preset', next);
-    } catch { }
+    } catch {}
     toast.info(`Shader: ${SHADER_LABELS[next]}`);
 };
 
 const videoShaderStyle = computed(() => {
     switch (shaderPreset.value) {
         case 'clarity':
-            return { filter: 'url(#klite-luma-sharpen) contrast(1.04) saturate(1.05)' };
+            return {
+                filter: 'url(#klite-luma-sharpen) contrast(1.04) saturate(1.05)',
+            };
         case 'vivid':
             return { filter: 'contrast(1.12) saturate(1.18) brightness(1.03)' };
         case 'night':
@@ -192,11 +209,16 @@ const currentPlaylist = computed(() => {
 });
 
 const currentIndex = computed(() => {
-    return currentPlaylist.value.findIndex((p: any) => String(p.id) === String(playback.activeItem.value?.id));
+    return currentPlaylist.value.findIndex(
+        (p: any) => String(p.id) === String(playback.activeItem.value?.id),
+    );
 });
 
 const hasNext = computed(() => {
-    return currentIndex.value >= 0 && currentIndex.value < currentPlaylist.value.length - 1;
+    return (
+        currentIndex.value >= 0 &&
+        currentIndex.value < currentPlaylist.value.length - 1
+    );
 });
 
 const hasPrevious = computed(() => {
@@ -222,7 +244,9 @@ const changeActiveMedia = (newItem: any) => {
     playback.currentTime.value = 0;
     playback.remuxStartOffset.value = 0;
     const exactDur = Number(newItem?.duration_seconds) || 0;
-    const fallbackDur = Number(newItem?.runtime_minutes) ? Number(newItem.runtime_minutes) * 60 : 0;
+    const fallbackDur = Number(newItem?.runtime_minutes)
+        ? Number(newItem.runtime_minutes) * 60
+        : 0;
     playback.duration.value = exactDur > 0 ? exactDur : fallbackDur;
     playback.isDurationLocked.value = exactDur > 0;
     const nextMode = playback.selectOptimalEngine(newItem);
@@ -235,7 +259,10 @@ const changeActiveMedia = (newItem: any) => {
 
     setTimeout(() => {
         const type = playback.isEpisode.value ? 'episode' : 'movie';
-        subtitles.fetchSubtitlesForMedia(type, newItem.watchable_id || newItem.id);
+        subtitles.fetchSubtitlesForMedia(
+            type,
+            newItem.watchable_id || newItem.id,
+        );
         if (playback.engineMode.value === 'web') {
             playback.initWebEngine();
         } else if (videoRef.value) {
@@ -296,7 +323,7 @@ const handleTranslate = async () => {
     await subtitles.translateSubtitleToArabic(
         playback.activeItem.value,
         playback.isEpisode.value,
-        subtitles.selectedSubtitleId.value
+        subtitles.selectedSubtitleId.value,
     );
 };
 
@@ -323,13 +350,17 @@ let progressInterval: any = null;
 onMounted(() => {
     subtitles.updateActiveCue(playback.currentTime.value);
     const type = playback.isEpisode.value ? 'episode' : 'movie';
-    const id = playback.activeItem.value?.watchable_id || playback.activeItem.value?.id;
+    const id =
+        playback.activeItem.value?.watchable_id ||
+        playback.activeItem.value?.id;
     if (id) {
         subtitles.fetchSubtitlesForMedia(type, id);
     }
 
     if (playback.itemKey.value) {
-        const savedSync = localStorage.getItem(`audio_sync_${playback.itemKey.value}`);
+        const savedSync = localStorage.getItem(
+            `audio_sync_${playback.itemKey.value}`,
+        );
         if (savedSync) {
             audioPipeline.setAudioDelay(parseInt(savedSync, 10));
         }
@@ -362,11 +393,18 @@ onBeforeUnmount(() => {
         dir="ltr"
         @mousemove="showControlsTemporarily"
         @click="showControlsTemporarily"
-        class="fixed inset-0 z-50 bg-black flex items-center justify-center select-none overflow-hidden font-sans group/player"
-        :class="{ 'cursor-none': !playback.isControlsVisible.value && playback.isPlaying.value }"
+        class="group/player fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black font-sans select-none"
+        :class="{
+            'cursor-none':
+                !playback.isControlsVisible.value && playback.isPlaying.value,
+        }"
     >
         <!-- Inline SVG K-Lite MPC-HC Luma Sharpen Shader -->
-        <svg aria-hidden="true" class="absolute w-0 h-0 pointer-events-none" focusable="false">
+        <svg
+            aria-hidden="true"
+            class="pointer-events-none absolute h-0 w-0"
+            focusable="false"
+        >
             <defs>
                 <filter id="klite-luma-sharpen">
                     <feConvolveMatrix
@@ -383,7 +421,7 @@ onBeforeUnmount(() => {
             ref="videoRef"
             :src="playback.effectiveVideoSrc.value"
             :style="videoShaderStyle"
-            class="w-full h-full object-contain cursor-pointer"
+            class="h-full w-full cursor-pointer object-contain"
             autoplay
             playsinline
             preload="auto"
@@ -395,7 +433,10 @@ onBeforeUnmount(() => {
             @ended="handleVideoEnded"
             @error="playback.handleDirectVideoError"
             @waiting="playback.isBuffering.value = true"
-            @playing="playback.isBuffering.value = false; playback.updateLiveResolution()"
+            @playing="
+                playback.isBuffering.value = false;
+                playback.updateLiveResolution();
+            "
             @click="handleTogglePlay"
         />
 
@@ -410,12 +451,22 @@ onBeforeUnmount(() => {
         >
             <div
                 v-if="showCenterPlayIndicator"
-                class="absolute pointer-events-none z-30 w-20 h-20 rounded-full bg-black/60 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-2xl"
+                class="pointer-events-none absolute z-30 flex h-20 w-20 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white shadow-2xl backdrop-blur-md"
             >
-                <svg v-if="playback.isPlaying.value" class="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
+                <svg
+                    v-if="playback.isPlaying.value"
+                    class="h-10 w-10"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                >
                     <path d="M8 5v14l11-7z" />
                 </svg>
-                <svg v-else class="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
+                <svg
+                    v-else
+                    class="h-10 w-10"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                >
                     <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
                 </svg>
             </div>
@@ -432,10 +483,20 @@ onBeforeUnmount(() => {
         >
             <div
                 v-if="touchFeedback === 'backward'"
-                class="absolute left-16 z-30 pointer-events-none flex items-center gap-2 px-5 py-2.5 rounded-full bg-black/70 backdrop-blur-md border border-white/20 text-white font-bold text-sm tracking-wide shadow-2xl animate-pulse"
+                class="pointer-events-none absolute left-16 z-30 flex animate-pulse items-center gap-2 rounded-full border border-white/20 bg-black/70 px-5 py-2.5 text-sm font-bold tracking-wide text-white shadow-2xl backdrop-blur-md"
             >
-                <svg class="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.334 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
+                <svg
+                    class="h-5 w-5 text-amber-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.334 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z"
+                    />
                 </svg>
                 <span>-10s</span>
             </div>
@@ -451,11 +512,21 @@ onBeforeUnmount(() => {
         >
             <div
                 v-if="touchFeedback === 'forward'"
-                class="absolute right-16 z-30 pointer-events-none flex items-center gap-2 px-5 py-2.5 rounded-full bg-black/70 backdrop-blur-md border border-white/20 text-white font-bold text-sm tracking-wide shadow-2xl animate-pulse"
+                class="pointer-events-none absolute right-16 z-30 flex animate-pulse items-center gap-2 rounded-full border border-white/20 bg-black/70 px-5 py-2.5 text-sm font-bold tracking-wide text-white shadow-2xl backdrop-blur-md"
             >
                 <span>+10s</span>
-                <svg class="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z" />
+                <svg
+                    class="h-5 w-5 text-amber-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z"
+                    />
                 </svg>
             </div>
         </Transition>
@@ -464,7 +535,7 @@ onBeforeUnmount(() => {
         <Transition name="fade">
             <div
                 v-if="playback.isBuffering.value"
-                class="absolute inset-0 flex items-center justify-center pointer-events-none z-30 bg-black/45 backdrop-blur-xs transition-all"
+                class="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/45 backdrop-blur-xs transition-all"
             >
                 <CinemaLoader
                     size="md"
@@ -498,8 +569,11 @@ onBeforeUnmount(() => {
 
         <!-- Bottom Controls Dock -->
         <div
-            class="absolute bottom-0 inset-x-0 p-4 sm:p-6 bg-gradient-to-t from-black/95 via-black/60 to-transparent z-30 transition-all duration-300 pointer-events-auto space-y-2"
-            :class="{ 'opacity-0 translate-y-4 pointer-events-none': !playback.isControlsVisible.value }"
+            class="pointer-events-auto absolute inset-x-0 bottom-0 z-30 space-y-2 bg-gradient-to-t from-black/95 via-black/60 to-transparent p-4 transition-all duration-300 sm:p-6"
+            :class="{
+                'pointer-events-none translate-y-4 opacity-0':
+                    !playback.isControlsVisible.value,
+            }"
         >
             <!-- Scrubber Timeline -->
             <CinemaScrubber
@@ -556,7 +630,10 @@ onBeforeUnmount(() => {
             @reset-delay="subtitles.resetSubtitleDelay"
             @set-font="subtitles.setSubtitleFont"
             @set-size="subtitles.setSubtitleFontSize"
-            @open-search="showSubtitlesModal = false; showSubtitleSearchModal = true"
+            @open-search="
+                showSubtitlesModal = false;
+                showSubtitleSearchModal = true;
+            "
             @translate="handleTranslate"
         />
 
@@ -567,11 +644,19 @@ onBeforeUnmount(() => {
             :is-translating="subtitles.isTranslatingSubtitle.value"
             @close="showSubtitleSearchModal = false"
             @translate="handleTranslate"
-            @downloaded="(downloadedSub) => {
-                const type = playback.isEpisode.value ? 'episode' : 'movie';
-                const id = playback.activeItem.value?.watchable_id || playback.activeItem.value?.id;
-                subtitles.fetchSubtitlesForMedia(type, id, downloadedSub?.id);
-            }"
+            @downloaded="
+                (downloadedSub) => {
+                    const type = playback.isEpisode.value ? 'episode' : 'movie';
+                    const id =
+                        playback.activeItem.value?.watchable_id ||
+                        playback.activeItem.value?.id;
+                    subtitles.fetchSubtitlesForMedia(
+                        type,
+                        id,
+                        downloadedSub?.id,
+                    );
+                }
+            "
         />
 
         <CinemaEqualizerModal
@@ -607,7 +692,11 @@ onBeforeUnmount(() => {
             :duration="playback.duration.value"
             :buffered-percent="playback.bufferedPercent.value"
             :live-resolution="playback.liveResolution.value"
-            :display-codec="playback.activeItem.value?.video_codec || playback.activeItem.value?.codec || 'H.264'"
+            :display-codec="
+                playback.activeItem.value?.video_codec ||
+                playback.activeItem.value?.codec ||
+                'H.264'
+            "
             :display-audio="playback.activeItem.value?.audio_codec || 'AAC'"
             :remux-start-offset="playback.remuxStartOffset.value"
             :audio-delay-ms="audioPipeline.audioDelayMs.value"

@@ -3,9 +3,20 @@ import { ref, computed, watch, nextTick } from 'vue';
 import { useSubtitleJob } from '@/composables/useSubtitleJob';
 import { useI18n } from '@/i18n/useI18n';
 import {
-    ShieldCheck, Play, Pause, XCircle, X, Terminal,
-    FileCheck2, AlertTriangle, Trash2, FileText, CheckCircle2,
-    RefreshCw, Layers, ExternalLink
+    ShieldCheck,
+    Play,
+    Pause,
+    XCircle,
+    X,
+    Terminal,
+    FileCheck2,
+    AlertTriangle,
+    Trash2,
+    FileText,
+    CheckCircle2,
+    RefreshCw,
+    Layers,
+    ExternalLink,
 } from 'lucide-vue-next';
 
 const {
@@ -17,7 +28,7 @@ const {
     closeSubtitleModal,
     pauseHealthJob,
     resumeHealthJob,
-    cancelHealthJob
+    cancelHealthJob,
 } = useSubtitleJob();
 
 const { t, isRTL } = useI18n();
@@ -30,155 +41,262 @@ const filteredLogs = computed(() => {
     return logs.filter((l) => l.level === terminalFilter.value);
 });
 
-watch(() => subtitleStatus.value.logs?.length, async () => {
-    await nextTick();
-    const term = document.getElementById('subtitle-terminal-feed');
-    if (term) term.scrollTop = term.scrollHeight;
-});
+watch(
+    () => subtitleStatus.value.logs?.length,
+    async () => {
+        await nextTick();
+        const term = document.getElementById('subtitle-terminal-feed');
+        if (term) term.scrollTop = term.scrollHeight;
+    },
+);
 </script>
 
 <template>
     <div
         v-if="isSubtitleModalOpen"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-all duration-300 animate-in fade-in"
+        class="animate-in fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md transition-all duration-300"
         @click.self="closeSubtitleModal"
     >
-        <div class="relative w-full max-w-2xl rounded-3xl bg-[#080B12] border border-cyan-500/30 p-6 shadow-2xl shadow-cyan-500/10 space-y-6 overflow-hidden">
+        <div
+            class="relative w-full max-w-2xl space-y-6 overflow-hidden rounded-3xl border border-cyan-500/30 bg-[#080B12] p-6 shadow-2xl shadow-cyan-500/10"
+        >
             <!-- Background Ambient Glow -->
-            <div class="ambient-glow bg-cyan-500/15 w-80 h-80 -top-24 -right-24 pointer-events-none"></div>
+            <div
+                class="ambient-glow pointer-events-none -top-24 -right-24 h-80 w-80 bg-cyan-500/15"
+            ></div>
 
             <!-- Modal Header -->
-            <div class="flex items-center justify-between relative z-10 border-b border-white/10 pb-4">
+            <div
+                class="relative z-10 flex items-center justify-between border-b border-white/10 pb-4"
+            >
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 flex items-center justify-center">
-                        <ShieldCheck class="w-5 h-5" />
+                    <div
+                        class="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-400"
+                    >
+                        <ShieldCheck class="h-5 w-5" />
                     </div>
                     <div>
-                        <h2 class="font-extrabold text-base text-white flex items-center gap-2">
-                            <span>{{ isRTL ? 'فاحص ومطهر ملفات الترجمة المباشر' : 'Subtitle Health & Normalizer Studio' }}</span>
+                        <h2
+                            class="flex items-center gap-2 text-base font-extrabold text-white"
+                        >
+                            <span>{{
+                                isRTL
+                                    ? 'فاحص ومطهر ملفات الترجمة المباشر'
+                                    : 'Subtitle Health & Normalizer Studio'
+                            }}</span>
                             <span
-                                class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase"
+                                class="rounded-full px-2 py-0.5 text-[10px] font-black uppercase"
                                 :class="{
-                                    'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 animate-pulse': isSubtitleRunning,
-                                    'bg-amber-500/20 text-amber-300 border border-amber-500/30': isSubtitlePaused,
-                                    'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30': isSubtitleCompleted,
-                                    'bg-white/10 text-slate-400': subtitleStatus.status === 'idle' || subtitleStatus.status === 'cancelled',
+                                    'animate-pulse border border-cyan-500/30 bg-cyan-500/20 text-cyan-300':
+                                        isSubtitleRunning,
+                                    'border border-amber-500/30 bg-amber-500/20 text-amber-300':
+                                        isSubtitlePaused,
+                                    'border border-emerald-500/30 bg-emerald-500/20 text-emerald-300':
+                                        isSubtitleCompleted,
+                                    'bg-white/10 text-slate-400':
+                                        subtitleStatus.status === 'idle' ||
+                                        subtitleStatus.status === 'cancelled',
                                 }"
                             >
                                 {{ subtitleStatus.status }}
                             </span>
                         </h2>
-                        <p class="text-xs text-slate-400 mt-0.5">
-                            {{ isRTL ? 'فحص جودة الترميز، إصلاح UTF-8، وتوحيد لاحقات اللغات والتنظيف' : 'Background UTF-8 repair, stub cleaner, and language suffix standardizer.' }}
+                        <p class="mt-0.5 text-xs text-slate-400">
+                            {{
+                                isRTL
+                                    ? 'فحص جودة الترميز، إصلاح UTF-8، وتوحيد لاحقات اللغات والتنظيف'
+                                    : 'Background UTF-8 repair, stub cleaner, and language suffix standardizer.'
+                            }}
                         </p>
                     </div>
                 </div>
 
                 <button
                     @click="closeSubtitleModal"
-                    class="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    class="cursor-pointer rounded-xl bg-white/5 p-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
                 >
-                    <X class="w-4 h-4" />
+                    <X class="h-4 w-4" />
                 </button>
             </div>
 
             <!-- Bento Stats Metrics Row -->
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 relative z-10">
-                <div class="p-3 rounded-2xl bg-slate-950/60 border border-white/5">
-                    <span class="text-[10px] uppercase font-bold text-slate-500 block">{{ isRTL ? 'الملفات المفحوصة' : 'Scanned Files' }}</span>
-                    <span class="text-base font-black text-cyan-400 font-mono mt-0.5 block">
-                        {{ subtitleStatus.processed_count }} / {{ subtitleStatus.total_files }}
+            <div class="relative z-10 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                <div
+                    class="rounded-2xl border border-white/5 bg-slate-950/60 p-3"
+                >
+                    <span
+                        class="block text-[10px] font-bold text-slate-500 uppercase"
+                        >{{
+                            isRTL ? 'الملفات المفحوصة' : 'Scanned Files'
+                        }}</span
+                    >
+                    <span
+                        class="mt-0.5 block font-mono text-base font-black text-cyan-400"
+                    >
+                        {{ subtitleStatus.processed_count }} /
+                        {{ subtitleStatus.total_files }}
                     </span>
                 </div>
-                <div class="p-3 rounded-2xl bg-slate-950/60 border border-white/5">
-                    <span class="text-[10px] uppercase font-bold text-slate-500 block">{{ isRTL ? 'ترميز UTF-8 تم إصلاحه' : 'Fixed Encodings' }}</span>
-                    <span class="text-base font-black text-emerald-400 font-mono mt-0.5 block">
+                <div
+                    class="rounded-2xl border border-white/5 bg-slate-950/60 p-3"
+                >
+                    <span
+                        class="block text-[10px] font-bold text-slate-500 uppercase"
+                        >{{
+                            isRTL ? 'ترميز UTF-8 تم إصلاحه' : 'Fixed Encodings'
+                        }}</span
+                    >
+                    <span
+                        class="mt-0.5 block font-mono text-base font-black text-emerald-400"
+                    >
                         {{ subtitleStatus.summary?.encoding_fixed_count || 0 }}
                     </span>
                 </div>
-                <div class="p-3 rounded-2xl bg-slate-950/60 border border-white/5">
-                    <span class="text-[10px] uppercase font-bold text-slate-500 block">{{ isRTL ? 'ملفات وهمية حُذفت' : 'Stubs Cleaned' }}</span>
-                    <span class="text-base font-black text-amber-400 font-mono mt-0.5 block">
+                <div
+                    class="rounded-2xl border border-white/5 bg-slate-950/60 p-3"
+                >
+                    <span
+                        class="block text-[10px] font-bold text-slate-500 uppercase"
+                        >{{
+                            isRTL ? 'ملفات وهمية حُذفت' : 'Stubs Cleaned'
+                        }}</span
+                    >
+                    <span
+                        class="mt-0.5 block font-mono text-base font-black text-amber-400"
+                    >
                         {{ subtitleStatus.summary?.deleted_count || 0 }}
                     </span>
                 </div>
-                <div class="p-3 rounded-2xl bg-slate-950/60 border border-white/5">
-                    <span class="text-[10px] uppercase font-bold text-slate-500 block">{{ isRTL ? 'تسميات تم توحيدها' : 'Renamed Standard' }}</span>
-                    <span class="text-base font-black text-purple-400 font-mono mt-0.5 block">
+                <div
+                    class="rounded-2xl border border-white/5 bg-slate-950/60 p-3"
+                >
+                    <span
+                        class="block text-[10px] font-bold text-slate-500 uppercase"
+                        >{{
+                            isRTL ? 'تسميات تم توحيدها' : 'Renamed Standard'
+                        }}</span
+                    >
+                    <span
+                        class="mt-0.5 block font-mono text-base font-black text-purple-400"
+                    >
                         {{ subtitleStatus.summary?.renamed_count || 0 }}
                     </span>
                 </div>
             </div>
 
             <!-- Progress Bar -->
-            <div class="space-y-1 relative z-10">
-                <div class="w-full h-2.5 rounded-full bg-white/5 border border-white/10 overflow-hidden">
+            <div class="relative z-10 space-y-1">
+                <div
+                    class="h-2.5 w-full overflow-hidden rounded-full border border-white/10 bg-white/5"
+                >
                     <div
                         class="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 transition-all duration-300"
-                        :style="{ width: `${subtitleStatus.progress_percent || 0}%` }"
+                        :style="{
+                            width: `${subtitleStatus.progress_percent || 0}%`,
+                        }"
                     ></div>
                 </div>
-                <div class="flex justify-between text-[11px] font-mono text-slate-400">
-                    <span class="truncate max-w-[320px]">{{ subtitleStatus.current_action || subtitleStatus.current_file || 'Waiting...' }}</span>
-                    <span class="font-bold text-cyan-400">{{ subtitleStatus.progress_percent || 0 }}%</span>
+                <div
+                    class="flex justify-between font-mono text-[11px] text-slate-400"
+                >
+                    <span class="max-w-[320px] truncate">{{
+                        subtitleStatus.current_action ||
+                        subtitleStatus.current_file ||
+                        'Waiting...'
+                    }}</span>
+                    <span class="font-bold text-cyan-400"
+                        >{{ subtitleStatus.progress_percent || 0 }}%</span
+                    >
                 </div>
             </div>
 
             <!-- Live Terminal Output Feed -->
-            <div class="relative z-10 rounded-2xl bg-black/60 border border-white/10 p-4 space-y-3">
-                <div class="flex items-center justify-between border-b border-white/5 pb-2.5">
+            <div
+                class="relative z-10 space-y-3 rounded-2xl border border-white/10 bg-black/60 p-4"
+            >
+                <div
+                    class="flex items-center justify-between border-b border-white/5 pb-2.5"
+                >
                     <div class="flex items-center gap-2">
-                        <Terminal class="w-3.5 h-3.5 text-cyan-400" />
-                        <span class="text-xs font-bold text-slate-300">{{ isRTL ? 'سجل الفحص والتطهير المباشر' : 'Live Subtitle Audit Log' }}</span>
+                        <Terminal class="h-3.5 w-3.5 text-cyan-400" />
+                        <span class="text-xs font-bold text-slate-300">{{
+                            isRTL
+                                ? 'سجل الفحص والتطهير المباشر'
+                                : 'Live Subtitle Audit Log'
+                        }}</span>
                     </div>
 
                     <div class="flex items-center gap-1.5 text-[10px]">
                         <button
-                            v-for="flt in ['all', 'success', 'info', 'error'] as const"
+                            v-for="flt in [
+                                'all',
+                                'success',
+                                'info',
+                                'error',
+                            ] as const"
                             :key="flt"
                             @click="terminalFilter = flt"
-                            class="px-2 py-0.5 rounded-lg uppercase font-bold transition-all cursor-pointer"
-                            :class="terminalFilter === flt ? 'bg-cyan-500 text-slate-950 font-black' : 'bg-white/5 text-slate-400 hover:text-white'"
+                            class="cursor-pointer rounded-lg px-2 py-0.5 font-bold uppercase transition-all"
+                            :class="
+                                terminalFilter === flt
+                                    ? 'bg-cyan-500 font-black text-slate-950'
+                                    : 'bg-white/5 text-slate-400 hover:text-white'
+                            "
                         >
                             {{ flt }}
                         </button>
                     </div>
                 </div>
 
-                <div id="subtitle-terminal-feed" class="h-44 overflow-y-auto font-mono text-[11px] space-y-1.5 pr-2 custom-scrollbar">
+                <div
+                    id="subtitle-terminal-feed"
+                    class="custom-scrollbar h-44 space-y-1.5 overflow-y-auto pr-2 font-mono text-[11px]"
+                >
                     <div
                         v-for="(log, idx) in filteredLogs"
                         :key="idx"
                         class="flex items-start gap-2 leading-relaxed"
                     >
-                        <span class="text-slate-600 shrink-0 select-none">[{{ log.time }}]</span>
+                        <span class="shrink-0 text-slate-600 select-none"
+                            >[{{ log.time }}]</span
+                        >
                         <span
                             :class="{
                                 'text-emerald-400': log.level === 'success',
                                 'text-cyan-300': log.level === 'info',
                                 'text-amber-400': log.level === 'warning',
-                                'text-rose-400 font-bold': log.level === 'error',
+                                'font-bold text-rose-400':
+                                    log.level === 'error',
                             }"
                         >
                             {{ log.message }}
                         </span>
                     </div>
-                    <div v-if="filteredLogs.length === 0" class="text-slate-600 italic py-6 text-center">
-                        {{ isRTL ? 'لا توجد سجلات حالياً...' : 'Waiting for subtitle audit events...' }}
+                    <div
+                        v-if="filteredLogs.length === 0"
+                        class="py-6 text-center text-slate-600 italic"
+                    >
+                        {{
+                            isRTL
+                                ? 'لا توجد سجلات حالياً...'
+                                : 'Waiting for subtitle audit events...'
+                        }}
                     </div>
                 </div>
             </div>
 
             <!-- Action Toolbar Footer -->
-            <div class="flex items-center justify-between flex-wrap gap-3 pt-2 relative z-10 border-t border-white/10">
+            <div
+                class="relative z-10 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-2"
+            >
                 <div class="flex items-center gap-2">
                     <!-- Pause Button -->
                     <button
                         v-if="isSubtitleRunning"
                         @click="pauseHealthJob"
-                        class="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                        class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/20 px-4 py-2 text-xs font-bold text-amber-300 transition-all hover:bg-amber-500/30"
                     >
-                        <Pause class="w-3.5 h-3.5" />
+                        <Pause class="h-3.5 w-3.5" />
                         <span>{{ isRTL ? 'إيقاف مؤقت' : 'Pause' }}</span>
                     </button>
 
@@ -186,9 +304,9 @@ watch(() => subtitleStatus.value.logs?.length, async () => {
                     <button
                         v-if="isSubtitlePaused"
                         @click="resumeHealthJob"
-                        class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-cyan-500/20"
+                        class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-cyan-500 px-4 py-2 text-xs font-bold text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:bg-cyan-400"
                     >
-                        <Play class="w-3.5 h-3.5 fill-current" />
+                        <Play class="h-3.5 w-3.5 fill-current" />
                         <span>{{ isRTL ? 'استئناف' : 'Resume' }}</span>
                     </button>
 
@@ -196,16 +314,16 @@ watch(() => subtitleStatus.value.logs?.length, async () => {
                     <button
                         v-if="isSubtitleRunning || isSubtitlePaused"
                         @click="cancelHealthJob"
-                        class="px-4 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                        class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/20 px-4 py-2 text-xs font-bold text-rose-300 transition-all hover:bg-rose-500/30"
                     >
-                        <XCircle class="w-3.5 h-3.5" />
+                        <XCircle class="h-3.5 w-3.5" />
                         <span>{{ isRTL ? 'إلغاء' : 'Cancel' }}</span>
                     </button>
                 </div>
 
                 <button
                     @click="closeSubtitleModal"
-                    class="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                    class="cursor-pointer rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
                 >
                     {{ isRTL ? 'إغلاق النافذة' : 'Close' }}
                 </button>

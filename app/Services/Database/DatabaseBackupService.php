@@ -112,7 +112,13 @@ class DatabaseBackupService
         // 2. Create SQLite binary snapshot if sqlite is in use
         if (($format === 'sqlite' || $format === 'both') && config('database.default') === 'sqlite') {
             $dbPath = config('database.connections.sqlite.database');
-            if (File::exists($dbPath)) {
+            if (is_string($dbPath) && $dbPath !== ':memory:' && File::exists($dbPath)) {
+                try {
+                    DB::statement('PRAGMA wal_checkpoint(TRUNCATE)');
+                } catch (\Throwable $e) {
+                    Log::warning('SQLite WAL checkpoint before backup failed: '.$e->getMessage());
+                }
+
                 $sqliteFilename = "{$safeName}.sqlite";
                 $sqliteFilePath = "{$backupDir}/{$sqliteFilename}";
                 File::copy($dbPath, $sqliteFilePath);
@@ -163,30 +169,25 @@ class DatabaseBackupService
                 'summary' => null,
             ];
 
-            // If it is a JSON file, read counts summary
-            if ($ext === 'json' && $size < 50 * 1024 * 1024) {
-                try {
-                    $content = File::get($file->getRealPath());
-                    $decoded = json_decode($content, true);
-                    if (is_array($decoded) && isset($decoded['counts'])) {
-                        $item['summary'] = $decoded['counts'];
-                        if (isset($decoded['exported_at'])) {
-                            $item['created_at'] = $decoded['exported_at'];
-                        }
-                    }
-                } catch (\Throwable $e) {
-                    // Ignore parsing error for corrupted file
+            // If it is a JSON file, extract lightweight header summary without decoding multi-MB payloads
+            if ($ext === 'json') {
+                $header = $this->extractJsonBackupHeader($file->getRealPath(), $size);
+                if ($header['counts'] !== null) {
+                    $item['summary'] = $header['counts'];
+                }
+                if ($header['exported_at'] !== null) {
+                    $item['created_at'] = $header['exported_at'];
                 }
             } elseif (in_array($ext, ['sqlite', 'db'])) {
                 try {
                     $pdo = new \PDO('sqlite:'.$file->getRealPath());
-                    $mediaCount = (int) $pdo->query('SELECT COUNT(*) FROM media_items')->fetchColumn();
-                    $seriesCount = (int) $pdo->query('SELECT COUNT(*) FROM series')->fetchColumn();
-                    $subCount = (int) $pdo->query('SELECT COUNT(*) FROM subtitles')->fetchColumn();
+                    $mediaStmt = $pdo->query('SELECT COUNT(*) FROM media_items');
+                    $seriesStmt = $pdo->query('SELECT COUNT(*) FROM series');
+                    $subStmt = $pdo->query('SELECT COUNT(*) FROM subtitles');
                     $item['summary'] = [
-                        'media_items' => $mediaCount,
-                        'series' => $seriesCount,
-                        'subtitles' => $subCount,
+                        'media_items' => $mediaStmt ? (int) $mediaStmt->fetchColumn() : 0,
+                        'series' => $seriesStmt ? (int) $seriesStmt->fetchColumn() : 0,
+                        'subtitles' => $subStmt ? (int) $subStmt->fetchColumn() : 0,
                     ];
                 } catch (\Throwable $e) {
                     // Ignore
@@ -200,6 +201,62 @@ class DatabaseBackupService
         usort($backups, fn ($a, $b) => $b['created_timestamp'] <=> $a['created_timestamp']);
 
         return $backups;
+    }
+
+    /**
+     * Read exported_at and counts from the opening header of a JSON backup without loading the full file into memory.
+     *
+     * @return array{exported_at: ?string, counts: ?array<string, int>}
+     */
+    protected function extractJsonBackupHeader(string $filePath, int $fileSize): array
+    {
+        $result = [
+            'exported_at' => null,
+            'counts' => null,
+        ];
+
+        $handle = @fopen($filePath, 'rb');
+        if ($handle === false) {
+            return $result;
+        }
+
+        try {
+            $head = fread($handle, 65536);
+        } finally {
+            fclose($handle);
+        }
+
+        if (! is_string($head) || $head === '') {
+            return $result;
+        }
+
+        // Small files can be decoded directly without extra parsing overhead
+        if ($fileSize <= 65536) {
+            $decoded = json_decode($head, true);
+            if (is_array($decoded)) {
+                if (isset($decoded['exported_at']) && is_string($decoded['exported_at'])) {
+                    $result['exported_at'] = $decoded['exported_at'];
+                }
+                if (isset($decoded['counts']) && is_array($decoded['counts'])) {
+                    $result['counts'] = $decoded['counts'];
+                }
+            }
+
+            return $result;
+        }
+
+        if (preg_match('/"exported_at"\s*:\s*"([^"]+)"/', $head, $exportedMatch) === 1) {
+            $result['exported_at'] = $exportedMatch[1];
+        }
+
+        if (preg_match('/"counts"\s*:\s*(\{[^{}]*\})/s', $head, $countsMatch) === 1) {
+            $decodedCounts = json_decode($countsMatch[1], true);
+            if (is_array($decodedCounts)) {
+                $result['counts'] = $decodedCounts;
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -559,16 +616,26 @@ class DatabaseBackupService
         $targetDb = config('database.connections.sqlite.database');
 
         // Validate header has "SQLite format 3"
-        $handle = fopen($sqliteFilePath, 'rb');
+        $handle = @fopen($sqliteFilePath, 'rb');
+        if ($handle === false) {
+            throw new \InvalidArgumentException('Could not open SQLite backup file for reading.');
+        }
+
         $header = fread($handle, 16);
         fclose($handle);
 
-        if (! str_starts_with($header, "SQLite format 3\0")) {
+        if (! is_string($header) || ! str_starts_with($header, "SQLite format 3\0")) {
             throw new \InvalidArgumentException('Invalid SQLite database file header.');
         }
 
-        // Close active connections
+        // Close active connections and clear stale WAL/SHM sidecars before replacing database
         DB::disconnect();
+
+        foreach (["{$targetDb}-wal", "{$targetDb}-shm"] as $sidecar) {
+            if (File::exists($sidecar)) {
+                @unlink($sidecar);
+            }
+        }
 
         // Copy over active database
         File::copy($sqliteFilePath, $targetDb);

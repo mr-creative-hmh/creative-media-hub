@@ -1,11 +1,13 @@
-import { ref, watch, onBeforeUnmount, type Ref } from 'vue';
+import { ref, onBeforeUnmount, type Ref } from 'vue';
 
 export interface UseCinemaAudioPipelineOptions {
     itemKey?: Ref<string>;
     onToast?: (message: string) => void;
 }
 
-export function useCinemaAudioPipeline(options?: UseCinemaAudioPipelineOptions) {
+export function useCinemaAudioPipeline(
+    options?: UseCinemaAudioPipelineOptions,
+) {
     const vocalBoost = ref<boolean>(false);
     const bassBoost = ref<boolean>(false);
     const nightMode = ref<boolean>(false);
@@ -23,7 +25,8 @@ export function useCinemaAudioPipeline(options?: UseCinemaAudioPipelineOptions) 
 
     // Load initial preferences
     try {
-        vocalBoost.value = localStorage.getItem('cinema_vocal_boost') === 'true';
+        vocalBoost.value =
+            localStorage.getItem('cinema_vocal_boost') === 'true';
         bassBoost.value = localStorage.getItem('cinema_bass_boost') === 'true';
         nightMode.value = localStorage.getItem('cinema_night_mode') === 'true';
     } catch {}
@@ -31,7 +34,8 @@ export function useCinemaAudioPipeline(options?: UseCinemaAudioPipelineOptions) 
     const initAudioPipeline = (videoEl: HTMLVideoElement | null) => {
         if (isAudioPipelineInitialized.value || !videoEl) return;
         try {
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            const AudioContextClass =
+                window.AudioContext || (window as any).webkitAudioContext;
             if (!AudioContextClass) return;
 
             audioCtx = new AudioContextClass();
@@ -108,7 +112,10 @@ export function useCinemaAudioPipeline(options?: UseCinemaAudioPipelineOptions) 
     const toggleVocalBoost = () => {
         vocalBoost.value = !vocalBoost.value;
         try {
-            localStorage.setItem('cinema_vocal_boost', String(vocalBoost.value));
+            localStorage.setItem(
+                'cinema_vocal_boost',
+                String(vocalBoost.value),
+            );
         } catch {}
         updateAudioFilters();
     };
@@ -133,7 +140,10 @@ export function useCinemaAudioPipeline(options?: UseCinemaAudioPipelineOptions) 
         audioDelayMs.value = delayVal;
         if (options?.itemKey?.value) {
             try {
-                localStorage.setItem(`audio_sync_${options.itemKey.value}`, String(delayVal));
+                localStorage.setItem(
+                    `audio_sync_${options.itemKey.value}`,
+                    String(delayVal),
+                );
             } catch {}
         }
 
@@ -143,12 +153,19 @@ export function useCinemaAudioPipeline(options?: UseCinemaAudioPipelineOptions) 
                 audioCtx.resume().catch(() => {});
             }
             const sec = Math.max(0, Math.min(5.0, delayVal / 1000));
-            delayNode.delayTime.setTargetAtTime(sec, audioCtx.currentTime, 0.05);
+            delayNode.delayTime.setTargetAtTime(
+                sec,
+                audioCtx.currentTime,
+                0.05,
+            );
         }
     };
 
     const nudgeAudioDelay = (deltaMs: number) => {
-        const nextVal = Math.min(3000, Math.max(-3000, audioDelayMs.value + deltaMs));
+        const nextVal = Math.min(
+            3000,
+            Math.max(-3000, audioDelayMs.value + deltaMs),
+        );
         setAudioDelay(nextVal);
     };
 
@@ -190,4 +207,3 @@ export function useCinemaAudioPipeline(options?: UseCinemaAudioPipelineOptions) 
         setVolumeGain,
     };
 }
-

@@ -249,4 +249,33 @@ class DatabaseBackupAndRestoreTest extends TestCase
         $backups = $service->listLocalBackups();
         $this->assertFalse(collect($backups)->contains(fn ($b) => $b['filename'] === 'test_for_delete.json'));
     }
+
+    public function test_list_local_backups_reads_large_json_header_without_decoding_full_payload(): void
+    {
+        $header = json_encode([
+            'app' => 'Creative Media Hub',
+            'version' => '1.0',
+            'exported_at' => '2026-11-20 12:34:56',
+            'database_driver' => 'sqlite',
+            'counts' => [
+                'media_items' => 42,
+                'series' => 7,
+                'subtitles' => 118,
+            ],
+        ], JSON_PRETTY_PRINT);
+
+        // Append > 80 KB of payload data so listLocalBackups() exercises the lightweight header parser
+        $largeJson = substr($header, 0, -1).', "tables": {"padding": "'.str_repeat('A', 90000).'"}}';
+        File::put($this->backupDir.'/large_snapshot.json', $largeJson);
+
+        $service = app(DatabaseBackupService::class);
+        $backups = $service->listLocalBackups();
+
+        $this->assertCount(1, $backups);
+        $this->assertSame('large_snapshot.json', $backups[0]['filename']);
+        $this->assertSame('2026-11-20 12:34:56', $backups[0]['created_at']);
+        $this->assertSame(42, $backups[0]['summary']['media_items']);
+        $this->assertSame(7, $backups[0]['summary']['series']);
+        $this->assertSame(118, $backups[0]['summary']['subtitles']);
+    }
 }

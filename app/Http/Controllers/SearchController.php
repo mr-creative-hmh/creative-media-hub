@@ -29,7 +29,7 @@ class SearchController extends Controller
             ]);
         }
 
-        $cacheKey = 'instant_search_v3_'.md5(mb_strtolower($query));
+        $cacheKey = 'instant_search_v4_'.md5(mb_strtolower($query));
 
         $results = Cache::remember($cacheKey, 300, function () use ($query) {
             $prefixTerm = "{$query}%";
@@ -134,11 +134,15 @@ class SearchController extends Controller
                     ];
                 });
 
+            $moviesList = $movies->values()->all();
+            $collectionsList = $collections->values()->all();
+            $seriesList = $series->values()->all();
+
             return [
-                'movies' => $movies,
-                'collections' => $collections,
-                'series' => $series,
-                'total' => $movies->count() + $collections->count() + $series->count(),
+                'movies' => $moviesList,
+                'collections' => $collectionsList,
+                'series' => $seriesList,
+                'total' => count($moviesList) + count($collectionsList) + count($seriesList),
             ];
         });
 

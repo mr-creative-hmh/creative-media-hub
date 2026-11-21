@@ -111,7 +111,7 @@ const getStoredAccent = (): AccentColor => {
         if (stored && ACCENT_PALETTES.some((p) => p.key === stored)) {
             return stored;
         }
-    } catch (e) {}
+    } catch {}
     return 'cyan';
 };
 
@@ -138,7 +138,7 @@ export function initializeThemeAccent(): void {
         router.on('navigate', () => {
             setDocumentAccent(currentAccent.value);
         });
-    } catch (e) {}
+    } catch {}
 
     isInitialized = true;
 }
@@ -169,7 +169,7 @@ export function useThemeAccent() {
         try {
             localStorage.setItem(STORAGE_KEY, accent);
             setCookie(STORAGE_KEY, accent);
-        } catch (e) {}
+        } catch {}
     };
 
     return {

@@ -1,4 +1,8 @@
-import { isActivityCenterOpen, openActivityCenter, closeActivityCenter } from './useActivityCenterState';
+import {
+    isActivityCenterOpen,
+    openActivityCenter,
+    closeActivityCenter,
+} from './useActivityCenterState';
 import { ref, computed } from 'vue';
 
 export interface SubtitleJobLog {
@@ -14,13 +18,16 @@ export interface SubtitleJobSummary {
     renamed_count: number;
     already_standard_count: number;
     encoding_fixed_count: number;
-    language_breakdown: Record<string, {
-        code: string;
-        name_en: string;
-        name_ar: string;
-        flag: string;
-        count: number;
-    }>;
+    language_breakdown: Record<
+        string,
+        {
+            code: string;
+            name_en: string;
+            name_ar: string;
+            flag: string;
+            count: number;
+        }
+    >;
 }
 
 export interface SubtitleJobStatus {
@@ -65,9 +72,17 @@ const subtitleStatus = ref<SubtitleJobStatus>({
 });
 
 export function useSubtitleJob() {
-    const isSubtitleRunning = computed(() => subtitleStatus.value.status === 'running');
-    const isSubtitlePaused = computed(() => subtitleStatus.value.status === 'paused' || isExplicitlyPaused.value);
-    const isSubtitleCompleted = computed(() => subtitleStatus.value.status === 'completed');
+    const isSubtitleRunning = computed(
+        () => subtitleStatus.value.status === 'running',
+    );
+    const isSubtitlePaused = computed(
+        () =>
+            subtitleStatus.value.status === 'paused' ||
+            isExplicitlyPaused.value,
+    );
+    const isSubtitleCompleted = computed(
+        () => subtitleStatus.value.status === 'completed',
+    );
 
     const openSubtitleModal = () => {
         openActivityCenter('subtitles');
@@ -77,7 +92,9 @@ export function useSubtitleJob() {
         closeActivityCenter();
     };
 
-    const getCsrfToken = () => (document.querySelector('meta[name="csrf-token"]') as any)?.content || '';
+    const getCsrfToken = () =>
+        (document.querySelector('meta[name="csrf-token"]') as any)?.content ||
+        '';
 
     const fetchSubtitleStatus = async () => {
         try {
@@ -92,9 +109,14 @@ export function useSubtitleJob() {
                         data.status = 'cancelled';
                     }
                     subtitleStatus.value = data;
-                    if (data.status === 'running' && !isWorkerRunning.value && !isExplicitlyPaused.value && !isExplicitlyCancelled.value) {
+                    if (
+                        data.status === 'running' &&
+                        !isWorkerRunning.value &&
+                        !isExplicitlyPaused.value &&
+                        !isExplicitlyCancelled.value
+                    ) {
                         isSubtitleModalOpen.value = true;
-                        runBackgroundWorker();
+                        void runBackgroundWorker();
                     }
                 }
             }
@@ -109,8 +131,16 @@ export function useSubtitleJob() {
 
         let consecutiveErrors = 0;
 
-        while (!isExplicitlyCancelled.value && (subtitleStatus.value.status === 'running' || subtitleStatus.value.status === 'paused' || isExplicitlyPaused.value)) {
-            if (isExplicitlyPaused.value || subtitleStatus.value.status === 'paused') {
+        while (
+            !isExplicitlyCancelled.value &&
+            (subtitleStatus.value.status === 'running' ||
+                subtitleStatus.value.status === 'paused' ||
+                isExplicitlyPaused.value)
+        ) {
+            if (
+                isExplicitlyPaused.value ||
+                subtitleStatus.value.status === 'paused'
+            ) {
                 await new Promise((r) => setTimeout(r, 400));
                 continue;
             }
@@ -141,7 +171,11 @@ export function useSubtitleJob() {
                         subtitleStatus.value = data.status;
                     }
 
-                    if (!data.has_more || subtitleStatus.value.status === 'completed' || subtitleStatus.value.status === 'cancelled') {
+                    if (
+                        !data.has_more ||
+                        subtitleStatus.value.status === 'completed' ||
+                        subtitleStatus.value.status === 'cancelled'
+                    ) {
                         break;
                     }
                 } else {
@@ -152,7 +186,7 @@ export function useSubtitleJob() {
                     }
                     await new Promise((r) => setTimeout(r, 1000));
                 }
-            } catch (e) {
+            } catch {
                 consecutiveErrors++;
                 if (consecutiveErrors >= 5) {
                     await fetchSubtitleStatus();
@@ -167,22 +201,26 @@ export function useSubtitleJob() {
         isWorkerRunning.value = false;
     };
 
-    const startHealthJob = async (options: {
-        dry_run?: boolean;
-        delete_invalid?: boolean;
-        auto_rename?: boolean;
-        target_path?: string | null;
-    } = {}) => {
+    const startHealthJob = async (
+        options: {
+            dry_run?: boolean;
+            delete_invalid?: boolean;
+            auto_rename?: boolean;
+            target_path?: string | null;
+        } = {},
+    ) => {
         isExplicitlyCancelled.value = false;
         isExplicitlyPaused.value = false;
         openSubtitleModal();
 
         subtitleStatus.value.status = 'running';
-        subtitleStatus.value.logs = [{
-            time: new Date().toLocaleTimeString(),
-            level: 'info',
-            message: 'Starting subtitle health and normalizer audit...',
-        }];
+        subtitleStatus.value.logs = [
+            {
+                time: new Date().toLocaleTimeString(),
+                level: 'info',
+                message: 'Starting subtitle health and normalizer audit...',
+            },
+        ];
 
         try {
             const res = await fetch('/api/subtitles/health-check/start', {
@@ -199,7 +237,7 @@ export function useSubtitleJob() {
                 if (data.status && typeof data.status === 'object') {
                     subtitleStatus.value = data.status;
                 }
-                runBackgroundWorker();
+                void runBackgroundWorker();
             } else {
                 subtitleStatus.value.status = 'idle';
                 closeSubtitleModal();
@@ -248,7 +286,7 @@ export function useSubtitleJob() {
             if (res.ok) {
                 const data = await res.json();
                 if (data.status) subtitleStatus.value = data.status;
-                runBackgroundWorker();
+                void runBackgroundWorker();
             }
         } catch (e) {
             console.error('Resume subtitle job error:', e);

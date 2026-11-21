@@ -60,9 +60,9 @@ export class Fmp4Transmuxer {
         // 1. ftyp box (isom, iso2, avc1, mp41)
         const ftypPayload = new Uint8Array(16);
         const ftypView = new DataView(ftypPayload.buffer);
-        ftypPayload.set([0x69, 0x73, 0x6F, 0x6D], 0); // major_brand: 'isom'
+        ftypPayload.set([0x69, 0x73, 0x6f, 0x6d], 0); // major_brand: 'isom'
         ftypView.setUint32(4, 1, false); // minor_version: 1
-        ftypPayload.set([0x69, 0x73, 0x6F, 0x32], 8); // compatible: 'iso2'
+        ftypPayload.set([0x69, 0x73, 0x6f, 0x32], 8); // compatible: 'iso2'
         ftypPayload.set([0x61, 0x76, 0x63, 0x31], 12); // compatible: 'avc1'
         const ftyp = Fmp4Transmuxer.box('ftyp', ftypPayload);
 
@@ -100,7 +100,7 @@ export class Fmp4Transmuxer {
         const mdhdView = new DataView(mdhdPayload.buffer);
         mdhdView.setUint32(12, this.timescale, false);
         mdhdView.setUint32(16, 0, false); // duration
-        mdhdView.setUint16(20, 0x55C4, false); // language: und
+        mdhdView.setUint16(20, 0x55c4, false); // language: und
         const mdhd = Fmp4Transmuxer.box('mdhd', mdhdPayload);
 
         // mdia -> hdlr
@@ -116,7 +116,10 @@ export class Fmp4Transmuxer {
         const vmhd = Fmp4Transmuxer.box('vmhd', vmhdPayload);
 
         // minf -> dinf -> dref
-        const drefEntry = Fmp4Transmuxer.box('url ', new Uint8Array([0, 0, 0, 1]));
+        const drefEntry = Fmp4Transmuxer.box(
+            'url ',
+            new Uint8Array([0, 0, 0, 1]),
+        );
         const drefPayload = new Uint8Array(8);
         new DataView(drefPayload.buffer).setUint32(4, 1, false); // entry_count = 1
         const dref = Fmp4Transmuxer.box('dref', drefPayload, drefEntry);
@@ -145,7 +148,14 @@ export class Fmp4Transmuxer {
             const p = new Uint8Array(8);
             return Fmp4Transmuxer.box(type, p);
         };
-        const stbl = Fmp4Transmuxer.box('stbl', stsd, emptyBox('stts'), emptyBox('stsc'), emptyBox('stsz'), emptyBox('stco'));
+        const stbl = Fmp4Transmuxer.box(
+            'stbl',
+            stsd,
+            emptyBox('stts'),
+            emptyBox('stsc'),
+            emptyBox('stsz'),
+            emptyBox('stco'),
+        );
         const minf = Fmp4Transmuxer.box('minf', vmhd, dinf, stbl);
         const mdia = Fmp4Transmuxer.box('mdia', mdhd, hdlr, minf);
         const trak = Fmp4Transmuxer.box('trak', tkhd, mdia);
@@ -184,16 +194,44 @@ export class Fmp4Transmuxer {
             0x64, // AVCProfileIndication: High (100)
             0x00, // profile_compatibility
             0x29, // AVCLevelIndication: 4.1
-            0xFF, // lengthSizeMinusOne: 3 (4 bytes)
-            0xE1, // numOfSequenceParameterSets: 1
-            0x00, 0x1B, // SPS length: 27
-            0x67, 0x64, 0x00, 0x29, 0xAC, 0xD9, 0x40, 0x78,
-            0x02, 0x27, 0xE5, 0xC0, 0x44, 0x00, 0x00, 0x03,
-            0x00, 0x04, 0x00, 0x00, 0x03, 0x00, 0xCA, 0x3C,
-            0x60, 0xC4, 0x48,
+            0xff, // lengthSizeMinusOne: 3 (4 bytes)
+            0xe1, // numOfSequenceParameterSets: 1
+            0x00,
+            0x1b, // SPS length: 27
+            0x67,
+            0x64,
+            0x00,
+            0x29,
+            0xac,
+            0xd9,
+            0x40,
+            0x78,
+            0x02,
+            0x27,
+            0xe5,
+            0xc0,
+            0x44,
+            0x00,
+            0x00,
+            0x03,
+            0x00,
+            0x04,
+            0x00,
+            0x00,
+            0x03,
+            0x00,
+            0xca,
+            0x3c,
+            0x60,
+            0xc4,
+            0x48,
             0x01, // numOfPictureParameterSets: 1
-            0x00, 0x04, // PPS length: 4
-            0x68, 0xEB, 0xE3, 0xCB
+            0x00,
+            0x04, // PPS length: 4
+            0x68,
+            0xeb,
+            0xe3,
+            0xcb,
         ]);
 
         return Fmp4Transmuxer.box('avcC', fallback);
@@ -202,7 +240,10 @@ export class Fmp4Transmuxer {
     /**
      * Generate Media Segment (moof + mdat) for a set of video samples.
      */
-    public generateMediaSegment(trackId: number, samples: VideoSample[]): Uint8Array | null {
+    public generateMediaSegment(
+        trackId: number,
+        samples: VideoSample[],
+    ): Uint8Array | null {
         if (!samples || samples.length === 0) return null;
 
         const firstSample = samples[0];
@@ -210,7 +251,11 @@ export class Fmp4Transmuxer {
 
         // mfhd (Movie Fragment Header)
         const mfhdPayload = new Uint8Array(8);
-        new DataView(mfhdPayload.buffer).setUint32(4, this.sequenceNumber++, false);
+        new DataView(mfhdPayload.buffer).setUint32(
+            4,
+            this.sequenceNumber++,
+            false,
+        );
         const mfhd = Fmp4Transmuxer.box('mfhd', mfhdPayload);
 
         // tfhd (Track Fragment Header)
@@ -238,9 +283,9 @@ export class Fmp4Transmuxer {
 
         // trun (Track Fragment Run)
         // flags: data-offset-present (0x01), sample-duration (0x100), sample-size (0x200), sample-flags (0x400), sample-cts (0x800)
-        const trunFlags = 0x000F01;
+        const trunFlags = 0x000f01;
         const entrySize = 16; // 4 + 4 + 4 + 4
-        const trunPayload = new Uint8Array(12 + (samples.length * entrySize));
+        const trunPayload = new Uint8Array(12 + samples.length * entrySize);
         const trunView = new DataView(trunPayload.buffer);
         trunView.setUint32(0, trunFlags, false);
         trunView.setUint32(4, samples.length, false); // sample_count
@@ -259,8 +304,17 @@ export class Fmp4Transmuxer {
         }
 
         const trunPlaceholder = Fmp4Transmuxer.box('trun', trunPayload);
-        const trafPlaceholder = Fmp4Transmuxer.box('traf', tfhd, tfdt, trunPlaceholder);
-        const moofPlaceholder = Fmp4Transmuxer.box('moof', mfhd, trafPlaceholder);
+        const trafPlaceholder = Fmp4Transmuxer.box(
+            'traf',
+            tfhd,
+            tfdt,
+            trunPlaceholder,
+        );
+        const moofPlaceholder = Fmp4Transmuxer.box(
+            'moof',
+            mfhd,
+            trafPlaceholder,
+        );
 
         // Patch exact data_offset into trun (moof length + 8 for mdat header)
         const exactDataOffset = moofPlaceholder.length + 8;
@@ -273,7 +327,7 @@ export class Fmp4Transmuxer {
         // mdat box
         const mdatHeader = new Uint8Array(8);
         new DataView(mdatHeader.buffer).setUint32(0, 8 + mdatSize, false);
-        mdatHeader.set([0x6D, 0x64, 0x61, 0x74], 4); // 'mdat'
+        mdatHeader.set([0x6d, 0x64, 0x61, 0x74], 4); // 'mdat'
 
         const mediaSegment = new Uint8Array(moof.length + 8 + mdatSize);
         mediaSegment.set(moof, 0);
@@ -288,4 +342,3 @@ export class Fmp4Transmuxer {
         return mediaSegment;
     }
 }
-

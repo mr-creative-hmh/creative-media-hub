@@ -46,7 +46,6 @@ class ScannerRelocationAndUpgradeTest extends TestCase
         file_put_contents($oldFile, str_repeat('A', 1024));
 
         $reflectionMethod = new \ReflectionMethod($scanner, 'indexSeriesEpisode');
-        $reflectionMethod->setAccessible(true);
 
         // Index first time at 720p
         $file1 = [
@@ -101,7 +100,6 @@ class ScannerRelocationAndUpgradeTest extends TestCase
         file_put_contents($multiFile, str_repeat('C', 2048));
 
         $reflectionMethod = new \ReflectionMethod($scanner, 'indexSeriesEpisode');
-        $reflectionMethod->setAccessible(true);
 
         $file = [
             'path' => $multiFile,

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\MediaItem;
-use App\Models\Series;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
@@ -86,11 +85,14 @@ class FixMatchCollectionController extends Controller
             'reorganize_folder' => 'nullable|boolean',
         ]);
 
-        if ($validated['media_type'] === 'movie') {
-            $media = MediaItem::findOrFail($validated['media_id']);
-        } else {
-            $media = Series::findOrFail($validated['media_id']);
+        if ($validated['media_type'] !== 'movie') {
+            return response()->json([
+                'success' => false,
+                'error' => 'Collections are only supported for movies.',
+            ], 422);
         }
+
+        $media = MediaItem::findOrFail((int) $validated['media_id']);
 
         $mode = $validated['collection_mode'];
         $reorganize = $validated['reorganize_folder'] ?? false;

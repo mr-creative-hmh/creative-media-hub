@@ -146,7 +146,7 @@ class PhysicalOrganizerService
 
         if (! isset(self::$episodesBySeries[$seriesId])) {
             $eps = Episode::where('series_id', $seriesId)
-                ->select('id', 'series_id', 'season_id', 'episode_number', 'title', 'clean_episode_title', 'resolution', 'file_path')
+                ->select('id', 'series_id', 'season_id', 'episode_number', 'title', 'resolution', 'file_path')
                 ->with('season:id,season_number')
                 ->get();
 

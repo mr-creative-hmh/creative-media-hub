@@ -37,7 +37,12 @@ export class MseBackendClient {
     private onError?: (err: any) => void;
 
     private onVideoTimeUpdate = () => {
-        if (this.isDestroyed || !this.sourceBuffer || this.sourceBuffer.updating || this.isAppending) {
+        if (
+            this.isDestroyed ||
+            !this.sourceBuffer ||
+            this.sourceBuffer.updating ||
+            this.isAppending
+        ) {
             return;
         }
         this.evictOldBuffers();
@@ -71,8 +76,14 @@ export class MseBackendClient {
         this.currentStartOffset = startSeconds;
         const generation = ++this.streamGeneration;
 
-        this.videoElement.removeEventListener('timeupdate', this.onVideoTimeUpdate);
-        this.videoElement.addEventListener('timeupdate', this.onVideoTimeUpdate);
+        this.videoElement.removeEventListener(
+            'timeupdate',
+            this.onVideoTimeUpdate,
+        );
+        this.videoElement.addEventListener(
+            'timeupdate',
+            this.onVideoTimeUpdate,
+        );
 
         try {
             this.mediaSource = new MediaSource();
@@ -90,7 +101,7 @@ export class MseBackendClient {
             this.videoElement.src = this.objectUrl;
             try {
                 this.videoElement.currentTime = 0;
-            } catch { }
+            } catch {}
 
             // Fire network request immediately without waiting for sourceopen
             const fetchPromise = this.initiateFetch(startSeconds, generation);
@@ -113,7 +124,10 @@ export class MseBackendClient {
     /**
      * Initiate fetch request with browser codec capability hints.
      */
-    private initiateFetch(startSeconds: number, generation: number): Promise<Response> {
+    private initiateFetch(
+        startSeconds: number,
+        generation: number,
+    ): Promise<Response> {
         if (this.abortController) {
             this.abortController.abort();
         }
@@ -121,7 +135,10 @@ export class MseBackendClient {
 
         const urlObj = new URL(this.baseStreamUrl, window.location.origin);
         if (startSeconds > 0) {
-            urlObj.searchParams.set('start', String(Math.round(startSeconds * 1000) / 1000));
+            urlObj.searchParams.set(
+                'start',
+                String(Math.round(startSeconds * 1000) / 1000),
+            );
         }
 
         const caps = getBrowserCodecCapabilities();
@@ -144,8 +161,15 @@ export class MseBackendClient {
     /**
      * Bind resolved fetch stream to SourceBuffer and pump fMP4 chunks.
      */
-    private async attachStreamResponse(fetchPromise: Promise<Response>, generation: number): Promise<boolean> {
-        if (!this.mediaSource || this.isDestroyed || generation !== this.streamGeneration) {
+    private async attachStreamResponse(
+        fetchPromise: Promise<Response>,
+        generation: number,
+    ): Promise<boolean> {
+        if (
+            !this.mediaSource ||
+            this.isDestroyed ||
+            generation !== this.streamGeneration
+        ) {
             return false;
         }
 
@@ -155,7 +179,7 @@ export class MseBackendClient {
             if (this.isDestroyed || generation !== this.streamGeneration) {
                 try {
                     await res.body?.cancel();
-                } catch { }
+                } catch {}
                 return true;
             }
 
@@ -176,7 +200,8 @@ export class MseBackendClient {
 
             // Retrieve codec from response header or use standard H.264/AAC string
             const headerCodec = res.headers.get('X-MSE-Codec');
-            let mimeType = headerCodec || 'video/mp4; codecs="avc1.640028, mp4a.40.2"';
+            let mimeType =
+                headerCodec || 'video/mp4; codecs="avc1.640028, mp4a.40.2"';
 
             if (!MediaSource.isTypeSupported(mimeType)) {
                 mimeType = 'video/mp4; codecs="avc1.42e01e, mp4a.40.2"';
@@ -185,7 +210,11 @@ export class MseBackendClient {
                 mimeType = 'video/mp4';
             }
 
-            if (!this.sourceBuffer && this.mediaSource && this.mediaSource.readyState === 'open') {
+            if (
+                !this.sourceBuffer &&
+                this.mediaSource &&
+                this.mediaSource.readyState === 'open'
+            ) {
                 this.sourceBuffer = this.mediaSource.addSourceBuffer(mimeType);
                 this.sourceBuffer.mode = 'segments';
 
@@ -196,22 +225,30 @@ export class MseBackendClient {
                     this.evictOldBuffers();
                     this.processPendingQueue();
 
-                    if (this.needsStartAlignment && this.sourceBuffer && this.sourceBuffer.buffered.length > 0) {
+                    if (
+                        this.needsStartAlignment &&
+                        this.sourceBuffer &&
+                        this.sourceBuffer.buffered.length > 0
+                    ) {
                         const bufStart = this.sourceBuffer.buffered.start(0);
                         const bufEnd = this.sourceBuffer.buffered.end(0);
                         if (bufEnd > bufStart) {
                             this.needsStartAlignment = false;
                             const cur = this.videoElement.currentTime;
-                            if ((cur < bufStart || cur > bufEnd) && Math.abs(cur - bufStart) > 0.25) {
+                            if (
+                                (cur < bufStart || cur > bufEnd) &&
+                                Math.abs(cur - bufStart) > 0.25
+                            ) {
                                 try {
-                                    this.videoElement.currentTime = bufStart + 0.01;
-                                } catch { }
+                                    this.videoElement.currentTime =
+                                        bufStart + 0.01;
+                                } catch {}
                             }
                             if (this.onBuffering) {
                                 this.onBuffering(false);
                             }
                             if (this.videoElement.paused) {
-                                this.videoElement.play().catch(() => { });
+                                this.videoElement.play().catch(() => {});
                             }
                         }
                     }
@@ -224,10 +261,13 @@ export class MseBackendClient {
             }
 
             const reader = res.body.getReader();
-            this.pumpStreamReader(reader, generation);
+            void this.pumpStreamReader(reader, generation);
             return true;
         } catch (e: any) {
-            if (e.name === 'AbortError' || generation !== this.streamGeneration) {
+            if (
+                e.name === 'AbortError' ||
+                generation !== this.streamGeneration
+            ) {
                 return true;
             }
             console.warn('[MseBackendClient] Stream fetch error:', e);
@@ -263,22 +303,34 @@ export class MseBackendClient {
      * Read stream chunks sequentially and queue for SourceBuffer append.
      * Applies TCP backpressure when 45s is buffered ahead so disk-speed FFmpeg pipes cannot overflow MSE quota.
      */
-    private async pumpStreamReader(reader: ReadableStreamDefaultReader<Uint8Array>, generation: number) {
+    private async pumpStreamReader(
+        reader: ReadableStreamDefaultReader<Uint8Array>,
+        generation: number,
+    ) {
         try {
-            while (!this.isDestroyed && this.isAttached && generation === this.streamGeneration) {
+            while (
+                !this.isDestroyed &&
+                this.isAttached &&
+                generation === this.streamGeneration
+            ) {
                 while (
                     !this.isDestroyed &&
                     this.isAttached &&
                     generation === this.streamGeneration &&
-                    (this.getBufferedAheadSeconds() > 45 || this.pendingBufferQueue.length > 10)
+                    (this.getBufferedAheadSeconds() > 45 ||
+                        this.pendingBufferQueue.length > 10)
                 ) {
                     await new Promise((resolve) => setTimeout(resolve, 250));
                 }
 
-                if (generation !== this.streamGeneration || this.isDestroyed || !this.isAttached) {
+                if (
+                    generation !== this.streamGeneration ||
+                    this.isDestroyed ||
+                    !this.isAttached
+                ) {
                     try {
                         await reader.cancel();
-                    } catch { }
+                    } catch {}
                     break;
                 }
 
@@ -286,7 +338,7 @@ export class MseBackendClient {
                 if (generation !== this.streamGeneration || this.isDestroyed) {
                     try {
                         await reader.cancel();
-                    } catch { }
+                    } catch {}
                     break;
                 }
                 if (done) {
@@ -302,7 +354,11 @@ export class MseBackendClient {
                 }
             }
         } catch (err: any) {
-            if (err.name !== 'AbortError' && !this.isDestroyed && generation === this.streamGeneration) {
+            if (
+                err.name !== 'AbortError' &&
+                !this.isDestroyed &&
+                generation === this.streamGeneration
+            ) {
                 console.warn('[MseBackendClient] Stream reader error:', err);
                 if (this.onError) this.onError(err);
             }
@@ -313,7 +369,13 @@ export class MseBackendClient {
      * Evict buffered media > 20s behind currentTime to keep SourceBuffer under quota.
      */
     private evictOldBuffers() {
-        if (!this.sourceBuffer || this.sourceBuffer.updating || this.isAppending || this.isDestroyed) return;
+        if (
+            !this.sourceBuffer ||
+            this.sourceBuffer.updating ||
+            this.isAppending ||
+            this.isDestroyed
+        )
+            return;
         try {
             if (this.sourceBuffer.buffered.length > 0) {
                 const bufStart = this.sourceBuffer.buffered.start(0);
@@ -332,14 +394,21 @@ export class MseBackendClient {
      * Append chunk safely respecting SourceBuffer.updating state and stream generation.
      */
     private appendBuffer(chunk: Uint8Array, generation: number) {
-        if (!this.sourceBuffer || this.isDestroyed || generation !== this.streamGeneration) return;
+        if (
+            !this.sourceBuffer ||
+            this.isDestroyed ||
+            generation !== this.streamGeneration
+        )
+            return;
 
         if (this.isAppending || this.sourceBuffer.updating) {
             this.pendingBufferQueue.push(chunk);
         } else {
             try {
                 this.isAppending = true;
-                this.sourceBuffer.appendBuffer(chunk as unknown as BufferSource);
+                this.sourceBuffer.appendBuffer(
+                    chunk as unknown as BufferSource,
+                );
             } catch (e: any) {
                 this.isAppending = false;
                 if (e?.name === 'QuotaExceededError') {
@@ -353,10 +422,17 @@ export class MseBackendClient {
     }
 
     private tryQuotaRecoveryEviction() {
-        if (!this.sourceBuffer || this.sourceBuffer.updating || this.sourceBuffer.buffered.length === 0) return;
+        if (
+            !this.sourceBuffer ||
+            this.sourceBuffer.updating ||
+            this.sourceBuffer.buffered.length === 0
+        )
+            return;
         try {
             const bufStart = this.sourceBuffer.buffered.start(0);
-            const bufEnd = this.sourceBuffer.buffered.end(this.sourceBuffer.buffered.length - 1);
+            const bufEnd = this.sourceBuffer.buffered.end(
+                this.sourceBuffer.buffered.length - 1,
+            );
             const current = this.videoElement.currentTime;
 
             if (current - 5 > bufStart + 0.5) {
@@ -372,7 +448,12 @@ export class MseBackendClient {
     }
 
     private processPendingQueue() {
-        if (this.isDestroyed || this.pendingBufferQueue.length === 0 || !this.sourceBuffer || this.sourceBuffer.updating) {
+        if (
+            this.isDestroyed ||
+            this.pendingBufferQueue.length === 0 ||
+            !this.sourceBuffer ||
+            this.sourceBuffer.updating
+        ) {
             return;
         }
         const next = this.pendingBufferQueue.shift();
@@ -408,7 +489,10 @@ export class MseBackendClient {
             for (let i = 0; i < buffered.length; i++) {
                 const rangeStart = buffered.start(i);
                 const rangeEnd = buffered.end(i);
-                if (localTarget >= rangeStart && rangeEnd - localTarget >= 0.25) {
+                if (
+                    localTarget >= rangeStart &&
+                    rangeEnd - localTarget >= 0.25
+                ) {
                     return true;
                 }
             }
@@ -438,7 +522,7 @@ export class MseBackendClient {
                     this.onBuffering(false);
                 }
                 if (this.videoElement.paused) {
-                    this.videoElement.play().catch(() => { });
+                    this.videoElement.play().catch(() => {});
                 }
                 return true;
             } catch {
@@ -457,7 +541,11 @@ export class MseBackendClient {
         this.pendingBufferQueue = [];
 
         const runSeek = async (): Promise<boolean> => {
-            if (this.isDestroyed || !this.mediaSource || myGeneration !== this.streamGeneration) {
+            if (
+                this.isDestroyed ||
+                !this.mediaSource ||
+                myGeneration !== this.streamGeneration
+            ) {
                 return false;
             }
 
@@ -466,33 +554,50 @@ export class MseBackendClient {
             // Safely clear old buffer segments
             if (this.sourceBuffer) {
                 await new Promise<void>((resolve) => {
-                    if (!this.sourceBuffer || !this.sourceBuffer.updating) return resolve();
+                    if (!this.sourceBuffer || !this.sourceBuffer.updating)
+                        return resolve();
                     const onEnd = () => {
-                        this.sourceBuffer?.removeEventListener('updateend', onEnd);
+                        this.sourceBuffer?.removeEventListener(
+                            'updateend',
+                            onEnd,
+                        );
                         resolve();
                     };
                     this.sourceBuffer.addEventListener('updateend', onEnd);
                 });
 
-                if (this.isDestroyed || myGeneration !== this.streamGeneration) {
+                if (
+                    this.isDestroyed ||
+                    myGeneration !== this.streamGeneration
+                ) {
                     return false;
                 }
 
                 try {
-                    if (this.sourceBuffer && this.sourceBuffer.buffered.length > 0 && !this.sourceBuffer.updating) {
+                    if (
+                        this.sourceBuffer &&
+                        this.sourceBuffer.buffered.length > 0 &&
+                        !this.sourceBuffer.updating
+                    ) {
                         this.isAppending = true;
                         this.sourceBuffer.remove(0, Infinity);
                         await new Promise<void>((resolve) => {
                             if (!this.sourceBuffer) return resolve();
                             const onRemove = () => {
-                                this.sourceBuffer?.removeEventListener('updateend', onRemove);
+                                this.sourceBuffer?.removeEventListener(
+                                    'updateend',
+                                    onRemove,
+                                );
                                 this.isAppending = false;
                                 resolve();
                             };
-                            this.sourceBuffer.addEventListener('updateend', onRemove);
+                            this.sourceBuffer.addEventListener(
+                                'updateend',
+                                onRemove,
+                            );
                         });
                     }
-                } catch { }
+                } catch {}
             }
 
             if (this.isDestroyed || myGeneration !== this.streamGeneration) {
@@ -506,14 +611,17 @@ export class MseBackendClient {
                     this.sourceBuffer.timestampOffset = 0;
                 }
                 this.videoElement.currentTime = 0;
-            } catch { }
+            } catch {}
 
             const fetchPromise = this.initiateFetch(seconds, myGeneration);
             return await this.attachStreamResponse(fetchPromise, myGeneration);
         };
 
         const chained = this.seekLockPromise.then(runSeek, runSeek);
-        this.seekLockPromise = chained.then(() => { }, () => { });
+        this.seekLockPromise = chained.then(
+            () => {},
+            () => {},
+        );
         return chained;
     }
 
@@ -527,24 +635,31 @@ export class MseBackendClient {
         this.streamGeneration++;
         this.pendingBufferQueue = [];
 
-        this.videoElement.removeEventListener('timeupdate', this.onVideoTimeUpdate);
+        this.videoElement.removeEventListener(
+            'timeupdate',
+            this.onVideoTimeUpdate,
+        );
 
         if (this.abortController) {
             this.abortController.abort();
             this.abortController = null;
         }
 
-        if (this.sourceBuffer && this.mediaSource && this.mediaSource.readyState === 'open') {
+        if (
+            this.sourceBuffer &&
+            this.mediaSource &&
+            this.mediaSource.readyState === 'open'
+        ) {
             try {
                 this.mediaSource.removeSourceBuffer(this.sourceBuffer);
-            } catch (e) { }
+            } catch {}
         }
         this.sourceBuffer = null;
 
         if (this.mediaSource && this.mediaSource.readyState === 'open') {
             try {
                 this.mediaSource.endOfStream();
-            } catch (e) { }
+            } catch {}
         }
         this.mediaSource = null;
 
@@ -554,4 +669,3 @@ export class MseBackendClient {
         }
     }
 }
-

@@ -28,19 +28,21 @@ const { t } = useI18n();
 <template>
     <div
         v-if="isOpen"
-        class="absolute top-20 right-4 sm:right-6 w-80 sm:w-96 rounded-2xl bg-black/85 border border-cyan-500/30 shadow-2xl p-4 text-xs font-mono text-slate-300 backdrop-blur-xl z-40 space-y-3 pointer-events-auto"
+        class="pointer-events-auto absolute top-20 right-4 z-40 w-80 space-y-3 rounded-2xl border border-cyan-500/30 bg-black/85 p-4 font-mono text-xs text-slate-300 shadow-2xl backdrop-blur-xl sm:right-6 sm:w-96"
     >
         <!-- Header -->
-        <div class="flex items-center justify-between pb-2 border-b border-white/10">
-            <div class="flex items-center gap-2 text-cyan-400 font-bold">
-                <Activity class="w-4 h-4" />
+        <div
+            class="flex items-center justify-between border-b border-white/10 pb-2"
+        >
+            <div class="flex items-center gap-2 font-bold text-cyan-400">
+                <Activity class="h-4 w-4" />
                 <span>Stream Diagnostics HUD</span>
             </div>
             <button
                 @click="emit('close')"
-                class="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                class="rounded-lg p-1 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
             >
-                <X class="w-4 h-4" />
+                <X class="h-4 w-4" />
             </button>
         </div>
 
@@ -48,14 +50,26 @@ const { t } = useI18n();
         <div class="space-y-1.5 text-[11px]">
             <div class="flex justify-between">
                 <span class="text-slate-500">Pipeline Engine:</span>
-                <span :class="isRemuxStream ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'">
-                    {{ isRemuxStream ? 'FFmpeg Remux (AAC Transcode)' : 'Native Direct (HTTP 206)' }}
+                <span
+                    :class="
+                        isRemuxStream
+                            ? 'font-bold text-amber-400'
+                            : 'font-bold text-emerald-400'
+                    "
+                >
+                    {{
+                        isRemuxStream
+                            ? 'FFmpeg Remux (AAC Transcode)'
+                            : 'Native Direct (HTTP 206)'
+                    }}
                 </span>
             </div>
 
             <div class="flex justify-between">
                 <span class="text-slate-500">Resolution (Live):</span>
-                <span class="text-white font-bold">{{ liveResolution || 'Detecting...' }}</span>
+                <span class="font-bold text-white">{{
+                    liveResolution || 'Detecting...'
+                }}</span>
             </div>
 
             <div class="flex justify-between">
@@ -70,31 +84,48 @@ const { t } = useI18n();
 
             <div class="flex justify-between">
                 <span class="text-slate-500">Timeline PTS:</span>
-                <span class="text-cyan-300 font-bold">{{ currentTime.toFixed(2) }}s / {{ duration.toFixed(2) }}s</span>
+                <span class="font-bold text-cyan-300"
+                    >{{ currentTime.toFixed(2) }}s /
+                    {{ duration.toFixed(2) }}s</span
+                >
             </div>
 
             <div v-if="isRemuxStream" class="flex justify-between">
                 <span class="text-slate-500">Remux Start Offset:</span>
-                <span class="text-amber-300 font-bold">{{ remuxStartOffset.toFixed(2) }}s</span>
+                <span class="font-bold text-amber-300"
+                    >{{ remuxStartOffset.toFixed(2) }}s</span
+                >
             </div>
 
             <div class="flex justify-between">
                 <span class="text-slate-500">Audio Delay (DSP):</span>
-                <span :class="audioDelayMs === 0 ? 'text-slate-400' : 'text-cyan-300 font-bold'">
+                <span
+                    :class="
+                        audioDelayMs === 0
+                            ? 'text-slate-400'
+                            : 'font-bold text-cyan-300'
+                    "
+                >
                     {{ audioDelayMs }}ms
                 </span>
             </div>
 
             <div class="flex justify-between">
                 <span class="text-slate-500">Buffer Progress:</span>
-                <span class="text-emerald-300">{{ bufferedPercent.toFixed(1) }}%</span>
+                <span class="text-emerald-300"
+                    >{{ bufferedPercent.toFixed(1) }}%</span
+                >
             </div>
 
-            <div class="pt-2 border-t border-white/10 text-[10px] text-slate-500 truncate" :title="streamUrl">
-                <span class="block font-bold text-slate-400">Stream Source URL:</span>
+            <div
+                class="truncate border-t border-white/10 pt-2 text-[10px] text-slate-500"
+                :title="streamUrl"
+            >
+                <span class="block font-bold text-slate-400"
+                    >Stream Source URL:</span
+                >
                 {{ streamUrl }}
             </div>
         </div>
     </div>
 </template>
-

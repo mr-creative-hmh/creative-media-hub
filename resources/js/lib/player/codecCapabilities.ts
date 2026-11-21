@@ -34,8 +34,12 @@ export function getBrowserCodecCapabilities(): BrowserCodecCapabilities {
         return cachedCapabilities;
     }
 
-    const mseSupported = typeof window !== 'undefined' && 'MediaSource' in window;
-    const videoEl = typeof document !== 'undefined' ? document.createElement('video') : null;
+    const mseSupported =
+        typeof window !== 'undefined' && 'MediaSource' in window;
+    const videoEl =
+        typeof document !== 'undefined'
+            ? document.createElement('video')
+            : null;
 
     const canNative = (mimes: string[]): boolean => {
         if (!videoEl) {
@@ -93,10 +97,15 @@ export function canDirectPlayMedia(mediaItem: any): boolean {
 
     const caps = getBrowserCodecCapabilities();
     const path = String(mediaItem.file_path || '').toLowerCase();
-    const video = String(mediaItem.video_codec || mediaItem.codec || '').toLowerCase();
+    const video = String(
+        mediaItem.video_codec || mediaItem.codec || '',
+    ).toLowerCase();
     const audio = String(mediaItem.audio_codec || '').toLowerCase();
 
-    const isDirectContainer = path.endsWith('.mp4') || path.endsWith('.m4v') || path.endsWith('.webm');
+    const isDirectContainer =
+        path.endsWith('.mp4') ||
+        path.endsWith('.m4v') ||
+        path.endsWith('.webm');
     if (!isDirectContainer) {
         return false;
     }
@@ -116,15 +125,30 @@ export function canDirectPlayMedia(mediaItem: any): boolean {
         return false;
     }
 
-    if (video.includes('mpeg') || video.includes('xvid') || video.includes('divx') || video.includes('vc1') || video.includes('wmv')) {
+    if (
+        video.includes('mpeg') ||
+        video.includes('xvid') ||
+        video.includes('divx') ||
+        video.includes('vc1') ||
+        video.includes('wmv')
+    ) {
         return false;
     }
 
-    if ((video.includes('h.264') || video.includes('h264') || video.includes('avc')) && !video.includes('hevc')) {
+    if (
+        (video.includes('h.264') ||
+            video.includes('h264') ||
+            video.includes('avc')) &&
+        !video.includes('hevc')
+    ) {
         return true;
     }
 
-    if (video.includes('hevc') || video.includes('h.265') || video.includes('h265')) {
+    if (
+        video.includes('hevc') ||
+        video.includes('h.265') ||
+        video.includes('h265')
+    ) {
         return caps.nativeHevcMp4;
     }
 
@@ -145,7 +169,9 @@ export function canDirectPlayMedia(mediaItem: any): boolean {
  *  2. 'web'    -> HEVC/AV1/VP9 videos supported only via MediaSource Extensions (zero-copy fMP4 MSE).
  *  3. 'remux'  -> Default server remux + LAV BS.775 stereo downmix for MKV/AVI/TS or surround audio.
  */
-export function selectOptimalEngineMode(mediaItem: any): 'direct' | 'remux' | 'web' {
+export function selectOptimalEngineMode(
+    mediaItem: any,
+): 'direct' | 'remux' | 'web' {
     if (canDirectPlayMedia(mediaItem)) {
         return 'direct';
     }
@@ -155,19 +181,22 @@ export function selectOptimalEngineMode(mediaItem: any): 'direct' | 'remux' | 'w
     }
 
     const caps = getBrowserCodecCapabilities();
-    const video = String(mediaItem.video_codec || mediaItem.codec || '').toLowerCase();
+    const video = String(
+        mediaItem.video_codec || mediaItem.codec || '',
+    ).toLowerCase();
 
     if (
         caps.mseSupported &&
-        (
-            ((video.includes('hevc') || video.includes('h.265') || video.includes('h265')) && caps.mseHevc && !caps.nativeHevcMp4) ||
+        (((video.includes('hevc') ||
+            video.includes('h.265') ||
+            video.includes('h265')) &&
+            caps.mseHevc &&
+            !caps.nativeHevcMp4) ||
             (video.includes('av1') && caps.mseAv1 && !caps.nativeAv1Mp4) ||
-            (video.includes('vp9') && caps.mseVp9 && !caps.nativeVp9Webm)
-        )
+            (video.includes('vp9') && caps.mseVp9 && !caps.nativeVp9Webm))
     ) {
         return 'web';
     }
 
     return 'remux';
 }
-

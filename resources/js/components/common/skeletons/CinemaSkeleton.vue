@@ -7,16 +7,16 @@ withDefaults(
     {
         className: 'w-full h-4',
         rounded: 'rounded-lg',
-    }
+    },
 );
 </script>
 
 <template>
     <div
         :class="[
-            'relative overflow-hidden bg-white/[0.04] border border-white/[0.05]',
+            'relative overflow-hidden border border-white/[0.05] bg-white/[0.04]',
             rounded,
-            className
+            className,
         ]"
     >
         <div
@@ -32,4 +32,3 @@ withDefaults(
     }
 }
 </style>
-

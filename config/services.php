@@ -35,4 +35,20 @@ return [
         ],
     ],
 
+    'tmdb' => [
+        'key' => env('TMDB_API_KEY'),
+    ],
+
+    'omdb' => [
+        'key' => env('OMDB_API_KEY'),
+    ],
+
+    'opensubtitles' => [
+        'key' => env('OPENSUBTITLES_API_KEY'),
+    ],
+
+    'subdl' => [
+        'key' => env('SUBDL_API_KEY'),
+    ],
+
 ];

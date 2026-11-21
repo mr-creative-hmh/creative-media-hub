@@ -3,9 +3,14 @@ import CinemaSkeleton from './CinemaSkeleton.vue';
 </script>
 
 <template>
-    <div class="relative w-full h-[380px] md:h-[480px] rounded-3xl overflow-hidden bg-black/50 border border-white/[0.06] p-8 md:p-12 flex flex-col justify-end backdrop-blur-md">
-        <CinemaSkeleton className="absolute inset-0 w-full h-full" rounded="rounded-3xl" />
-        <div class="relative z-10 space-y-4 max-w-2xl">
+    <div
+        class="relative flex h-[380px] w-full flex-col justify-end overflow-hidden rounded-3xl border border-white/[0.06] bg-black/50 p-8 backdrop-blur-md md:h-[480px] md:p-12"
+    >
+        <CinemaSkeleton
+            className="absolute inset-0 w-full h-full"
+            rounded="rounded-3xl"
+        />
+        <div class="relative z-10 max-w-2xl space-y-4">
             <CinemaSkeleton className="w-28 h-6" rounded="rounded-full" />
             <CinemaSkeleton className="w-3/4 h-10 md:h-12" />
             <CinemaSkeleton className="w-full h-4" />
@@ -17,4 +22,3 @@ import CinemaSkeleton from './CinemaSkeleton.vue';
         </div>
     </div>
 </template>
-

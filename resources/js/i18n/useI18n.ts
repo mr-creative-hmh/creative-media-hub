@@ -2,7 +2,27 @@ import { ref, computed } from 'vue';
 import en from './en.json';
 import ar from './ar.json';
 
-const currentLocale = ref<string>(localStorage.getItem('app_locale') || 'en');
+const getInitialLocale = (): string => {
+    if (typeof window === 'undefined') {
+        return 'en';
+    }
+    try {
+        return window.localStorage.getItem('app_locale') || 'en';
+    } catch {
+        return 'en';
+    }
+};
+
+const applyDocumentLocale = (localeCode: string): void => {
+    if (typeof document === 'undefined') {
+        return;
+    }
+    document.documentElement.dir = localeCode === 'ar' ? 'rtl' : 'ltr';
+    document.documentElement.lang = localeCode;
+};
+
+const currentLocale = ref<string>(getInitialLocale());
+applyDocumentLocale(currentLocale.value);
 
 const translations: Record<string, any> = {
     en,
@@ -16,19 +36,19 @@ export function useI18n() {
     const setLocale = (newLocale: string) => {
         if (newLocale === 'ar' || newLocale === 'en') {
             currentLocale.value = newLocale;
-            localStorage.setItem('app_locale', newLocale);
-            document.documentElement.dir = newLocale === 'ar' ? 'rtl' : 'ltr';
-            document.documentElement.lang = newLocale;
+            if (typeof window !== 'undefined') {
+                try {
+                    window.localStorage.setItem('app_locale', newLocale);
+                } catch {}
+            }
+            applyDocumentLocale(newLocale);
         }
     };
 
-    // Apply document direction on first load
-    if (typeof document !== 'undefined') {
-        document.documentElement.dir = currentLocale.value === 'ar' ? 'rtl' : 'ltr';
-        document.documentElement.lang = currentLocale.value;
-    }
-
-    const t = (key: string, params: Record<string, string | number> = {}): string => {
+    const t = (
+        key: string,
+        params: Record<string, string | number> = {},
+    ): string => {
         const keys = key.split('.');
         let val: any = translations[currentLocale.value] || translations['en'];
 
@@ -39,7 +59,11 @@ export function useI18n() {
                 // Fallback to English
                 let fallback: any = translations['en'];
                 for (const fk of keys) {
-                    if (fallback && typeof fallback === 'object' && fk in fallback) {
+                    if (
+                        fallback &&
+                        typeof fallback === 'object' &&
+                        fk in fallback
+                    ) {
                         fallback = fallback[fk];
                     } else {
                         return key;

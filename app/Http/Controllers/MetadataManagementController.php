@@ -18,6 +18,7 @@ use App\Services\Scanner\VirtualLibraryScannerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -417,6 +418,7 @@ class MetadataManagementController extends Controller
             ]);
 
             Episode::create([
+                'series_id' => $series->id,
                 'season_id' => $season->id,
                 'episode_number' => 1,
                 'title' => $title,
@@ -727,7 +729,11 @@ class MetadataManagementController extends Controller
         $monitored = $monitoredJson ? json_decode($monitoredJson, true) : [];
         if (is_array($monitored)) {
             foreach ($monitored as $mDir) {
-                $mNorm = str_replace('\\', '/', realpath($mDir) ?: $mDir);
+                $mPath = is_array($mDir) ? ($mDir['path'] ?? null) : $mDir;
+                if (! is_string($mPath) || $mPath === '') {
+                    continue;
+                }
+                $mNorm = str_replace('\\', '/', realpath($mPath) ?: $mPath);
                 if (strcasecmp($dirNorm, $mNorm) === 0) {
                     return false;
                 }
@@ -919,7 +925,7 @@ class MetadataManagementController extends Controller
             $item->update([
                 'file_path' => $newPath,
                 'folder_path' => dirname($newPath),
-                'size' => filesize($newPath),
+                'file_size_bytes' => filesize($newPath),
             ]);
 
             return response()->json([
@@ -968,18 +974,25 @@ class MetadataManagementController extends Controller
 
     protected function findCandidateMoviePath(MediaItem $item): ?string
     {
-        $searchDirs = [
-            'H:/Entertainment/Movies',
-            'D:/Downloads',
-        ];
+        $searchDirs = [];
 
         $monitoredJson = AppSetting::where('key', 'scanner_monitored_directories')->first()?->value;
         if ($monitoredJson) {
             $monitored = json_decode($monitoredJson, true);
             if (is_array($monitored)) {
-                $searchDirs = array_unique(array_merge($searchDirs, $monitored));
+                foreach ($monitored as $mDir) {
+                    $mPath = is_array($mDir) ? ($mDir['path'] ?? null) : $mDir;
+                    if (is_string($mPath) && $mPath !== '') {
+                        $searchDirs[] = $mPath;
+                    }
+                }
             }
         }
+
+        $searchDirs = array_values(array_unique(array_merge($searchDirs, [
+            'H:/Entertainment/Movies',
+            'D:/Downloads',
+        ])));
 
         $cleanTitle = trim(preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $item->title ?? ''));
         $cleanTitle = preg_replace('/\s+/', ' ', $cleanTitle);
@@ -1157,7 +1170,12 @@ class MetadataManagementController extends Controller
         $movie->save();
 
         Cache::forget('collections.index.data.v3');
-        app(LibraryMasterIndexService::class)->buildAll(false, false, false);
+
+        try {
+            app(LibraryMasterIndexService::class)->buildMasterIndex(false, false);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to rebuild master index after movie collection update: '.$e->getMessage());
+        }
 
         return response()->json([
             'success' => true,

@@ -11,17 +11,47 @@ import AppLogo from '@/components/common/AppLogo.vue';
 import AccentColorPicker from '@/components/common/AccentColorPicker.vue';
 import LiveSearchDropdown from '@/components/common/LiveSearchDropdown.vue';
 import {
-    Search, Globe, LayoutDashboard, History, Film, Layers, Clapperboard, FolderSync,
-    Subtitles, BarChart3, DownloadCloud, Menu, X, Tv,
-    Settings, ScanLine, Sparkles, Activity, RefreshCw, Pause, BookOpen, Compass
+    Search,
+    Globe,
+    LayoutDashboard,
+    History,
+    Film,
+    Layers,
+    Clapperboard,
+    FolderSync,
+    Subtitles,
+    BarChart3,
+    DownloadCloud,
+    Menu,
+    X,
+    Tv,
+    Settings,
+    ScanLine,
+    Sparkles,
+    Activity,
+    RefreshCw,
+    Pause,
+    BookOpen,
+    Compass,
 } from 'lucide-vue-next';
 
 const { t, locale, setLocale, isRTL } = useI18n();
 const { scanStatus, isScanning, isPaused, openScanModal } = useScanner();
 const { activeDownloads, totalSpeedDownFormatted } = useDownloader();
-const { planJobStatus, isAnalyzing, isPaused: isOrgPaused, openPlanModal } = useOrganizerPlan();
-const { subtitleStatus, isSubtitleRunning, isSubtitlePaused, openSubtitleModal } = useSubtitleJob();
-const { isAnyRunning, isAnyPaused, activeJobsCount, openActivityCenter } = useActivityCenter();
+const {
+    planJobStatus,
+    isAnalyzing,
+    isPaused: isOrgPaused,
+    openPlanModal,
+} = useOrganizerPlan();
+const {
+    subtitleStatus,
+    isSubtitleRunning,
+    isSubtitlePaused,
+    openSubtitleModal,
+} = useSubtitleJob();
+const { isAnyRunning, isAnyPaused, activeJobsCount, openActivityCenter } =
+    useActivityCenter();
 
 const searchQuery = ref('');
 const isMobileMenuOpen = ref(false);
@@ -56,12 +86,17 @@ const mobileNavItems = [
 </script>
 
 <template>
-    <header class="sticky top-0 z-40 w-full glass-panel border-b border-white/10 bg-[#07090E]/90 backdrop-blur-xl px-4 lg:px-8 py-3 flex items-center justify-between gap-4 transition-all">
+    <header
+        class="glass-panel sticky top-0 z-40 flex w-full items-center justify-between gap-4 border-b border-white/10 bg-[#07090E]/90 px-4 py-3 backdrop-blur-xl transition-all lg:px-8"
+    >
         <!-- Logo & Mobile Toggle -->
         <div class="flex items-center gap-3">
-            <button @click="isMobileMenuOpen = !isMobileMenuOpen" class="lg:hidden p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 cursor-pointer">
-                <Menu v-if="!isMobileMenuOpen" class="w-5 h-5" />
-                <X v-else class="w-5 h-5" />
+            <button
+                @click="isMobileMenuOpen = !isMobileMenuOpen"
+                class="cursor-pointer rounded-lg bg-white/5 p-2 text-slate-300 hover:bg-white/10 lg:hidden"
+            >
+                <Menu v-if="!isMobileMenuOpen" class="h-5 w-5" />
+                <X v-else class="h-5 w-5" />
             </button>
             <Link href="/" class="flex items-center">
                 <AppLogo size="md" :show-text="true" />
@@ -69,7 +104,7 @@ const mobileNavItems = [
         </div>
 
         <!-- Universal Instant Search Bar (YTS-Style Live Flyout) -->
-        <div class="flex-1 max-w-xl mx-2 sm:mx-6">
+        <div class="mx-2 max-w-xl flex-1 sm:mx-6">
             <LiveSearchDropdown
                 v-model="searchQuery"
                 :placeholder="t('common.search_placeholder')"
@@ -85,38 +120,67 @@ const mobileNavItems = [
             <Link
                 v-if="activeDownloads.length > 0"
                 href="/downloads"
-                class="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-xs font-bold transition-all hover:bg-cyan-500/30 cursor-pointer shadow-sm hover:shadow-cyan-500/20 active:scale-95 animate-fade-in"
+                class="animate-fade-in flex cursor-pointer items-center gap-2 rounded-xl border border-cyan-500/40 bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 px-2.5 py-1.5 text-xs font-bold text-cyan-300 shadow-sm transition-all hover:bg-cyan-500/30 hover:shadow-cyan-500/20 active:scale-95 sm:px-3"
                 :title="isRTL ? 'التنزيلات النشطة' : 'Active Downloads'"
             >
-                <DownloadCloud class="w-4 h-4 animate-bounce text-cyan-400 shrink-0" />
-                <span class="px-1.5 py-0.2 rounded-md bg-cyan-500/30 text-[10px] font-mono font-black text-cyan-200">
+                <DownloadCloud
+                    class="h-4 w-4 shrink-0 animate-bounce text-cyan-400"
+                />
+                <span
+                    class="py-0.2 rounded-md bg-cyan-500/30 px-1.5 font-mono text-[10px] font-black text-cyan-200"
+                >
                     {{ activeDownloads.length }}
                 </span>
-                <span class="font-mono text-[11px] text-slate-200 hidden sm:inline">{{ totalSpeedDownFormatted }}</span>
-                <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping shrink-0"></span>
+                <span
+                    class="hidden font-mono text-[11px] text-slate-200 sm:inline"
+                    >{{ totalSpeedDownFormatted }}</span
+                >
+                <span
+                    class="h-1.5 w-1.5 shrink-0 animate-ping rounded-full bg-cyan-400"
+                ></span>
             </Link>
 
             <!-- Universal Activity & Job Center Navbar Pill -->
             <button
                 v-if="isAnyRunning || isAnyPaused"
                 @click="openActivityCenter()"
-                class="flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all active:scale-95 cursor-pointer"
-                :class="isAnyRunning ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300 shadow-lg shadow-cyan-500/10' : 'bg-amber-500/20 border-amber-500/40 text-amber-300'"
-                :title="isRTL ? 'مركز مراقبة وإدارة العمليات الموحد' : 'Universal Job Center'"
+                class="flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all active:scale-95"
+                :class="
+                    isAnyRunning
+                        ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-300 shadow-lg shadow-cyan-500/10'
+                        : 'border-amber-500/40 bg-amber-500/20 text-amber-300'
+                "
+                :title="
+                    isRTL
+                        ? 'مركز مراقبة وإدارة العمليات الموحد'
+                        : 'Universal Job Center'
+                "
             >
-                <RefreshCw v-if="isAnyRunning" class="w-3.5 h-3.5 animate-spin text-cyan-400" />
-                <Pause v-else class="w-3.5 h-3.5 text-amber-400" />
-                <span class="font-bold">{{ isRTL ? 'العمليات النشطة' : 'Active Jobs' }}</span>
-                <span class="px-1.5 py-0.5 rounded-md bg-white/10 text-[10px] font-mono">{{ activeJobsCount }}</span>
+                <RefreshCw
+                    v-if="isAnyRunning"
+                    class="h-3.5 w-3.5 animate-spin text-cyan-400"
+                />
+                <Pause v-else class="h-3.5 w-3.5 text-amber-400" />
+                <span class="font-bold">{{
+                    isRTL ? 'العمليات النشطة' : 'Active Jobs'
+                }}</span>
+                <span
+                    class="rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-[10px]"
+                    >{{ activeJobsCount }}</span
+                >
             </button>
 
             <button
                 v-else
                 @click="openActivityCenter()"
-                class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-panel border border-white/10 hover:border-cyan-500/40 text-xs font-bold text-slate-300 hover:text-white transition-all active:scale-95 cursor-pointer shadow-sm"
-                :title="isRTL ? 'مركز مراقبة وإدارة العمليات الموحد' : 'Universal Job Center'"
+                class="glass-panel hidden cursor-pointer items-center gap-1.5 rounded-xl border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-300 shadow-sm transition-all hover:border-cyan-500/40 hover:text-white active:scale-95 sm:flex"
+                :title="
+                    isRTL
+                        ? 'مركز مراقبة وإدارة العمليات الموحد'
+                        : 'Universal Job Center'
+                "
             >
-                <Activity class="w-3.5 h-3.5 text-cyan-400" />
+                <Activity class="h-3.5 w-3.5 text-cyan-400" />
                 <span>{{ isRTL ? 'مركز العمليات' : 'Job Center' }}</span>
             </button>
 
@@ -126,36 +190,50 @@ const mobileNavItems = [
             <!-- Language Switcher -->
             <button
                 @click="toggleLanguage"
-                class="flex items-center gap-2 px-3 py-1.5 rounded-xl glass-panel border border-white/10 hover:border-cyan-500/40 text-xs font-bold text-slate-300 hover:text-white transition-all active:scale-95 cursor-pointer shadow-sm"
+                class="glass-panel flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-300 shadow-sm transition-all hover:border-cyan-500/40 hover:text-white active:scale-95"
             >
-                <Globe class="w-3.5 h-3.5 text-cyan-400" />
+                <Globe class="h-3.5 w-3.5 text-cyan-400" />
                 <span>{{ locale === 'ar' ? 'English' : 'عربي' }}</span>
             </button>
         </div>
-    </header>
 
-    <!-- Mobile Drawer Menu (Instant SPA Links) -->
-    <div v-if="isMobileMenuOpen" class="lg:hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col p-6 animate-in fade-in">
-        <div class="flex items-center justify-between pb-6 border-b border-white/10">
-            <AppLogo size="md" :show-text="true" />
-            <div class="flex items-center gap-2">
-                <AccentColorPicker :compact="true" />
-                <button @click="isMobileMenuOpen = false" class="p-2 text-slate-400 hover:text-white cursor-pointer">
-                    <X class="w-6 h-6" />
-                </button>
-            </div>
-        </div>
-        <div class="flex flex-col gap-2 pt-6">
-            <Link
-                v-for="item in mobileNavItems"
-                :key="item.href"
-                :href="item.href"
-                @click="isMobileMenuOpen = false"
-                class="flex items-center gap-3.5 p-3 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 font-bold text-sm"
+        <!-- Mobile Drawer Menu (Instant SPA Links) -->
+        <Teleport to="body">
+            <div
+                v-if="isMobileMenuOpen"
+                :dir="isRTL ? 'rtl' : 'ltr'"
+                class="animate-in fade-in fixed inset-0 z-50 flex flex-col bg-black/80 p-6 backdrop-blur-md lg:hidden"
             >
-                <component :is="item.icon" class="w-5 h-5 text-cyan-400" />
-                <span>{{ t(item.nameKey) }}</span>
-            </Link>
-        </div>
-    </div>
+                <div
+                    class="flex items-center justify-between border-b border-white/10 pb-6"
+                >
+                    <AppLogo size="md" :show-text="true" />
+                    <div class="flex items-center gap-2">
+                        <AccentColorPicker :compact="true" />
+                        <button
+                            @click="isMobileMenuOpen = false"
+                            class="cursor-pointer p-2 text-slate-400 hover:text-white"
+                        >
+                            <X class="h-6 w-6" />
+                        </button>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-2 pt-6">
+                    <Link
+                        v-for="item in mobileNavItems"
+                        :key="item.href"
+                        :href="item.href"
+                        @click="isMobileMenuOpen = false"
+                        class="flex items-center gap-3.5 rounded-xl p-3 text-sm font-bold text-slate-300 hover:bg-white/10 hover:text-white"
+                    >
+                        <component
+                            :is="item.icon"
+                            class="h-5 w-5 text-cyan-400"
+                        />
+                        <span>{{ t(item.nameKey) }}</span>
+                    </Link>
+                </div>
+            </div>
+        </Teleport>
+    </header>
 </template>

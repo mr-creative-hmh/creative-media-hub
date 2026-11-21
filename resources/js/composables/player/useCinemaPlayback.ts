@@ -1,6 +1,9 @@
 import { ref, computed, nextTick, type Ref } from 'vue';
 import { MseBackendClient } from '@/lib/player/webEngine/mseBackendClient';
-import { getBrowserCodecCapabilities, selectOptimalEngineMode } from '@/lib/player/codecCapabilities';
+import {
+    getBrowserCodecCapabilities,
+    selectOptimalEngineMode,
+} from '@/lib/player/codecCapabilities';
 
 export interface UseCinemaPlaybackOptions {
     item: Ref<any>;
@@ -17,7 +20,8 @@ export interface UseCinemaPlaybackOptions {
 export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
     const activeItem = ref<any>(options.item.value);
     const videoRef = options.videoRef || ref<HTMLVideoElement | null>(null);
-    const playerContainerRef = options.playerContainerRef || ref<HTMLDivElement | null>(null);
+    const playerContainerRef =
+        options.playerContainerRef || ref<HTMLDivElement | null>(null);
 
     const isPlaying = ref(false);
     const isMuted = ref(false);
@@ -25,16 +29,20 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
 
     const pendingInitialSeek = ref<number>(
         Number(options.initialProgress) ||
-        Number(options.item.value?.progress_seconds) ||
-        Number(options.item.value?.initial_progress) ||
-        0
+            Number(options.item.value?.progress_seconds) ||
+            Number(options.item.value?.initial_progress) ||
+            0,
     );
-    const currentTime = ref(pendingInitialSeek.value > 0 ? pendingInitialSeek.value : 0);
+    const currentTime = ref(
+        pendingInitialSeek.value > 0 ? pendingInitialSeek.value : 0,
+    );
 
     const hasExactDuration = Number(options.item.value?.duration_seconds) > 0;
     const initialDuration = hasExactDuration
         ? Number(options.item.value?.duration_seconds)
-        : (Number(options.item.value?.runtime_minutes) ? Number(options.item.value.runtime_minutes) * 60 : 0);
+        : Number(options.item.value?.runtime_minutes)
+          ? Number(options.item.value.runtime_minutes) * 60
+          : 0;
     const duration = ref(initialDuration > 0 ? initialDuration : 0);
     const isDurationLocked = ref(hasExactDuration);
 
@@ -62,7 +70,9 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
 
     const manualEngineOverride = ref(false);
 
-    const selectOptimalEngine = (mediaItem: any): 'web' | 'remux' | 'direct' => {
+    const selectOptimalEngine = (
+        mediaItem: any,
+    ): 'web' | 'remux' | 'direct' => {
         return selectOptimalEngineMode(mediaItem);
     };
 
@@ -77,7 +87,11 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
     const isRemuxStream = ref(checkNeedsRemux(options.item.value));
     const engineMode = ref<'web' | 'remux' | 'direct'>(getInitialEngineMode());
     const playbackRate = ref<number>(1.0);
-    const remuxStartOffset = ref(isRemuxStream.value && pendingInitialSeek.value > 0 ? pendingInitialSeek.value : 0);
+    const remuxStartOffset = ref(
+        isRemuxStream.value && pendingInitialSeek.value > 0
+            ? pendingInitialSeek.value
+            : 0,
+    );
     const isServerCached = ref(false);
     const cachedStreamUrl = ref('');
     const webEngineInstance = ref<MseBackendClient | null>(null);
@@ -118,9 +132,12 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
         fallbackAttemptedForItemKey = key;
 
         clearAudioWatchdog();
-        const resumeAt = engineMode.value === 'web'
-            ? currentTime.value
-            : (videoRef.value && videoRef.value.currentTime > 0 ? videoRef.value.currentTime : currentTime.value);
+        const resumeAt =
+            engineMode.value === 'web'
+                ? currentTime.value
+                : videoRef.value && videoRef.value.currentTime > 0
+                  ? videoRef.value.currentTime
+                  : currentTime.value;
 
         destroyWebEngine();
         engineMode.value = 'remux';
@@ -137,24 +154,29 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
             videoRef.value.src = streamUrl.value;
             videoRef.value.load();
             videoRef.value.playbackRate = playbackRate.value;
-            videoRef.value.play().catch(() => { });
+            videoRef.value.play().catch(() => {});
         }
     };
 
     const handleDirectVideoError = () => {
         if (engineMode.value === 'direct') {
-            hotSwapEngineFallback('Switching to Server Remux (K-Lite Pipeline)');
+            void hotSwapEngineFallback(
+                'Switching to Server Remux (K-Lite Pipeline)',
+            );
         }
     };
 
     const initWebEngine = async (): Promise<boolean> => {
         destroyWebEngine();
-        if (!videoRef.value || !activeItem.value || engineMode.value !== 'web') return false;
+        if (!videoRef.value || !activeItem.value || engineMode.value !== 'web')
+            return false;
 
         const targetId = activeItem.value?.watchable_id || activeItem.value?.id;
         if (!targetId) return false;
 
-        const mseStreamUrl = isEpisode.value ? `/stream/mse/episode/${targetId}` : `/stream/mse/movie/${targetId}`;
+        const mseStreamUrl = isEpisode.value
+            ? `/stream/mse/episode/${targetId}`
+            : `/stream/mse/movie/${targetId}`;
 
         isBuffering.value = true;
         const engine = new MseBackendClient({
@@ -172,12 +194,20 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
                 }
             },
             onError: (err) => {
-                console.warn('[CinemaPlayback] MSE backend client error, falling back to Server Remux:', err);
-                hotSwapEngineFallback('Web Media Engine interrupted — switching to Server Remux');
+                console.warn(
+                    '[CinemaPlayback] MSE backend client error, falling back to Server Remux:',
+                    err,
+                );
+                void hotSwapEngineFallback(
+                    'Web Media Engine interrupted — switching to Server Remux',
+                );
             },
         });
 
-        const startAt = pendingInitialSeek.value > 0 ? pendingInitialSeek.value : currentTime.value;
+        const startAt =
+            pendingInitialSeek.value > 0
+                ? pendingInitialSeek.value
+                : currentTime.value;
         isRemuxStream.value = true;
         remuxStartOffset.value = startAt;
         currentTime.value = startAt;
@@ -223,7 +253,9 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
         if (engineMode.value === 'web') {
             const params: string[] = [];
             if (remuxStartOffset.value > 0) {
-                params.push(`start=${Math.round(remuxStartOffset.value * 1000) / 1000}`);
+                params.push(
+                    `start=${Math.round(remuxStartOffset.value * 1000) / 1000}`,
+                );
             }
             const caps = getBrowserCodecCapabilities();
             if (caps.nativeHevcMp4) {
@@ -245,7 +277,9 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
             }
             const params: string[] = [];
             if (remuxStartOffset.value > 0) {
-                params.push(`start=${Math.round(remuxStartOffset.value * 1000) / 1000}`);
+                params.push(
+                    `start=${Math.round(remuxStartOffset.value * 1000) / 1000}`,
+                );
             }
             const caps = getBrowserCodecCapabilities();
             if (caps.nativeHevcMp4) {
@@ -276,13 +310,16 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
 
     const progressPercent = computed(() => {
         if (!duration.value || duration.value <= 0) return 0;
-        return Math.min(100, Math.max(0, (currentTime.value / duration.value) * 100));
+        return Math.min(
+            100,
+            Math.max(0, (currentTime.value / duration.value) * 100),
+        );
     });
 
     const togglePlay = () => {
         if (!videoRef.value) return;
         if (videoRef.value.paused) {
-            videoRef.value.play().catch(() => { });
+            videoRef.value.play().catch(() => {});
         } else {
             videoRef.value.pause();
         }
@@ -310,10 +347,10 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
         const el = playerContainerRef.value;
         if (!el) return;
         if (!document.fullscreenElement) {
-            el.requestFullscreen().catch(() => { });
+            el.requestFullscreen().catch(() => {});
             isFullscreen.value = true;
         } else {
-            document.exitFullscreen().catch(() => { });
+            document.exitFullscreen().catch(() => {});
             isFullscreen.value = false;
         }
     };
@@ -336,27 +373,37 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
         remuxStartOffset.value = currentTime.value;
         try {
             const type = isEpisode.value ? 'episode' : 'movie';
-            const targetId = activeItem.value?.watchable_id || activeItem.value?.id;
-            localStorage.setItem(`stream_engine_${type}_${targetId}`, engineMode.value);
-            localStorage.setItem(`stream_mode_${type}_${targetId}`, isRemuxStream.value ? 'remux' : 'direct');
-        } catch { }
+            const targetId =
+                activeItem.value?.watchable_id || activeItem.value?.id;
+            localStorage.setItem(
+                `stream_engine_${type}_${targetId}`,
+                engineMode.value,
+            );
+            localStorage.setItem(
+                `stream_mode_${type}_${targetId}`,
+                isRemuxStream.value ? 'remux' : 'direct',
+            );
+        } catch {}
 
         if (options.onToast) {
-            const label = engineMode.value === 'web'
-                ? 'Web Media Engine active (In-Browser MSE)'
-                : (engineMode.value === 'remux' ? 'Server Remux active (AAC Sync)' : 'Direct Native Stream (Hardware)');
+            const label =
+                engineMode.value === 'web'
+                    ? 'Web Media Engine active (In-Browser MSE)'
+                    : engineMode.value === 'remux'
+                      ? 'Server Remux active (AAC Sync)'
+                      : 'Direct Native Stream (Hardware)';
             options.onToast(label);
         }
 
         if (engineMode.value === 'web') {
             await initWebEngine();
         } else {
-            nextTick(() => {
+            await nextTick(() => {
                 if (videoRef.value) {
                     videoRef.value.src = streamUrl.value;
                     videoRef.value.load();
                     videoRef.value.playbackRate = playbackRate.value;
-                    videoRef.value.play().catch(() => { });
+                    videoRef.value.play().catch(() => {});
                 }
             });
         }
@@ -365,7 +412,10 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
     let currentSeekToken = 0;
 
     const executeSeek = async (targetSecs: number) => {
-        const clamped = Math.max(0, Math.min(duration.value || 3600, targetSecs));
+        const clamped = Math.max(
+            0,
+            Math.min(duration.value || 3600, targetSecs),
+        );
         currentTime.value = clamped;
         if (options.onTimeUpdateCallback) {
             options.onTimeUpdateCallback(clamped);
@@ -385,11 +435,14 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
                             videoRef.value.playbackRate = playbackRate.value;
                         }
                         if (videoRef.value.paused) {
-                            videoRef.value.play().catch(() => { });
+                            videoRef.value.play().catch(() => {});
                         }
                     }
                 } catch (e) {
-                    console.warn('[CinemaPlayback] In-buffer MSE seek error:', e);
+                    console.warn(
+                        '[CinemaPlayback] In-buffer MSE seek error:',
+                        e,
+                    );
                 }
                 return;
             }
@@ -407,7 +460,10 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
                 resolvePendingMseDebounce = resolve;
                 mseSeekDebounceTimer = setTimeout(async () => {
                     resolvePendingMseDebounce = null;
-                    if (seekToken !== currentSeekToken || !webEngineInstance.value) {
+                    if (
+                        seekToken !== currentSeekToken ||
+                        !webEngineInstance.value
+                    ) {
                         resolve();
                         return;
                     }
@@ -417,14 +473,18 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
                         await webEngineInstance.value.seekTo(clamped);
                         if (videoRef.value) {
                             if (playbackRate.value !== 1.0) {
-                                videoRef.value.playbackRate = playbackRate.value;
+                                videoRef.value.playbackRate =
+                                    playbackRate.value;
                             }
                             if (videoRef.value.paused) {
-                                videoRef.value.play().catch(() => { });
+                                videoRef.value.play().catch(() => {});
                             }
                         }
                     } catch (e) {
-                        console.warn('[CinemaPlayback] MseBackendClient seek error:', e);
+                        console.warn(
+                            '[CinemaPlayback] MseBackendClient seek error:',
+                            e,
+                        );
                     } finally {
                         if (seekToken === currentSeekToken) {
                             isSeekPending.value = false;
@@ -443,11 +503,14 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
                 if (localTarget >= 0) {
                     const buffered = videoRef.value.buffered;
                     for (let i = 0; i < buffered.length; i++) {
-                        if (localTarget >= buffered.start(i) && buffered.end(i) - localTarget >= 0.25) {
+                        if (
+                            localTarget >= buffered.start(i) &&
+                            buffered.end(i) - localTarget >= 0.25
+                        ) {
                             videoRef.value.currentTime = localTarget;
                             videoRef.value.playbackRate = playbackRate.value;
                             if (videoRef.value.paused) {
-                                videoRef.value.play().catch(() => { });
+                                videoRef.value.play().catch(() => {});
                             }
                             return;
                         }
@@ -461,15 +524,21 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
             if (clamped > 2) {
                 try {
                     const type = isEpisode.value ? 'episode' : 'movie';
-                    const id = activeItem.value?.watchable_id || activeItem.value?.id;
-                    const res = await fetch(`/api/media/seek-keyframe?type=${type}&id=${id}&time=${clamped}`);
+                    const id =
+                        activeItem.value?.watchable_id || activeItem.value?.id;
+                    const res = await fetch(
+                        `/api/media/seek-keyframe?type=${type}&id=${id}&time=${clamped}`,
+                    );
                     if (res.ok) {
                         const data = await res.json();
-                        if (typeof data.keyframe === 'number' && data.keyframe >= 0) {
+                        if (
+                            typeof data.keyframe === 'number' &&
+                            data.keyframe >= 0
+                        ) {
                             actualTarget = data.keyframe;
                         }
                     }
-                } catch (e) { }
+                } catch {}
             }
 
             if (seekToken !== currentSeekToken) return;
@@ -488,13 +557,13 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
                 videoRef.value.src = streamUrl.value;
                 videoRef.value.load();
                 videoRef.value.playbackRate = playbackRate.value;
-                videoRef.value.play().catch(() => { });
+                videoRef.value.play().catch(() => {});
             }
         } else if (videoRef.value) {
             videoRef.value.currentTime = clamped;
             videoRef.value.playbackRate = playbackRate.value;
             if (videoRef.value.paused) {
-                videoRef.value.play().catch(() => { });
+                videoRef.value.play().catch(() => {});
             }
         }
     };
@@ -502,7 +571,10 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
     let seekDebounceTimer: any = null;
     const seekRelative = (seconds: number) => {
         const current = currentTime.value;
-        const target = Math.max(0, Math.min(duration.value || 0, current + seconds));
+        const target = Math.max(
+            0,
+            Math.min(duration.value || 0, current + seconds),
+        );
         currentTime.value = target;
         if (options.onTimeUpdateCallback) {
             options.onTimeUpdateCallback(target);
@@ -510,12 +582,18 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
 
         clearTimeout(seekDebounceTimer);
         seekDebounceTimer = setTimeout(() => {
-            executeSeek(currentTime.value);
+            void executeSeek(currentTime.value);
         }, 150);
     };
 
     const updateBufferProgress = () => {
-        if (!videoRef.value || !duration.value || duration.value <= 0 || !isFinite(duration.value)) return;
+        if (
+            !videoRef.value ||
+            !duration.value ||
+            duration.value <= 0 ||
+            !isFinite(duration.value)
+        )
+            return;
         const buf = videoRef.value.buffered;
         if (buf && buf.length > 0) {
             let maxBufferedEnd = 0;
@@ -525,10 +603,14 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
                     maxBufferedEnd = end;
                 }
             }
-            const effectiveEnd = (isRemuxStream.value && remuxStartOffset.value > 0)
-                ? remuxStartOffset.value + maxBufferedEnd
-                : maxBufferedEnd;
-            const calc = Math.min(100, Math.max(0, (effectiveEnd / duration.value) * 100));
+            const effectiveEnd =
+                isRemuxStream.value && remuxStartOffset.value > 0
+                    ? remuxStartOffset.value + maxBufferedEnd
+                    : maxBufferedEnd;
+            const calc = Math.min(
+                100,
+                Math.max(0, (effectiveEnd / duration.value) * 100),
+            );
             if (calc > bufferedPercent.value) {
                 bufferedPercent.value = calc;
             }
@@ -546,13 +628,20 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
             isSeekPending.value = false;
         }
 
-        if ((isRemuxStream.value || engineMode.value === 'web') && remuxStartOffset.value > 0) {
+        if (
+            (isRemuxStream.value || engineMode.value === 'web') &&
+            remuxStartOffset.value > 0
+        ) {
             currentTime.value = remuxStartOffset.value + rawCurrent;
         } else {
             currentTime.value = rawCurrent;
         }
 
-        if (!isDurationLocked.value && !isRemuxStream.value && engineMode.value !== 'web') {
+        if (
+            !isDurationLocked.value &&
+            !isRemuxStream.value &&
+            engineMode.value !== 'web'
+        ) {
             const d = videoRef.value.duration;
             if (d && isFinite(d) && !isNaN(d) && d > 0) {
                 duration.value = d;
@@ -589,33 +678,63 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
 
         videoRef.value.playbackRate = playbackRate.value;
 
-        if (!isDurationLocked.value && !isRemuxStream.value && engineMode.value !== 'web') {
+        if (
+            !isDurationLocked.value &&
+            !isRemuxStream.value &&
+            engineMode.value !== 'web'
+        ) {
             const d = videoRef.value.duration;
             if (d && isFinite(d) && !isNaN(d) && d > 0) {
                 duration.value = d;
             }
         }
 
-        if (pendingInitialSeek.value > 0 && !isRemuxStream.value && engineMode.value !== 'web') {
+        if (
+            pendingInitialSeek.value > 0 &&
+            !isRemuxStream.value &&
+            engineMode.value !== 'web'
+        ) {
             videoRef.value.currentTime = pendingInitialSeek.value;
         }
 
         clearAudioWatchdog();
-        if (engineMode.value === 'direct' && !manualEngineOverride.value && fallbackAttemptedForItemKey !== itemKey.value) {
+        if (
+            engineMode.value === 'direct' &&
+            !manualEngineOverride.value &&
+            fallbackAttemptedForItemKey !== itemKey.value
+        ) {
             audioWatchdogTimer = setTimeout(() => {
                 const v = videoRef.value as any;
-                if (!v || engineMode.value !== 'direct' || manualEngineOverride.value) return;
-                if (!v.paused && v.readyState >= 2 && typeof v.webkitAudioDecodedByteCount === 'number' && v.webkitAudioDecodedByteCount === 0) {
-                    hotSwapEngineFallback('Unsupported audio track detected — switching to Server Remux');
+                if (
+                    !v ||
+                    engineMode.value !== 'direct' ||
+                    manualEngineOverride.value
+                )
+                    return;
+                if (
+                    !v.paused &&
+                    v.readyState >= 2 &&
+                    typeof v.webkitAudioDecodedByteCount === 'number' &&
+                    v.webkitAudioDecodedByteCount === 0
+                ) {
+                    void hotSwapEngineFallback(
+                        'Unsupported audio track detected — switching to Server Remux',
+                    );
                 }
             }, 2200);
         }
 
-        videoRef.value.play().then(() => {
-            isPlaying.value = true;
-        }).catch((err) => {
-            console.warn('Autoplay prevented or waiting for interaction:', err);
-        });
+        videoRef.value
+            .play()
+            .then(() => {
+                isPlaying.value = true;
+            })
+            .catch((err) => {
+                console.warn(
+                    'Autoplay prevented or waiting for interaction:',
+                    err,
+                );
+            });
     };
 
     const savePlaybackProgress = async (isCompleted = false) => {
@@ -630,21 +749,28 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+                    'X-CSRF-TOKEN':
+                        (
+                            document.querySelector(
+                                'meta[name="csrf-token"]',
+                            ) as HTMLMetaElement
+                        )?.content || '',
                 },
                 body: JSON.stringify({
-                    watchable_id: activeItem.value.watchable_id || activeItem.value.id,
+                    watchable_id:
+                        activeItem.value.watchable_id || activeItem.value.id,
                     watchable_type: isEpisode.value ? 'episode' : 'movie',
                     progress_seconds: completed ? 0 : timeSec,
                     duration_seconds: durSec,
                     is_completed: completed,
                 }),
             });
-        } catch (e) { }
+        } catch {}
     };
 
     const formatTime = (seconds: number) => {
-        if (!seconds || isNaN(seconds) || !isFinite(seconds) || seconds <= 0) return '00:00';
+        if (!seconds || isNaN(seconds) || !isFinite(seconds) || seconds <= 0)
+            return '00:00';
         const hrs = Math.floor(seconds / 3600);
         const mins = Math.floor((seconds % 3600) / 60);
         const secs = Math.floor(seconds % 60);
@@ -705,4 +831,3 @@ export function useCinemaPlayback(options: UseCinemaPlaybackOptions) {
         webEngineInstance,
     };
 }
-

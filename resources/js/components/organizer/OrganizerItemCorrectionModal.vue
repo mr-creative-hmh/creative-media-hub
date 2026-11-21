@@ -2,9 +2,23 @@
 import { ref, watch, computed } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
-    X, Edit3, RotateCcw, Check, Film, Tv, Folder,
-    Calendar, Hash, Tag, Layers, Subtitles, AlertCircle, ArrowRight,
-    Search, ChevronDown, Sparkles
+    X,
+    Edit3,
+    RotateCcw,
+    Check,
+    Film,
+    Tv,
+    Folder,
+    Calendar,
+    Hash,
+    Tag,
+    Layers,
+    Subtitles,
+    AlertCircle,
+    ArrowRight,
+    Search,
+    ChevronDown,
+    Sparkles,
 } from 'lucide-vue-next';
 
 export interface PlanItem {
@@ -70,10 +84,24 @@ const manualDestinationPath = ref('');
 
 // Popular genres dropdown suggestions
 const commonGenres = [
-    'Action', 'Adventure', 'Animation', 'Comedy', 'Crime',
-    'Documentary', 'Drama', 'Family', 'Fantasy', 'History',
-    'Horror', 'Music', 'Mystery', 'Romance', 'Science Fiction',
-    'Thriller', 'War', 'Western'
+    'Action',
+    'Adventure',
+    'Animation',
+    'Comedy',
+    'Crime',
+    'Documentary',
+    'Drama',
+    'Family',
+    'Fantasy',
+    'History',
+    'Horror',
+    'Music',
+    'Mystery',
+    'Romance',
+    'Science Fiction',
+    'Thriller',
+    'War',
+    'Western',
 ];
 
 const isGenreDropdownOpen = ref(false);
@@ -81,14 +109,20 @@ const isGenreDropdownOpen = ref(false);
 const filteredGenres = computed(() => {
     if (!genre.value) return commonGenres;
     const q = genre.value.trim().toLowerCase();
-    const matched = commonGenres.filter(g => g.toLowerCase().includes(q));
+    const matched = commonGenres.filter((g) => g.toLowerCase().includes(q));
     return matched.length > 0 ? matched : commonGenres;
 });
 
 const isGenreActive = (g: string) => {
     if (!genre.value) return false;
     const current = genre.value.trim().toLowerCase();
-    return current === g.toLowerCase() || current.split(',').map(s => s.trim().toLowerCase()).includes(g.toLowerCase());
+    return (
+        current === g.toLowerCase() ||
+        current
+            .split(',')
+            .map((s) => s.trim().toLowerCase())
+            .includes(g.toLowerCase())
+    );
 };
 
 const selectGenre = (g: string) => {
@@ -105,44 +139,63 @@ const clearGenre = () => {
     isGenreDropdownOpen.value = false;
 };
 
-const setCategoryPreset = (categoryType: 'movie' | 'series', categoryFolder = '') => {
+const setCategoryPreset = (
+    categoryType: 'movie' | 'series',
+    categoryFolder = '',
+) => {
     type.value = categoryType;
     customCategory.value = categoryFolder;
     showCustomCategoryInput.value = false;
 };
 
-watch(() => props.item, (newItem) => {
-    if (newItem) {
-        type.value = newItem.type || 'movie';
-        // Auto-detect custom category folder if item was placed in specialized path
-        if (newItem.destination_path) {
-            const norm = newItem.destination_path.replace(/\\/g, '/');
-            if (norm.includes('/TV Shows/Arabic Series/')) {
-                customCategory.value = 'TV Shows/Arabic Series';
-            } else if (norm.includes('/Anime/')) {
-                customCategory.value = 'Anime';
-            } else if (norm.includes('/Documentaries/')) {
-                customCategory.value = 'Documentaries';
+watch(
+    () => props.item,
+    (newItem) => {
+        if (newItem) {
+            type.value = newItem.type || 'movie';
+            // Auto-detect custom category folder if item was placed in specialized path
+            if (newItem.destination_path) {
+                const norm = newItem.destination_path.replace(/\\/g, '/');
+                if (norm.includes('/TV Shows/Arabic Series/')) {
+                    customCategory.value = 'TV Shows/Arabic Series';
+                } else if (norm.includes('/Anime/')) {
+                    customCategory.value = 'Anime';
+                } else if (norm.includes('/Documentaries/')) {
+                    customCategory.value = 'Documentaries';
+                } else {
+                    customCategory.value = '';
+                }
             } else {
                 customCategory.value = '';
             }
-        } else {
-            customCategory.value = '';
-        }
-        showCustomCategoryInput.value = !!customCategory.value && !['TV Shows/Arabic Series', 'Anime', 'Documentaries'].includes(customCategory.value);
+            showCustomCategoryInput.value =
+                !!customCategory.value &&
+                !['TV Shows/Arabic Series', 'Anime', 'Documentaries'].includes(
+                    customCategory.value,
+                );
 
-        cleanTitle.value = newItem.clean_title || '';
-        year.value = newItem.year ? String(newItem.year) : '';
-        season.value = newItem.season !== null && newItem.season !== undefined ? newItem.season : 1;
-        episode.value = newItem.episode !== null && newItem.episode !== undefined ? newItem.episode : 1;
-        episodeTitle.value = newItem.episode_title || '';
-        collectionName.value = newItem.collection_name || '';
-        genre.value = newItem.genre || '';
-        resolution.value = newItem.resolution || '1080p';
-        manualDestinationPath.value = newItem.destination_path || '';
-        customPathOverride.value = !!newItem.is_manually_edited && !isPathGeneratedFromTemplate(newItem.destination_path);
-    }
-}, { immediate: true });
+            cleanTitle.value = newItem.clean_title || '';
+            year.value = newItem.year ? String(newItem.year) : '';
+            season.value =
+                newItem.season !== null && newItem.season !== undefined
+                    ? newItem.season
+                    : 1;
+            episode.value =
+                newItem.episode !== null && newItem.episode !== undefined
+                    ? newItem.episode
+                    : 1;
+            episodeTitle.value = newItem.episode_title || '';
+            collectionName.value = newItem.collection_name || '';
+            genre.value = newItem.genre || '';
+            resolution.value = newItem.resolution || '1080p';
+            manualDestinationPath.value = newItem.destination_path || '';
+            customPathOverride.value =
+                !!newItem.is_manually_edited &&
+                !isPathGeneratedFromTemplate(newItem.destination_path);
+        }
+    },
+    { immediate: true },
+);
 
 function sanitizeSegment(val: string): string {
     return val.replace(/[<>:"/\\|?*]/g, '').trim();
@@ -154,7 +207,7 @@ function sanitizePathCategory(val: string): string {
         .replace(/\\/g, '/')
         .replace(/[<>:"|?*]/g, '')
         .split('/')
-        .map(s => s.trim())
+        .map((s) => s.trim())
         .filter(Boolean)
         .join('/');
 }
@@ -171,7 +224,9 @@ const calculatedDestination = computed(() => {
 
     if (!props.item) return '';
 
-    const root = (props.targetRoot || 'H:/Entertainment').replace(/\\/g, '/').replace(/\/+$/, '');
+    const root = (props.targetRoot || 'H:/Entertainment')
+        .replace(/\\/g, '/')
+        .replace(/\/+$/, '');
     const isSeries = type.value === 'series';
     const pattern = isSeries ? props.seriesTemplate : props.movieTemplate;
 
@@ -187,7 +242,9 @@ const calculatedDestination = computed(() => {
 
     const effectiveTypeDir = customCategory.value.trim()
         ? sanitizePathCategory(customCategory.value.trim())
-        : (isSeries ? 'TV Shows' : 'Movies');
+        : isSeries
+          ? 'TV Shows'
+          : 'Movies';
 
     let path = pattern
         .replace(/{Type}/g, effectiveTypeDir)
@@ -210,13 +267,19 @@ const calculatedDestination = computed(() => {
     if (sGenre) {
         path = path.replace(/{Genre}/g, sGenre);
     } else {
-        path = path.replace(/\/{Genre}/g, '').replace(/{Genre}\//g, '').replace(/{Genre}/g, '');
+        path = path
+            .replace(/\/{Genre}/g, '')
+            .replace(/{Genre}\//g, '')
+            .replace(/{Genre}/g, '');
     }
 
     if (sYear) {
         path = path.replace(/{Year}/g, sYear);
     } else {
-        path = path.replace(/\s*\({Year}\)/g, '').replace(/\({Year}\)/g, '').replace(/{Year}/g, '');
+        path = path
+            .replace(/\s*\({Year}\)/g, '')
+            .replace(/\({Year}\)/g, '')
+            .replace(/{Year}/g, '');
     }
 
     if (isSeries) {
@@ -227,13 +290,18 @@ const calculatedDestination = computed(() => {
         if (sEpTitle) {
             path = path.replace(/{EpisodeTitle}/g, sEpTitle);
         } else {
-            path = path.replace(/\s*-\s*{EpisodeTitle}/g, '').replace(/{EpisodeTitle}/g, '');
+            path = path
+                .replace(/\s*-\s*{EpisodeTitle}/g, '')
+                .replace(/{EpisodeTitle}/g, '');
         }
     }
 
     // Clean double slashes and empty brackets
     path = path.replace(/\/+/g, '/').replace(/\s+/g, ' ').trim();
-    path = path.replace(/\[\s*\]/g, '').replace(/\(\s*\)/g, '').replace(/\s+\./g, '.');
+    path = path
+        .replace(/\[\s*\]/g, '')
+        .replace(/\(\s*\)/g, '')
+        .replace(/\s+\./g, '.');
 
     return `${root}/${path}`.replace(/\/+/g, '/');
 });
@@ -245,15 +313,19 @@ const updatedSubtitles = computed(() => {
     const dest = calculatedDestination.value;
     const destDir = dest.substring(0, dest.lastIndexOf('/'));
     const fullFileName = dest.substring(dest.lastIndexOf('/') + 1);
-    const destBase = fullFileName.substring(0, fullFileName.lastIndexOf('.')) || fullFileName;
+    const destBase =
+        fullFileName.substring(0, fullFileName.lastIndexOf('.')) ||
+        fullFileName;
 
-    return props.item.subtitles.map(sub => {
+    return props.item.subtitles.map((sub) => {
         const lang = sub.language || 'und';
-        const langSuffix = ['ar', 'en', 'fr', 'es', 'de'].includes(lang) ? `.${lang}` : '';
+        const langSuffix = ['ar', 'en', 'fr', 'es', 'de'].includes(lang)
+            ? `.${lang}`
+            : '';
         const subExt = sub.destination?.split('.').pop() || 'srt';
         return {
             ...sub,
-            destination: `${destDir}/${destBase}${langSuffix}.${subExt}`
+            destination: `${destDir}/${destBase}${langSuffix}.${subExt}`,
         };
     });
 });
@@ -262,7 +334,8 @@ function handleSave() {
     if (!props.item) return;
 
     // Preserve original_item for reset capability if not already stored
-    const original = props.item.original_item || JSON.parse(JSON.stringify(props.item));
+    const original =
+        props.item.original_item || JSON.parse(JSON.stringify(props.item));
 
     const updated: PlanItem = {
         ...props.item,
@@ -271,12 +344,23 @@ function handleSave() {
         type: type.value,
         clean_title: cleanTitle.value.trim(),
         year: year.value.trim() ? year.value.trim() : null,
-        season: type.value === 'series' ? (parseInt(String(season.value), 10) || 1) : null,
-        episode: type.value === 'series' ? (parseInt(String(episode.value), 10) || 1) : null,
-        episode_title: type.value === 'series' ? episodeTitle.value.trim() : null,
-        collection_name: collectionName.value.trim() ? collectionName.value.trim() : null,
+        season:
+            type.value === 'series'
+                ? parseInt(String(season.value), 10) || 1
+                : null,
+        episode:
+            type.value === 'series'
+                ? parseInt(String(episode.value), 10) || 1
+                : null,
+        episode_title:
+            type.value === 'series' ? episodeTitle.value.trim() : null,
+        collection_name: collectionName.value.trim()
+            ? collectionName.value.trim()
+            : null,
         genre: genre.value.trim() ? genre.value.trim() : null,
-        resolution: resolution.value.trim() ? resolution.value.trim() : props.item.resolution,
+        resolution: resolution.value.trim()
+            ? resolution.value.trim()
+            : props.item.resolution,
         destination_path: calculatedDestination.value,
         subtitles: updatedSubtitles.value,
         status: 'ready',
@@ -299,24 +383,42 @@ function handleReset() {
 <template>
     <div
         v-if="isOpen && item"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
+        class="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
         :dir="isRTL ? 'rtl' : 'ltr'"
     >
-        <div class="relative w-full max-w-3xl max-h-[90vh] bg-slate-900 border border-white/10 rounded-3xl shadow-2xl flex flex-col overflow-hidden">
+        <div
+            class="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-900 shadow-2xl"
+        >
             <!-- Modal Header -->
-            <div class="px-6 py-5 border-b border-white/10 flex items-center justify-between bg-slate-950/60">
+            <div
+                class="flex items-center justify-between border-b border-white/10 bg-slate-950/60 px-6 py-5"
+            >
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-2xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/30">
-                        <Edit3 class="w-5 h-5" />
+                    <div
+                        class="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/20 text-cyan-400"
+                    >
+                        <Edit3 class="h-5 w-5" />
                     </div>
                     <div>
-                        <h3 class="text-base font-black text-white flex items-center gap-2">
-                            <span>{{ isRTL ? 'تصحيح وتعديل بيانات الملف يدوياً' : 'Manual Item Correction & Path Override' }}</span>
-                            <span v-if="item.is_manually_edited" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        <h3
+                            class="flex items-center gap-2 text-base font-black text-white"
+                        >
+                            <span>{{
+                                isRTL
+                                    ? 'تصحيح وتعديل بيانات الملف يدوياً'
+                                    : 'Manual Item Correction & Path Override'
+                            }}</span>
+                            <span
+                                v-if="item.is_manually_edited"
+                                class="rounded-full border border-amber-500/30 bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300"
+                            >
                                 {{ isRTL ? 'تم التعديل سابقاً' : 'Edited' }}
                             </span>
                         </h3>
-                        <p class="text-xs text-slate-400 font-mono truncate max-w-lg" :title="item.filename">
+                        <p
+                            class="max-w-lg truncate font-mono text-xs text-slate-400"
+                            :title="item.filename"
+                        >
                             {{ item.filename }}
                         </p>
                     </div>
@@ -324,20 +426,31 @@ function handleReset() {
 
                 <button
                     @click="$emit('close')"
-                    class="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                    class="cursor-pointer rounded-xl p-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
                 >
-                    <X class="w-5 h-5" />
+                    <X class="h-5 w-5" />
                 </button>
             </div>
 
             <!-- Modal Body (Scrollable) -->
-            <div class="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
+            <div class="flex-1 space-y-6 overflow-y-auto p-6 text-xs">
                 <!-- Source Path Info -->
-                <div class="p-3.5 rounded-2xl bg-black/40 border border-white/5 space-y-1">
-                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        {{ isRTL ? 'المسار الأصلي الحالي على القرص:' : 'Current Source Path on Disk:' }}
+                <div
+                    class="space-y-1 rounded-2xl border border-white/5 bg-black/40 p-3.5"
+                >
+                    <div
+                        class="text-[10px] font-bold tracking-wider text-slate-400 uppercase"
+                    >
+                        {{
+                            isRTL
+                                ? 'المسار الأصلي الحالي على القرص:'
+                                : 'Current Source Path on Disk:'
+                        }}
                     </div>
-                    <div class="font-mono text-slate-300 truncate" :title="item.source_path">
+                    <div
+                        class="truncate font-mono text-slate-300"
+                        :title="item.source_path"
+                    >
                         {{ item.source_path }}
                     </div>
                 </div>
@@ -346,32 +459,49 @@ function handleReset() {
                 <div class="space-y-2.5">
                     <div class="flex items-center justify-between">
                         <label class="block font-bold text-slate-300">
-                            {{ isRTL ? 'التصنيف / نوع الوسائط ومجلد الوجهة:' : 'Category / Media Type & Target Folder:' }}
+                            {{
+                                isRTL
+                                    ? 'التصنيف / نوع الوسائط ومجلد الوجهة:'
+                                    : 'Category / Media Type & Target Folder:'
+                            }}
                         </label>
                         <button
                             type="button"
-                            @click="showCustomCategoryInput = !showCustomCategoryInput"
-                            class="text-[11px] text-cyan-400 hover:text-cyan-300 font-bold transition-colors cursor-pointer"
+                            @click="
+                                showCustomCategoryInput =
+                                    !showCustomCategoryInput
+                            "
+                            class="cursor-pointer text-[11px] font-bold text-cyan-400 transition-colors hover:text-cyan-300"
                         >
-                            {{ showCustomCategoryInput ? (isRTL ? 'إخفاء التخصيص' : 'Hide Custom') : (isRTL ? 'تخصيص مجلد الفئة' : 'Custom Category Folder') }}
+                            {{
+                                showCustomCategoryInput
+                                    ? isRTL
+                                        ? 'إخفاء التخصيص'
+                                        : 'Hide Custom'
+                                    : isRTL
+                                      ? 'تخصيص مجلد الفئة'
+                                      : 'Custom Category Folder'
+                            }}
                         </button>
                     </div>
 
                     <!-- Category Preset Buttons -->
-                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-5">
                         <!-- Movies -->
                         <button
                             type="button"
                             @click="setCategoryPreset('movie')"
                             :class="[
-                                'p-2.5 rounded-xl border font-bold flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer',
+                                'flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 font-bold transition-all',
                                 type === 'movie' && !customCategory
-                                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400 shadow-md ring-1 ring-cyan-500/50'
-                                    : 'bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10'
+                                    ? 'border-cyan-400 bg-cyan-500/20 text-cyan-300 shadow-md ring-1 ring-cyan-500/50'
+                                    : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white',
                             ]"
                         >
-                            <Film class="w-4 h-4" />
-                            <span class="text-[11px]">{{ isRTL ? 'أفلام' : 'Movies' }}</span>
+                            <Film class="h-4 w-4" />
+                            <span class="text-[11px]">{{
+                                isRTL ? 'أفلام' : 'Movies'
+                            }}</span>
                         </button>
 
                         <!-- TV Series -->
@@ -379,29 +509,38 @@ function handleReset() {
                             type="button"
                             @click="setCategoryPreset('series')"
                             :class="[
-                                'p-2.5 rounded-xl border font-bold flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer',
+                                'flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 font-bold transition-all',
                                 type === 'series' && !customCategory
-                                    ? 'bg-purple-500/20 text-purple-300 border-purple-400 shadow-md ring-1 ring-purple-500/50'
-                                    : 'bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10'
+                                    ? 'border-purple-400 bg-purple-500/20 text-purple-300 shadow-md ring-1 ring-purple-500/50'
+                                    : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white',
                             ]"
                         >
-                            <Tv class="w-4 h-4" />
-                            <span class="text-[11px]">{{ isRTL ? 'مسلسلات' : 'TV Shows' }}</span>
+                            <Tv class="h-4 w-4" />
+                            <span class="text-[11px]">{{
+                                isRTL ? 'مسلسلات' : 'TV Shows'
+                            }}</span>
                         </button>
 
                         <!-- Arabic Series -->
                         <button
                             type="button"
-                            @click="setCategoryPreset('series', 'TV Shows/Arabic Series')"
+                            @click="
+                                setCategoryPreset(
+                                    'series',
+                                    'TV Shows/Arabic Series',
+                                )
+                            "
                             :class="[
-                                'p-2.5 rounded-xl border font-bold flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer',
+                                'flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 font-bold transition-all',
                                 customCategory === 'TV Shows/Arabic Series'
-                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400 shadow-md ring-1 ring-emerald-500/50'
-                                    : 'bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10'
+                                    ? 'border-emerald-400 bg-emerald-500/20 text-emerald-300 shadow-md ring-1 ring-emerald-500/50'
+                                    : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white',
                             ]"
                         >
                             <span class="text-sm">🕌</span>
-                            <span class="text-[11px]">{{ isRTL ? 'مسلسلات عربية' : 'Arabic Series' }}</span>
+                            <span class="text-[11px]">{{
+                                isRTL ? 'مسلسلات عربية' : 'Arabic Series'
+                            }}</span>
                         </button>
 
                         <!-- Anime -->
@@ -409,14 +548,16 @@ function handleReset() {
                             type="button"
                             @click="setCategoryPreset('series', 'Anime')"
                             :class="[
-                                'p-2.5 rounded-xl border font-bold flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer',
+                                'flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 font-bold transition-all',
                                 customCategory === 'Anime'
-                                    ? 'bg-rose-500/20 text-rose-300 border-rose-400 shadow-md ring-1 ring-rose-500/50'
-                                    : 'bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10'
+                                    ? 'border-rose-400 bg-rose-500/20 text-rose-300 shadow-md ring-1 ring-rose-500/50'
+                                    : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white',
                             ]"
                         >
                             <span class="text-sm">🎌</span>
-                            <span class="text-[11px]">{{ isRTL ? 'أنمي' : 'Anime' }}</span>
+                            <span class="text-[11px]">{{
+                                isRTL ? 'أنمي' : 'Anime'
+                            }}</span>
                         </button>
 
                         <!-- Documentaries -->
@@ -424,14 +565,16 @@ function handleReset() {
                             type="button"
                             @click="setCategoryPreset('movie', 'Documentaries')"
                             :class="[
-                                'p-2.5 rounded-xl border font-bold flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer col-span-2 sm:col-span-1',
+                                'col-span-2 flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 font-bold transition-all sm:col-span-1',
                                 customCategory === 'Documentaries'
-                                    ? 'bg-amber-500/20 text-amber-300 border-amber-400 shadow-md ring-1 ring-amber-500/50'
-                                    : 'bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10'
+                                    ? 'border-amber-400 bg-amber-500/20 text-amber-300 shadow-md ring-1 ring-amber-500/50'
+                                    : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white',
                             ]"
                         >
                             <span class="text-sm">📽️</span>
-                            <span class="text-[11px]">{{ isRTL ? 'وثائقيات' : 'Documentary' }}</span>
+                            <span class="text-[11px]">{{
+                                isRTL ? 'وثائقيات' : 'Documentary'
+                            }}</span>
                         </button>
                     </div>
 
@@ -440,25 +583,41 @@ function handleReset() {
                         <input
                             v-model="customCategory"
                             type="text"
-                            class="w-full bg-slate-950 border border-cyan-500/40 rounded-xl px-3.5 py-2 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-400"
-                            :placeholder="type === 'series' ? 'e.g. TV Shows/Anime or Cartoons' : 'e.g. Movies/4K UHD or Animation'"
+                            class="w-full rounded-xl border border-cyan-500/40 bg-slate-950 px-3.5 py-2 font-mono text-xs text-cyan-300 focus:border-cyan-400 focus:outline-none"
+                            :placeholder="
+                                type === 'series'
+                                    ? 'e.g. TV Shows/Anime or Cartoons'
+                                    : 'e.g. Movies/4K UHD or Animation'
+                            "
                         />
                     </div>
                 </div>
 
                 <!-- Core Metadata Grid -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <!-- Title -->
                     <div class="space-y-1.5 md:col-span-2">
                         <label class="block font-bold text-slate-300">
-                            {{ type === 'series' ? (isRTL ? 'اسم المسلسل النظيف:' : 'Clean Series Title:') : (isRTL ? 'اسم الفيلم النظيف:' : 'Clean Movie Title:') }}
+                            {{
+                                type === 'series'
+                                    ? isRTL
+                                        ? 'اسم المسلسل النظيف:'
+                                        : 'Clean Series Title:'
+                                    : isRTL
+                                      ? 'اسم الفيلم النظيف:'
+                                      : 'Clean Movie Title:'
+                            }}
                         </label>
                         <div class="relative">
                             <input
                                 v-model="cleanTitle"
                                 type="text"
-                                class="w-full bg-slate-950 border border-white/10 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
-                                :placeholder="type === 'series' ? 'e.g. Breaking Bad' : 'e.g. Inception'"
+                                class="w-full rounded-xl border border-white/10 bg-slate-950 px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
+                                :placeholder="
+                                    type === 'series'
+                                        ? 'e.g. Breaking Bad'
+                                        : 'e.g. Inception'
+                                "
                             />
                         </div>
                     </div>
@@ -466,28 +625,34 @@ function handleReset() {
                     <!-- Year -->
                     <div class="space-y-1.5">
                         <label class="block font-bold text-slate-300">
-                            {{ isRTL ? 'سنة الإنتاج (Year):' : 'Release Year:' }}
+                            {{
+                                isRTL ? 'سنة الإنتاج (Year):' : 'Release Year:'
+                            }}
                         </label>
                         <input
                             v-model="year"
                             type="text"
                             maxlength="4"
-                            class="w-full bg-slate-950 border border-white/10 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono"
+                            class="w-full rounded-xl border border-white/10 bg-slate-950 px-3.5 py-2.5 font-mono text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
                             placeholder="e.g. 2024"
                         />
                     </div>
 
                     <!-- Genre (Interactive Search & Autocomplete) -->
-                    <div class="space-y-1.5 relative">
+                    <div class="relative space-y-1.5">
                         <div class="flex items-center justify-between">
                             <label class="block font-bold text-slate-300">
-                                {{ isRTL ? 'التصنيف الأساسي (Genre):' : 'Primary Genre:' }}
+                                {{
+                                    isRTL
+                                        ? 'التصنيف الأساسي (Genre):'
+                                        : 'Primary Genre:'
+                                }}
                             </label>
                             <button
                                 v-if="genre"
                                 type="button"
                                 @click="clearGenre"
-                                class="text-[10px] text-red-400 hover:text-red-300 font-bold transition-colors cursor-pointer"
+                                class="cursor-pointer text-[10px] font-bold text-red-400 transition-colors hover:text-red-300"
                             >
                                 {{ isRTL ? 'مسح التصنيف' : 'Clear' }}
                             </button>
@@ -499,51 +664,66 @@ function handleReset() {
                                 v-model="genre"
                                 @focus="isGenreDropdownOpen = true"
                                 type="text"
-                                class="w-full bg-slate-950 border border-white/10 rounded-xl px-3.5 py-2.5 pr-8 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                                class="w-full rounded-xl border border-white/10 bg-slate-950 px-3.5 py-2.5 pr-8 text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
                                 placeholder="e.g. Action, Drama, Sci-Fi"
                             />
                             <button
                                 v-if="genre"
                                 type="button"
                                 @click="clearGenre"
-                                class="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white cursor-pointer"
+                                class="absolute top-1/2 right-2.5 -translate-y-1/2 cursor-pointer p-1 text-slate-400 hover:text-white"
                             >
-                                <X class="w-3.5 h-3.5" />
+                                <X class="h-3.5 w-3.5" />
                             </button>
                             <button
                                 v-else
                                 type="button"
-                                @click="isGenreDropdownOpen = !isGenreDropdownOpen"
-                                class="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white cursor-pointer"
+                                @click="
+                                    isGenreDropdownOpen = !isGenreDropdownOpen
+                                "
+                                class="absolute top-1/2 right-2.5 -translate-y-1/2 cursor-pointer p-1 text-slate-400 hover:text-white"
                             >
-                                <ChevronDown class="w-3.5 h-3.5" />
+                                <ChevronDown class="h-3.5 w-3.5" />
                             </button>
                         </div>
 
                         <!-- Filtered Dropdown Popover -->
                         <div
                             v-if="isGenreDropdownOpen"
-                            class="absolute z-20 left-0 right-0 top-full mt-1 bg-slate-950 border border-white/20 rounded-2xl shadow-2xl p-2 max-h-48 overflow-y-auto space-y-1 backdrop-blur-xl"
+                            class="absolute top-full right-0 left-0 z-20 mt-1 max-h-48 space-y-1 overflow-y-auto rounded-2xl border border-white/20 bg-slate-950 p-2 shadow-2xl backdrop-blur-xl"
                         >
                             <button
                                 v-for="g in filteredGenres"
                                 :key="g"
                                 type="button"
                                 @click="selectGenre(g)"
-                                class="w-full text-left px-3 py-1.5 rounded-lg flex items-center justify-between text-xs transition-colors cursor-pointer"
-                                :class="isGenreActive(g) ? 'bg-cyan-500/20 text-cyan-300 font-bold' : 'text-slate-300 hover:bg-white/10'"
+                                class="flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-1.5 text-left text-xs transition-colors"
+                                :class="
+                                    isGenreActive(g)
+                                        ? 'bg-cyan-500/20 font-bold text-cyan-300'
+                                        : 'text-slate-300 hover:bg-white/10'
+                                "
                             >
                                 <span>{{ g }}</span>
-                                <Check v-if="isGenreActive(g)" class="w-3.5 h-3.5 text-cyan-400" />
+                                <Check
+                                    v-if="isGenreActive(g)"
+                                    class="h-3.5 w-3.5 text-cyan-400"
+                                />
                             </button>
                         </div>
                     </div>
 
                     <!-- Quick Select Genre Badges / Chips -->
-                    <div class="space-y-1.5 md:col-span-2 pt-1">
-                        <div class="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                            <Tag class="w-3.5 h-3.5 text-cyan-400" />
-                            <span>{{ isRTL ? 'تصنيفات شائعة للاختيار السريع بنقرة واحدة:' : 'Popular Genres (Click to Select / Toggle):' }}</span>
+                    <div class="space-y-1.5 pt-1 md:col-span-2">
+                        <div
+                            class="flex items-center gap-1.5 text-[11px] font-bold text-slate-400"
+                        >
+                            <Tag class="h-3.5 w-3.5 text-cyan-400" />
+                            <span>{{
+                                isRTL
+                                    ? 'تصنيفات شائعة للاختيار السريع بنقرة واحدة:'
+                                    : 'Popular Genres (Click to Select / Toggle):'
+                            }}</span>
                         </div>
                         <div class="flex flex-wrap gap-1.5">
                             <button
@@ -552,14 +732,17 @@ function handleReset() {
                                 type="button"
                                 @click="selectGenre(g)"
                                 :class="[
-                                    'px-2.5 py-1 rounded-xl text-[11px] border font-bold transition-all cursor-pointer flex items-center gap-1.5',
+                                    'flex cursor-pointer items-center gap-1.5 rounded-xl border px-2.5 py-1 text-[11px] font-bold transition-all',
                                     isGenreActive(g)
-                                        ? 'bg-cyan-500/25 border-cyan-400 text-cyan-300 shadow-md ring-1 ring-cyan-500/50 scale-105'
-                                        : 'bg-white/5 border-white/10 text-slate-400 hover:text-white hover:bg-white/10'
+                                        ? 'scale-105 border-cyan-400 bg-cyan-500/25 text-cyan-300 shadow-md ring-1 ring-cyan-500/50'
+                                        : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white',
                                 ]"
                             >
                                 <span>{{ g }}</span>
-                                <Check v-if="isGenreActive(g)" class="w-3 h-3 text-cyan-400" />
+                                <Check
+                                    v-if="isGenreActive(g)"
+                                    class="h-3 w-3 text-cyan-400"
+                                />
                             </button>
                         </div>
                     </div>
@@ -568,73 +751,106 @@ function handleReset() {
                     <template v-if="type === 'series'">
                         <div class="space-y-1.5">
                             <label class="block font-bold text-slate-300">
-                                {{ isRTL ? 'رقم الموسم (Season):' : 'Season Number:' }}
+                                {{
+                                    isRTL
+                                        ? 'رقم الموسم (Season):'
+                                        : 'Season Number:'
+                                }}
                             </label>
                             <input
                                 v-model.number="season"
                                 type="number"
                                 min="1"
                                 max="99"
-                                class="w-full bg-slate-950 border border-white/10 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono"
+                                class="w-full rounded-xl border border-white/10 bg-slate-950 px-3.5 py-2.5 font-mono text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
                                 placeholder="1"
                             />
                         </div>
 
                         <div class="space-y-1.5">
                             <label class="block font-bold text-slate-300">
-                                {{ isRTL ? 'رقم الحلقة (Episode):' : 'Episode Number:' }}
+                                {{
+                                    isRTL
+                                        ? 'رقم الحلقة (Episode):'
+                                        : 'Episode Number:'
+                                }}
                             </label>
                             <input
                                 v-model.number="episode"
                                 type="number"
                                 min="1"
                                 max="999"
-                                class="w-full bg-slate-950 border border-white/10 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono"
+                                class="w-full rounded-xl border border-white/10 bg-slate-950 px-3.5 py-2.5 font-mono text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
                                 placeholder="1"
                             />
                         </div>
 
                         <div class="space-y-1.5 md:col-span-2">
                             <label class="block font-bold text-slate-300">
-                                {{ isRTL ? 'عنوان الحلقة (اختياري):' : 'Episode Title (Optional):' }}
+                                {{
+                                    isRTL
+                                        ? 'عنوان الحلقة (اختياري):'
+                                        : 'Episode Title (Optional):'
+                                }}
                             </label>
                             <input
                                 v-model="episodeTitle"
                                 type="text"
-                                class="w-full bg-slate-950 border border-white/10 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                                class="w-full rounded-xl border border-white/10 bg-slate-950 px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
                                 placeholder="e.g. Pilot, Ozymandias"
                             />
                         </div>
                     </template>
 
                     <!-- Movie Specific: Collection -->
-                    <div v-if="type === 'movie'" class="space-y-1.5 md:col-span-2">
-                        <label class="block font-bold text-slate-300 flex items-center justify-between">
-                            <span>{{ isRTL ? 'مجموعة / سلسلة الفيلم (Collection / Franchise):' : 'Movie Collection / Franchise:' }}</span>
-                            <span class="text-[10px] text-slate-500 font-normal">
-                                {{ isRTL ? 'اتركه فارغاً إذا كان فيلماً منفرداً' : 'Leave blank for standalone films' }}
+                    <div
+                        v-if="type === 'movie'"
+                        class="space-y-1.5 md:col-span-2"
+                    >
+                        <label
+                            class="block flex items-center justify-between font-bold text-slate-300"
+                        >
+                            <span>{{
+                                isRTL
+                                    ? 'مجموعة / سلسلة الفيلم (Collection / Franchise):'
+                                    : 'Movie Collection / Franchise:'
+                            }}</span>
+                            <span
+                                class="text-[10px] font-normal text-slate-500"
+                            >
+                                {{
+                                    isRTL
+                                        ? 'اتركه فارغاً إذا كان فيلماً منفرداً'
+                                        : 'Leave blank for standalone films'
+                                }}
                             </span>
                         </label>
                         <input
                             v-model="collectionName"
                             type="text"
-                            class="w-full bg-slate-950 border border-white/10 rounded-xl px-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                            class="w-full rounded-xl border border-white/10 bg-slate-950 px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
                             placeholder="e.g. Harry Potter Collection, Marvel Cinematic Universe"
                         />
                     </div>
                 </div>
 
                 <!-- Custom Path Override Toggle -->
-                <div class="pt-2 border-t border-white/10 space-y-3">
+                <div class="space-y-3 border-t border-white/10 pt-2">
                     <div class="flex items-center justify-between">
-                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                        <label
+                            class="flex cursor-pointer items-center gap-2 select-none"
+                        >
                             <input
                                 type="checkbox"
                                 v-model="customPathOverride"
-                                class="rounded border-white/20 bg-slate-950 text-cyan-500 focus:ring-0 cursor-pointer"
+                                class="cursor-pointer rounded border-white/20 bg-slate-950 text-cyan-500 focus:ring-0"
                             />
                             <span class="font-bold text-slate-200">
-                                {{ isRTL ? 'تخصيص مسار الوجهة يدوياً بالكامل (Direct Path Override)' : 'Direct Path Override (Manual Custom Destination)' }}
+                                {{
+                                    isRTL
+                                        ? 'تخصيص مسار الوجهة يدوياً بالكامل (Direct Path Override)'
+                                        : 'Direct Path Override (Manual Custom Destination)'
+                                }}
                             </span>
                         </label>
                     </div>
@@ -643,48 +859,83 @@ function handleReset() {
                         <input
                             v-model="manualDestinationPath"
                             type="text"
-                            class="w-full bg-slate-950 border border-cyan-500/50 rounded-xl px-3.5 py-2.5 text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-400"
+                            class="w-full rounded-xl border border-cyan-500/50 bg-slate-950 px-3.5 py-2.5 font-mono text-xs text-cyan-300 focus:border-cyan-400 focus:outline-none"
                             :placeholder="calculatedDestination"
                         />
                     </div>
                 </div>
 
                 <!-- Live Result Destination Preview -->
-                <div class="p-4 rounded-2xl bg-cyan-950/20 border border-cyan-500/30 space-y-2.5">
-                    <div class="flex items-center justify-between text-[11px] font-bold text-cyan-300">
+                <div
+                    class="space-y-2.5 rounded-2xl border border-cyan-500/30 bg-cyan-950/20 p-4"
+                >
+                    <div
+                        class="flex items-center justify-between text-[11px] font-bold text-cyan-300"
+                    >
                         <span class="flex items-center gap-1.5">
-                            <ArrowRight class="w-3.5 h-3.5" :class="isRTL ? 'rotate-180' : ''" />
-                            <span>{{ isRTL ? 'مسار الوجهة المنظم النهائي المتوقع:' : 'Calculated Final Destination Path:' }}</span>
+                            <ArrowRight
+                                class="h-3.5 w-3.5"
+                                :class="isRTL ? 'rotate-180' : ''"
+                            />
+                            <span>{{
+                                isRTL
+                                    ? 'مسار الوجهة المنظم النهائي المتوقع:'
+                                    : 'Calculated Final Destination Path:'
+                            }}</span>
                         </span>
                         <!-- Quick Token Badges -->
-                        <div class="flex items-center gap-1.5 font-mono text-[10px]">
-                            <span class="px-2 py-0.5 rounded-md bg-cyan-500/15 border border-cyan-400/30 text-cyan-300">
-                                {{ customCategory || (type === 'series' ? 'TV Shows' : 'Movies') }}
+                        <div
+                            class="flex items-center gap-1.5 font-mono text-[10px]"
+                        >
+                            <span
+                                class="rounded-md border border-cyan-400/30 bg-cyan-500/15 px-2 py-0.5 text-cyan-300"
+                            >
+                                {{
+                                    customCategory ||
+                                    (type === 'series' ? 'TV Shows' : 'Movies')
+                                }}
                             </span>
-                            <span v-if="genre" class="px-2 py-0.5 rounded-md bg-purple-500/15 border border-purple-400/30 text-purple-300">
+                            <span
+                                v-if="genre"
+                                class="rounded-md border border-purple-400/30 bg-purple-500/15 px-2 py-0.5 text-purple-300"
+                            >
                                 {{ genre }}
                             </span>
                         </div>
                     </div>
-                    <div class="font-mono text-xs text-white break-all bg-black/40 p-2.5 rounded-xl border border-white/5 select-all">
+                    <div
+                        class="rounded-xl border border-white/5 bg-black/40 p-2.5 font-mono text-xs break-all text-white select-all"
+                    >
                         {{ calculatedDestination }}
                     </div>
                 </div>
 
                 <!-- Companion Subtitles Preview -->
                 <div v-if="updatedSubtitles.length > 0" class="space-y-2">
-                    <div class="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
-                        <Subtitles class="w-3.5 h-3.5 text-cyan-400" />
-                        <span>{{ isRTL ? `ملفات الترجمة المرافقة المتزامنة تلقائياً (${updatedSubtitles.length}):` : `Companion Subtitles Auto-Synced (${updatedSubtitles.length}):` }}</span>
+                    <div
+                        class="flex items-center gap-1.5 text-[11px] font-bold text-slate-300"
+                    >
+                        <Subtitles class="h-3.5 w-3.5 text-cyan-400" />
+                        <span>{{
+                            isRTL
+                                ? `ملفات الترجمة المرافقة المتزامنة تلقائياً (${updatedSubtitles.length}):`
+                                : `Companion Subtitles Auto-Synced (${updatedSubtitles.length}):`
+                        }}</span>
                     </div>
                     <div class="space-y-1.5">
                         <div
                             v-for="(sub, idx) in updatedSubtitles"
                             :key="idx"
-                            class="p-2.5 rounded-xl bg-black/30 border border-white/5 font-mono text-[11px] flex items-center justify-between gap-2 text-slate-300"
+                            class="flex items-center justify-between gap-2 rounded-xl border border-white/5 bg-black/30 p-2.5 font-mono text-[11px] text-slate-300"
                         >
-                            <span class="truncate flex-1" :title="sub.destination">{{ sub.destination }}</span>
-                            <span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">
+                            <span
+                                class="flex-1 truncate"
+                                :title="sub.destination"
+                                >{{ sub.destination }}</span
+                            >
+                            <span
+                                class="shrink-0 rounded border border-cyan-500/20 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-bold text-cyan-400 uppercase"
+                            >
                                 {{ sub.language || 'und' }}
                             </span>
                         </div>
@@ -693,16 +944,22 @@ function handleReset() {
             </div>
 
             <!-- Modal Footer -->
-            <div class="px-6 py-4 border-t border-white/10 bg-slate-950/80 flex items-center justify-between">
+            <div
+                class="flex items-center justify-between border-t border-white/10 bg-slate-950/80 px-6 py-4"
+            >
                 <div>
                     <button
                         v-if="item.is_manually_edited"
                         @click="handleReset"
                         type="button"
-                        class="px-4 py-2 rounded-xl text-xs font-bold text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 border border-amber-500/30 flex items-center gap-1.5 transition-colors cursor-pointer"
+                        class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-500/30 px-4 py-2 text-xs font-bold text-amber-400 transition-colors hover:bg-amber-500/10 hover:text-amber-300"
                     >
-                        <RotateCcw class="w-3.5 h-3.5" />
-                        <span>{{ isRTL ? 'استعادة الاقتراح التلقائي' : 'Reset to Auto Proposal' }}</span>
+                        <RotateCcw class="h-3.5 w-3.5" />
+                        <span>{{
+                            isRTL
+                                ? 'استعادة الاقتراح التلقائي'
+                                : 'Reset to Auto Proposal'
+                        }}</span>
                     </button>
                 </div>
 
@@ -710,7 +967,7 @@ function handleReset() {
                     <button
                         @click="$emit('close')"
                         type="button"
-                        class="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                        class="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
                     >
                         {{ isRTL ? 'إلغاء' : 'Cancel' }}
                     </button>
@@ -718,14 +975,15 @@ function handleReset() {
                     <button
                         @click="handleSave"
                         type="button"
-                        class="px-5 py-2.5 rounded-xl text-xs font-black bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/25 flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                        class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-cyan-500 px-5 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-cyan-500/25 transition-all hover:scale-105 hover:bg-cyan-400 active:scale-95"
                     >
-                        <Check class="w-4 h-4" />
-                        <span>{{ isRTL ? 'حفظ وتطبيق التصحيح' : 'Apply Corrections' }}</span>
+                        <Check class="h-4 w-4" />
+                        <span>{{
+                            isRTL ? 'حفظ وتطبيق التصحيح' : 'Apply Corrections'
+                        }}</span>
                     </button>
                 </div>
             </div>
         </div>
     </div>
 </template>
-

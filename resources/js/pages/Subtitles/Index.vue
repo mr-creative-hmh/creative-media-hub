@@ -7,11 +7,36 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import SubtitlePickerModal from '@/components/subtitles/SubtitlePickerModal.vue';
 import { useToast } from '@/composables/useToast';
 import {
-    Subtitles, Download, Check, AlertCircle, Sparkles,
-    Search, Cpu, CheckCircle2, Globe, ArrowDownToLine, RefreshCw,
-    Film, Tv, HardDrive, FileText, CheckCheck, ChevronLeft, ChevronRight, SlidersHorizontal,
-    ShieldCheck, Trash2, Tag, Eye, Play, AlertTriangle, Filter, FolderCheck,
-    Pause, XCircle, Terminal
+    Subtitles,
+    Download,
+    Check,
+    AlertCircle,
+    Sparkles,
+    Search,
+    Cpu,
+    CheckCircle2,
+    Globe,
+    ArrowDownToLine,
+    RefreshCw,
+    Film,
+    Tv,
+    HardDrive,
+    FileText,
+    CheckCheck,
+    ChevronLeft,
+    ChevronRight,
+    SlidersHorizontal,
+    ShieldCheck,
+    Trash2,
+    Tag,
+    Eye,
+    Play,
+    AlertTriangle,
+    Filter,
+    FolderCheck,
+    Pause,
+    XCircle,
+    Terminal,
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -57,7 +82,7 @@ const {
     pauseHealthJob,
     resumeHealthJob,
     cancelHealthJob,
-    fetchSubtitleStatus
+    fetchSubtitleStatus,
 } = useSubtitleJob();
 const isCheckingHealth = ref(false);
 const healthResults = ref<any | null>(null);
@@ -65,7 +90,9 @@ const checkerDryRun = ref(true);
 const checkerDeleteInvalid = ref(true);
 const checkerAutoRename = ref(true);
 const checkerCustomPath = ref('');
-const checkerFilter = ref<'all' | 'invalid' | 'renamed' | 'already_standard' | 'valid'>('all');
+const checkerFilter = ref<
+    'all' | 'invalid' | 'renamed' | 'already_standard' | 'valid'
+>('all');
 const checkerSearchText = ref('');
 const checkerCurrentPage = ref(1);
 const checkerPerPage = ref(15);
@@ -79,14 +106,18 @@ const runHealthCheck = async () => {
     });
 };
 
-watch(() => subtitleStatus.value.items, (newItems) => {
-    if (newItems && newItems.length > 0) {
-        healthResults.value = {
-            summary: subtitleStatus.value.summary,
-            items: newItems,
-        };
-    }
-}, { deep: true, immediate: true });
+watch(
+    () => subtitleStatus.value.items,
+    (newItems) => {
+        if (newItems && newItems.length > 0) {
+            healthResults.value = {
+                summary: subtitleStatus.value.summary,
+                items: newItems,
+            };
+        }
+    },
+    { deep: true, immediate: true },
+);
 
 const filteredCheckerItems = computed(() => {
     if (!healthResults.value || !healthResults.value.items) return [];
@@ -94,8 +125,17 @@ const filteredCheckerItems = computed(() => {
         // Status filter
         if (checkerFilter.value === 'invalid' && item.is_valid) return false;
         if (checkerFilter.value === 'valid' && !item.is_valid) return false;
-        if (checkerFilter.value === 'renamed' && item.action !== 'renamed' && item.action !== 'would_rename') return false;
-        if (checkerFilter.value === 'already_standard' && item.action !== 'already_standard') return false;
+        if (
+            checkerFilter.value === 'renamed' &&
+            item.action !== 'renamed' &&
+            item.action !== 'would_rename'
+        )
+            return false;
+        if (
+            checkerFilter.value === 'already_standard' &&
+            item.action !== 'already_standard'
+        )
+            return false;
 
         // Search text
         if (checkerSearchText.value.trim()) {
@@ -110,11 +150,19 @@ const filteredCheckerItems = computed(() => {
     });
 });
 
-const totalCheckerPages = computed(() => Math.max(1, Math.ceil(filteredCheckerItems.value.length / checkerPerPage.value)));
+const totalCheckerPages = computed(() =>
+    Math.max(
+        1,
+        Math.ceil(filteredCheckerItems.value.length / checkerPerPage.value),
+    ),
+);
 
 const paginatedCheckerItems = computed(() => {
     const start = (checkerCurrentPage.value - 1) * checkerPerPage.value;
-    return filteredCheckerItems.value.slice(start, start + checkerPerPage.value);
+    return filteredCheckerItems.value.slice(
+        start,
+        start + checkerPerPage.value,
+    );
 });
 
 // ================= CLOUD SEARCH & MISSING STATE =================
@@ -132,25 +180,32 @@ const currentPage = ref(1);
 const perPage = ref(12);
 
 const filteredItems = computed(() => {
-    return (props.missingSubtitles || []).filter(item => {
+    return (props.missingSubtitles || []).filter((item) => {
         if (filterType.value === 'movie' && item.type !== 'movie') return false;
-        if (filterType.value === 'episode' && item.type !== 'episode') return false;
-        if (filterStatus.value === 'missing_ar' && !item.missing_ar) return false;
-        if (filterStatus.value === 'missing_en' && !item.missing_en) return false;
+        if (filterType.value === 'episode' && item.type !== 'episode')
+            return false;
+        if (filterStatus.value === 'missing_ar' && !item.missing_ar)
+            return false;
+        if (filterStatus.value === 'missing_en' && !item.missing_en)
+            return false;
 
         if (filterText.value.trim()) {
             const q = filterText.value.toLowerCase().trim();
             const title = (item.title || '').toLowerCase();
             const seriesTitle = (item.series_title || '').toLowerCase();
             const path = (item.file_path || '').toLowerCase();
-            return title.includes(q) || seriesTitle.includes(q) || path.includes(q);
+            return (
+                title.includes(q) || seriesTitle.includes(q) || path.includes(q)
+            );
         }
 
         return true;
     });
 });
 
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredItems.value.length / perPage.value)));
+const totalPages = computed(() =>
+    Math.max(1, Math.ceil(filteredItems.value.length / perPage.value)),
+);
 
 const paginatedItems = computed(() => {
     const start = (currentPage.value - 1) * perPage.value;
@@ -168,7 +223,9 @@ const performSearch = async () => {
     if (!searchQuery.value.trim()) return;
     isSearching.value = true;
     try {
-        const res = await fetch(`/api/subtitles/search?query=${encodeURIComponent(searchQuery.value.trim())}&language=${encodeURIComponent(searchLang.value)}`);
+        const res = await fetch(
+            `/api/subtitles/search?query=${encodeURIComponent(searchQuery.value.trim())}&language=${encodeURIComponent(searchLang.value)}`,
+        );
         if (res.ok) {
             const data = await res.json();
             searchResults.value = data.results || [];
@@ -185,7 +242,9 @@ const downloadSub = async (item: any, lang: string) => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                'X-CSRF-TOKEN':
+                    (document.querySelector('meta[name="csrf-token"]') as any)
+                        ?.content || '',
             },
             body: JSON.stringify({
                 media_id: item.id,
@@ -202,9 +261,19 @@ const downloadSub = async (item: any, lang: string) => {
             const data = await res.json();
             if (lang === 'ar') item.missing_ar = false;
             if (lang === 'en') item.missing_en = false;
-            toast.success(isRTL.value ? `تم تحميل وتفعيل ترجمة ${lang === 'ar' ? 'العربية' : 'الإنجليزية'} بنجاح!` : `Downloaded ${lang.toUpperCase()} subtitle!`, 'Subtitle Ready');
+            toast.success(
+                isRTL.value
+                    ? `تم تحميل وتفعيل ترجمة ${lang === 'ar' ? 'العربية' : 'الإنجليزية'} بنجاح!`
+                    : `Downloaded ${lang.toUpperCase()} subtitle!`,
+                'Subtitle Ready',
+            );
         } else {
-            toast.error(isRTL.value ? 'لم يتم العثور على ترجمة مناسبة لدى المزودات' : 'No online subtitle matched this media', 'Subtitle Not Found');
+            toast.error(
+                isRTL.value
+                    ? 'لم يتم العثور على ترجمة مناسبة لدى المزودات'
+                    : 'No online subtitle matched this media',
+                'Subtitle Not Found',
+            );
         }
     } catch (e) {
         toast.error('Failed to download subtitle', 'Download Error');
@@ -214,7 +283,9 @@ const downloadSub = async (item: any, lang: string) => {
 };
 
 const downloadAllMissing = async (lang: string) => {
-    const targets = (props.missingSubtitles || []).filter(item => lang === 'ar' ? item.missing_ar : item.missing_en);
+    const targets = (props.missingSubtitles || []).filter((item) =>
+        lang === 'ar' ? item.missing_ar : item.missing_en,
+    );
     for (const item of targets.slice(0, 10)) {
         await downloadSub(item, lang);
     }
@@ -229,7 +300,9 @@ const generateArabicFromEnglish = async (item: any) => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                'X-CSRF-TOKEN':
+                    (document.querySelector('meta[name="csrf-token"]') as any)
+                        ?.content || '',
             },
             body: JSON.stringify({
                 media_id: item.id,
@@ -241,17 +314,25 @@ const generateArabicFromEnglish = async (item: any) => {
         if (res.ok && data.status === 'success') {
             item.missing_ar = false;
             toast.success(
-                isRTL.value ? 'تم توليد وترجمة ملف الترجمة العربية بنجاح وحفظه!' : 'Arabic subtitle successfully translated from English!',
-                isRTL.value ? 'تم التوليد' : 'Translation Ready'
+                isRTL.value
+                    ? 'تم توليد وترجمة ملف الترجمة العربية بنجاح وحفظه!'
+                    : 'Arabic subtitle successfully translated from English!',
+                isRTL.value ? 'تم التوليد' : 'Translation Ready',
             );
         } else {
             toast.error(
-                data.message || (isRTL.value ? 'تعذر توليد الترجمة العربية: تأكد من وجود ترجمة إنجليزية أولاً' : 'Failed to generate Arabic translation: Ensure English subtitle is available'),
-                isRTL.value ? 'خطأ في التوليد' : 'Generation Failed'
+                data.message ||
+                    (isRTL.value
+                        ? 'تعذر توليد الترجمة العربية: تأكد من وجود ترجمة إنجليزية أولاً'
+                        : 'Failed to generate Arabic translation: Ensure English subtitle is available'),
+                isRTL.value ? 'خطأ في التوليد' : 'Generation Failed',
             );
         }
     } catch (e: any) {
-        toast.error(e.message || 'Error communicating with translation service', 'Error');
+        toast.error(
+            e.message || 'Error communicating with translation service',
+            'Error',
+        );
     } finally {
         isGeneratingArabicId.value = null;
     }
@@ -272,92 +353,170 @@ onMounted(() => {
 </script>
 
 <template>
-    <Head :title="isRTL ? 'إدارة ومطهر الترجمات الذكي' : 'Subtitle Studio & Health Normalizer'" />
-
     <AppLayout>
-
+        <Head
+            :title="
+                isRTL
+                    ? 'إدارة ومطهر الترجمات الذكي'
+                    : 'Subtitle Studio & Health Normalizer'
+            "
+        />
+        <Head
+            :title="
+                isRTL
+                    ? 'إدارة ومطهر الترجمات الذكي'
+                    : 'Subtitle Studio & Health Normalizer'
+            "
+        />
 
         <!-- Header -->
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div
+            class="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-center"
+        >
             <div>
                 <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 rounded-2xl bg-cyan-500/10 dark:bg-cyan-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/30">
-                        <Subtitles class="w-6 h-6" />
+                    <div
+                        class="flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 dark:bg-cyan-500/20"
+                    >
+                        <Subtitles class="h-6 w-6" />
                     </div>
                     <div>
-                        <h1 class="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                            {{ isRTL ? 'فاحص ومطهر الترجمات الذكي' : 'Subtitle Studio & Health Normalizer' }}
+                        <h1
+                            class="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl dark:text-white"
+                        >
+                            {{
+                                isRTL
+                                    ? 'فاحص ومطهر الترجمات الذكي'
+                                    : 'Subtitle Studio & Health Normalizer'
+                            }}
                         </h1>
-                        <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                            {{ isRTL ? 'فحص ملفات الترجمة، حذف القوالب التالفة والوهمية، الكشف فائق الدقة عن اللغة، وتوحيد الامتدادات (.ar.srt, .en.srt).' : 'Inspect library subtitles, prune corrupt/stub files, accurately detect dialogue language, and standardize extensions (.ar.srt, .en.srt).' }}
+                        <p
+                            class="mt-0.5 text-xs text-slate-500 sm:text-sm dark:text-slate-400"
+                        >
+                            {{
+                                isRTL
+                                    ? 'فحص ملفات الترجمة، حذف القوالب التالفة والوهمية، الكشف فائق الدقة عن اللغة، وتوحيد الامتدادات (.ar.srt, .en.srt).'
+                                    : 'Inspect library subtitles, prune corrupt/stub files, accurately detect dialogue language, and standardize extensions (.ar.srt, .en.srt).'
+                            }}
                         </p>
                     </div>
                 </div>
             </div>
 
             <!-- Quick Batch Download Buttons -->
-            <div v-if="activeMainTab === 'missing'" class="flex items-center gap-2 flex-wrap">
+            <div
+                v-if="activeMainTab === 'missing'"
+                class="flex flex-wrap items-center gap-2"
+            >
                 <button
                     @click="downloadAllMissing('ar')"
-                    class="px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all flex items-center gap-2 cursor-pointer"
+                    class="flex cursor-pointer items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-xs font-bold text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:bg-cyan-400"
                 >
-                    <Download class="w-4 h-4" />
-                    <span>{{ isRTL ? 'تحميل كل الترجمات العربية' : 'Download All Arabic' }}</span>
+                    <Download class="h-4 w-4" />
+                    <span>{{
+                        isRTL
+                            ? 'تحميل كل الترجمات العربية'
+                            : 'Download All Arabic'
+                    }}</span>
                 </button>
                 <button
                     @click="downloadAllMissing('en')"
-                    class="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-700 dark:text-white font-bold text-xs border border-slate-200 dark:border-white/10 transition-all flex items-center gap-2 cursor-pointer"
+                    class="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-xs font-bold text-slate-700 transition-all hover:bg-slate-200 dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
                 >
-                    <Download class="w-4 h-4" />
-                    <span>{{ isRTL ? 'تحميل كل الترجمات الإنجليزية' : 'Download All English' }}</span>
+                    <Download class="h-4 w-4" />
+                    <span>{{
+                        isRTL
+                            ? 'تحميل كل الترجمات الإنجليزية'
+                            : 'Download All English'
+                    }}</span>
                 </button>
             </div>
         </div>
 
         <!-- Studio Mode Selector Navigation Tabs -->
-        <div class="flex items-center gap-2 p-1.5 rounded-2xl glass-panel border border-slate-200 dark:border-white/10 mb-8 bg-slate-100/60 dark:bg-black/30 overflow-x-auto">
+        <div
+            class="glass-panel mb-8 flex items-center gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-100/60 p-1.5 dark:border-white/10 dark:bg-black/30"
+        >
             <button
                 @click="activeMainTab = 'checker'"
-                class="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer"
-                :class="activeMainTab === 'checker' ? 'bg-cyan-500 text-slate-950 font-black shadow-lg shadow-cyan-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-white'"
+                class="flex shrink-0 cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all"
+                :class="
+                    activeMainTab === 'checker'
+                        ? 'bg-cyan-500 font-black text-slate-950 shadow-lg shadow-cyan-500/20'
+                        : 'text-slate-600 hover:text-white dark:text-slate-400'
+                "
             >
-                <ShieldCheck class="w-4 h-4" />
-                <span>{{ isRTL ? 'فاحص ومطهر الترجمات الذكي (Checker)' : 'Subtitle Health & Normalizer' }}</span>
+                <ShieldCheck class="h-4 w-4" />
+                <span>{{
+                    isRTL
+                        ? 'فاحص ومطهر الترجمات الذكي (Checker)'
+                        : 'Subtitle Health & Normalizer'
+                }}</span>
             </button>
 
             <button
                 @click="activeMainTab = 'missing'"
-                class="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer"
-                :class="activeMainTab === 'missing' ? 'bg-cyan-500 text-slate-950 font-black shadow-lg shadow-cyan-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-white'"
+                class="flex shrink-0 cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all"
+                :class="
+                    activeMainTab === 'missing'
+                        ? 'bg-cyan-500 font-black text-slate-950 shadow-lg shadow-cyan-500/20'
+                        : 'text-slate-600 hover:text-white dark:text-slate-400'
+                "
             >
-                <FileText class="w-4 h-4" />
-                <span>{{ isRTL ? 'الترجمات الناقصة في المكتبة' : 'Missing Subtitles Ingestor' }} ({{ props.missingSubtitles?.length || 0 }})</span>
+                <FileText class="h-4 w-4" />
+                <span
+                    >{{
+                        isRTL
+                            ? 'الترجمات الناقصة في المكتبة'
+                            : 'Missing Subtitles Ingestor'
+                    }}
+                    ({{ props.missingSubtitles?.length || 0 }})</span
+                >
             </button>
 
             <button
                 @click="activeMainTab = 'cloud'"
-                class="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer"
-                :class="activeMainTab === 'cloud' ? 'bg-cyan-500 text-slate-950 font-black shadow-lg shadow-cyan-500/20' : 'text-slate-600 dark:text-slate-400 hover:text-white'"
+                class="flex shrink-0 cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all"
+                :class="
+                    activeMainTab === 'cloud'
+                        ? 'bg-cyan-500 font-black text-slate-950 shadow-lg shadow-cyan-500/20'
+                        : 'text-slate-600 hover:text-white dark:text-slate-400'
+                "
             >
-                <Globe class="w-4 h-4" />
-                <span>{{ isRTL ? 'البحث السحابي المباشر' : 'Live Cloud Search' }}</span>
+                <Globe class="h-4 w-4" />
+                <span>{{
+                    isRTL ? 'البحث السحابي المباشر' : 'Live Cloud Search'
+                }}</span>
             </button>
         </div>
 
         <!-- ================= TAB 1: SUBTITLE CHECKER & NORMALIZER ================= -->
         <div v-if="activeMainTab === 'checker'" class="space-y-6">
             <!-- Checker Control & Execution Panel -->
-            <div class="glass-panel rounded-3xl p-6 sm:p-8 border border-cyan-500/30 shadow-2xl bg-white dark:bg-[#121622] space-y-6">
-                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 dark:border-white/10 pb-5">
+            <div
+                class="glass-panel space-y-6 rounded-3xl border border-cyan-500/30 bg-white p-6 shadow-2xl sm:p-8 dark:bg-[#121622]"
+            >
+                <div
+                    class="flex flex-col justify-between gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-center dark:border-white/10"
+                >
                     <div>
-                        <h3 class="text-base sm:text-lg font-black text-slate-900 dark:text-white flex items-center gap-2.5">
-                            <ShieldCheck class="w-5 h-5 text-cyan-400" />
-                            <span>{{ isRTL ? 'أداة الفحص الشامل وتطهير ملفات الترجمة' : 'Automated Subtitle Health & Normalizer' }}</span>
+                        <h3
+                            class="flex items-center gap-2.5 text-base font-black text-slate-900 sm:text-lg dark:text-white"
+                        >
+                            <ShieldCheck class="h-5 w-5 text-cyan-400" />
+                            <span>{{
+                                isRTL
+                                    ? 'أداة الفحص الشامل وتطهير ملفات الترجمة'
+                                    : 'Automated Subtitle Health & Normalizer'
+                            }}</span>
                         </h3>
-                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
-                            {{ isRTL
-                                ? 'يقوم الفاحص بالمرور على جميع ملفات .srt و .vtt في مجلدات الأفلام والمسلسلات، ويفحص محتواها: يحذف الملفات الفارغة والقوالب الوهمية المكسورة، ويكتشف اللغة الحقيقية للحوار بدقة 100%، ويعيد ربط وتسمية الملف بصيغة الفيلم المعتمدة (.ar.srt, .en.srt).'
-                                : 'Inspects all subtitle files across film & TV series directories, detects and deletes corrupt/dummy templates, identifies the exact dialogue language, and renames files to standardized .ar.srt / .en.srt format.'
+                        <p
+                            class="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500 dark:text-slate-400"
+                        >
+                            {{
+                                isRTL
+                                    ? 'يقوم الفاحص بالمرور على جميع ملفات .srt و .vtt في مجلدات الأفلام والمسلسلات، ويفحص محتواها: يحذف الملفات الفارغة والقوالب الوهمية المكسورة، ويكتشف اللغة الحقيقية للحوار بدقة 100%، ويعيد ربط وتسمية الملف بصيغة الفيلم المعتمدة (.ar.srt, .en.srt).'
+                                    : 'Inspects all subtitle files across film & TV series directories, detects and deletes corrupt/dummy templates, identifies the exact dialogue language, and renames files to standardized .ar.srt / .en.srt format.'
                             }}
                         </p>
                     </div>
@@ -366,239 +525,589 @@ onMounted(() => {
                     <button
                         @click="runHealthCheck"
                         :disabled="isSubtitleRunning"
-                        class="px-6 py-3 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs sm:text-sm shadow-xl shadow-cyan-500/25 active:scale-95 transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50 shrink-0"
+                        class="flex shrink-0 cursor-pointer items-center justify-center gap-2.5 rounded-2xl bg-cyan-500 px-6 py-3 text-xs font-black text-slate-950 shadow-xl shadow-cyan-500/25 transition-all hover:bg-cyan-400 active:scale-95 disabled:opacity-50 sm:text-sm"
                     >
-                        <RefreshCw v-if="isSubtitleRunning" class="w-4 h-4 animate-spin text-slate-950" />
-                        <Play v-else class="w-4 h-4 fill-slate-950" />
-                        <span>{{ checkerDryRun ? (isRTL ? 'بدء المعاينة والفحص (Dry-Run)' : 'Run Preview Scan (Dry-Run)') : (isRTL ? 'تطبيق الفحص والتطهير الفعلي' : 'Execute Health Clean & Rename') }}</span>
+                        <RefreshCw
+                            v-if="isSubtitleRunning"
+                            class="h-4 w-4 animate-spin text-slate-950"
+                        />
+                        <Play v-else class="h-4 w-4 fill-slate-950" />
+                        <span>{{
+                            checkerDryRun
+                                ? isRTL
+                                    ? 'بدء المعاينة والفحص (Dry-Run)'
+                                    : 'Run Preview Scan (Dry-Run)'
+                                : isRTL
+                                  ? 'تطبيق الفحص والتطهير الفعلي'
+                                  : 'Execute Health Clean & Rename'
+                        }}</span>
                     </button>
                 </div>
 
                 <!-- Settings & Toggles Grid -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                <div class="grid grid-cols-1 gap-4 pt-2 md:grid-cols-3">
                     <!-- Dry-Run Toggle -->
                     <div
                         @click="checkerDryRun = !checkerDryRun"
-                        class="p-4 rounded-2xl border cursor-pointer transition-all flex items-start gap-3"
-                        :class="checkerDryRun ? 'bg-cyan-500/10 border-cyan-500/40 text-white' : 'bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-400'"
+                        class="flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-all"
+                        :class="
+                            checkerDryRun
+                                ? 'border-cyan-500/40 bg-cyan-500/10 text-white'
+                                : 'border-slate-200 bg-slate-50 text-slate-400 dark:border-white/10 dark:bg-white/5'
+                        "
                     >
-                        <div class="w-5 h-5 rounded-md border flex items-center justify-center shrink-0 mt-0.5" :class="checkerDryRun ? 'border-cyan-400 bg-cyan-500 text-slate-950' : 'border-slate-500'">
-                            <Check v-if="checkerDryRun" class="w-3.5 h-3.5" />
+                        <div
+                            class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border"
+                            :class="
+                                checkerDryRun
+                                    ? 'border-cyan-400 bg-cyan-500 text-slate-950'
+                                    : 'border-slate-500'
+                            "
+                        >
+                            <Check v-if="checkerDryRun" class="h-3.5 w-3.5" />
                         </div>
                         <div>
-                            <span class="text-xs font-bold block text-slate-900 dark:text-white">{{ isRTL ? 'معاينة تجريبية (Dry-Run Preview)' : 'Dry-Run Preview Only' }}</span>
-                            <span class="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">{{ isRTL ? 'عرض النتائج والتوصيات دون حذف أو تعديل أي ملف على القرص' : 'Simulate checks and report without touching files on disk' }}</span>
+                            <span
+                                class="block text-xs font-bold text-slate-900 dark:text-white"
+                                >{{
+                                    isRTL
+                                        ? 'معاينة تجريبية (Dry-Run Preview)'
+                                        : 'Dry-Run Preview Only'
+                                }}</span
+                            >
+                            <span
+                                class="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400"
+                                >{{
+                                    isRTL
+                                        ? 'عرض النتائج والتوصيات دون حذف أو تعديل أي ملف على القرص'
+                                        : 'Simulate checks and report without touching files on disk'
+                                }}</span
+                            >
                         </div>
                     </div>
 
                     <!-- Delete Invalid Subtitles Toggle -->
                     <div
                         @click="checkerDeleteInvalid = !checkerDeleteInvalid"
-                        class="p-4 rounded-2xl border cursor-pointer transition-all flex items-start gap-3"
-                        :class="checkerDeleteInvalid ? 'bg-rose-500/10 border-rose-500/40 text-white' : 'bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-400'"
+                        class="flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-all"
+                        :class="
+                            checkerDeleteInvalid
+                                ? 'border-rose-500/40 bg-rose-500/10 text-white'
+                                : 'border-slate-200 bg-slate-50 text-slate-400 dark:border-white/10 dark:bg-white/5'
+                        "
                     >
-                        <div class="w-5 h-5 rounded-md border flex items-center justify-center shrink-0 mt-0.5" :class="checkerDeleteInvalid ? 'border-rose-400 bg-rose-500 text-white' : 'border-slate-500'">
-                            <Check v-if="checkerDeleteInvalid" class="w-3.5 h-3.5" />
+                        <div
+                            class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border"
+                            :class="
+                                checkerDeleteInvalid
+                                    ? 'border-rose-400 bg-rose-500 text-white'
+                                    : 'border-slate-500'
+                            "
+                        >
+                            <Check
+                                v-if="checkerDeleteInvalid"
+                                class="h-3.5 w-3.5"
+                            />
                         </div>
                         <div>
-                            <span class="text-xs font-bold block text-slate-900 dark:text-white">{{ isRTL ? 'حذف الملفات التالفة والقوالب الوهمية' : 'Delete Corrupt & Stub Files' }}</span>
-                            <span class="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">{{ isRTL ? 'حذف أي ترجمة أقل من 5 حوارات أو تحتوي صفحات خطأ HTML' : 'Purges files with < 5 cues, broken timecodes, or HTML 404 stubs' }}</span>
+                            <span
+                                class="block text-xs font-bold text-slate-900 dark:text-white"
+                                >{{
+                                    isRTL
+                                        ? 'حذف الملفات التالفة والقوالب الوهمية'
+                                        : 'Delete Corrupt & Stub Files'
+                                }}</span
+                            >
+                            <span
+                                class="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400"
+                                >{{
+                                    isRTL
+                                        ? 'حذف أي ترجمة أقل من 5 حوارات أو تحتوي صفحات خطأ HTML'
+                                        : 'Purges files with < 5 cues, broken timecodes, or HTML 404 stubs'
+                                }}</span
+                            >
                         </div>
                     </div>
 
                     <!-- Auto-Rename Extension Toggle -->
                     <div
                         @click="checkerAutoRename = !checkerAutoRename"
-                        class="p-4 rounded-2xl border cursor-pointer transition-all flex items-start gap-3"
-                        :class="checkerAutoRename ? 'bg-indigo-500/10 border-indigo-500/40 text-white' : 'bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-400'"
+                        class="flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-all"
+                        :class="
+                            checkerAutoRename
+                                ? 'border-indigo-500/40 bg-indigo-500/10 text-white'
+                                : 'border-slate-200 bg-slate-50 text-slate-400 dark:border-white/10 dark:bg-white/5'
+                        "
                     >
-                        <div class="w-5 h-5 rounded-md border flex items-center justify-center shrink-0 mt-0.5" :class="checkerAutoRename ? 'border-indigo-400 bg-indigo-500 text-white' : 'border-slate-500'">
-                            <Check v-if="checkerAutoRename" class="w-3.5 h-3.5" />
+                        <div
+                            class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border"
+                            :class="
+                                checkerAutoRename
+                                    ? 'border-indigo-400 bg-indigo-500 text-white'
+                                    : 'border-slate-500'
+                            "
+                        >
+                            <Check
+                                v-if="checkerAutoRename"
+                                class="h-3.5 w-3.5"
+                            />
                         </div>
                         <div>
-                            <span class="text-xs font-bold block text-slate-900 dark:text-white">{{ isRTL ? 'توحيد صيغة الامتداد (.ar.srt)' : 'Standardize Language Extension' }}</span>
-                            <span class="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">{{ isRTL ? 'إعادة تسمية الملف تلقائياً وفقاً للغة الحوار المكتشفة' : 'Renames to {media}.{lang}.srt matching detected language' }}</span>
+                            <span
+                                class="block text-xs font-bold text-slate-900 dark:text-white"
+                                >{{
+                                    isRTL
+                                        ? 'توحيد صيغة الامتداد (.ar.srt)'
+                                        : 'Standardize Language Extension'
+                                }}</span
+                            >
+                            <span
+                                class="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400"
+                                >{{
+                                    isRTL
+                                        ? 'إعادة تسمية الملف تلقائياً وفقاً للغة الحوار المكتشفة'
+                                        : 'Renames to {media}.{lang}.srt matching detected language'
+                                }}</span
+                            >
                         </div>
                     </div>
                 </div>
 
                 <!-- Optional Folder Path Input -->
                 <div class="pt-2">
-                    <label class="text-xs font-bold text-slate-400 mb-1.5 block">
-                        {{ isRTL ? 'مسار مجلد محدد (اختياري، اتركه فارغاً لفحص كامل المكتبة):' : 'Specific Target Folder (Optional, leave blank to scan entire library):' }}
+                    <label
+                        class="mb-1.5 block text-xs font-bold text-slate-400"
+                    >
+                        {{
+                            isRTL
+                                ? 'مسار مجلد محدد (اختياري، اتركه فارغاً لفحص كامل المكتبة):'
+                                : 'Specific Target Folder (Optional, leave blank to scan entire library):'
+                        }}
                     </label>
                     <input
                         type="text"
                         v-model="checkerCustomPath"
                         placeholder="e.g. H:\Entertainment\Movies\Inception (2010)"
-                        class="w-full h-11 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/15 px-4 text-xs font-mono text-cyan-400 focus:border-cyan-500 outline-none"
+                        class="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 font-mono text-xs text-cyan-400 outline-none focus:border-cyan-500 dark:border-white/15 dark:bg-slate-900"
                     />
                 </div>
             </div>
 
             <!-- Health Summary Metrics -->
-            <div v-if="healthResults" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                <div class="glass-panel rounded-2xl p-4 border border-white/10 bg-white dark:bg-[#121622] text-center">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'إجمالي الملفات' : 'Total Scanned' }}</span>
-                    <span class="text-2xl font-black text-slate-900 dark:text-white mt-1 block font-mono">{{ healthResults.total_scanned }}</span>
+            <div
+                v-if="healthResults"
+                class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5"
+            >
+                <div
+                    class="glass-panel rounded-2xl border border-white/10 bg-white p-4 text-center dark:bg-[#121622]"
+                >
+                    <span
+                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        >{{ isRTL ? 'إجمالي الملفات' : 'Total Scanned' }}</span
+                    >
+                    <span
+                        class="mt-1 block font-mono text-2xl font-black text-slate-900 dark:text-white"
+                        >{{ healthResults.total_scanned }}</span
+                    >
                 </div>
 
-                <div class="glass-panel rounded-2xl p-4 border border-emerald-500/30 bg-emerald-500/5 text-center">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'ترجمات سليمة' : 'Valid Subtitles' }}</span>
-                    <span class="text-2xl font-black text-emerald-400 mt-1 block font-mono">{{ healthResults.valid_count }}</span>
+                <div
+                    class="glass-panel rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-center"
+                >
+                    <span
+                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        >{{ isRTL ? 'ترجمات سليمة' : 'Valid Subtitles' }}</span
+                    >
+                    <span
+                        class="mt-1 block font-mono text-2xl font-black text-emerald-400"
+                        >{{ healthResults.valid_count }}</span
+                    >
                 </div>
 
-                <div class="glass-panel rounded-2xl p-4 border border-rose-500/30 bg-rose-500/5 text-center">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'ملفات تالفة / وهمية' : 'Corrupt / Stubs' }}</span>
-                    <span class="text-2xl font-black text-rose-400 mt-1 block font-mono">{{ healthResults.invalid_count }}</span>
+                <div
+                    class="glass-panel rounded-2xl border border-rose-500/30 bg-rose-500/5 p-4 text-center"
+                >
+                    <span
+                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        >{{
+                            isRTL ? 'ملفات تالفة / وهمية' : 'Corrupt / Stubs'
+                        }}</span
+                    >
+                    <span
+                        class="mt-1 block font-mono text-2xl font-black text-rose-400"
+                        >{{ healthResults.invalid_count }}</span
+                    >
                 </div>
 
-                <div class="glass-panel rounded-2xl p-4 border border-cyan-500/30 bg-cyan-500/5 text-center">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'تعديل التسمية' : 'Renamed / Standard' }}</span>
-                    <span class="text-2xl font-black text-cyan-400 mt-1 block font-mono">{{ healthResults.renamed_count }}</span>
+                <div
+                    class="glass-panel rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-4 text-center"
+                >
+                    <span
+                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        >{{
+                            isRTL ? 'تعديل التسمية' : 'Renamed / Standard'
+                        }}</span
+                    >
+                    <span
+                        class="mt-1 block font-mono text-2xl font-black text-cyan-400"
+                        >{{ healthResults.renamed_count }}</span
+                    >
                 </div>
 
-                <div class="glass-panel rounded-2xl p-4 border border-indigo-500/30 bg-indigo-500/5 text-center">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'مطابقة معيارياً' : 'Already Standard' }}</span>
-                    <span class="text-2xl font-black text-indigo-400 mt-1 block font-mono">{{ healthResults.already_standard_count }}</span>
+                <div
+                    class="glass-panel rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-4 text-center"
+                >
+                    <span
+                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        >{{
+                            isRTL ? 'مطابقة معيارياً' : 'Already Standard'
+                        }}</span
+                    >
+                    <span
+                        class="mt-1 block font-mono text-2xl font-black text-indigo-400"
+                        >{{ healthResults.already_standard_count }}</span
+                    >
                 </div>
             </div>
 
             <!-- Language Breakdown Badges -->
-            <div v-if="healthResults && healthResults.language_breakdown && Object.keys(healthResults.language_breakdown).length > 0" class="glass-panel rounded-2xl p-4 border border-white/10 bg-white dark:bg-[#121622] flex items-center gap-3 flex-wrap">
-                <span class="text-xs font-bold text-slate-400">{{ isRTL ? 'توزيع اللغات المكتشفة:' : 'Detected Languages:' }}</span>
+            <div
+                v-if="
+                    healthResults &&
+                    healthResults.language_breakdown &&
+                    Object.keys(healthResults.language_breakdown).length > 0
+                "
+                class="glass-panel flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white p-4 dark:bg-[#121622]"
+            >
+                <span class="text-xs font-bold text-slate-400">{{
+                    isRTL ? 'توزيع اللغات المكتشفة:' : 'Detected Languages:'
+                }}</span>
                 <div
                     v-for="lang in healthResults.language_breakdown"
                     :key="lang.code"
-                    class="px-3 py-1 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs font-bold flex items-center gap-1.5"
+                    class="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-bold dark:border-white/10 dark:bg-white/5"
                 >
                     <span>{{ lang.flag }}</span>
-                    <span class="text-slate-900 dark:text-white">{{ lang.name_en }} ({{ lang.code }}):</span>
-                    <span class="text-cyan-400 font-mono">{{ lang.count }}</span>
+                    <span class="text-slate-900 dark:text-white"
+                        >{{ lang.name_en }} ({{ lang.code }}):</span
+                    >
+                    <span class="font-mono text-cyan-400">{{
+                        lang.count
+                    }}</span>
                 </div>
             </div>
 
             <!-- Subtitle Items Table -->
             <div v-if="healthResults" class="space-y-4">
                 <!-- Table Filter & Search Bar -->
-                <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10">
-                    <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+                <div
+                    class="flex flex-col items-stretch justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-100 p-3 sm:flex-row sm:items-center dark:border-white/10 dark:bg-white/5"
+                >
+                    <div
+                        class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0"
+                    >
                         <button
                             v-for="f in [
-                                { id: 'all', label_en: 'All', label_ar: 'الكل' },
-                                { id: 'invalid', label_en: 'Invalid / Stubs', label_ar: 'التالفة / الوهمية' },
-                                { id: 'renamed', label_en: 'Renamed', label_ar: 'المعدلة' },
-                                { id: 'already_standard', label_en: 'Standard', label_ar: 'المعيارية' },
-                                { id: 'valid', label_en: 'All Valid', label_ar: 'السليمة' },
+                                {
+                                    id: 'all',
+                                    label_en: 'All',
+                                    label_ar: 'الكل',
+                                },
+                                {
+                                    id: 'invalid',
+                                    label_en: 'Invalid / Stubs',
+                                    label_ar: 'التالفة / الوهمية',
+                                },
+                                {
+                                    id: 'renamed',
+                                    label_en: 'Renamed',
+                                    label_ar: 'المعدلة',
+                                },
+                                {
+                                    id: 'already_standard',
+                                    label_en: 'Standard',
+                                    label_ar: 'المعيارية',
+                                },
+                                {
+                                    id: 'valid',
+                                    label_en: 'All Valid',
+                                    label_ar: 'السليمة',
+                                },
                             ]"
                             :key="f.id"
-                            @click="checkerFilter = f.id as any; checkerCurrentPage = 1"
-                            class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer"
-                            :class="checkerFilter === f.id ? 'bg-cyan-500 text-slate-950 font-black shadow-md shadow-cyan-500/20' : 'bg-white/5 text-slate-400 hover:text-white'"
+                            @click="
+                                checkerFilter = f.id as any;
+                                checkerCurrentPage = 1;
+                            "
+                            class="shrink-0 cursor-pointer rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all"
+                            :class="
+                                checkerFilter === f.id
+                                    ? 'bg-cyan-500 font-black text-slate-950 shadow-md shadow-cyan-500/20'
+                                    : 'bg-white/5 text-slate-400 hover:text-white'
+                            "
                         >
                             {{ isRTL ? f.label_ar : f.label_en }}
                         </button>
                     </div>
 
                     <div class="relative min-w-[240px]">
-                        <Search class="absolute top-2.5 left-3 w-4 h-4 text-slate-400" />
+                        <Search
+                            class="absolute top-2.5 left-3 h-4 w-4 text-slate-400"
+                        />
                         <input
                             v-model="checkerSearchText"
                             type="text"
-                            :placeholder="isRTL ? 'بحث بالاسم أو اللغة...' : 'Filter files or language...'"
-                            class="w-full pl-9 pr-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none"
+                            :placeholder="
+                                isRTL
+                                    ? 'بحث بالاسم أو اللغة...'
+                                    : 'Filter files or language...'
+                            "
+                            class="w-full rounded-xl border border-slate-200 bg-white py-1.5 pr-3 pl-9 text-xs font-semibold text-slate-900 focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
                         />
                     </div>
                 </div>
 
                 <!-- Table Card Container -->
-                <div class="glass-panel rounded-3xl border border-slate-200 dark:border-white/10 overflow-hidden shadow-xl bg-white dark:bg-[#121622]">
+                <div
+                    class="glass-panel overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl dark:border-white/10 dark:bg-[#121622]"
+                >
                     <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse text-xs">
+                        <table class="w-full border-collapse text-left text-xs">
                             <thead>
-                                <tr class="border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] text-slate-400 uppercase font-mono text-[10px] tracking-wider">
-                                    <th class="py-3 px-4 font-bold">{{ isRTL ? 'اسم الملف الأصلي' : 'File Name' }}</th>
-                                    <th class="py-3 px-4 font-bold">{{ isRTL ? 'الحالة' : 'Status' }}</th>
-                                    <th class="py-3 px-4 font-bold">{{ isRTL ? 'اللغة المكتشفة' : 'Detected Language' }}</th>
-                                    <th class="py-3 px-4 font-bold">{{ isRTL ? 'الحوارات' : 'Cues' }}</th>
-                                    <th class="py-3 px-4 font-bold">{{ isRTL ? 'الإجراء المتخذ / المقترح' : 'Action / Target Name' }}</th>
+                                <tr
+                                    class="border-b border-slate-200 bg-slate-50 font-mono text-[10px] tracking-wider text-slate-400 uppercase dark:border-white/10 dark:bg-white/[0.02]"
+                                >
+                                    <th class="px-4 py-3 font-bold">
+                                        {{
+                                            isRTL
+                                                ? 'اسم الملف الأصلي'
+                                                : 'File Name'
+                                        }}
+                                    </th>
+                                    <th class="px-4 py-3 font-bold">
+                                        {{ isRTL ? 'الحالة' : 'Status' }}
+                                    </th>
+                                    <th class="px-4 py-3 font-bold">
+                                        {{
+                                            isRTL
+                                                ? 'اللغة المكتشفة'
+                                                : 'Detected Language'
+                                        }}
+                                    </th>
+                                    <th class="px-4 py-3 font-bold">
+                                        {{ isRTL ? 'الحوارات' : 'Cues' }}
+                                    </th>
+                                    <th class="px-4 py-3 font-bold">
+                                        {{
+                                            isRTL
+                                                ? 'الإجراء المتخذ / المقترح'
+                                                : 'Action / Target Name'
+                                        }}
+                                    </th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-slate-100 dark:divide-white/5">
+                            <tbody
+                                class="divide-y divide-slate-100 dark:divide-white/5"
+                            >
                                 <tr
                                     v-for="(item, idx) in paginatedCheckerItems"
                                     :key="idx"
-                                    class="hover:bg-slate-50 dark:hover:bg-white/[0.03] transition-colors"
+                                    class="transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.03]"
                                 >
                                     <!-- File Name & Path -->
-                                    <td class="py-3 px-4 max-w-xs sm:max-w-md">
-                                        <div class="font-bold text-slate-900 dark:text-white truncate" :title="item.file_name">
+                                    <td class="max-w-xs px-4 py-3 sm:max-w-md">
+                                        <div
+                                            class="truncate font-bold text-slate-900 dark:text-white"
+                                            :title="item.file_name"
+                                        >
                                             {{ item.file_name }}
                                         </div>
-                                        <div class="text-[10px] text-slate-400 truncate mt-0.5" :title="item.original_path">
+                                        <div
+                                            class="mt-0.5 truncate text-[10px] text-slate-400"
+                                            :title="item.original_path"
+                                        >
                                             {{ item.original_path }}
                                         </div>
-                                        <div v-if="item.issues && item.issues.length > 0" class="mt-1 flex items-center gap-1.5 text-[10px] text-rose-400 font-bold">
-                                            <AlertTriangle class="w-3 h-3 shrink-0" />
-                                            <span>{{ item.issues.join(', ') }}</span>
+                                        <div
+                                            v-if="
+                                                item.issues &&
+                                                item.issues.length > 0
+                                            "
+                                            class="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-rose-400"
+                                        >
+                                            <AlertTriangle
+                                                class="h-3 w-3 shrink-0"
+                                            />
+                                            <span>{{
+                                                item.issues.join(', ')
+                                            }}</span>
                                         </div>
                                     </td>
 
                                     <!-- Status -->
-                                    <td class="py-3 px-4 whitespace-nowrap">
+                                    <td class="px-4 py-3 whitespace-nowrap">
                                         <span
-                                            class="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider inline-flex items-center gap-1"
-                                            :class="item.is_valid ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'"
+                                            class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-mono text-[10px] font-bold tracking-wider uppercase"
+                                            :class="
+                                                item.is_valid
+                                                    ? 'border border-emerald-500/30 bg-emerald-500/20 text-emerald-400'
+                                                    : 'border border-rose-500/30 bg-rose-500/20 text-rose-400'
+                                            "
                                         >
-                                            <span class="w-1.5 h-1.5 rounded-full" :class="item.is_valid ? 'bg-emerald-400' : 'bg-rose-400'"></span>
-                                            <span>{{ item.is_valid ? 'VALID' : 'INVALID STUB' }}</span>
+                                            <span
+                                                class="h-1.5 w-1.5 rounded-full"
+                                                :class="
+                                                    item.is_valid
+                                                        ? 'bg-emerald-400'
+                                                        : 'bg-rose-400'
+                                                "
+                                            ></span>
+                                            <span>{{
+                                                item.is_valid
+                                                    ? 'VALID'
+                                                    : 'INVALID STUB'
+                                            }}</span>
                                         </span>
                                     </td>
 
                                     <!-- Detected Language -->
-                                    <td class="py-3 px-4 whitespace-nowrap">
+                                    <td class="px-4 py-3 whitespace-nowrap">
                                         <div class="flex items-center gap-2">
-                                            <span class="text-base">{{ item.flag }}</span>
+                                            <span class="text-base">{{
+                                                item.flag
+                                            }}</span>
                                             <div>
-                                                <span class="font-bold text-slate-900 dark:text-white block">{{ item.language_name }}</span>
-                                                <span v-if="item.confidence" class="text-[10px] font-mono text-slate-400">{{ Math.round(item.confidence * 100) }}% confidence</span>
+                                                <span
+                                                    class="block font-bold text-slate-900 dark:text-white"
+                                                    >{{
+                                                        item.language_name
+                                                    }}</span
+                                                >
+                                                <span
+                                                    v-if="item.confidence"
+                                                    class="font-mono text-[10px] text-slate-400"
+                                                    >{{
+                                                        Math.round(
+                                                            item.confidence *
+                                                                100,
+                                                        )
+                                                    }}% confidence</span
+                                                >
                                             </div>
                                         </div>
                                     </td>
 
                                     <!-- Cues & Size -->
-                                    <td class="py-3 px-4 whitespace-nowrap font-mono text-slate-400">
+                                    <td
+                                        class="px-4 py-3 font-mono whitespace-nowrap text-slate-400"
+                                    >
                                         <div>{{ item.cue_count }} cues</div>
-                                        <div class="text-[10px] text-slate-500">{{ Math.round(item.file_size / 1024) }} KB</div>
+                                        <div class="text-[10px] text-slate-500">
+                                            {{
+                                                Math.round(
+                                                    item.file_size / 1024,
+                                                )
+                                            }}
+                                            KB
+                                        </div>
                                     </td>
 
                                     <!-- Action / Target Filename -->
-                                    <td class="py-3 px-4">
-                                        <div v-if="item.action === 'deleted' || item.action === 'deleted_invalid'" class="text-rose-400 font-bold text-xs flex items-center gap-1">
-                                            <Trash2 class="w-3.5 h-3.5" />
-                                            <span>{{ isRTL ? 'تم الحذف بنجاح' : 'Deleted' }}</span>
+                                    <td class="px-4 py-3">
+                                        <div
+                                            v-if="
+                                                item.action === 'deleted' ||
+                                                item.action ===
+                                                    'deleted_invalid'
+                                            "
+                                            class="flex items-center gap-1 text-xs font-bold text-rose-400"
+                                        >
+                                            <Trash2 class="h-3.5 w-3.5" />
+                                            <span>{{
+                                                isRTL
+                                                    ? 'تم الحذف بنجاح'
+                                                    : 'Deleted'
+                                            }}</span>
                                         </div>
-                                        <div v-else-if="item.action === 'flagged_for_deletion'" class="text-rose-400 font-bold text-xs flex items-center gap-1">
-                                            <AlertTriangle class="w-3.5 h-3.5" />
-                                            <span>{{ isRTL ? 'مرشح للحذف (تالف/وهمي)' : 'Flagged for Deletion' }}</span>
+                                        <div
+                                            v-else-if="
+                                                item.action ===
+                                                'flagged_for_deletion'
+                                            "
+                                            class="flex items-center gap-1 text-xs font-bold text-rose-400"
+                                        >
+                                            <AlertTriangle
+                                                class="h-3.5 w-3.5"
+                                            />
+                                            <span>{{
+                                                isRTL
+                                                    ? 'مرشح للحذف (تالف/وهمي)'
+                                                    : 'Flagged for Deletion'
+                                            }}</span>
                                         </div>
-                                        <div v-else-if="item.action === 'renamed'" class="text-cyan-400 font-bold text-xs">
-                                            <div class="flex items-center gap-1">
-                                                <Tag class="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                                                <span class="truncate">{{ item.target_filename }}</span>
+                                        <div
+                                            v-else-if="
+                                                item.action === 'renamed'
+                                            "
+                                            class="text-xs font-bold text-cyan-400"
+                                        >
+                                            <div
+                                                class="flex items-center gap-1"
+                                            >
+                                                <Tag
+                                                    class="h-3.5 w-3.5 shrink-0 text-cyan-400"
+                                                />
+                                                <span class="truncate">{{
+                                                    item.target_filename
+                                                }}</span>
                                             </div>
-                                            <span class="text-[10px] text-emerald-400">{{ isRTL ? 'تمت إعادة التسمية بنجاح' : 'Renamed' }}</span>
+                                            <span
+                                                class="text-[10px] text-emerald-400"
+                                                >{{
+                                                    isRTL
+                                                        ? 'تمت إعادة التسمية بنجاح'
+                                                        : 'Renamed'
+                                                }}</span
+                                            >
                                         </div>
-                                        <div v-else-if="item.action === 'would_rename'" class="text-indigo-400 font-bold text-xs">
-                                            <div class="flex items-center gap-1">
-                                                <Tag class="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                                                <span class="truncate">{{ item.target_filename }}</span>
+                                        <div
+                                            v-else-if="
+                                                item.action === 'would_rename'
+                                            "
+                                            class="text-xs font-bold text-indigo-400"
+                                        >
+                                            <div
+                                                class="flex items-center gap-1"
+                                            >
+                                                <Tag
+                                                    class="h-3.5 w-3.5 shrink-0 text-indigo-400"
+                                                />
+                                                <span class="truncate">{{
+                                                    item.target_filename
+                                                }}</span>
                                             </div>
-                                            <span class="text-[10px] text-slate-400">{{ isRTL ? 'سيتم التعديل عند التنفيذ' : 'Target Standard Name' }}</span>
+                                            <span
+                                                class="text-[10px] text-slate-400"
+                                                >{{
+                                                    isRTL
+                                                        ? 'سيتم التعديل عند التنفيذ'
+                                                        : 'Target Standard Name'
+                                                }}</span
+                                            >
                                         </div>
-                                        <div v-else-if="item.action === 'already_standard'" class="text-emerald-400 font-bold text-xs flex items-center gap-1">
-                                            <CheckCircle2 class="w-3.5 h-3.5" />
-                                            <span>{{ isRTL ? 'تسمية معيارية صحيحة' : 'Already Standard' }}</span>
+                                        <div
+                                            v-else-if="
+                                                item.action ===
+                                                'already_standard'
+                                            "
+                                            class="flex items-center gap-1 text-xs font-bold text-emerald-400"
+                                        >
+                                            <CheckCircle2 class="h-3.5 w-3.5" />
+                                            <span>{{
+                                                isRTL
+                                                    ? 'تسمية معيارية صحيحة'
+                                                    : 'Already Standard'
+                                            }}</span>
                                         </div>
                                     </td>
                                 </tr>
@@ -607,23 +1116,49 @@ onMounted(() => {
                     </div>
 
                     <!-- Pagination -->
-                    <div v-if="totalCheckerPages > 1" class="flex items-center justify-between p-4 border-t border-slate-200 dark:border-white/10 text-xs">
+                    <div
+                        v-if="totalCheckerPages > 1"
+                        class="flex items-center justify-between border-t border-slate-200 p-4 text-xs dark:border-white/10"
+                    >
                         <span class="text-slate-400">
-                            {{ (checkerCurrentPage - 1) * checkerPerPage + 1 }} - {{ Math.min(checkerCurrentPage * checkerPerPage, filteredCheckerItems.length) }} of {{ filteredCheckerItems.length }}
+                            {{ (checkerCurrentPage - 1) * checkerPerPage + 1 }}
+                            -
+                            {{
+                                Math.min(
+                                    checkerCurrentPage * checkerPerPage,
+                                    filteredCheckerItems.length,
+                                )
+                            }}
+                            of {{ filteredCheckerItems.length }}
                         </span>
                         <div class="flex items-center gap-1">
                             <button
-                                @click="checkerCurrentPage = Math.max(1, checkerCurrentPage - 1)"
+                                @click="
+                                    checkerCurrentPage = Math.max(
+                                        1,
+                                        checkerCurrentPage - 1,
+                                    )
+                                "
                                 :disabled="checkerCurrentPage === 1"
-                                class="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 disabled:opacity-30 cursor-pointer"
+                                class="cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-slate-300 disabled:opacity-30"
                             >
                                 {{ isRTL ? 'السابق' : 'Prev' }}
                             </button>
-                            <span class="px-3 py-1.5 font-mono text-cyan-400">{{ checkerCurrentPage }} / {{ totalCheckerPages }}</span>
+                            <span class="px-3 py-1.5 font-mono text-cyan-400"
+                                >{{ checkerCurrentPage }} /
+                                {{ totalCheckerPages }}</span
+                            >
                             <button
-                                @click="checkerCurrentPage = Math.min(totalCheckerPages, checkerCurrentPage + 1)"
-                                :disabled="checkerCurrentPage === totalCheckerPages"
-                                class="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 disabled:opacity-30 cursor-pointer"
+                                @click="
+                                    checkerCurrentPage = Math.min(
+                                        totalCheckerPages,
+                                        checkerCurrentPage + 1,
+                                    )
+                                "
+                                :disabled="
+                                    checkerCurrentPage === totalCheckerPages
+                                "
+                                class="cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-slate-300 disabled:opacity-30"
                             >
                                 {{ isRTL ? 'التالي' : 'Next' }}
                             </button>
@@ -636,44 +1171,70 @@ onMounted(() => {
         <!-- ================= TAB 2: MISSING SUBTITLES INGESTOR ================= -->
         <div v-if="activeMainTab === 'missing'" class="space-y-6">
             <!-- Filter Bar -->
-            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+            <div
+                class="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-100 p-4 lg:flex-row lg:items-center dark:border-white/10 dark:bg-white/5"
+            >
                 <!-- Search text -->
                 <div class="relative flex-1">
-                    <Search class="absolute top-2.5 left-3 w-4 h-4 text-slate-400" />
+                    <Search
+                        class="absolute top-2.5 left-3 h-4 w-4 text-slate-400"
+                    />
                     <input
                         v-model="filterText"
                         type="text"
-                        :placeholder="isRTL ? 'تصفية حسب الاسم...' : 'Filter media items...'"
-                        class="w-full pl-9 pr-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none"
+                        :placeholder="
+                            isRTL
+                                ? 'تصفية حسب الاسم...'
+                                : 'Filter media items...'
+                        "
+                        class="w-full rounded-xl border border-slate-200 bg-white py-2 pr-3 pl-9 text-xs font-semibold text-slate-900 focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
                     />
                 </div>
 
                 <!-- Filters -->
-                <div class="flex items-center gap-2 flex-wrap">
+                <div class="flex flex-wrap items-center gap-2">
                     <!-- Type Filter -->
                     <select
                         v-model="filterType"
-                        class="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none"
+                        class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-slate-200"
                     >
-                        <option value="all">{{ isRTL ? 'كل الوسائط' : 'All Media Types' }}</option>
-                        <option value="movie">{{ isRTL ? 'الأفلام فقط' : 'Movies Only' }}</option>
-                        <option value="episode">{{ isRTL ? 'حلقات المسلسلات' : 'Series Episodes' }}</option>
+                        <option value="all">
+                            {{ isRTL ? 'كل الوسائط' : 'All Media Types' }}
+                        </option>
+                        <option value="movie">
+                            {{ isRTL ? 'الأفلام فقط' : 'Movies Only' }}
+                        </option>
+                        <option value="episode">
+                            {{ isRTL ? 'حلقات المسلسلات' : 'Series Episodes' }}
+                        </option>
                     </select>
 
                     <!-- Status Filter -->
                     <select
                         v-model="filterStatus"
-                        class="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none"
+                        class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-slate-200"
                     >
-                        <option value="all">{{ isRTL ? 'كل الحالات' : 'All Status' }}</option>
-                        <option value="missing_ar">{{ isRTL ? 'ينقصها ترجمة عربية' : 'Missing Arabic' }}</option>
-                        <option value="missing_en">{{ isRTL ? 'ينقصها ترجمة إنجليزية' : 'Missing English' }}</option>
+                        <option value="all">
+                            {{ isRTL ? 'كل الحالات' : 'All Status' }}
+                        </option>
+                        <option value="missing_ar">
+                            {{
+                                isRTL ? 'ينقصها ترجمة عربية' : 'Missing Arabic'
+                            }}
+                        </option>
+                        <option value="missing_en">
+                            {{
+                                isRTL
+                                    ? 'ينقصها ترجمة إنجليزية'
+                                    : 'Missing English'
+                            }}
+                        </option>
                     </select>
 
                     <!-- Per page -->
                     <select
                         v-model="perPage"
-                        class="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none"
+                        class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-slate-200"
                     >
                         <option :value="12">12 / page</option>
                         <option :value="24">24 / page</option>
@@ -683,72 +1244,132 @@ onMounted(() => {
             </div>
 
             <!-- Items Counter -->
-            <div class="flex items-center justify-between text-xs text-slate-500 font-bold px-1">
+            <div
+                class="flex items-center justify-between px-1 text-xs font-bold text-slate-500"
+            >
                 <span>
-                    {{ isRTL ? 'إجمالي العناصر:' : 'Total items:' }} <strong class="text-cyan-500">{{ filteredItems.length }}</strong>
+                    {{ isRTL ? 'إجمالي العناصر:' : 'Total items:' }}
+                    <strong class="text-cyan-500">{{
+                        filteredItems.length
+                    }}</strong>
                 </span>
                 <span v-if="totalPages > 1">
-                    {{ isRTL ? 'الصفحة' : 'Page' }} {{ currentPage }} / {{ totalPages }}
+                    {{ isRTL ? 'الصفحة' : 'Page' }} {{ currentPage }} /
+                    {{ totalPages }}
                 </span>
             </div>
 
             <!-- Grid of Missing Media Items -->
-            <div v-if="paginatedItems.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div
+                v-if="paginatedItems.length > 0"
+                class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+            >
                 <div
                     v-for="item in paginatedItems"
                     :key="`${item.type}-${item.id}`"
-                    class="glass-panel rounded-2xl p-4 border border-slate-200 dark:border-white/10 flex flex-col justify-between shadow-sm bg-white dark:bg-[#121622] hover:border-cyan-500/40 transition-all"
+                    class="glass-panel flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-cyan-500/40 dark:border-white/10 dark:bg-[#121622]"
                 >
                     <div>
-                        <div class="flex items-center justify-between gap-2 mb-2">
+                        <div
+                            class="mb-2 flex items-center justify-between gap-2"
+                        >
                             <span
                                 class="cinema-badge text-[10px] font-bold"
-                                :class="item.type === 'movie' ? 'bg-cyan-500/20 text-cyan-300' : 'bg-purple-500/20 text-purple-300'"
+                                :class="
+                                    item.type === 'movie'
+                                        ? 'bg-cyan-500/20 text-cyan-300'
+                                        : 'bg-purple-500/20 text-purple-300'
+                                "
                             >
-                                {{ item.type === 'movie' ? (isRTL ? 'فيلم' : 'Movie') : (isRTL ? 'حلقة مسلسل' : 'Episode') }}
+                                {{
+                                    item.type === 'movie'
+                                        ? isRTL
+                                            ? 'فيلم'
+                                            : 'Movie'
+                                        : isRTL
+                                          ? 'حلقة مسلسل'
+                                          : 'Episode'
+                                }}
                             </span>
-                            <span class="text-[10px] font-mono text-slate-400">
+                            <span class="font-mono text-[10px] text-slate-400">
                                 {{ item.year || item.season_info || '' }}
                             </span>
                         </div>
 
-                        <h4 class="font-extrabold text-sm text-slate-900 dark:text-white line-clamp-1">
-                            {{ isRTL && item.title_ar ? item.title_ar : item.title }}
+                        <h4
+                            class="line-clamp-1 text-sm font-extrabold text-slate-900 dark:text-white"
+                        >
+                            {{
+                                isRTL && item.title_ar
+                                    ? item.title_ar
+                                    : item.title
+                            }}
                         </h4>
-                        <p v-if="item.series_title" class="text-xs text-slate-500 mt-0.5 line-clamp-1">
+                        <p
+                            v-if="item.series_title"
+                            class="mt-0.5 line-clamp-1 text-xs text-slate-500"
+                        >
                             {{ item.series_title }}
                         </p>
                     </div>
 
                     <!-- Action Buttons -->
-                    <div class="space-y-2 mt-4 pt-3 border-t border-slate-100 dark:border-white/5">
+                    <div
+                        class="mt-4 space-y-2 border-t border-slate-100 pt-3 dark:border-white/5"
+                    >
                         <div class="flex items-center gap-2">
                             <!-- Arabic Subtitle Action -->
                             <button
                                 @click="openPickerModal(item, 'ar')"
                                 :disabled="!item.missing_ar"
-                                class="flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                                :class="!item.missing_ar
-                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-default'
-                                    : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-md shadow-cyan-500/20'"
+                                class="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-all"
+                                :class="
+                                    !item.missing_ar
+                                        ? 'cursor-default border border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                                        : 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20 hover:bg-cyan-400'
+                                "
                             >
-                                <Check v-if="!item.missing_ar" class="w-3.5 h-3.5" />
-                                <Download v-else class="w-3.5 h-3.5" />
-                                <span>{{ !item.missing_ar ? (isRTL ? 'العربية متوفرة' : 'Arabic Ready') : (isRTL ? 'تحميل العربية' : 'Get Arabic') }}</span>
+                                <Check
+                                    v-if="!item.missing_ar"
+                                    class="h-3.5 w-3.5"
+                                />
+                                <Download v-else class="h-3.5 w-3.5" />
+                                <span>{{
+                                    !item.missing_ar
+                                        ? isRTL
+                                            ? 'العربية متوفرة'
+                                            : 'Arabic Ready'
+                                        : isRTL
+                                          ? 'تحميل العربية'
+                                          : 'Get Arabic'
+                                }}</span>
                             </button>
 
                             <!-- English Subtitle Action -->
                             <button
                                 @click="openPickerModal(item, 'en')"
                                 :disabled="!item.missing_en"
-                                class="flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                                :class="!item.missing_en
-                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-default'
-                                    : 'bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-700 dark:text-white border border-slate-200 dark:border-white/10'"
+                                class="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-all"
+                                :class="
+                                    !item.missing_en
+                                        ? 'cursor-default border border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                                        : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/20'
+                                "
                             >
-                                <Check v-if="!item.missing_en" class="w-3.5 h-3.5" />
-                                <Download v-else class="w-3.5 h-3.5" />
-                                <span>{{ !item.missing_en ? (isRTL ? 'الإنجليزية متوفرة' : 'English Ready') : (isRTL ? 'تحميل الإنجليزية' : 'Get English') }}</span>
+                                <Check
+                                    v-if="!item.missing_en"
+                                    class="h-3.5 w-3.5"
+                                />
+                                <Download v-else class="h-3.5 w-3.5" />
+                                <span>{{
+                                    !item.missing_en
+                                        ? isRTL
+                                            ? 'الإنجليزية متوفرة'
+                                            : 'English Ready'
+                                        : isRTL
+                                          ? 'تحميل الإنجليزية'
+                                          : 'Get English'
+                                }}</span>
                             </button>
                         </div>
 
@@ -757,45 +1378,77 @@ onMounted(() => {
                             v-if="item.missing_ar"
                             @click="generateArabicFromEnglish(item)"
                             :disabled="isGeneratingArabicId === item.id"
-                            class="w-full py-1.5 px-3 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 active:scale-95 disabled:opacity-50"
+                            class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-bold text-cyan-400 transition-all hover:bg-cyan-500/20 active:scale-95 disabled:opacity-50"
                         >
-                            <RefreshCw v-if="isGeneratingArabicId === item.id" class="w-3 h-3 animate-spin text-cyan-400" />
-                            <Sparkles v-else class="w-3 h-3 text-cyan-400" />
-                            <span>{{ isGeneratingArabicId === item.id ? (isRTL ? 'جارٍ الترجمة والتوليد...' : 'Translating from English...') : (isRTL ? 'توليد ترجمة عربية من الإنجليزية' : 'Translate Arabic from English') }}</span>
+                            <RefreshCw
+                                v-if="isGeneratingArabicId === item.id"
+                                class="h-3 w-3 animate-spin text-cyan-400"
+                            />
+                            <Sparkles v-else class="h-3 w-3 text-cyan-400" />
+                            <span>{{
+                                isGeneratingArabicId === item.id
+                                    ? isRTL
+                                        ? 'جارٍ الترجمة والتوليد...'
+                                        : 'Translating from English...'
+                                    : isRTL
+                                      ? 'توليد ترجمة عربية من الإنجليزية'
+                                      : 'Translate Arabic from English'
+                            }}</span>
                         </button>
                     </div>
                 </div>
             </div>
 
             <!-- Empty State -->
-            <div v-else class="glass-panel rounded-3xl p-12 text-center text-slate-500 dark:text-slate-400">
-                <CheckCheck class="w-12 h-12 text-emerald-400 mx-auto mb-3" />
-                <h3 class="font-bold text-base text-slate-800 dark:text-slate-200">
-                    {{ isRTL ? 'جميع الوسائط تحتوي على ترجمات كاملة!' : 'All Media Subtitles Synchronized!' }}
+            <div
+                v-else
+                class="glass-panel rounded-3xl p-12 text-center text-slate-500 dark:text-slate-400"
+            >
+                <CheckCheck class="mx-auto mb-3 h-12 w-12 text-emerald-400" />
+                <h3
+                    class="text-base font-bold text-slate-800 dark:text-slate-200"
+                >
+                    {{
+                        isRTL
+                            ? 'جميع الوسائط تحتوي على ترجمات كاملة!'
+                            : 'All Media Subtitles Synchronized!'
+                    }}
                 </h3>
-                <p class="text-xs text-slate-500 mt-1">
-                    {{ isRTL ? 'لا توجد وسائط تنقصها ترجمات وفقاً لخيارات التصفية المحددة.' : 'No items match your filter criteria.' }}
+                <p class="mt-1 text-xs text-slate-500">
+                    {{
+                        isRTL
+                            ? 'لا توجد وسائط تنقصها ترجمات وفقاً لخيارات التصفية المحددة.'
+                            : 'No items match your filter criteria.'
+                    }}
                 </p>
             </div>
 
             <!-- Pagination Bar -->
-            <div v-if="totalPages > 1" class="flex items-center justify-center gap-2 pt-6">
+            <div
+                v-if="totalPages > 1"
+                class="flex items-center justify-center gap-2 pt-6"
+            >
                 <button
                     @click="setPage(currentPage - 1)"
                     :disabled="currentPage === 1"
-                    class="p-2.5 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 disabled:opacity-30 cursor-pointer border border-slate-200 dark:border-white/10"
+                    class="cursor-pointer rounded-xl border border-slate-200 bg-slate-100 p-2.5 text-slate-700 hover:bg-slate-200 disabled:opacity-30 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
                 >
-                    <ChevronLeft class="w-4 h-4" :class="isRTL ? 'rotate-180' : ''" />
+                    <ChevronLeft
+                        class="h-4 w-4"
+                        :class="isRTL ? 'rotate-180' : ''"
+                    />
                 </button>
 
                 <button
                     v-for="p in totalPages"
                     :key="p"
                     @click="setPage(p)"
-                    class="w-10 h-10 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                    :class="currentPage === p
-                        ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20 font-black'
-                        : 'bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10'"
+                    class="h-10 w-10 cursor-pointer rounded-xl text-xs font-bold transition-all"
+                    :class="
+                        currentPage === p
+                            ? 'bg-cyan-500 font-black text-slate-950 shadow-lg shadow-cyan-500/20'
+                            : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10'
+                    "
                 >
                     {{ p }}
                 </button>
@@ -803,43 +1456,65 @@ onMounted(() => {
                 <button
                     @click="setPage(currentPage + 1)"
                     :disabled="currentPage === totalPages"
-                    class="p-2.5 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 disabled:opacity-30 cursor-pointer border border-slate-200 dark:border-white/10"
+                    class="cursor-pointer rounded-xl border border-slate-200 bg-slate-100 p-2.5 text-slate-700 hover:bg-slate-200 disabled:opacity-30 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
                 >
-                    <ChevronRight class="w-4 h-4" :class="isRTL ? 'rotate-180' : ''" />
+                    <ChevronRight
+                        class="h-4 w-4"
+                        :class="isRTL ? 'rotate-180' : ''"
+                    />
                 </button>
             </div>
         </div>
 
         <!-- ================= TAB 3: LIVE CLOUD SEARCH ENGINE ================= -->
-        <div v-if="activeMainTab === 'cloud'" class="glass-panel rounded-3xl p-6 sm:p-8 mb-10 border border-slate-200 dark:border-white/10 shadow-xl bg-white dark:bg-[#121622]">
-            <div class="flex items-center justify-between gap-4 mb-4 flex-wrap">
+        <div
+            v-if="activeMainTab === 'cloud'"
+            class="glass-panel mb-10 rounded-3xl border border-slate-200 bg-white p-6 shadow-xl sm:p-8 dark:border-white/10 dark:bg-[#121622]"
+        >
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-4">
                 <div class="flex items-center gap-2">
-                    <Sparkles class="w-5 h-5 text-cyan-400" />
-                    <h3 class="font-extrabold text-base text-slate-900 dark:text-white">
-                        {{ isRTL ? 'البحث السحابي الفوري (SubDL & OpenSubtitles Engine)' : 'Live Cloud Subtitle Search Engine' }}
+                    <Sparkles class="h-5 w-5 text-cyan-400" />
+                    <h3
+                        class="text-base font-extrabold text-slate-900 dark:text-white"
+                    >
+                        {{
+                            isRTL
+                                ? 'البحث السحابي الفوري (SubDL & OpenSubtitles Engine)'
+                                : 'Live Cloud Subtitle Search Engine'
+                        }}
                     </h3>
                 </div>
-                <div class="flex items-center gap-2 text-xs font-mono text-emerald-500 font-bold">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <div
+                    class="flex items-center gap-2 font-mono text-xs font-bold text-emerald-500"
+                >
+                    <span
+                        class="h-2 w-2 animate-pulse rounded-full bg-emerald-500"
+                    ></span>
                     <span>SubDL & OpenSubtitles Live Active</span>
                 </div>
             </div>
 
-            <div class="flex flex-col sm:flex-row gap-3">
+            <div class="flex flex-col gap-3 sm:flex-row">
                 <div class="relative flex-1">
-                    <Search class="absolute top-3.5 left-3.5 w-4 h-4 text-slate-400" />
+                    <Search
+                        class="absolute top-3.5 left-3.5 h-4 w-4 text-slate-400"
+                    />
                     <input
                         v-model="searchQuery"
                         @keyup.enter="performSearch"
                         type="text"
-                        :placeholder="isRTL ? 'ابحث عن اسم الفيلم أو المسلسل...' : 'Search movie or series title...'"
-                        class="w-full pl-10 pr-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-cyan-500"
+                        :placeholder="
+                            isRTL
+                                ? 'ابحث عن اسم الفيلم أو المسلسل...'
+                                : 'Search movie or series title...'
+                        "
+                        class="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pr-4 pl-10 text-sm font-semibold text-slate-900 focus:border-cyan-500 focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
                     />
                 </div>
 
                 <select
                     v-model="searchLang"
-                    class="px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-sm font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-cyan-500"
+                    class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 focus:border-cyan-500 focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-slate-200"
                 >
                     <option value="ar">🇸🇦 العربية (Arabic)</option>
                     <option value="en">🇬🇧 English</option>
@@ -852,42 +1527,70 @@ onMounted(() => {
                 <button
                     @click="performSearch"
                     :disabled="isSearching"
-                    class="px-6 py-3 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-sm shadow-lg shadow-cyan-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    class="flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-cyan-500 px-6 py-3 text-sm font-black text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:bg-cyan-400 disabled:opacity-50"
                 >
-                    <RefreshCw v-if="isSearching" class="w-4 h-4 animate-spin" />
-                    <Search v-else class="w-4 h-4" />
+                    <RefreshCw
+                        v-if="isSearching"
+                        class="h-4 w-4 animate-spin"
+                    />
+                    <Search v-else class="h-4 w-4" />
                     <span>{{ isRTL ? 'بحث سحابي' : 'Search Cloud' }}</span>
                 </button>
             </div>
 
             <!-- Search Results Display -->
-            <div v-if="searchResults && searchResults.length > 0" class="mt-6 space-y-2.5 pt-4 border-t border-slate-100 dark:border-white/5">
-                <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                    {{ isRTL ? 'نتائج البحث السحابية' : 'Cloud Subtitle Matches' }} ({{ searchResults.length }})
+            <div
+                v-if="searchResults && searchResults.length > 0"
+                class="mt-6 space-y-2.5 border-t border-slate-100 pt-4 dark:border-white/5"
+            >
+                <div
+                    class="mb-2 text-xs font-bold tracking-wider text-slate-400 uppercase"
+                >
+                    {{
+                        isRTL
+                            ? 'نتائج البحث السحابية'
+                            : 'Cloud Subtitle Matches'
+                    }}
+                    ({{ searchResults.length }})
                 </div>
                 <div
                     v-for="(sub, idx) in searchResults"
                     :key="idx"
-                    class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/5 flex items-center justify-between gap-4"
+                    class="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-3.5 dark:border-white/5 dark:bg-slate-900/60"
                 >
                     <div class="flex items-center gap-3 truncate">
-                        <FileText class="w-5 h-5 text-cyan-400 shrink-0" />
+                        <FileText class="h-5 w-5 shrink-0 text-cyan-400" />
                         <div class="truncate">
-                            <div class="font-bold text-xs text-slate-900 dark:text-white truncate">{{ sub.release || sub.file_name }}</div>
-                            <div class="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
-                                <span class="cinema-badge bg-cyan-500/10 text-cyan-400 text-[10px]">{{ sub.provider }}</span>
-                                <span>Rating: {{ sub.rating || '9.5' }}/10</span>
-                                <span>{{ sub.downloads || 450 }} downloads</span>
+                            <div
+                                class="truncate text-xs font-bold text-slate-900 dark:text-white"
+                            >
+                                {{ sub.release || sub.file_name }}
+                            </div>
+                            <div
+                                class="mt-0.5 flex items-center gap-2 text-[11px] text-slate-500"
+                            >
+                                <span
+                                    class="cinema-badge bg-cyan-500/10 text-[10px] text-cyan-400"
+                                    >{{ sub.provider }}</span
+                                >
+                                <span
+                                    >Rating: {{ sub.rating || '9.5' }}/10</span
+                                >
+                                <span
+                                    >{{ sub.downloads || 450 }} downloads</span
+                                >
                             </div>
                         </div>
                     </div>
-                    <span class="cinema-badge bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold shrink-0">
+                    <span
+                        class="cinema-badge shrink-0 border border-emerald-500/30 bg-emerald-500/20 text-xs font-bold text-emerald-400"
+                    >
                         {{ isRTL ? 'متطابق بنسبة 100%' : '100% Synced' }}
                     </span>
                 </div>
             </div>
         </div>
-            <!-- Interactive Subtitle Search & Selection Modal -->
+        <!-- Interactive Subtitle Search & Selection Modal -->
         <SubtitlePickerModal
             :is-open="isPickerOpen"
             :media="selectedMediaForPicker"
@@ -899,6 +1602,12 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
+}
 </style>

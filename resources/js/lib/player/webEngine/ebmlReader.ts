@@ -56,7 +56,9 @@ export class EbmlReader {
     /**
      * Read Variable-Length Integer (EBML VINT) used for Element IDs and Data Sizes.
      */
-    public readVint(maskWidth = true): { value: number; length: number } | null {
+    public readVint(
+        maskWidth = true,
+    ): { value: number; length: number } | null {
         if (!this.hasBytes(1)) return null;
         const firstByte = this.buffer[this.pos];
         if (firstByte === 0) return null; // Invalid VINT
@@ -70,9 +72,9 @@ export class EbmlReader {
 
         if (length > 8 || !this.hasBytes(length)) return null;
 
-        let value = maskWidth ? (firstByte & ~mask) : firstByte;
+        let value = maskWidth ? firstByte & ~mask : firstByte;
         for (let i = 1; i < length; i++) {
-            value = (value * 256) + this.buffer[this.pos + i];
+            value = value * 256 + this.buffer[this.pos + i];
         }
 
         return { value, length };
@@ -101,13 +103,17 @@ export class EbmlReader {
     public readUint(size: number): number {
         let val = 0;
         for (let i = 0; i < size; i++) {
-            val = (val * 256) + this.buffer[this.pos++];
+            val = val * 256 + this.buffer[this.pos++];
         }
         return val;
     }
 
     public readFloat(size: number): number {
-        const view = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.pos, size);
+        const view = new DataView(
+            this.buffer.buffer,
+            this.buffer.byteOffset + this.pos,
+            size,
+        );
         this.pos += size;
         if (size === 4) return view.getFloat32(0, false);
         if (size === 8) return view.getFloat64(0, false);
@@ -148,9 +154,11 @@ export class MatroskaDemuxer {
             const size = reader.readElementSize();
             if (id === null || size === null) break;
 
-            if (id === 0x1A45DFA3) { // EBML Header
+            if (id === 0x1a45dfa3) {
+                // EBML Header
                 reader.skip(size);
-            } else if (id === 0x18538067) { // Segment
+            } else if (id === 0x18538067) {
+                // Segment
                 // Descend into Segment elements
                 this.parseSegmentChildren(reader, size);
                 return this.tracks.size > 0;
@@ -170,13 +178,17 @@ export class MatroskaDemuxer {
             const size = reader.readElementSize();
             if (id === null || size === null) break;
 
-            if (id === 0x1549A966) { // Info
+            if (id === 0x1549a966) {
+                // Info
                 this.parseInfo(reader, size);
-            } else if (id === 0x1654AE6B) { // Tracks
+            } else if (id === 0x1654ae6b) {
+                // Tracks
                 this.parseTracks(reader, size);
-            } else if (id === 0x1C53BB6B) { // Cues
+            } else if (id === 0x1c53bb6b) {
+                // Cues
                 this.parseCues(reader, size);
-            } else if (id === 0x1F43B675) { // First Cluster encountered - header scan complete
+            } else if (id === 0x1f43b675) {
+                // First Cluster encountered - header scan complete
                 reader.skip(size);
                 break;
             } else {
@@ -192,9 +204,11 @@ export class MatroskaDemuxer {
             const elSize = reader.readElementSize();
             if (id === null || elSize === null) break;
 
-            if (id === 0x2AD7B1) { // TimecodeScale
+            if (id === 0x2ad7b1) {
+                // TimecodeScale
                 this.timecodeScale = reader.readUint(elSize);
-            } else if (id === 0x4489) { // Duration
+            } else if (id === 0x4489) {
+                // Duration
                 const rawDur = reader.readFloat(elSize);
                 this.duration = (rawDur * this.timecodeScale) / 1000000000; // in seconds
             } else {
@@ -210,7 +224,8 @@ export class MatroskaDemuxer {
             const elSize = reader.readElementSize();
             if (id === null || elSize === null) break;
 
-            if (id === 0xAE) { // TrackEntry
+            if (id === 0xae) {
+                // TrackEntry
                 this.parseTrackEntry(reader, elSize);
             } else {
                 reader.skip(elSize);
@@ -231,10 +246,11 @@ export class MatroskaDemuxer {
             if (id === null || elSize === null) break;
 
             switch (id) {
-                case 0xD7: // TrackNumber
+                case 0xd7: // TrackNumber
                     track.trackNumber = reader.readUint(elSize);
                     break;
-                case 0x83: { // TrackType
+                case 0x83: {
+                    // TrackType
                     const typeNum = reader.readUint(elSize);
                     if (typeNum === 1) track.trackType = 'video';
                     else if (typeNum === 2) track.trackType = 'audio';
@@ -244,19 +260,19 @@ export class MatroskaDemuxer {
                 case 0x86: // CodecID
                     track.codecId = reader.readString(elSize);
                     break;
-                case 0x63A2: // CodecPrivate
+                case 0x63a2: // CodecPrivate
                     track.codecPrivate = reader.readBytes(elSize);
                     break;
-                case 0x536E: // Name
+                case 0x536e: // Name
                     track.name = reader.readString(elSize);
                     break;
-                case 0x22B59C: // Language
+                case 0x22b59c: // Language
                     track.language = reader.readString(elSize);
                     break;
-                case 0xE0: // VideoSettings
+                case 0xe0: // VideoSettings
                     this.parseVideoSettings(reader, elSize, track);
                     break;
-                case 0xE1: // AudioSettings
+                case 0xe1: // AudioSettings
                     this.parseAudioSettings(reader, elSize, track);
                     break;
                 default:
@@ -270,28 +286,36 @@ export class MatroskaDemuxer {
         }
     }
 
-    private parseVideoSettings(reader: EbmlReader, size: number, track: Partial<TrackInfo>) {
+    private parseVideoSettings(
+        reader: EbmlReader,
+        size: number,
+        track: Partial<TrackInfo>,
+    ) {
         const endPos = reader.position + size;
         while (reader.position < endPos) {
             const id = reader.readElementId();
             const elSize = reader.readElementSize();
             if (id === null || elSize === null) break;
 
-            if (id === 0xB0) track.width = reader.readUint(elSize);
-            else if (id === 0xBA) track.height = reader.readUint(elSize);
+            if (id === 0xb0) track.width = reader.readUint(elSize);
+            else if (id === 0xba) track.height = reader.readUint(elSize);
             else reader.skip(elSize);
         }
     }
 
-    private parseAudioSettings(reader: EbmlReader, size: number, track: Partial<TrackInfo>) {
+    private parseAudioSettings(
+        reader: EbmlReader,
+        size: number,
+        track: Partial<TrackInfo>,
+    ) {
         const endPos = reader.position + size;
         while (reader.position < endPos) {
             const id = reader.readElementId();
             const elSize = reader.readElementSize();
             if (id === null || elSize === null) break;
 
-            if (id === 0xB5) track.samplingRate = reader.readFloat(elSize);
-            else if (id === 0x9F) track.channels = reader.readUint(elSize);
+            if (id === 0xb5) track.samplingRate = reader.readFloat(elSize);
+            else if (id === 0x9f) track.channels = reader.readUint(elSize);
             else reader.skip(elSize);
         }
     }
@@ -303,7 +327,8 @@ export class MatroskaDemuxer {
             const elSize = reader.readElementSize();
             if (id === null || elSize === null) break;
 
-            if (id === 0xBB) { // CuePoint
+            if (id === 0xbb) {
+                // CuePoint
                 this.parseCuePoint(reader, elSize);
             } else {
                 reader.skip(elSize);
@@ -321,15 +346,18 @@ export class MatroskaDemuxer {
             const elSize = reader.readElementSize();
             if (id === null || elSize === null) break;
 
-            if (id === 0xB3) { // CueTime
+            if (id === 0xb3) {
+                // CueTime
                 time = (reader.readUint(elSize) * this.timecodeScale) / 1000000; // in ms
-            } else if (id === 0xB7) { // CueTrackPositions
+            } else if (id === 0xb7) {
+                // CueTrackPositions
                 const trackPosEnd = reader.position + elSize;
                 while (reader.position < trackPosEnd) {
                     const tpId = reader.readElementId();
                     const tpSize = reader.readElementSize();
                     if (tpId === null || tpSize === null) break;
-                    if (tpId === 0xF1) { // CueClusterPosition
+                    if (tpId === 0xf1) {
+                        // CueClusterPosition
                         clusterOffset = reader.readUint(tpSize);
                     } else {
                         reader.skip(tpSize);
@@ -358,16 +386,28 @@ export class MatroskaDemuxer {
             const size = reader.readElementSize();
             if (id === null || size === null) break;
 
-            if (id === 0x1F43B675) { // Cluster Header
+            if (id === 0x1f43b675) {
+                // Cluster Header
                 // continue reading cluster elements
                 continue;
-            } else if (id === 0xE7) { // Timecode
+            } else if (id === 0xe7) {
+                // Timecode
                 clusterTimecode = reader.readUint(size);
-            } else if (id === 0xA3) { // SimpleBlock
-                const blockSample = this.parseSimpleBlock(reader, size, clusterTimecode);
+            } else if (id === 0xa3) {
+                // SimpleBlock
+                const blockSample = this.parseSimpleBlock(
+                    reader,
+                    size,
+                    clusterTimecode,
+                );
                 if (blockSample) samples.push(blockSample);
-            } else if (id === 0xA0) { // BlockGroup
-                const groupSample = this.parseBlockGroup(reader, size, clusterTimecode);
+            } else if (id === 0xa0) {
+                // BlockGroup
+                const groupSample = this.parseBlockGroup(
+                    reader,
+                    size,
+                    clusterTimecode,
+                );
                 if (groupSample) samples.push(groupSample);
             } else {
                 reader.skip(size);
@@ -377,7 +417,11 @@ export class MatroskaDemuxer {
         return samples;
     }
 
-    private parseSimpleBlock(reader: EbmlReader, size: number, clusterTimecode: number): MediaSample | null {
+    private parseSimpleBlock(
+        reader: EbmlReader,
+        size: number,
+        clusterTimecode: number,
+    ): MediaSample | null {
         const startPos = reader.position;
         const trackVint = reader.readVint(true);
         if (!trackVint) return null;
@@ -395,7 +439,8 @@ export class MatroskaDemuxer {
         if (payloadSize <= 0) return null;
 
         const data = reader.readBytes(payloadSize);
-        const absTimeMs = ((clusterTimecode + relTimecode) * this.timecodeScale) / 1000000;
+        const absTimeMs =
+            ((clusterTimecode + relTimecode) * this.timecodeScale) / 1000000;
 
         return {
             trackNumber: trackVint.value,
@@ -405,7 +450,11 @@ export class MatroskaDemuxer {
         };
     }
 
-    private parseBlockGroup(reader: EbmlReader, size: number, clusterTimecode: number): MediaSample | null {
+    private parseBlockGroup(
+        reader: EbmlReader,
+        size: number,
+        clusterTimecode: number,
+    ): MediaSample | null {
         const endPos = reader.position + size;
         let sample: MediaSample | null = null;
 
@@ -414,7 +463,8 @@ export class MatroskaDemuxer {
             const elSize = reader.readElementSize();
             if (id === null || elSize === null) break;
 
-            if (id === 0xA1) { // Block
+            if (id === 0xa1) {
+                // Block
                 sample = this.parseSimpleBlock(reader, elSize, clusterTimecode);
             } else {
                 reader.skip(elSize);
@@ -424,4 +474,3 @@ export class MatroskaDemuxer {
         return sample;
     }
 }
-

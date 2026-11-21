@@ -7,12 +7,38 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import FixMatchModal from '@/components/media/FixMatchModal.vue';
 import ConfirmModal from '@/components/common/ConfirmModal.vue';
 import {
-    Sparkles, Search, Image as ImageIcon, Globe, Film, Tv,
-    Star, RefreshCw, CheckCircle2, AlertCircle, Play,
-    SlidersHorizontal, Edit, ExternalLink, Check, X, Trash2,
-    Database, Filter, ArrowRight, Wand2, Repeat, ArrowRightLeft,
-    AlertTriangle, HelpCircle, Layers, Copy, FileVideo, Folder, HardDrive,
-    FileEdit, ShieldAlert
+    Sparkles,
+    Search,
+    Image as ImageIcon,
+    Globe,
+    Film,
+    Tv,
+    Star,
+    RefreshCw,
+    CheckCircle2,
+    AlertCircle,
+    Play,
+    SlidersHorizontal,
+    Edit,
+    ExternalLink,
+    Check,
+    X,
+    Trash2,
+    Database,
+    Filter,
+    ArrowRight,
+    Wand2,
+    Repeat,
+    ArrowRightLeft,
+    AlertTriangle,
+    HelpCircle,
+    Layers,
+    Copy,
+    FileVideo,
+    Folder,
+    HardDrive,
+    FileEdit,
+    ShieldAlert,
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -35,9 +61,12 @@ const { t, isRTL } = useI18n();
 
 // Local reactive items array
 const localItems = ref<any[]>([...props.items]);
-watch(() => props.items, (newVal) => {
-    localItems.value = [...newVal];
-});
+watch(
+    () => props.items,
+    (newVal) => {
+        localItems.value = [...newVal];
+    },
+);
 
 const activeFilter = ref(props.filters?.filter || 'all');
 const searchQuery = ref(props.filters?.search || '');
@@ -67,7 +96,10 @@ const confirmModal = ref<{
     action: () => {},
 });
 
-const showToast = (msg: string, type: 'success' | 'info' | 'danger' = 'success') => {
+const showToast = (
+    msg: string,
+    type: 'success' | 'info' | 'danger' = 'success',
+) => {
     if (type === 'danger') {
         globalToast.error(msg);
     } else if (type === 'info') {
@@ -79,17 +111,25 @@ const showToast = (msg: string, type: 'success' | 'info' | 'danger' = 'success')
 
 const applyFilter = (filterKey: string) => {
     activeFilter.value = filterKey;
-    router.get('/metadata', {
-        filter: filterKey,
-        search: searchQuery.value || undefined,
-    }, { preserveState: true });
+    router.get(
+        '/metadata',
+        {
+            filter: filterKey,
+            search: searchQuery.value || undefined,
+        },
+        { preserveState: true },
+    );
 };
 
 const handleSearch = () => {
-    router.get('/metadata', {
-        filter: activeFilter.value,
-        search: searchQuery.value || undefined,
-    }, { preserveState: true });
+    router.get(
+        '/metadata',
+        {
+            filter: activeFilter.value,
+            search: searchQuery.value || undefined,
+        },
+        { preserveState: true },
+    );
 };
 
 const openFixMatch = (item: any) => {
@@ -97,19 +137,37 @@ const openFixMatch = (item: any) => {
     showFixModal.value = true;
 };
 
-const cardVerifications = ref<Record<string, { checking?: boolean; exists?: boolean; size_formatted?: string; candidate_path?: string | null }>>({});
+const cardVerifications = ref<
+    Record<
+        string,
+        {
+            checking?: boolean;
+            exists?: boolean;
+            size_formatted?: string;
+            candidate_path?: string | null;
+        }
+    >
+>({});
 
 const verifyCardDisk = async (item: any) => {
     const key = `${item.type}_${item.id}`;
     cardVerifications.value[key] = { checking: true };
     try {
-        const res = await fetch(`/api/metadata/${item.type}/${item.id}/verify-file`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+        const res = await fetch(
+            `/api/metadata/${item.type}/${item.id}/verify-file`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN':
+                        (
+                            document.querySelector(
+                                'meta[name="csrf-token"]',
+                            ) as any
+                        )?.content || '',
+                },
             },
-        });
+        );
         const data = await res.json();
         if (data.success) {
             cardVerifications.value[key] = {
@@ -130,14 +188,22 @@ const autoRelinkCard = async (item: any, newPath: string) => {
     const key = `${item.type}_${item.id}`;
     cardVerifications.value[key] = { checking: true };
     try {
-        const res = await fetch(`/api/metadata/${item.type}/${item.id}/relocate-file`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+        const res = await fetch(
+            `/api/metadata/${item.type}/${item.id}/relocate-file`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN':
+                        (
+                            document.querySelector(
+                                'meta[name="csrf-token"]',
+                            ) as any
+                        )?.content || '',
+                },
+                body: JSON.stringify({ new_path: newPath }),
             },
-            body: JSON.stringify({ new_path: newPath }),
-        });
+        );
         const data = await res.json();
         if (data.success) {
             if (item.type === 'movie' && data.item) {
@@ -149,7 +215,9 @@ const autoRelinkCard = async (item: any, newPath: string) => {
             cardVerifications.value[key] = {
                 checking: false,
                 exists: true,
-                size_formatted: data.item?.size ? (data.item.size / (1024*1024*1024)).toFixed(2) + ' GB' : undefined,
+                size_formatted: data.item?.size
+                    ? (data.item.size / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+                    : undefined,
             };
         } else {
             cardVerifications.value[key] = { checking: false, exists: false };
@@ -176,8 +244,10 @@ const copyFilePath = async (item: any) => {
 const handleItemUpdated = (updatedItem: any) => {
     showFixModal.value = false;
     showToast(
-        isRTL.value ? `تم تحديث بيانات "${updatedItem.title}" بنجاح!` : `Metadata updated for "${updatedItem.title}"!`,
-        'success'
+        isRTL.value
+            ? `تم تحديث بيانات "${updatedItem.title}" بنجاح!`
+            : `Metadata updated for "${updatedItem.title}"!`,
+        'success',
     );
 
     // If currently filtered by unmatched/missing and the item is now resolved, remove it locally
@@ -186,9 +256,13 @@ const handleItemUpdated = (updatedItem: any) => {
         (activeFilter.value === 'missing_posters' && updatedItem.has_poster) ||
         (activeFilter.value === 'missing_arabic' && updatedItem.has_arabic)
     ) {
-        localItems.value = localItems.value.filter(i => !(i.id === updatedItem.id && i.type === updatedItem.type));
+        localItems.value = localItems.value.filter(
+            (i) => !(i.id === updatedItem.id && i.type === updatedItem.type),
+        );
     } else {
-        const target = localItems.value.find((i) => i.id === updatedItem.id && i.type === updatedItem.type);
+        const target = localItems.value.find(
+            (i) => i.id === updatedItem.id && i.type === updatedItem.type,
+        );
         if (target) {
             Object.assign(target, updatedItem);
         }
@@ -201,13 +275,21 @@ const handleItemUpdated = (updatedItem: any) => {
 const quickReparse = async (item: any) => {
     isOperating.value = true;
     try {
-        const res = await fetch(`/api/metadata/${item.type}/${item.id}/reparse`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+        const res = await fetch(
+            `/api/metadata/${item.type}/${item.id}/reparse`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN':
+                        (
+                            document.querySelector(
+                                'meta[name="csrf-token"]',
+                            ) as any
+                        )?.content || '',
+                },
             },
-        });
+        );
         const data = await res.json();
         if (data.success) {
             handleItemUpdated(data.media || data.series);
@@ -225,13 +307,21 @@ const quickReparse = async (item: any) => {
 const quickConvert = async (item: any) => {
     isOperating.value = true;
     try {
-        const res = await fetch(`/api/metadata/${item.type}/${item.id}/convert-type`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+        const res = await fetch(
+            `/api/metadata/${item.type}/${item.id}/convert-type`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN':
+                        (
+                            document.querySelector(
+                                'meta[name="csrf-token"]',
+                            ) as any
+                        )?.content || '',
+                },
             },
-        });
+        );
         const data = await res.json();
         if (data.success) {
             showToast(data.message || 'Media type converted!', 'info');
@@ -250,7 +340,9 @@ const confirmRenameFile = (item: any) => {
     const rawPath = item.file_path || item.folder_path || '';
     const oldName = rawPath.split(/[\\/]/).pop() || '';
     const ext = oldName.includes('.') ? '.' + oldName.split('.').pop() : '';
-    const cleanTitle = (item.title || 'media').replace(/[\\/:*?"<>|]/g, ' ').trim();
+    const cleanTitle = (item.title || 'media')
+        .replace(/[\\/:*?"<>|]/g, ' ')
+        .trim();
     const newName = `${cleanTitle}${item.release_year ? ` (${item.release_year})` : ''}${item.type === 'movie' ? ext : ''}`;
 
     const isSeries = item.type === 'series';
@@ -258,46 +350,74 @@ const confirmRenameFile = (item: any) => {
     confirmModal.value = {
         show: true,
         title: isSeries
-            ? (isRTL.value ? 'إعادة تسمية مجلد وحلقات المسلسل على القرص' : 'Rename Series Folder & Episodes on Disk')
-            : (isRTL.value ? 'إعادة تسمية ملف الفيلم ومجلده على القرص' : 'Rename Physical Movie File & Folder on Disk'),
+            ? isRTL.value
+                ? 'إعادة تسمية مجلد وحلقات المسلسل على القرص'
+                : 'Rename Series Folder & Episodes on Disk'
+            : isRTL.value
+              ? 'إعادة تسمية ملف الفيلم ومجلده على القرص'
+              : 'Rename Physical Movie File & Folder on Disk',
         message: isSeries
-            ? (isRTL.value
+            ? isRTL.value
                 ? `هل تريد إعادة تسمية مجلد المسلسل (${oldName}) وجميع ملفات الحلقات لتطابق الاسم القياسي الجديد:
 "${newName}"؟`
                 : `Do you want to rename the series folder (${oldName}) and all physical episode files on disk to match:
-"${newName}"?`)
-            : (isRTL.value
-                ? `هل تريد إعادة تسمية الملف من:
+"${newName}"?`
+            : isRTL.value
+              ? `هل تريد إعادة تسمية الملف من:
 "${oldName}"
 
 إلى الاسم القياسي الجديد:
 "${newName}"؟`
-                : `Do you want to rename the physical file on disk from:
+              : `Do you want to rename the physical file on disk from:
 "${oldName}"
 
 to the clean standard title:
-"${newName}"?`),
+"${newName}"?`,
         confirmText: isSeries
-            ? (isRTL.value ? 'تأكيد إعادة تسمية المسلسل والحلقات' : 'Rename Series & Episodes Now')
-            : (isRTL.value ? 'تأكيد إعادة التسمية' : 'Rename File Now'),
+            ? isRTL.value
+                ? 'تأكيد إعادة تسمية المسلسل والحلقات'
+                : 'Rename Series & Episodes Now'
+            : isRTL.value
+              ? 'تأكيد إعادة التسمية'
+              : 'Rename File Now',
         type: 'info',
         action: async () => {
             confirmModal.value.show = false;
             isOperating.value = true;
             try {
-                const res = await fetch(`/api/metadata/${item.type}/${item.id}/rename-file`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                const res = await fetch(
+                    `/api/metadata/${item.type}/${item.id}/rename-file`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN':
+                                (
+                                    document.querySelector(
+                                        'meta[name="csrf-token"]',
+                                    ) as any
+                                )?.content || '',
+                        },
                     },
-                });
+                );
                 const data = await res.json();
                 if (data.success) {
-                    showToast(data.message || (isRTL.value ? 'تمت إعادة تسمية الملف بنجاح!' : 'File renamed successfully!'), 'success');
+                    showToast(
+                        data.message ||
+                            (isRTL.value
+                                ? 'تمت إعادة تسمية الملف بنجاح!'
+                                : 'File renamed successfully!'),
+                        'success',
+                    );
                     handleItemUpdated(data.media || data.series);
                 } else {
-                    showToast(data.message || (isRTL.value ? 'فشلت إعادة التسمية.' : 'Failed to rename file.'), 'danger');
+                    showToast(
+                        data.message ||
+                            (isRTL.value
+                                ? 'فشلت إعادة التسمية.'
+                                : 'Failed to rename file.'),
+                        'danger',
+                    );
                 }
             } catch (e) {
                 console.error(e);
@@ -312,7 +432,9 @@ to the clean standard title:
 const confirmDeleteItem = (item: any) => {
     confirmModal.value = {
         show: true,
-        title: isRTL.value ? 'حذف من فهرس المكتبة' : 'Remove from Library Index',
+        title: isRTL.value
+            ? 'حذف من فهرس المكتبة'
+            : 'Remove from Library Index',
         message: isRTL.value
             ? `هل أنت متأكد من حذف "${item.title}" من فهرس المكتبة؟
 (ملاحظة: لن يتم حذف الملف الفعلي من القرص الصلب)`
@@ -325,20 +447,39 @@ const confirmDeleteItem = (item: any) => {
             confirmModal.value.show = false;
             isOperating.value = true;
             try {
-                const res = await fetch(`/api/metadata/${item.type}/${item.id}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                const res = await fetch(
+                    `/api/metadata/${item.type}/${item.id}`,
+                    {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN':
+                                (
+                                    document.querySelector(
+                                        'meta[name="csrf-token"]',
+                                    ) as any
+                                )?.content || '',
+                        },
                     },
-                });
+                );
                 const data = await res.json();
                 if (data.success) {
-                    showToast(data.message || (isRTL.value ? 'تم حذف العنصر من الفهرس!' : 'Item removed from library index!'), 'info');
-                    localItems.value = localItems.value.filter(i => !(i.id === item.id && i.type === item.type));
+                    showToast(
+                        data.message ||
+                            (isRTL.value
+                                ? 'تم حذف العنصر من الفهرس!'
+                                : 'Item removed from library index!'),
+                        'info',
+                    );
+                    localItems.value = localItems.value.filter(
+                        (i) => !(i.id === item.id && i.type === item.type),
+                    );
                     router.reload();
                 } else {
-                    showToast(data.message || 'Failed to delete index.', 'danger');
+                    showToast(
+                        data.message || 'Failed to delete index.',
+                        'danger',
+                    );
                 }
             } catch (e) {
                 console.error(e);
@@ -353,7 +494,9 @@ const confirmDeleteItem = (item: any) => {
 const triggerBatchEnrich = async () => {
     confirmModal.value = {
         show: true,
-        title: isRTL.value ? 'بدء المعالجة الذكية الشاملة' : 'Trigger Automated Batch Metadata Enrichment',
+        title: isRTL.value
+            ? 'بدء المعالجة الذكية الشاملة'
+            : 'Trigger Automated Batch Metadata Enrichment',
         message: isRTL.value
             ? 'سيقوم النظام بالبحث في قواعد بيانات TMDb و Wikipedia لجميع العناصر غير المطابقة وتحميل البوسترات وترجمة الملخصات تلقائياً في الخلفية. هل تريد المتابعة؟'
             : 'The engine will query TMDb, Wikipedia, and subtitle databases for all pending and unmatched media items in the background. Do you want to proceed?',
@@ -363,19 +506,32 @@ const triggerBatchEnrich = async () => {
             confirmModal.value.show = false;
             isBatchEnriching.value = true;
             showToast(
-                isRTL.value ? 'جارٍ تشغيل المعالجة الذكية في الخلفية...' : 'Batch enrichment running in background...',
-                'info'
+                isRTL.value
+                    ? 'جارٍ تشغيل المعالجة الذكية في الخلفية...'
+                    : 'Batch enrichment running in background...',
+                'info',
             );
             try {
                 const res = await fetch('/api/metadata/batch-enrich', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                        'X-CSRF-TOKEN':
+                            (
+                                document.querySelector(
+                                    'meta[name="csrf-token"]',
+                                ) as any
+                            )?.content || '',
                     },
                 });
                 const data = await res.json();
-                showToast(data.message || (isRTL.value ? 'اكتملت المعالجة الذكية!' : 'Batch enrichment finished!'), 'success');
+                showToast(
+                    data.message ||
+                        (isRTL.value
+                            ? 'اكتملت المعالجة الذكية!'
+                            : 'Batch enrichment finished!'),
+                    'success',
+                );
                 router.reload();
             } catch (e) {
                 console.error(e);
@@ -390,29 +546,57 @@ const triggerBatchEnrich = async () => {
 
 <template>
     <AppLayout>
-        <Head :title="isRTL ? 'استوديو إصلاح وتصحيح البيانات' : 'Fix Match & Metadata Studio'" />
+        <Head
+            :title="
+                isRTL
+                    ? 'استوديو إصلاح وتصحيح البيانات'
+                    : 'Fix Match & Metadata Studio'
+            "
+        />
 
-        <div class="space-y-8 max-w-7xl mx-auto pb-24">
-
-
+        <div class="mx-auto max-w-7xl space-y-8 pb-24">
             <!-- Header Showcase Hero -->
-            <div class="relative overflow-hidden rounded-3xl p-8 lg:p-10 border border-white/10 bg-gradient-to-br from-slate-900 via-[#0c1222] to-slate-950 shadow-2xl">
-                <div class="absolute -top-24 -right-24 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
-                <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div
+                class="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 via-[#0c1222] to-slate-950 p-8 shadow-2xl lg:p-10"
+            >
+                <div
+                    class="pointer-events-none absolute -top-24 -right-24 h-96 w-96 rounded-full bg-cyan-500/10 blur-3xl"
+                ></div>
+                <div
+                    class="pointer-events-none absolute -bottom-24 -left-24 h-96 w-96 rounded-full bg-purple-500/10 blur-3xl"
+                ></div>
 
-                <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div
+                    class="relative z-10 flex flex-col justify-between gap-6 md:flex-row md:items-center"
+                >
                     <div>
-                        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-semibold uppercase tracking-wider mb-4">
-                            <Sparkles class="w-3.5 h-3.5 animate-pulse" />
-                            <span>{{ isRTL ? 'استوديو تصحيح ومطابقة البيانات' : 'Metadata Correction & Triage Studio' }}</span>
+                        <div
+                            class="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-semibold tracking-wider text-cyan-400 uppercase"
+                        >
+                            <Sparkles class="h-3.5 w-3.5 animate-pulse" />
+                            <span>{{
+                                isRTL
+                                    ? 'استوديو تصحيح ومطابقة البيانات'
+                                    : 'Metadata Correction & Triage Studio'
+                            }}</span>
                         </div>
-                        <h1 class="text-3xl lg:text-4xl font-black text-white tracking-tight">
-                            {{ isRTL ? 'إصلاح وتصحيح مكتبة الوسائط' : 'Fix Match & Error Resolution Studio' }}
+                        <h1
+                            class="text-3xl font-black tracking-tight text-white lg:text-4xl"
+                        >
+                            {{
+                                isRTL
+                                    ? 'إصلاح وتصحيح مكتبة الوسائط'
+                                    : 'Fix Match & Error Resolution Studio'
+                            }}
                         </h1>
-                        <p class="text-slate-400 text-sm max-w-2xl mt-2 leading-relaxed">
-                            {{ isRTL 
-                                ? 'استعراض المسار الفعلي للملفات، إصلاح التسميات غير المطابقة، إعادة تسمية الملفات على القرص، حذف العناصر غير المرغوبة من الفهرس، وجلب البوسترات بدقة.' 
-                                : 'Inspect physical disk paths, fix unmatched titles, rename disk files to standard titles, remove obsolete indexes, and fetch pristine artwork.' }}
+                        <p
+                            class="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400"
+                        >
+                            {{
+                                isRTL
+                                    ? 'استعراض المسار الفعلي للملفات، إصلاح التسميات غير المطابقة، إعادة تسمية الملفات على القرص، حذف العناصر غير المرغوبة من الفهرس، وجلب البوسترات بدقة.'
+                                    : 'Inspect physical disk paths, fix unmatched titles, rename disk files to standard titles, remove obsolete indexes, and fetch pristine artwork.'
+                            }}
                         </p>
                     </div>
 
@@ -420,89 +604,171 @@ const triggerBatchEnrich = async () => {
                     <button
                         @click="triggerBatchEnrich"
                         :disabled="isBatchEnriching"
-                        class="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-slate-950 font-black text-sm shadow-xl shadow-cyan-500/20 transition-all flex items-center gap-2.5 shrink-0 self-start md:self-center disabled:opacity-50 cursor-pointer active:scale-95"
+                        class="flex shrink-0 cursor-pointer items-center gap-2.5 self-start rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 px-6 py-3.5 text-sm font-black text-slate-950 shadow-xl shadow-cyan-500/20 transition-all hover:from-cyan-400 hover:to-purple-500 active:scale-95 disabled:opacity-50 md:self-center"
                     >
-                        <RefreshCw v-if="isBatchEnriching" class="w-4 h-4 animate-spin" />
-                        <Wand2 v-else class="w-4 h-4" />
-                        <span>{{ isRTL ? 'معالجة ومطابقة شاملة تلقائية' : 'Auto-Fix All Unmatched' }}</span>
+                        <RefreshCw
+                            v-if="isBatchEnriching"
+                            class="h-4 w-4 animate-spin"
+                        />
+                        <Wand2 v-else class="h-4 w-4" />
+                        <span>{{
+                            isRTL
+                                ? 'معالجة ومطابقة شاملة تلقائية'
+                                : 'Auto-Fix All Unmatched'
+                        }}</span>
                     </button>
                 </div>
 
                 <!-- Live Quick Stats Counter -->
-                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-8 pt-6 border-t border-white/10">
-                    <div class="p-3.5 rounded-2xl bg-white/[0.03] border border-white/5">
-                        <span class="text-xs text-slate-400 block">{{ isRTL ? 'إجمالي العناصر' : 'Total Items' }}</span>
-                        <span class="text-xl font-black text-white mt-1 block">{{ stats.total_items }}</span>
+                <div
+                    class="mt-8 grid grid-cols-2 gap-3 border-t border-white/10 pt-6 sm:grid-cols-3 lg:grid-cols-6"
+                >
+                    <div
+                        class="rounded-2xl border border-white/5 bg-white/[0.03] p-3.5"
+                    >
+                        <span class="block text-xs text-slate-400">{{
+                            isRTL ? 'إجمالي العناصر' : 'Total Items'
+                        }}</span>
+                        <span
+                            class="mt-1 block text-xl font-black text-white"
+                            >{{ stats.total_items }}</span
+                        >
                     </div>
-                    <div class="p-3.5 rounded-2xl bg-amber-500/5 border border-amber-500/10">
-                        <span class="text-xs text-amber-300 block">{{ isRTL ? 'غير مطابق' : 'Unmatched' }}</span>
-                        <span class="text-xl font-black text-amber-400 mt-1 block">{{ stats.unmatched_count ?? 0 }}</span>
+                    <div
+                        class="rounded-2xl border border-amber-500/10 bg-amber-500/5 p-3.5"
+                    >
+                        <span class="block text-xs text-amber-300">{{
+                            isRTL ? 'غير مطابق' : 'Unmatched'
+                        }}</span>
+                        <span
+                            class="mt-1 block text-xl font-black text-amber-400"
+                            >{{ stats.unmatched_count ?? 0 }}</span
+                        >
                     </div>
-                    <div class="p-3.5 rounded-2xl bg-rose-500/5 border border-rose-500/10">
-                        <span class="text-xs text-rose-300 block">{{ isRTL ? 'بدون بوستر' : 'Missing Posters' }}</span>
-                        <span class="text-xl font-black text-rose-400 mt-1 block">{{ stats.missing_posters_count }}</span>
+                    <div
+                        class="rounded-2xl border border-rose-500/10 bg-rose-500/5 p-3.5"
+                    >
+                        <span class="block text-xs text-rose-300">{{
+                            isRTL ? 'بدون بوستر' : 'Missing Posters'
+                        }}</span>
+                        <span
+                            class="mt-1 block text-xl font-black text-rose-400"
+                            >{{ stats.missing_posters_count }}</span
+                        >
                     </div>
-                    <div class="p-3.5 rounded-2xl bg-purple-500/5 border border-purple-500/10">
-                        <span class="text-xs text-purple-300 block">{{ isRTL ? 'بدون عربي' : 'Missing Arabic' }}</span>
-                        <span class="text-xl font-black text-purple-400 mt-1 block">{{ stats.missing_arabic_count }}</span>
+                    <div
+                        class="rounded-2xl border border-purple-500/10 bg-purple-500/5 p-3.5"
+                    >
+                        <span class="block text-xs text-purple-300">{{
+                            isRTL ? 'بدون عربي' : 'Missing Arabic'
+                        }}</span>
+                        <span
+                            class="mt-1 block text-xl font-black text-purple-400"
+                            >{{ stats.missing_arabic_count }}</span
+                        >
                     </div>
-                    <div class="p-3.5 rounded-2xl bg-cyan-500/5 border border-cyan-500/10">
-                        <span class="text-xs text-cyan-300 block">{{ isRTL ? 'أفلام' : 'Movies' }}</span>
-                        <span class="text-xl font-black text-cyan-400 mt-1 block">{{ stats.movies_count }}</span>
+                    <div
+                        class="rounded-2xl border border-cyan-500/10 bg-cyan-500/5 p-3.5"
+                    >
+                        <span class="block text-xs text-cyan-300">{{
+                            isRTL ? 'أفلام' : 'Movies'
+                        }}</span>
+                        <span
+                            class="mt-1 block text-xl font-black text-cyan-400"
+                            >{{ stats.movies_count }}</span
+                        >
                     </div>
-                    <div class="p-3.5 rounded-2xl bg-emerald-500/5 border border-emerald-500/10">
-                        <span class="text-xs text-emerald-300 block">{{ isRTL ? 'مسلسلات' : 'Series' }}</span>
-                        <span class="text-xl font-black text-emerald-400 mt-1 block">{{ stats.series_count }}</span>
+                    <div
+                        class="rounded-2xl border border-emerald-500/10 bg-emerald-500/5 p-3.5"
+                    >
+                        <span class="block text-xs text-emerald-300">{{
+                            isRTL ? 'مسلسلات' : 'Series'
+                        }}</span>
+                        <span
+                            class="mt-1 block text-xl font-black text-emerald-400"
+                            >{{ stats.series_count }}</span
+                        >
                     </div>
                 </div>
             </div>
 
             <!-- Triage Filters & Search Bar -->
-            <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div
+                class="flex flex-col items-center justify-between gap-4 md:flex-row"
+            >
                 <!-- Filter Tabs -->
-                <div class="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-900/90 rounded-2xl border border-white/10 w-full md:w-auto">
+                <div
+                    class="flex w-full flex-wrap items-center gap-1.5 rounded-2xl border border-white/10 bg-slate-900/90 p-1.5 md:w-auto"
+                >
                     <button
                         @click="applyFilter('all')"
-                        class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                        :class="activeFilter === 'all' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'"
+                        class="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold transition-all"
+                        :class="
+                            activeFilter === 'all'
+                                ? 'bg-cyan-500 text-slate-950 shadow-md'
+                                : 'text-slate-400 hover:text-white'
+                        "
                     >
                         {{ isRTL ? 'الكل' : 'All Media' }}
                     </button>
                     <button
                         @click="applyFilter('unmatched')"
-                        class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                        :class="activeFilter === 'unmatched' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'"
+                        class="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold transition-all"
+                        :class="
+                            activeFilter === 'unmatched'
+                                ? 'bg-amber-500 text-slate-950 shadow-md'
+                                : 'text-slate-400 hover:text-white'
+                        "
                     >
                         {{ isRTL ? 'غير مطابق' : 'Unmatched' }}
-                        <span v-if="stats.unmatched_count" class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-black/30">
+                        <span
+                            v-if="stats.unmatched_count"
+                            class="py-0.2 ml-1 rounded-full bg-black/30 px-1.5 text-[10px]"
+                        >
                             {{ stats.unmatched_count }}
                         </span>
                     </button>
                     <button
                         @click="applyFilter('missing_posters')"
-                        class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                        :class="activeFilter === 'missing_posters' ? 'bg-rose-500 text-white shadow-md' : 'text-slate-400 hover:text-white'"
+                        class="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold transition-all"
+                        :class="
+                            activeFilter === 'missing_posters'
+                                ? 'bg-rose-500 text-white shadow-md'
+                                : 'text-slate-400 hover:text-white'
+                        "
                     >
                         {{ isRTL ? 'بدون بوستر' : 'Missing Posters' }}
                     </button>
                     <button
                         @click="applyFilter('missing_arabic')"
-                        class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                        :class="activeFilter === 'missing_arabic' ? 'bg-purple-500 text-white shadow-md' : 'text-slate-400 hover:text-white'"
+                        class="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold transition-all"
+                        :class="
+                            activeFilter === 'missing_arabic'
+                                ? 'bg-purple-500 text-white shadow-md'
+                                : 'text-slate-400 hover:text-white'
+                        "
                     >
                         {{ isRTL ? 'بدون عربي' : 'Missing Arabic' }}
                     </button>
                     <button
                         @click="applyFilter('movies')"
-                        class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                        :class="activeFilter === 'movies' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'"
+                        class="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold transition-all"
+                        :class="
+                            activeFilter === 'movies'
+                                ? 'bg-slate-700 text-white'
+                                : 'text-slate-400 hover:text-white'
+                        "
                     >
                         {{ isRTL ? 'أفلام فقط' : 'Movies Only' }}
                     </button>
                     <button
                         @click="applyFilter('series')"
-                        class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                        :class="activeFilter === 'series' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'"
+                        class="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold transition-all"
+                        :class="
+                            activeFilter === 'series'
+                                ? 'bg-slate-700 text-white'
+                                : 'text-slate-400 hover:text-white'
+                        "
                     >
                         {{ isRTL ? 'مسلسلات فقط' : 'Series Only' }}
                     </button>
@@ -510,13 +776,19 @@ const triggerBatchEnrich = async () => {
 
                 <!-- Instant Search Input -->
                 <div class="relative w-full md:w-80">
-                    <Search class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <Search
+                        class="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-slate-400"
+                    />
                     <input
                         v-model="searchQuery"
                         @keyup.enter="handleSearch"
                         type="text"
-                        :placeholder="isRTL ? 'ابحث بالاسم أو المسار...' : 'Search title or disk path...'"
-                        class="w-full bg-slate-900/90 border border-white/10 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all font-mono"
+                        :placeholder="
+                            isRTL
+                                ? 'ابحث بالاسم أو المسار...'
+                                : 'Search title or disk path...'
+                        "
+                        class="w-full rounded-2xl border border-white/10 bg-slate-900/90 py-2.5 pr-4 pl-10 font-mono text-xs text-white placeholder-slate-500 transition-all focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
                     />
                 </div>
             </div>
@@ -526,53 +798,87 @@ const triggerBatchEnrich = async () => {
                 <div
                     v-for="item in localItems"
                     :key="`${item.type}-${item.id}`"
-                    class="p-4 rounded-3xl bg-slate-900/60 hover:bg-slate-900/90 border border-white/10 hover:border-cyan-500/40 transition-all flex flex-col gap-3 group"
+                    class="group flex flex-col gap-3 rounded-3xl border border-white/10 bg-slate-900/60 p-4 transition-all hover:border-cyan-500/40 hover:bg-slate-900/90"
                 >
                     <!-- Top Row: Poster, Title & Actions -->
-                    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div
+                        class="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center"
+                    >
                         <!-- Left: Poster + Core Info -->
-                        <div class="flex items-center gap-4 flex-1 min-w-0">
+                        <div class="flex min-w-0 flex-1 items-center gap-4">
                             <!-- Poster Preview -->
-                            <div class="w-14 aspect-[2/3] rounded-xl overflow-hidden bg-slate-950 shrink-0 border border-white/10 relative shadow-md">
+                            <div
+                                class="relative aspect-[2/3] w-14 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-950 shadow-md"
+                            >
                                 <img
                                     v-if="item.poster_path"
                                     :src="item.poster_path"
                                     :alt="item.title"
-                                    class="w-full h-full object-cover"
+                                    class="h-full w-full object-cover"
                                     loading="lazy"
                                 />
-                                <div v-else class="w-full h-full flex items-center justify-center text-slate-700 bg-slate-900">
-                                    <Film v-if="item.type === 'movie'" class="w-5 h-5 text-cyan-400/50" />
-                                    <Tv v-else class="w-5 h-5 text-purple-400/50" />
+                                <div
+                                    v-else
+                                    class="flex h-full w-full items-center justify-center bg-slate-900 text-slate-700"
+                                >
+                                    <Film
+                                        v-if="item.type === 'movie'"
+                                        class="h-5 w-5 text-cyan-400/50"
+                                    />
+                                    <Tv
+                                        v-else
+                                        class="h-5 w-5 text-purple-400/50"
+                                    />
                                 </div>
 
                                 <!-- Match Status Dot -->
                                 <div
-                                    class="absolute top-1 right-1 w-2.5 h-2.5 rounded-full border border-black/80 shadow-sm"
-                                    :class="item.is_matched ? 'bg-emerald-400 shadow-emerald-400/50' : 'bg-amber-400 animate-pulse'"
-                                    :title="item.is_matched ? 'TMDb Matched' : 'Unmatched / Pending Fix'"
+                                    class="absolute top-1 right-1 h-2.5 w-2.5 rounded-full border border-black/80 shadow-sm"
+                                    :class="
+                                        item.is_matched
+                                            ? 'bg-emerald-400 shadow-emerald-400/50'
+                                            : 'animate-pulse bg-amber-400'
+                                    "
+                                    :title="
+                                        item.is_matched
+                                            ? 'TMDb Matched'
+                                            : 'Unmatched / Pending Fix'
+                                    "
                                 ></div>
                             </div>
 
                             <!-- Title & Metadata Badges -->
-                            <div class="space-y-1.5 min-w-0 flex-1">
+                            <div class="min-w-0 flex-1 space-y-1.5">
                                 <div class="flex flex-wrap items-center gap-2">
                                     <span
-                                        class="text-[10px] font-black uppercase px-2 py-0.5 rounded-md"
-                                        :class="item.type === 'series' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'"
+                                        class="rounded-md px-2 py-0.5 text-[10px] font-black uppercase"
+                                        :class="
+                                            item.type === 'series'
+                                                ? 'border border-purple-500/30 bg-purple-500/20 text-purple-300'
+                                                : 'border border-cyan-500/30 bg-cyan-500/20 text-cyan-300'
+                                        "
                                     >
                                         {{ item.type }}
                                     </span>
 
-                                    <h3 class="text-sm font-bold text-white truncate group-hover:text-cyan-400 transition-colors">
+                                    <h3
+                                        class="truncate text-sm font-bold text-white transition-colors group-hover:text-cyan-400"
+                                    >
                                         {{ item.title }}
                                     </h3>
 
-                                    <span v-if="item.title_ar" class="text-xs text-cyan-300 truncate font-medium" dir="rtl">
+                                    <span
+                                        v-if="item.title_ar"
+                                        class="truncate text-xs font-medium text-cyan-300"
+                                        dir="rtl"
+                                    >
                                         ({{ item.title_ar }})
                                     </span>
 
-                                    <span v-if="item.release_year" class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white/[0.06] text-slate-300">
+                                    <span
+                                        v-if="item.release_year"
+                                        class="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-slate-300"
+                                    >
                                         {{ item.release_year }}
                                     </span>
                                 </div>
@@ -580,24 +886,52 @@ const triggerBatchEnrich = async () => {
                                 <!-- Status Badges -->
                                 <div class="flex flex-wrap items-center gap-2">
                                     <span
-                                        class="text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1"
-                                        :class="item.is_matched ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'"
+                                        class="flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold"
+                                        :class="
+                                            item.is_matched
+                                                ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                                                : 'border border-amber-500/30 bg-amber-500/10 text-amber-300'
+                                        "
                                     >
-                                        <CheckCircle2 v-if="item.is_matched" class="w-3 h-3" />
-                                        <AlertTriangle v-else class="w-3 h-3" />
-                                        <span>{{ item.is_matched ? 'TMDb Matched' : (isRTL ? 'غير مطابق' : 'Unmatched') }}</span>
+                                        <CheckCircle2
+                                            v-if="item.is_matched"
+                                            class="h-3 w-3"
+                                        />
+                                        <AlertTriangle v-else class="h-3 w-3" />
+                                        <span>{{
+                                            item.is_matched
+                                                ? 'TMDb Matched'
+                                                : isRTL
+                                                  ? 'غير مطابق'
+                                                  : 'Unmatched'
+                                        }}</span>
                                     </span>
 
                                     <span
-                                        class="text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1"
-                                        :class="item.has_arabic ? 'bg-purple-500/10 text-purple-300 border border-purple-500/20' : 'bg-white/[0.05] text-slate-400 border border-white/10'"
+                                        class="flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold"
+                                        :class="
+                                            item.has_arabic
+                                                ? 'border border-purple-500/20 bg-purple-500/10 text-purple-300'
+                                                : 'border border-white/10 bg-white/[0.05] text-slate-400'
+                                        "
                                     >
-                                        <Globe class="w-3 h-3" />
-                                        <span>{{ item.has_arabic ? (isRTL ? 'عربي متوفر' : 'Arabic Ready') : (isRTL ? 'بدون عربي' : 'No Arabic') }}</span>
+                                        <Globe class="h-3 w-3" />
+                                        <span>{{
+                                            item.has_arabic
+                                                ? isRTL
+                                                    ? 'عربي متوفر'
+                                                    : 'Arabic Ready'
+                                                : isRTL
+                                                  ? 'بدون عربي'
+                                                  : 'No Arabic'
+                                        }}</span>
                                     </span>
 
-                                    <span v-if="item.collection_name" class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
-                                        <Layers class="w-2.5 h-2.5" />
+                                    <span
+                                        v-if="item.collection_name"
+                                        class="inline-flex items-center gap-1 rounded border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold text-cyan-300"
+                                    >
+                                        <Layers class="h-2.5 w-2.5" />
                                         <span>{{ item.collection_name }}</span>
                                     </span>
                                 </div>
@@ -605,93 +939,161 @@ const triggerBatchEnrich = async () => {
                         </div>
 
                         <!-- Right: Action Buttons -->
-                        <div class="flex items-center gap-2 shrink-0 self-end md:self-center">
+                        <div
+                            class="flex shrink-0 items-center gap-2 self-end md:self-center"
+                        >
                             <!-- Rename File on Disk -->
                             <button
                                 @click="confirmRenameFile(item)"
                                 :disabled="isOperating"
-                                class="p-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-300 text-xs font-bold transition-all cursor-pointer"
-                                :title="isRTL ? 'إعادة تسمية الملف الفعلي على القرص ليطابق العنوان النظيف' : 'Rename physical file on disk to clean standard title'"
+                                class="cursor-pointer rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-2.5 text-xs font-bold text-emerald-300 transition-all hover:bg-emerald-500/20"
+                                :title="
+                                    isRTL
+                                        ? 'إعادة تسمية الملف الفعلي على القرص ليطابق العنوان النظيف'
+                                        : 'Rename physical file on disk to clean standard title'
+                                "
                             >
-                                <FileEdit class="w-4 h-4" />
+                                <FileEdit class="h-4 w-4" />
                             </button>
 
                             <!-- Quick Re-Parse -->
                             <button
                                 @click="quickReparse(item)"
                                 :disabled="isOperating"
-                                class="p-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-slate-300 hover:text-cyan-300 text-xs font-bold transition-all cursor-pointer"
-                                :title="isRTL ? 'إعادة تفكيك اسم الملف بالخوارزمية الذكية' : 'Re-parse file with intelligent parser'"
+                                class="cursor-pointer rounded-xl border border-white/10 bg-white/[0.05] p-2.5 text-xs font-bold text-slate-300 transition-all hover:bg-white/[0.1] hover:text-cyan-300"
+                                :title="
+                                    isRTL
+                                        ? 'إعادة تفكيك اسم الملف بالخوارزمية الذكية'
+                                        : 'Re-parse file with intelligent parser'
+                                "
                             >
-                                <Repeat class="w-4 h-4" />
+                                <Repeat class="h-4 w-4" />
                             </button>
 
                             <!-- Quick Convert Type -->
                             <button
                                 @click="quickConvert(item)"
                                 :disabled="isOperating"
-                                class="p-2.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-300 text-xs font-bold transition-all cursor-pointer"
-                                :title="item.type === 'movie' ? (isRTL ? 'تحويل لمسلسل' : 'Convert to Series') : (isRTL ? 'تحويل لفيلم' : 'Convert to Movie')"
+                                class="cursor-pointer rounded-xl border border-purple-500/20 bg-purple-500/10 p-2.5 text-xs font-bold text-purple-300 transition-all hover:bg-purple-500/20"
+                                :title="
+                                    item.type === 'movie'
+                                        ? isRTL
+                                            ? 'تحويل لمسلسل'
+                                            : 'Convert to Series'
+                                        : isRTL
+                                          ? 'تحويل لفيلم'
+                                          : 'Convert to Movie'
+                                "
                             >
-                                <ArrowRightLeft class="w-4 h-4" />
+                                <ArrowRightLeft class="h-4 w-4" />
                             </button>
 
                             <!-- Delete Index from Library -->
                             <button
                                 @click="confirmDeleteItem(item)"
                                 :disabled="isOperating"
-                                class="p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 hover:text-rose-300 text-xs font-bold transition-all cursor-pointer"
-                                :title="isRTL ? 'حذف من فهرس المكتبة' : 'Remove item from library index'"
+                                class="cursor-pointer rounded-xl border border-rose-500/20 bg-rose-500/10 p-2.5 text-xs font-bold text-rose-400 transition-all hover:bg-rose-500/20 hover:text-rose-300"
+                                :title="
+                                    isRTL
+                                        ? 'حذف من فهرس المكتبة'
+                                        : 'Remove item from library index'
+                                "
                             >
-                                <Trash2 class="w-4 h-4" />
+                                <Trash2 class="h-4 w-4" />
                             </button>
 
                             <!-- Fix Match Modal Trigger -->
                             <button
                                 @click="openFixMatch(item)"
-                                class="px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md shadow-cyan-500/10 transition-all cursor-pointer active:scale-95"
+                                class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-cyan-500 px-4 py-2.5 text-xs font-black text-slate-950 shadow-md shadow-cyan-500/10 transition-all hover:bg-cyan-400 active:scale-95"
                             >
-                                <Wand2 class="w-3.5 h-3.5" />
-                                <span>{{ isRTL ? 'إصلاح ومطابقة' : 'Fix Match' }}</span>
+                                <Wand2 class="h-3.5 w-3.5" />
+                                <span>{{
+                                    isRTL ? 'إصلاح ومطابقة' : 'Fix Match'
+                                }}</span>
                             </button>
                         </div>
                     </div>
 
                     <!-- Bottom Row: Full Physical Storage File Path Box (Un-truncated, Fully Visible & Copyable) -->
-                    <div class="p-2.5 rounded-2xl bg-slate-950/80 border border-white/5 hover:border-white/10 transition-colors flex items-center justify-between gap-3 shadow-inner">
-                        <div class="flex items-start sm:items-center gap-2 overflow-hidden min-w-0 flex-1">
-                            <FileVideo v-if="item.type === 'movie'" class="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5 sm:mt-0" />
-                            <Folder v-else class="w-3.5 h-3.5 text-purple-400 shrink-0 mt-0.5 sm:mt-0" />
+                    <div
+                        class="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-slate-950/80 p-2.5 shadow-inner transition-colors hover:border-white/10"
+                    >
+                        <div
+                            class="flex min-w-0 flex-1 items-start gap-2 overflow-hidden sm:items-center"
+                        >
+                            <FileVideo
+                                v-if="item.type === 'movie'"
+                                class="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-400 sm:mt-0"
+                            />
+                            <Folder
+                                v-else
+                                class="mt-0.5 h-3.5 w-3.5 shrink-0 text-purple-400 sm:mt-0"
+                            />
                             <div class="min-w-0 flex-1">
-                                <span class="font-mono text-slate-300 select-all break-all text-[11px] leading-relaxed block">
-                                    {{ item.file_path || item.folder_path || 'No Path' }}
+                                <span
+                                    class="block font-mono text-[11px] leading-relaxed break-all text-slate-300 select-all"
+                                >
+                                    {{
+                                        item.file_path ||
+                                        item.folder_path ||
+                                        'No Path'
+                                    }}
                                 </span>
                             </div>
                         </div>
                         <button
                             @click="copyFilePath(item)"
                             type="button"
-                            class="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 text-[11px] font-semibold shrink-0 transition-all flex items-center gap-1 border border-white/5 hover:border-cyan-500/30 cursor-pointer active:scale-95"
-                            :title="isRTL ? 'نسخ المسار بالكامل' : 'Copy full file path'"
+                            class="flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-white/5 bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-slate-300 transition-all hover:border-cyan-500/30 hover:bg-white/[0.12] active:scale-95"
+                            :title="
+                                isRTL
+                                    ? 'نسخ المسار بالكامل'
+                                    : 'Copy full file path'
+                            "
                         >
-                            <Check v-if="copiedItemId === item.id" class="w-3 h-3 text-emerald-400" />
-                            <Copy v-else class="w-3 h-3 text-slate-400" />
-                            <span>{{ copiedItemId === item.id ? (isRTL ? 'تم النسخ!' : 'Copied!') : (isRTL ? 'نسخ المسار' : 'Copy') }}</span>
+                            <Check
+                                v-if="copiedItemId === item.id"
+                                class="h-3 w-3 text-emerald-400"
+                            />
+                            <Copy v-else class="h-3 w-3 text-slate-400" />
+                            <span>{{
+                                copiedItemId === item.id
+                                    ? isRTL
+                                        ? 'تم النسخ!'
+                                        : 'Copied!'
+                                    : isRTL
+                                      ? 'نسخ المسار'
+                                      : 'Copy'
+                            }}</span>
                         </button>
                     </div>
                 </div>
             </div>
 
             <!-- Empty State -->
-            <div v-else class="p-16 rounded-3xl border border-dashed border-white/10 text-center space-y-4">
-                <div class="w-16 h-16 rounded-full bg-slate-900 border border-white/10 flex items-center justify-center mx-auto text-slate-600">
-                    <CheckCircle2 class="w-8 h-8 text-emerald-400" />
+            <div
+                v-else
+                class="space-y-4 rounded-3xl border border-dashed border-white/10 p-16 text-center"
+            >
+                <div
+                    class="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-slate-900 text-slate-600"
+                >
+                    <CheckCircle2 class="h-8 w-8 text-emerald-400" />
                 </div>
                 <h3 class="text-xl font-bold text-white">
-                    {{ isRTL ? 'لا توجد عناصر بحاجة للإصلاح في هذا القسم' : 'All Media Clean & Matched!' }}
+                    {{
+                        isRTL
+                            ? 'لا توجد عناصر بحاجة للإصلاح في هذا القسم'
+                            : 'All Media Clean & Matched!'
+                    }}
                 </h3>
-                <p class="text-slate-400 text-sm max-w-md mx-auto">
-                    {{ isRTL ? 'جميع ملفات الوسائط الخاصة بك تمت مطابقتها بنجاح مع البوسترات والعناوين.' : 'All media items in your library are properly indexed and matched with online metadata.' }}
+                <p class="mx-auto max-w-md text-sm text-slate-400">
+                    {{
+                        isRTL
+                            ? 'جميع ملفات الوسائط الخاصة بك تمت مطابقتها بنجاح مع البوسترات والعناوين.'
+                            : 'All media items in your library are properly indexed and matched with online metadata.'
+                    }}
                 </p>
             </div>
         </div>

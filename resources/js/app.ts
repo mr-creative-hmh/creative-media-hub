@@ -8,9 +8,13 @@ import { initializeThemeAccent } from '@/composables/useThemeAccent';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Creative Media Hub';
 
-createInertiaApp({
+void createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
-    resolve: (name) => resolvePageComponent(`./pages/${name}.vue`, import.meta.glob<any>('./pages/**/*.vue')),
+    resolve: (name) =>
+        resolvePageComponent(
+            `./pages/${name}.vue`,
+            import.meta.glob<any>('./pages/**/*.vue'),
+        ),
     setup({ el, App, props, plugin }) {
         createApp({ render: () => h(App, props) })
             .use(plugin)

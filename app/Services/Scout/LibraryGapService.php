@@ -8,6 +8,7 @@ use App\Models\MediaItem;
 use App\Models\Series;
 use App\Services\Metadata\TmdbProvider;
 use Carbon\Carbon;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
@@ -298,7 +299,7 @@ class LibraryGapService
                 }
             }
 
-            $apiKey = AppSetting::get('tmdb_api_key') ?? config('services.tmdb.key') ?? env('TMDB_API_KEY');
+            $apiKey = AppSetting::get('tmdb_api_key') ?? config('services.tmdb.key');
 
             // Parallel batch fetch missing cache in chunks of 25
             $chunks = array_chunk($collectionIds, 25);
@@ -321,8 +322,9 @@ class LibraryGapService
                         });
 
                         foreach ($toFetch as $id) {
-                            if (isset($responses["col_{$id}"]) && $responses["col_{$id}"]->successful()) {
-                                Cache::put("scout_tmdb_col_{$id}", $responses["col_{$id}"]->json(), 86400 * 7);
+                            $response = $responses["col_{$id}"] ?? null;
+                            if ($response instanceof Response && $response->successful()) {
+                                Cache::put("scout_tmdb_col_{$id}", $response->json(), 86400 * 7);
                             }
                         }
                     } catch (\Throwable $e) {

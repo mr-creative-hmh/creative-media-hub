@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue';
-import { AlertTriangle, Trash2, RotateCcw, X, ShieldAlert, Sparkles, AlertCircle } from 'lucide-vue-next';
+import {
+    AlertTriangle,
+    Trash2,
+    RotateCcw,
+    X,
+    ShieldAlert,
+    Sparkles,
+    AlertCircle,
+} from 'lucide-vue-next';
 import { useI18n } from '@/i18n/useI18n';
 
 const props = withDefaults(
@@ -18,7 +26,7 @@ const props = withDefaults(
         cancelText: '',
         type: 'info',
         loading: false,
-    }
+    },
 );
 
 const emit = defineEmits(['confirm', 'cancel', 'close']);
@@ -47,10 +55,11 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
 <template>
     <div
         v-if="show"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-all duration-300 animate-in fade-in"
+        class="animate-in fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md transition-all duration-300"
         @click.self="handleClose"
     >
-        <div class="relative w-full max-w-lg rounded-3xl bg-[#080B12] border p-6 shadow-2xl space-y-5 overflow-hidden"
+        <div
+            class="relative w-full max-w-lg space-y-5 overflow-hidden rounded-3xl border bg-[#080B12] p-6 shadow-2xl"
             :class="{
                 'border-rose-500/40 shadow-rose-500/10': type === 'danger',
                 'border-amber-500/40 shadow-amber-500/10': type === 'warning',
@@ -59,7 +68,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
         >
             <!-- Ambient Glow -->
             <div
-                class="ambient-glow w-64 h-64 -top-20 -right-20 pointer-events-none"
+                class="ambient-glow pointer-events-none -top-20 -right-20 h-64 w-64"
                 :class="{
                     'bg-rose-500/15': type === 'danger',
                     'bg-amber-500/15': type === 'warning',
@@ -68,25 +77,32 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
             ></div>
 
             <!-- Header -->
-            <div class="flex items-start gap-3.5 relative z-10">
+            <div class="relative z-10 flex items-start gap-3.5">
                 <div
-                    class="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border"
+                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border"
                     :class="{
-                        'bg-rose-500/15 text-rose-400 border-rose-500/30': type === 'danger',
-                        'bg-amber-500/15 text-amber-400 border-amber-500/30': type === 'warning',
-                        'bg-cyan-500/15 text-cyan-400 border-cyan-500/30': type === 'info',
+                        'border-rose-500/30 bg-rose-500/15 text-rose-400':
+                            type === 'danger',
+                        'border-amber-500/30 bg-amber-500/15 text-amber-400':
+                            type === 'warning',
+                        'border-cyan-500/30 bg-cyan-500/15 text-cyan-400':
+                            type === 'info',
                     }"
                 >
-                    <Trash2 v-if="type === 'danger'" class="w-5 h-5" />
-                    <RotateCcw v-else-if="type === 'warning'" class="w-5 h-5" />
-                    <Sparkles v-else class="w-5 h-5" />
+                    <Trash2 v-if="type === 'danger'" class="h-5 w-5" />
+                    <RotateCcw v-else-if="type === 'warning'" class="h-5 w-5" />
+                    <Sparkles v-else class="h-5 w-5" />
                 </div>
 
                 <div class="min-w-0 flex-1">
-                    <h3 class="font-extrabold text-base text-white leading-tight">
+                    <h3
+                        class="text-base leading-tight font-extrabold text-white"
+                    >
                         {{ title }}
                     </h3>
-                    <p class="text-xs text-slate-400 mt-1.5 leading-relaxed whitespace-pre-line">
+                    <p
+                        class="mt-1.5 text-xs leading-relaxed whitespace-pre-line text-slate-400"
+                    >
                         {{ message }}
                     </p>
                 </div>
@@ -94,9 +110,9 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
                 <button
                     type="button"
                     @click="handleClose"
-                    class="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer shrink-0"
+                    class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-white/5 text-slate-400 transition-all hover:bg-white/10 hover:text-white"
                 >
-                    <X class="w-4 h-4" />
+                    <X class="h-4 w-4" />
                 </button>
             </div>
 
@@ -107,11 +123,13 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
             </div>
 
             <!-- Footer Actions -->
-            <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-white/10 relative z-10">
+            <div
+                class="relative z-10 flex items-center justify-end gap-2.5 border-t border-white/10 pt-3"
+            >
                 <button
                     type="button"
                     @click="handleClose"
-                    class="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-xs font-bold transition-all cursor-pointer"
+                    class="cursor-pointer rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-bold text-slate-300 transition-all hover:bg-white/10"
                 >
                     {{ cancelText || (isRTL ? 'إلغاء' : 'Cancel') }}
                 </button>
@@ -120,15 +138,23 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
                     type="button"
                     @click="handleConfirm"
                     :disabled="loading"
-                    class="px-5 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer shadow-lg"
+                    class="flex cursor-pointer items-center gap-1.5 rounded-xl px-5 py-2.5 text-xs font-extrabold shadow-lg transition-all active:scale-95"
                     :class="{
-                        'bg-rose-500 hover:bg-rose-400 text-slate-950 shadow-rose-500/20': type === 'danger',
-                        'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/20': type === 'warning',
-                        'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-cyan-500/20': type === 'info',
+                        'bg-rose-500 text-slate-950 shadow-rose-500/20 hover:bg-rose-400':
+                            type === 'danger',
+                        'bg-amber-500 text-slate-950 shadow-amber-500/20 hover:bg-amber-400':
+                            type === 'warning',
+                        'bg-cyan-500 text-slate-950 shadow-cyan-500/20 hover:bg-cyan-400':
+                            type === 'info',
                     }"
                 >
-                    <span v-if="loading" class="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
-                    <span>{{ confirmText || (isRTL ? 'تأكيد' : 'Confirm') }}</span>
+                    <span
+                        v-if="loading"
+                        class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-950 border-t-transparent"
+                    ></span>
+                    <span>{{
+                        confirmText || (isRTL ? 'تأكيد' : 'Confirm')
+                    }}</span>
                 </button>
             </div>
         </div>

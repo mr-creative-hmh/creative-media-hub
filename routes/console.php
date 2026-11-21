@@ -17,4 +17,4 @@ Artisan::command('organizer:watch {--dry-run : Only simulate organizing files}',
     $this->info("Scanned: {$result['total_scanned']}, Ready: {$result['ready_count']}, Organized: {$result['organized_count']}");
 })->purpose('Monitor watched folders and auto-organize completed downloads');
 
-Schedule::command('organizer:watch')->everyFiveMinutes();
+Schedule::command('organizer:watch')->everyFiveMinutes()->withoutOverlapping();

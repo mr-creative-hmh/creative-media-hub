@@ -22,7 +22,12 @@ export function isGenericEpisodeTitle(title?: string | null): boolean {
     if (!clean) return true;
     if (/^(?:Episode|الحلقة|Ep|Part)\s*\d+$/i.test(clean)) return true;
     if (/^S\d+\s*E\d+$/i.test(clean)) return true;
-    if (/^(?:Season|الموسم)\s*\d+\s*(?:[-:]*\s*)?(?:Episode|الحلقة)\s*\d+$/i.test(clean)) return true;
+    if (
+        /^(?:Season|الموسم)\s*\d+\s*(?:[-:]*\s*)?(?:Episode|الحلقة)\s*\d+$/i.test(
+            clean,
+        )
+    )
+        return true;
     return false;
 }
 
@@ -30,7 +35,10 @@ export function isGenericEpisodeTitle(title?: string | null): boolean {
  * Sanitizes and extracts the pure episode title, stripping any accidental duplicate
  * series names, season/episode prefixes, or generic labels.
  */
-export function extractPureEpisodeTitle(candidate?: string | null, seriesNames: string[] = []): string {
+export function extractPureEpisodeTitle(
+    candidate?: string | null,
+    seriesNames: string[] = [],
+): string {
     if (!candidate) return '';
     let clean = candidate.trim();
     if (!clean) return '';
@@ -39,8 +47,14 @@ export function extractPureEpisodeTitle(candidate?: string | null, seriesNames: 
     for (const sep of [' - ', ' : ', ' ']) {
         const parts = clean.split(sep);
         if (parts.length >= 2 && parts.length % 2 === 0) {
-            const firstHalf = parts.slice(0, parts.length / 2).join(sep).trim();
-            const secondHalf = parts.slice(parts.length / 2).join(sep).trim();
+            const firstHalf = parts
+                .slice(0, parts.length / 2)
+                .join(sep)
+                .trim();
+            const secondHalf = parts
+                .slice(parts.length / 2)
+                .join(sep)
+                .trim();
             if (firstHalf.toLowerCase() === secondHalf.toLowerCase()) {
                 clean = firstHalf;
                 break;
@@ -49,7 +63,9 @@ export function extractPureEpisodeTitle(candidate?: string | null, seriesNames: 
     }
 
     // 2. Check pattern: .*?(Season|الموسم)\s*\d+.*?[-:]*(Episode|الحلقة)\s*\d+[\s\-:]*(.*)$
-    const seMatch = clean.match(/(?:Season|الموسم)\s*\d+.*?[-:]*(?:Episode|الحلقة)\s*\d+[\s\-:]*(.*)$/i);
+    const seMatch = clean.match(
+        /(?:Season|الموسم)\s*\d+.*?[-:]*(?:Episode|الحلقة)\s*\d+[\s\-:]*(.*)$/i,
+    );
     if (seMatch) {
         clean = seMatch[1] ? seMatch[1].trim() : '';
     } else {
@@ -64,11 +80,16 @@ export function extractPureEpisodeTitle(candidate?: string | null, seriesNames: 
     for (const sName of seriesNames) {
         if (!sName) continue;
         const esc = sName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        clean = clean.replace(new RegExp('^' + esc + '[\\s\\-:]*', 'i'), '').trim();
+        clean = clean
+            .replace(new RegExp('^' + esc + '[\\s\\-:]*', 'i'), '')
+            .trim();
     }
 
     // 5. Strip leading & trailing dashes or colons
-    clean = clean.replace(/^[\s\-:]+/, '').replace(/[\s\-:]+$/, '').trim();
+    clean = clean
+        .replace(/^[\s\-:]+/, '')
+        .replace(/[\s\-:]+$/, '')
+        .trim();
 
     if (isGenericEpisodeTitle(clean)) return '';
     return clean;
@@ -77,25 +98,39 @@ export function extractPureEpisodeTitle(candidate?: string | null, seriesNames: 
 /**
  * Extracts a clean episode title, returning empty string if it's generic.
  */
-export function getCleanEpisodeTitle(item: any, isRTL: boolean = false): string {
+export function getCleanEpisodeTitle(
+    item: any,
+    isRTL: boolean = false,
+): string {
     if (!item) return '';
 
     const seriesNames = [
-        item.series?.title, item.series?.title_ar,
-        item.series_title, item.series_title_ar,
-        item.series_name, item.series_name_ar
+        item.series?.title,
+        item.series?.title_ar,
+        item.series_title,
+        item.series_title_ar,
+        item.series_name,
+        item.series_name_ar,
     ].filter(Boolean) as string[];
 
     let candidate = '';
     if (isRTL) {
-        candidate = item.episode_title_ar || item.title_ar || item.episode_title || item.title || '';
+        candidate =
+            item.episode_title_ar ||
+            item.title_ar ||
+            item.episode_title ||
+            item.title ||
+            '';
     } else {
         candidate = item.episode_title || item.title || '';
     }
 
     let pure = extractPureEpisodeTitle(candidate, seriesNames);
     if (!pure && isRTL && (item.episode_title || item.title)) {
-        pure = extractPureEpisodeTitle(item.episode_title || item.title, seriesNames);
+        pure = extractPureEpisodeTitle(
+            item.episode_title || item.title,
+            seriesNames,
+        );
     }
     return pure;
 }
@@ -104,7 +139,10 @@ export function getCleanEpisodeTitle(item: any, isRTL: boolean = false): string 
  * Formats a series episode title according to the standardized convention:
  * "TV show [name] - Season [Number] - Episode [Number] - [Episode title if available]"
  */
-export function formatEpisodeTitle(item: any, options: EpisodeTitleOptions = {}): string {
+export function formatEpisodeTitle(
+    item: any,
+    options: EpisodeTitleOptions = {},
+): string {
     if (!item) return '';
 
     const isRTL = options.isRTL ?? false;
@@ -113,10 +151,17 @@ export function formatEpisodeTitle(item: any, options: EpisodeTitleOptions = {})
     // 1. Extract Series Name
     let sName = '';
     if (isRTL) {
-        sName = item.series?.title_ar || item.series_title_ar || item.series_name_ar || 
-                item.series?.title || item.series_title || item.series_name || '';
+        sName =
+            item.series?.title_ar ||
+            item.series_title_ar ||
+            item.series_name_ar ||
+            item.series?.title ||
+            item.series_title ||
+            item.series_name ||
+            '';
     } else {
-        sName = item.series?.title || item.series_title || item.series_name || '';
+        sName =
+            item.series?.title || item.series_title || item.series_name || '';
     }
 
     if (!sName && item.title) {
@@ -127,9 +172,10 @@ export function formatEpisodeTitle(item: any, options: EpisodeTitleOptions = {})
     }
 
     // Clean out any lingering raw season tags from series name
-    sName = sName.replace(/\s*-\s*S\d+E\d+.*$/gi, '')
-                 .replace(/\s*-\s*(?:Season|الموسم)\s*\d+.*$/gi, '')
-                 .trim();
+    sName = sName
+        .replace(/\s*-\s*S\d+E\d+.*$/gi, '')
+        .replace(/\s*-\s*(?:Season|الموسم)\s*\d+.*$/gi, '')
+        .trim();
 
     if (!sName && options.fallbackSeriesName) {
         sName = options.fallbackSeriesName;
@@ -169,6 +215,9 @@ export function formatEpisodeTitle(item: any, options: EpisodeTitleOptions = {})
  * Format Season and Episode with Title (without Series Name prefix).
  * E.g.: "Season 1 - Episode 1 - The National Anthem"
  */
-export function formatSeasonEpisodeTitle(item: any, options: Omit<EpisodeTitleOptions, 'includeSeriesName'> = {}): string {
+export function formatSeasonEpisodeTitle(
+    item: any,
+    options: Omit<EpisodeTitleOptions, 'includeSeriesName'> = {},
+): string {
     return formatEpisodeTitle(item, { ...options, includeSeriesName: false });
 }

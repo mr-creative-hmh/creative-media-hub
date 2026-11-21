@@ -38,7 +38,7 @@ export interface DownloadItem {
     source_url?: string;
     destination_path?: string;
     destination_folder?: string;
-    torrent_files?: any | null;
+    torrent_files?: any;
     selected_files?: any[] | null;
     info_hash?: string | null;
     aria2_gid?: string | null;
@@ -49,8 +49,21 @@ export interface DownloadItem {
     upload_speed_bytes_sec?: number;
     num_seeders?: number;
     connections?: number;
-    workflow_stage?: 'downloading' | 'verifying' | 'organizing' | 'scanning' | 'ready' | 'failed' | null;
-    organize_status?: 'pending' | 'in_progress' | 'success' | 'failed' | 'completed' | null;
+    workflow_stage?:
+        | 'downloading'
+        | 'verifying'
+        | 'organizing'
+        | 'scanning'
+        | 'ready'
+        | 'failed'
+        | null;
+    organize_status?:
+        | 'pending'
+        | 'in_progress'
+        | 'success'
+        | 'failed'
+        | 'completed'
+        | null;
     organized_path?: string | null;
     indexed_id?: number | null;
     error_message?: string;
@@ -80,26 +93,37 @@ export interface DownloaderInspection {
 const downloads = ref<DownloadItem[]>([]);
 const isWorkerRunning = ref(false);
 const daemonStatus = ref<any>(null);
-let workerInterval: any = null;
+let workerInterval: ReturnType<typeof setInterval> | null = null;
+let refreshHandler: (() => void) | null = null;
+let visibilityHandler: (() => void) | null = null;
 
 export function useDownloader() {
     const { isRTL } = useI18n();
 
     const activeDownloads = computed(() =>
-        downloads.value.filter(d =>
-            d.status === 'downloading' ||
-            d.status === 'queued' ||
-            (d.workflow_stage && d.workflow_stage !== 'ready' && d.workflow_stage !== 'failed') ||
-            d.organize_status === 'in_progress'
-        )
+        downloads.value.filter(
+            (d) =>
+                d.status === 'downloading' ||
+                d.status === 'queued' ||
+                (d.workflow_stage &&
+                    d.workflow_stage !== 'ready' &&
+                    d.workflow_stage !== 'failed') ||
+                d.organize_status === 'in_progress',
+        ),
     );
 
     const completedDownloads = computed(() =>
-        downloads.value.filter(d => d.status === 'completed')
+        downloads.value.filter((d) => d.status === 'completed'),
     );
 
     const totalSpeedBytesSec = computed(() =>
-        downloads.value.reduce((acc, d) => d.status === 'downloading' ? acc + (d.speed_bytes_sec || 0) : acc, 0)
+        downloads.value.reduce(
+            (acc, d) =>
+                d.status === 'downloading'
+                    ? acc + (d.speed_bytes_sec || 0)
+                    : acc,
+            0,
+        ),
     );
 
     const totalSpeedDownFormatted = computed(() => {
@@ -109,32 +133,53 @@ export function useDownloader() {
         return `${(bytes / (1024 * 1024)).toFixed(1)} MB/s`;
     });
 
+    const totalUploadSpeedBytesSec = computed(() =>
+        downloads.value.reduce(
+            (acc, d) =>
+                d.status === 'downloading'
+                    ? acc + (d.upload_speed_bytes_sec || 0)
+                    : acc,
+            0,
+        ),
+    );
+
     const totalSpeedUpFormatted = computed(() => {
-        const active = activeDownloads.value.length;
-        if (active === 0) return '0.0 MB/s';
-        return `${(active * 0.85).toFixed(1)} MB/s`;
+        const bytes = totalUploadSpeedBytesSec.value;
+        if (bytes <= 0) return '0.0 MB/s';
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB/s`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB/s`;
     });
 
     const formatBytes = (bytes: number) => {
         if (!bytes || bytes <= 0) return '0 MB';
         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-        if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        if (bytes < 1024 * 1024 * 1024)
+            return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
         return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
     };
 
     const getProgressPercent = (item: DownloadItem) => {
         if (item.status === 'completed') return 100;
         if (!item.total_bytes || item.total_bytes <= 0) return 0;
-        return Math.min(100, Math.round((item.downloaded_bytes / item.total_bytes) * 100));
+        return Math.min(
+            100,
+            Math.round((item.downloaded_bytes / item.total_bytes) * 100),
+        );
     };
 
     const getETA = (item: DownloadItem) => {
-        if (item.status === 'completed') return isRTL.value ? 'مكتمل' : 'Completed';
+        if (item.status === 'completed')
+            return isRTL.value ? 'مكتمل' : 'Completed';
         if (item.status === 'paused') return isRTL.value ? 'متوقف' : 'Paused';
-        if (item.status === 'queued') return isRTL.value ? 'في الانتظار' : 'In Queue';
-        if (item.speed_bytes_sec <= 0) return isRTL.value ? 'جاري الحساب...' : 'Calculating...';
+        if (item.status === 'queued')
+            return isRTL.value ? 'في الانتظار' : 'In Queue';
+        if (item.speed_bytes_sec <= 0)
+            return isRTL.value ? 'جاري الحساب...' : 'Calculating...';
 
-        const remainingBytes = Math.max(0, item.total_bytes - item.downloaded_bytes);
+        const remainingBytes = Math.max(
+            0,
+            item.total_bytes - item.downloaded_bytes,
+        );
         const seconds = Math.ceil(remainingBytes / item.speed_bytes_sec);
 
         if (seconds < 60) return `${seconds}s`;
@@ -150,16 +195,24 @@ export function useDownloader() {
                 const data = await res.json();
                 downloads.value = data;
             }
-        } catch (e) {}
+        } catch {}
     };
 
-    const inspectUrl = async (url: string, type?: string): Promise<DownloaderInspection | null> => {
+    const inspectUrl = async (
+        url: string,
+        type?: string,
+    ): Promise<DownloaderInspection | null> => {
         try {
             const res = await fetch('/api/downloads/inspect', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    'X-CSRF-TOKEN':
+                        (
+                            document.querySelector(
+                                'meta[name="csrf-token"]',
+                            ) as any
+                        )?.content || '',
                 },
                 body: JSON.stringify({ url, type }),
             });
@@ -172,7 +225,9 @@ export function useDownloader() {
         return null;
     };
 
-    const inspectTorrentFile = async (file: File): Promise<DownloaderInspection | null> => {
+    const inspectTorrentFile = async (
+        file: File,
+    ): Promise<DownloaderInspection | null> => {
         try {
             const formData = new FormData();
             formData.append('torrent_file', file);
@@ -180,7 +235,12 @@ export function useDownloader() {
             const res = await fetch('/api/downloads/inspect', {
                 method: 'POST',
                 headers: {
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    'X-CSRF-TOKEN':
+                        (
+                            document.querySelector(
+                                'meta[name="csrf-token"]',
+                            ) as any
+                        )?.content || '',
                 },
                 body: formData,
             });
@@ -199,7 +259,7 @@ export function useDownloader() {
             if (res.ok) {
                 return await res.json();
             }
-        } catch (e) {}
+        } catch {}
         return null;
     };
 
@@ -209,12 +269,17 @@ export function useDownloader() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    'X-CSRF-TOKEN':
+                        (
+                            document.querySelector(
+                                'meta[name="csrf-token"]',
+                            ) as any
+                        )?.content || '',
                 },
                 body: JSON.stringify(settings),
             });
             return res.ok;
-        } catch (e) {
+        } catch {
             return false;
         }
     };
@@ -225,7 +290,12 @@ export function useDownloader() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    'X-CSRF-TOKEN':
+                        (
+                            document.querySelector(
+                                'meta[name="csrf-token"]',
+                            ) as any
+                        )?.content || '',
                 },
             });
             if (res.ok) {
@@ -234,7 +304,7 @@ export function useDownloader() {
                     downloads.value = data.downloads;
                 }
             }
-        } catch (e) {}
+        } catch {}
     };
 
     const fetchDaemonStatus = async () => {
@@ -243,7 +313,7 @@ export function useDownloader() {
             if (res.ok) {
                 daemonStatus.value = await res.json();
             }
-        } catch (e) {}
+        } catch {}
     };
 
     const stopDaemon = async () => {
@@ -252,7 +322,12 @@ export function useDownloader() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    'X-CSRF-TOKEN':
+                        (
+                            document.querySelector(
+                                'meta[name="csrf-token"]',
+                            ) as any
+                        )?.content || '',
                 },
             });
             if (res.ok) {
@@ -260,48 +335,75 @@ export function useDownloader() {
                 daemonStatus.value = data.daemon;
                 return true;
             }
-        } catch (e) {}
+        } catch {}
         return false;
     };
 
-    let idleTick = 0;
+    const stopBackgroundWorker = () => {
+        if (workerInterval !== null) {
+            clearInterval(workerInterval);
+            workerInterval = null;
+        }
+        if (typeof window !== 'undefined' && refreshHandler) {
+            window.removeEventListener('downloads:refresh', refreshHandler);
+            refreshHandler = null;
+        }
+        if (typeof document !== 'undefined' && visibilityHandler) {
+            document.removeEventListener('visibilitychange', visibilityHandler);
+            visibilityHandler = null;
+        }
+        isWorkerRunning.value = false;
+    };
+
     const startBackgroundWorker = () => {
-        if (isWorkerRunning.value) return;
+        if (isWorkerRunning.value || workerInterval !== null) return;
         isWorkerRunning.value = true;
-        fetchDownloads();
+        void fetchDownloads();
 
         workerInterval = setInterval(() => {
-            idleTick++;
+            if (typeof document !== 'undefined' && document.hidden) {
+                return;
+            }
             if (activeDownloads.value.length > 0) {
-                processNextChunk();
-            } else if (idleTick % 3 === 0) {
-                fetchDownloads();
+                void processNextChunk();
             }
         }, 1200);
 
-        if (typeof window !== 'undefined') {
-            window.addEventListener('downloads:refresh', () => {
-                fetchDownloads();
-                processNextChunk();
-            });
+        if (typeof window !== 'undefined' && !refreshHandler) {
+            refreshHandler = () => {
+                void fetchDownloads();
+                void processNextChunk();
+            };
+            window.addEventListener('downloads:refresh', refreshHandler);
+        }
+
+        if (typeof document !== 'undefined' && !visibilityHandler) {
+            visibilityHandler = () => {
+                if (!document.hidden) {
+                    void fetchDownloads();
+                }
+            };
+            document.addEventListener('visibilitychange', visibilityHandler);
         }
     };
 
     const addDownload = async (
-        titleOrPayload: string | {
-            title: string;
-            media_type?: 'movie' | 'series' | 'subtitle';
-            source_url?: string;
-            destination_path?: string;
-            destination_folder?: string;
-            download_type?: 'direct' | 'torrent';
-            selected_files?: any[];
-            torrent_files?: any[];
-            info_hash?: string;
-        },
+        titleOrPayload:
+            | string
+            | {
+                  title: string;
+                  media_type?: 'movie' | 'series' | 'subtitle';
+                  source_url?: string;
+                  destination_path?: string;
+                  destination_folder?: string;
+                  download_type?: 'direct' | 'torrent';
+                  selected_files?: any[];
+                  torrent_files?: any[];
+                  info_hash?: string;
+              },
         legacyMediaType: 'movie' | 'series' | 'subtitle' = 'movie',
         legacySourceUrl?: string,
-        legacyDestPath?: string
+        legacyDestPath?: string,
     ) => {
         try {
             let payload: any = {};
@@ -320,7 +422,12 @@ export function useDownloader() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    'X-CSRF-TOKEN':
+                        (
+                            document.querySelector(
+                                'meta[name="csrf-token"]',
+                            ) as any
+                        )?.content || '',
                 },
                 body: JSON.stringify(payload),
             });
@@ -329,12 +436,12 @@ export function useDownloader() {
                 downloads.value.unshift(newItem);
                 return newItem;
             }
-        } catch (e) {}
+        } catch {}
         return null;
     };
 
     const pauseDownload = async (id: number) => {
-        const item = downloads.value.find(d => d.id === id);
+        const item = downloads.value.find((d) => d.id === id);
         if (item) {
             item.status = 'paused';
             item.speed_bytes_sec = 0;
@@ -342,13 +449,15 @@ export function useDownloader() {
         await fetch(`/api/downloads/${id}/pause`, {
             method: 'POST',
             headers: {
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                'X-CSRF-TOKEN':
+                    (document.querySelector('meta[name="csrf-token"]') as any)
+                        ?.content || '',
             },
         });
     };
 
     const stopDownload = async (id: number) => {
-        const item = downloads.value.find(d => d.id === id);
+        const item = downloads.value.find((d) => d.id === id);
         if (item) {
             item.status = 'paused';
             item.speed_bytes_sec = 0;
@@ -356,26 +465,30 @@ export function useDownloader() {
         await fetch(`/api/downloads/${id}/stop`, {
             method: 'POST',
             headers: {
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                'X-CSRF-TOKEN':
+                    (document.querySelector('meta[name="csrf-token"]') as any)
+                        ?.content || '',
             },
         });
     };
 
     const resumeDownload = async (id: number) => {
-        const item = downloads.value.find(d => d.id === id);
+        const item = downloads.value.find((d) => d.id === id);
         if (item) {
             item.status = 'downloading';
         }
         await fetch(`/api/downloads/${id}/resume`, {
             method: 'POST',
             headers: {
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                'X-CSRF-TOKEN':
+                    (document.querySelector('meta[name="csrf-token"]') as any)
+                        ?.content || '',
             },
         });
     };
 
     const retryDownload = async (id: number) => {
-        const item = downloads.value.find(d => d.id === id);
+        const item = downloads.value.find((d) => d.id === id);
         if (item) {
             item.downloaded_bytes = 0;
             item.status = 'downloading';
@@ -383,13 +496,15 @@ export function useDownloader() {
         await fetch(`/api/downloads/${id}/retry`, {
             method: 'POST',
             headers: {
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                'X-CSRF-TOKEN':
+                    (document.querySelector('meta[name="csrf-token"]') as any)
+                        ?.content || '',
             },
         });
     };
 
     const organizeDownload = async (id: number) => {
-        const item = downloads.value.find(d => d.id === id);
+        const item = downloads.value.find((d) => d.id === id);
         if (item) {
             item.workflow_stage = 'organizing';
             item.organize_status = 'in_progress';
@@ -399,7 +514,12 @@ export function useDownloader() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                    'X-CSRF-TOKEN':
+                        (
+                            document.querySelector(
+                                'meta[name="csrf-token"]',
+                            ) as any
+                        )?.content || '',
                 },
             });
             if (res.ok) {
@@ -416,11 +536,13 @@ export function useDownloader() {
     };
 
     const deleteDownload = async (id: number) => {
-        downloads.value = downloads.value.filter(d => d.id !== id);
+        downloads.value = downloads.value.filter((d) => d.id !== id);
         await fetch(`/api/downloads/${id}`, {
             method: 'DELETE',
             headers: {
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                'X-CSRF-TOKEN':
+                    (document.querySelector('meta[name="csrf-token"]') as any)
+                        ?.content || '',
             },
         });
     };
@@ -440,6 +562,7 @@ export function useDownloader() {
         getSettings,
         saveSettings,
         startBackgroundWorker,
+        stopBackgroundWorker,
         addDownload,
         pauseDownload,
         stopDownload,

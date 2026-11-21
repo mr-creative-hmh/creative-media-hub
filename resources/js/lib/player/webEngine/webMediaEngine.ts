@@ -79,7 +79,8 @@ export class WebMediaEngine {
                 return false;
             }
 
-            const headerParsed = this.demuxer.parseHeaderAndTracks(initialBytes);
+            const headerParsed =
+                this.demuxer.parseHeaderAndTracks(initialBytes);
             if (!headerParsed) {
                 return false;
             }
@@ -126,12 +127,12 @@ export class WebMediaEngine {
             if (this.demuxer.duration > 0 && isFinite(this.demuxer.duration)) {
                 try {
                     this.mediaSource.duration = this.demuxer.duration;
-                } catch (e) {}
+                } catch {}
             }
 
             // Start streaming clusters
             this.currentByteOffset = 262144;
-            this.startClusterStreamLoop();
+            void this.startClusterStreamLoop();
 
             return true;
         } catch (err) {
@@ -152,16 +153,24 @@ export class WebMediaEngine {
         try {
             while (!this.isDestroyed && this.isAttached) {
                 // If buffered enough ahead (e.g. 20s), throttle fetching
-                if (this.videoElement && this.videoElement.buffered.length > 0) {
+                if (
+                    this.videoElement &&
+                    this.videoElement.buffered.length > 0
+                ) {
                     const curTime = this.videoElement.currentTime;
-                    const bufEnd = this.videoElement.buffered.end(this.videoElement.buffered.length - 1);
+                    const bufEnd = this.videoElement.buffered.end(
+                        this.videoElement.buffered.length - 1,
+                    );
                     if (bufEnd - curTime > 25) {
-                        await new Promise(r => setTimeout(r, 1000));
+                        await new Promise((r) => setTimeout(r, 1000));
                         continue;
                     }
                 }
 
-                const bytes = await this.fetchRange(this.currentByteOffset, this.currentByteOffset + chunkSize - 1);
+                const bytes = await this.fetchRange(
+                    this.currentByteOffset,
+                    this.currentByteOffset + chunkSize - 1,
+                );
                 if (!bytes || bytes.length === 0) {
                     break;
                 }
@@ -187,7 +196,11 @@ export class WebMediaEngine {
                     }
 
                     if (videoSamples.length > 0) {
-                        const mediaSegment = this.transmuxer.generateMediaSegment(this.videoTrack.trackNumber, videoSamples);
+                        const mediaSegment =
+                            this.transmuxer.generateMediaSegment(
+                                this.videoTrack.trackNumber,
+                                videoSamples,
+                            );
                         if (mediaSegment) {
                             this.appendBuffer(mediaSegment);
                         }
@@ -195,7 +208,7 @@ export class WebMediaEngine {
                 }
 
                 // Small pause between chunks to yield to browser UI thread
-                await new Promise(r => setTimeout(r, 50));
+                await new Promise((r) => setTimeout(r, 50));
             }
         } catch (e) {
             console.warn('WebMediaEngine cluster stream loop stopped:', e);
@@ -213,8 +226,10 @@ export class WebMediaEngine {
         } else {
             try {
                 this.isAppending = true;
-                this.sourceBuffer.appendBuffer(chunk as unknown as BufferSource);
-            } catch (e) {
+                this.sourceBuffer.appendBuffer(
+                    chunk as unknown as BufferSource,
+                );
+            } catch {
                 this.isAppending = false;
                 this.pendingBufferQueue.push(chunk);
             }
@@ -222,13 +237,19 @@ export class WebMediaEngine {
     }
 
     private processPendingQueue() {
-        if (this.pendingBufferQueue.length > 0 && this.sourceBuffer && !this.sourceBuffer.updating) {
+        if (
+            this.pendingBufferQueue.length > 0 &&
+            this.sourceBuffer &&
+            !this.sourceBuffer.updating
+        ) {
             const next = this.pendingBufferQueue.shift();
             if (next) {
                 try {
                     this.isAppending = true;
-                    this.sourceBuffer.appendBuffer(next as unknown as BufferSource);
-                } catch (e) {
+                    this.sourceBuffer.appendBuffer(
+                        next as unknown as BufferSource,
+                    );
+                } catch {
                     this.isAppending = false;
                 }
             }
@@ -238,12 +259,15 @@ export class WebMediaEngine {
     /**
      * Fetch byte range via HTTP 206 Partial Content.
      */
-    private async fetchRange(start: number, end: number): Promise<Uint8Array | null> {
+    private async fetchRange(
+        start: number,
+        end: number,
+    ): Promise<Uint8Array | null> {
         this.abortController = new AbortController();
         try {
             const res = await fetch(this.streamUrl, {
                 headers: {
-                    'Range': `bytes=${start}-${end}`,
+                    Range: `bytes=${start}-${end}`,
                 },
                 signal: this.abortController.signal,
             });
@@ -254,7 +278,7 @@ export class WebMediaEngine {
 
             const buf = await res.arrayBuffer();
             return new Uint8Array(buf);
-        } catch (e) {
+        } catch {
             return null;
         }
     }
@@ -282,7 +306,7 @@ export class WebMediaEngine {
             if (this.sourceBuffer && !this.sourceBuffer.updating) {
                 try {
                     this.sourceBuffer.abort();
-                } catch (e) {}
+                } catch {}
             }
             this.pendingBufferQueue = [];
             this.videoElement.currentTime = seconds;
@@ -301,10 +325,14 @@ export class WebMediaEngine {
         if (this.abortController) {
             this.abortController.abort();
         }
-        if (this.sourceBuffer && this.mediaSource && this.mediaSource.readyState === 'open') {
+        if (
+            this.sourceBuffer &&
+            this.mediaSource &&
+            this.mediaSource.readyState === 'open'
+        ) {
             try {
                 this.mediaSource.removeSourceBuffer(this.sourceBuffer);
-            } catch (e) {}
+            } catch {}
         }
         if (this.objectUrl) {
             URL.revokeObjectURL(this.objectUrl);

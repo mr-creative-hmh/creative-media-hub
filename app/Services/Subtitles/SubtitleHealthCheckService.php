@@ -258,12 +258,12 @@ class SubtitleHealthCheckService
         }
 
         // 2. Download destinations
-        $destMovies = AppSetting::get('download_folder_movies');
+        $destMovies = AppSetting::get('movies_download_path');
         if ($destMovies && is_dir($destMovies)) {
             $dirs[] = rtrim(str_replace('\\', '/', $destMovies), '/');
         }
 
-        $destSeries = AppSetting::get('download_folder_series');
+        $destSeries = AppSetting::get('series_download_path');
         if ($destSeries && is_dir($destSeries)) {
             $dirs[] = rtrim(str_replace('\\', '/', $destSeries), '/');
         }
@@ -425,8 +425,10 @@ class SubtitleHealthCheckService
             $episodeNum = (int) $m[2];
 
             $seriesFolder = basename(dirname(dirname($subPath)));
-            $ep = Episode::where('season_number', $seasonNum)
-                ->where('episode_number', $episodeNum)
+            $ep = Episode::where('episode_number', $episodeNum)
+                ->whereHas('season', function ($q) use ($seasonNum) {
+                    $q->where('season_number', $seasonNum);
+                })
                 ->whereHas('series', function ($q) use ($seriesFolder) {
                     $q->where('title', 'LIKE', "%{$seriesFolder}%")
                         ->orWhere('folder_path', 'LIKE', "%{$seriesFolder}%");

@@ -198,7 +198,7 @@ class CollectionManagementController extends Controller
 
         // Rebuild master index and flush caches
         try {
-            $masterService->buildAll(false, false, false);
+            $masterService->buildMasterIndex(false, false);
         } catch (\Throwable $e) {
         }
 

@@ -160,11 +160,17 @@ class SubtitleStreamService
                 $newStart = max(0, $start - $startSeconds);
                 $newEnd = max(0.1, $end - $startSeconds);
 
-                $formatTime = function ($sec) {
-                    $h = floor($sec / 3600);
-                    $m = floor(($sec % 3600) / 60);
-                    $s = floor($sec % 60);
-                    $ms = round(($sec - floor($sec)) * 1000);
+                $formatTime = function (float $sec): string {
+                    $wholeSeconds = (int) floor($sec);
+                    $h = intdiv($wholeSeconds, 3600);
+                    $m = intdiv($wholeSeconds % 3600, 60);
+                    $s = $wholeSeconds % 60;
+                    $ms = (int) round(($sec - $wholeSeconds) * 1000);
+
+                    if ($ms >= 1000) {
+                        $ms -= 1000;
+                        $s++;
+                    }
 
                     return sprintf('%02d:%02d:%02d.%03d', $h, $m, $s, $ms);
                 };

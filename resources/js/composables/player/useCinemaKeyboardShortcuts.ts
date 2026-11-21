@@ -15,11 +15,18 @@ export interface UseCinemaKeyboardShortcutsActions {
     closeTopModal?: () => boolean;
 }
 
-export function useCinemaKeyboardShortcuts(actions: UseCinemaKeyboardShortcutsActions) {
+export function useCinemaKeyboardShortcuts(
+    actions: UseCinemaKeyboardShortcutsActions,
+) {
     const handleKeyDown = (e: KeyboardEvent) => {
         // Do not intercept if focused on inputs
         const target = e.target as HTMLElement;
-        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) {
+        if (
+            target &&
+            (target.tagName === 'INPUT' ||
+                target.tagName === 'TEXTAREA' ||
+                target.tagName === 'SELECT')
+        ) {
             return;
         }
 
@@ -75,7 +82,11 @@ export function useCinemaKeyboardShortcuts(actions: UseCinemaKeyboardShortcutsAc
                 break;
             case 'Escape':
                 e.preventDefault();
-                if (actions.isModalOpen && actions.isModalOpen() && actions.closeTopModal) {
+                if (
+                    actions.isModalOpen &&
+                    actions.isModalOpen() &&
+                    actions.closeTopModal
+                ) {
                     actions.closeTopModal();
                 } else {
                     actions.onClose();
@@ -92,4 +103,3 @@ export function useCinemaKeyboardShortcuts(actions: UseCinemaKeyboardShortcutsAc
         window.removeEventListener('keydown', handleKeyDown);
     });
 }
-

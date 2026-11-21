@@ -8,10 +8,30 @@ import WatchHistoryBar from '@/components/layout/WatchHistoryBar.vue';
 import MediaCard from '@/components/media/MediaCard.vue';
 import MediaDetailModal from '@/components/media/MediaDetailModal.vue';
 import {
-    Film, Tv, HardDrive, Subtitles, DownloadCloud, Sparkles,
-    FolderSync, BarChart3, Play, ChevronRight, ChevronLeft,
-    Clock, Flame, CheckCircle, Plus, ScanLine, AlertCircle,
-    Zap, Eye, Heart, Compass, Star, ArrowRight, Layers
+    Film,
+    Tv,
+    HardDrive,
+    Subtitles,
+    DownloadCloud,
+    Sparkles,
+    FolderSync,
+    BarChart3,
+    Play,
+    ChevronRight,
+    ChevronLeft,
+    Clock,
+    Flame,
+    CheckCircle,
+    Plus,
+    ScanLine,
+    AlertCircle,
+    Zap,
+    Eye,
+    Heart,
+    Compass,
+    Star,
+    ArrowRight,
+    Layers,
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -50,7 +70,9 @@ const isModalOpen = ref(false);
 const activeVibeId = ref<string>(props.vibes?.[0]?.id || 'mind-bending');
 
 const activeVibe = computed(() => {
-    return props.vibes.find((v) => v.id === activeVibeId.value) || props.vibes[0];
+    return (
+        props.vibes.find((v) => v.id === activeVibeId.value) || props.vibes[0]
+    );
 });
 
 const openDetail = (item: any) => {
@@ -63,12 +85,17 @@ const closeDetail = () => {
     isModalOpen.value = false;
 };
 
-const handleHeroPlay = (item: any, playFn: (mediaItem: any, playlist?: any[]) => void) => {
+const handleHeroPlay = (
+    item: any,
+    playFn: (mediaItem: any, playlist?: any[]) => void,
+) => {
     if (!item) return;
 
     // If it's a TV Series
     if (item.type === 'series' || item.seasons || !item.file_path) {
-        const firstSeason = item.seasons?.find((s: any) => s.season_number === 1) || item.seasons?.[0];
+        const firstSeason =
+            item.seasons?.find((s: any) => s.season_number === 1) ||
+            item.seasons?.[0];
         const firstEp = item.first_episode || firstSeason?.episodes?.[0];
         if (firstEp) {
             const playlist = (firstSeason?.episodes || []).map((e: any) => ({
@@ -88,22 +115,25 @@ const handleHeroPlay = (item: any, playFn: (mediaItem: any, playlist?: any[]) =>
                 subtitles: e.subtitles || [],
             }));
 
-            playFn({
-                ...firstEp,
-                id: firstEp.id,
-                type: 'episode',
-                watchable_id: firstEp.id,
-                watchable_type: 'episode',
-                series: item,
-                series_id: item.id,
-                series_title: item.title,
-                series_title_ar: item.title_ar,
-                season_number: firstSeason?.season_number || 1,
-                episode_number: firstEp.episode_number || 1,
-                title: firstEp.title,
-                title_ar: firstEp.title_ar,
-                subtitles: firstEp.subtitles || [],
-            }, playlist);
+            playFn(
+                {
+                    ...firstEp,
+                    id: firstEp.id,
+                    type: 'episode',
+                    watchable_id: firstEp.id,
+                    watchable_type: 'episode',
+                    series: item,
+                    series_id: item.id,
+                    series_title: item.title,
+                    series_title_ar: item.title_ar,
+                    season_number: firstSeason?.season_number || 1,
+                    episode_number: firstEp.episode_number || 1,
+                    title: firstEp.title,
+                    title_ar: firstEp.title_ar,
+                    subtitles: firstEp.subtitles || [],
+                },
+                playlist,
+            );
             return;
         }
 
@@ -132,9 +162,8 @@ const handleHeroDetails = (item: any) => {
 </script>
 
 <template>
-    <Head :title="t('nav.dashboard')" />
-
     <AppLayout v-slot="{ play }">
+        <Head :title="t('nav.dashboard')" />
         <!-- 1. Hero Spotlight Carousel with Ambient Backdrop Glow -->
         <div v-if="featuredMedia && featuredMedia.length > 0" class="mb-10">
             <HeroBanner
@@ -146,65 +175,102 @@ const handleHeroDetails = (item: any) => {
         </div>
 
         <!-- 2. Quick Overview Stats Bento Bar -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
+        <div class="mb-10 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <!-- Total Movies -->
             <Link
                 href="/movies"
-                class="glass-panel p-4 rounded-2xl border border-slate-200 dark:border-white/10 hover:border-cyan-500/50 transition-all duration-300 group hover:-translate-y-0.5 shadow-sm flex flex-col justify-between"
+                class="glass-panel group flex flex-col justify-between rounded-2xl border border-slate-200 p-4 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-cyan-500/50 dark:border-white/10"
             >
                 <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{{ t('nav.movies') }}</span>
-                    <div class="w-7 h-7 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <Film class="w-3.5 h-3.5" />
+                    <span
+                        class="text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400"
+                        >{{ t('nav.movies') }}</span
+                    >
+                    <div
+                        class="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-600 transition-transform group-hover:scale-110 dark:text-cyan-400"
+                    >
+                        <Film class="h-3.5 w-3.5" />
                     </div>
                 </div>
-                <div class="text-xl font-black text-slate-900 dark:text-white mt-2">{{ stats.total_movies }}</div>
+                <div
+                    class="mt-2 text-xl font-black text-slate-900 dark:text-white"
+                >
+                    {{ stats.total_movies }}
+                </div>
             </Link>
 
             <!-- TV Series -->
             <Link
                 href="/series"
-                class="glass-panel p-4 rounded-2xl border border-slate-200 dark:border-white/10 hover:border-indigo-500/50 transition-all duration-300 group hover:-translate-y-0.5 shadow-sm flex flex-col justify-between"
+                class="glass-panel group flex flex-col justify-between rounded-2xl border border-slate-200 p-4 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-500/50 dark:border-white/10"
             >
                 <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{{ t('nav.series') }}</span>
-                    <div class="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <Tv class="w-3.5 h-3.5" />
+                    <span
+                        class="text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400"
+                        >{{ t('nav.series') }}</span
+                    >
+                    <div
+                        class="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 transition-transform group-hover:scale-110 dark:text-indigo-400"
+                    >
+                        <Tv class="h-3.5 w-3.5" />
                     </div>
                 </div>
-                <div class="text-xl font-black text-slate-900 dark:text-white mt-2">
-                    {{ stats.total_series }} <span class="text-xs font-normal text-slate-400">({{ stats.total_episodes }} ep)</span>
+                <div
+                    class="mt-2 text-xl font-black text-slate-900 dark:text-white"
+                >
+                    {{ stats.total_series }}
+                    <span class="text-xs font-normal text-slate-400"
+                        >({{ stats.total_episodes }} ep)</span
+                    >
                 </div>
             </Link>
 
             <!-- Metadata Studio Status -->
             <Link
                 href="/metadata"
-                class="glass-panel p-4 rounded-2xl border border-slate-200 dark:border-white/10 hover:border-amber-500/50 transition-all duration-300 group hover:-translate-y-0.5 shadow-sm flex flex-col justify-between"
+                class="glass-panel group flex flex-col justify-between rounded-2xl border border-slate-200 p-4 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-amber-500/50 dark:border-white/10"
             >
                 <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{{ t('nav.metadata') }}</span>
-                    <div class="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <Sparkles class="w-3.5 h-3.5" />
+                    <span
+                        class="text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400"
+                        >{{ t('nav.metadata') }}</span
+                    >
+                    <div
+                        class="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 transition-transform group-hover:scale-110 dark:text-amber-400"
+                    >
+                        <Sparkles class="h-3.5 w-3.5" />
                     </div>
                 </div>
-                <div class="text-xs font-bold text-slate-900 dark:text-white mt-2 flex items-center gap-1.5">
-                    <span>{{ isRTL ? 'إدارة الأغلفة والبيانات' : 'Studio Manager' }}</span>
+                <div
+                    class="mt-2 flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white"
+                >
+                    <span>{{
+                        isRTL ? 'إدارة الأغلفة والبيانات' : 'Studio Manager'
+                    }}</span>
                 </div>
             </Link>
 
             <!-- Storage Used -->
             <Link
                 href="/analytics"
-                class="glass-panel p-4 rounded-2xl border border-slate-200 dark:border-white/10 hover:border-emerald-500/50 transition-all duration-300 group hover:-translate-y-0.5 shadow-sm flex flex-col justify-between"
+                class="glass-panel group flex flex-col justify-between rounded-2xl border border-slate-200 p-4 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-500/50 dark:border-white/10"
             >
                 <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{{ t('analytics_view.storage_used') }}</span>
-                    <div class="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <HardDrive class="w-3.5 h-3.5" />
+                    <span
+                        class="text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400"
+                        >{{ t('analytics_view.storage_used') }}</span
+                    >
+                    <div
+                        class="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 transition-transform group-hover:scale-110 dark:text-emerald-400"
+                    >
+                        <HardDrive class="h-3.5 w-3.5" />
                     </div>
                 </div>
-                <div class="text-xl font-black text-slate-900 dark:text-white mt-2">{{ stats.storage_formatted }}</div>
+                <div
+                    class="mt-2 text-xl font-black text-slate-900 dark:text-white"
+                >
+                    {{ stats.storage_formatted }}
+                </div>
             </Link>
         </div>
 
@@ -212,20 +278,36 @@ const handleHeroDetails = (item: any) => {
         <WatchHistoryBar type="all" @play="play" />
 
         <!-- 3. Curated AI Mood Vibes Interactive Matcher Studio -->
-        <div class="mb-12 glass-panel rounded-3xl p-6 border border-slate-200 dark:border-white/10 space-y-6 relative overflow-hidden shadow-sm">
-            <div class="ambient-glow bg-indigo-500/10 w-96 h-96 -top-32 -right-32 pointer-events-none"></div>
+        <div
+            class="glass-panel relative mb-12 space-y-6 overflow-hidden rounded-3xl border border-slate-200 p-6 shadow-sm dark:border-white/10"
+        >
+            <div
+                class="ambient-glow pointer-events-none -top-32 -right-32 h-96 w-96 bg-indigo-500/10"
+            ></div>
 
-            <div class="flex items-center justify-between flex-wrap gap-4 relative z-10">
+            <div
+                class="relative z-10 flex flex-wrap items-center justify-between gap-4"
+            >
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/30">
-                        <Sparkles class="w-5 h-5" />
+                    <div
+                        class="flex h-10 w-10 items-center justify-center rounded-2xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+                    >
+                        <Sparkles class="h-5 w-5" />
                     </div>
                     <div>
-                        <h2 class="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-wide">
+                        <h2
+                            class="text-lg font-black tracking-wide text-slate-900 sm:text-xl dark:text-white"
+                        >
                             {{ t('media.vibes') }}
                         </h2>
-                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                            {{ isRTL ? 'اختر المزاج السينمائي لاكتشاف أفضل الأفلام والمسلسلات المطابقة فورياً.' : 'Select a mood to instantly surface smart matches from your personal library.' }}
+                        <p
+                            class="mt-0.5 text-xs text-slate-500 dark:text-slate-400"
+                        >
+                            {{
+                                isRTL
+                                    ? 'اختر المزاج السينمائي لاكتشاف أفضل الأفلام والمسلسلات المطابقة فورياً.'
+                                    : 'Select a mood to instantly surface smart matches from your personal library.'
+                            }}
                         </p>
                     </div>
                 </div>
@@ -234,24 +316,35 @@ const handleHeroDetails = (item: any) => {
                 <div class="flex items-center gap-2">
                     <Link
                         :href="`/movies?genre=${activeVibe?.genre}`"
-                        class="text-xs font-bold text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-1"
+                        class="flex items-center gap-1 text-xs font-bold text-cyan-600 hover:underline dark:text-cyan-400"
                     >
-                        <span>{{ isRTL ? `أفلام ${activeVibe?.label_ar}` : `View ${activeVibe?.label_en} Movies` }}</span>
-                        <component :is="isRTL ? ChevronLeft : ChevronRight" class="w-3.5 h-3.5" />
+                        <span>{{
+                            isRTL
+                                ? `أفلام ${activeVibe?.label_ar}`
+                                : `View ${activeVibe?.label_en} Movies`
+                        }}</span>
+                        <component
+                            :is="isRTL ? ChevronLeft : ChevronRight"
+                            class="h-3.5 w-3.5"
+                        />
                     </Link>
                 </div>
             </div>
 
             <!-- Vibe Selector Chips -->
-            <div class="flex items-center gap-2.5 overflow-x-auto pb-2 custom-scrollbar relative z-10">
+            <div
+                class="custom-scrollbar relative z-10 flex items-center gap-2.5 overflow-x-auto pb-2"
+            >
                 <button
                     v-for="vibe in vibes"
                     :key="vibe.id"
                     @click="activeVibeId = vibe.id"
-                    class="flex items-center gap-2 px-4 py-2.5 rounded-2xl border text-xs font-extrabold transition-all whitespace-nowrap active:scale-95 shadow-sm cursor-pointer"
-                    :class="activeVibeId === vibe.id
-                        ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/30 font-black'
-                        : 'bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300'"
+                    class="flex cursor-pointer items-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-extrabold whitespace-nowrap shadow-sm transition-all active:scale-95"
+                    :class="
+                        activeVibeId === vibe.id
+                            ? 'border-indigo-500 bg-indigo-600 font-black text-white shadow-md shadow-indigo-600/30'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10'
+                    "
                 >
                     <span class="text-cyan-400">✦</span>
                     <span>{{ isRTL ? vibe.label_ar : vibe.label_en }}</span>
@@ -259,57 +352,106 @@ const handleHeroDetails = (item: any) => {
             </div>
 
             <!-- Active Vibe Description & Matches Grid -->
-            <div v-if="activeVibe" class="space-y-4 pt-2 border-t border-slate-200 dark:border-white/10 relative z-10">
-                <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+            <div
+                v-if="activeVibe"
+                class="relative z-10 space-y-4 border-t border-slate-200 pt-2 dark:border-white/10"
+            >
+                <div
+                    class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400"
+                >
                     <p class="italic">
-                        {{ isRTL ? activeVibe.description_ar : activeVibe.description_en }}
+                        {{
+                            isRTL
+                                ? activeVibe.description_ar
+                                : activeVibe.description_en
+                        }}
                     </p>
-                    <span class="cinema-badge bg-indigo-500/20 text-indigo-300 border-indigo-500/30 text-[10px]">
-                        {{ activeVibe.match_count || 0 }} {{ isRTL ? 'عنصر مطابق' : 'Matches' }}
+                    <span
+                        class="cinema-badge border-indigo-500/30 bg-indigo-500/20 text-[10px] text-indigo-300"
+                    >
+                        {{ activeVibe.match_count || 0 }}
+                        {{ isRTL ? 'عنصر مطابق' : 'Matches' }}
                     </span>
                 </div>
 
                 <!-- Matches Grid -->
-                <div v-if="activeVibe.matches && activeVibe.matches.length > 0" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <div
+                    v-if="activeVibe.matches && activeVibe.matches.length > 0"
+                    class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
+                >
                     <div
                         v-for="item in activeVibe.matches"
                         :key="`${item.type}-${item.id}`"
-                        @click="item.type === 'series' ? $inertia.visit(`/series/${item.slug || item.id}`) : play(item)"
-                        class="glass-card group relative rounded-2xl overflow-hidden cursor-pointer flex flex-col border border-slate-200 dark:border-white/10 hover:border-cyan-500/50 transition-all duration-300 shadow-sm hover:shadow-lg hover:-translate-y-1"
+                        @click="
+                            item.type === 'series'
+                                ? $inertia.visit(
+                                      `/series/${item.slug || item.id}`,
+                                  )
+                                : play(item)
+                        "
+                        class="glass-card group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-slate-200 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-cyan-500/50 hover:shadow-lg dark:border-white/10"
                     >
-                        <div class="relative aspect-[2/3] w-full overflow-hidden bg-slate-900">
+                        <div
+                            class="relative aspect-[2/3] w-full overflow-hidden bg-slate-900"
+                        >
                             <img
                                 :src="item.poster_path || '/placeholder.jpg'"
                                 :alt="item.title"
-                                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                             />
-                            <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-60"></div>
+                            <div
+                                class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-60"
+                            ></div>
 
                             <!-- Match Score Badge -->
-                            <div class="absolute top-2 inset-x-2 flex items-center justify-between">
-                                <span class="cinema-badge bg-cyan-500/90 text-slate-950 font-black text-[9px] shadow-sm">
-                                    {{ 94 + (item.id % 6) }}% {{ isRTL ? 'تطابق' : 'Match' }}
+                            <div
+                                class="absolute inset-x-2 top-2 flex items-center justify-between"
+                            >
+                                <span
+                                    class="cinema-badge bg-cyan-500/90 text-[9px] font-black text-slate-950 shadow-sm"
+                                >
+                                    {{ 94 + (item.id % 6) }}%
+                                    {{ isRTL ? 'تطابق' : 'Match' }}
                                 </span>
-                                <span class="cinema-badge bg-black/70 text-slate-300 text-[9px] uppercase">
+                                <span
+                                    class="cinema-badge bg-black/70 text-[9px] text-slate-300 uppercase"
+                                >
                                     {{ item.type }}
                                 </span>
                             </div>
 
                             <!-- Play Overlay -->
-                            <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
-                                <div class="w-10 h-10 rounded-full bg-cyan-500 text-slate-950 flex items-center justify-center shadow-lg shadow-cyan-500/50">
-                                    <Play class="w-4 h-4 fill-current ml-0.5" />
+                            <div
+                                class="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100"
+                            >
+                                <div
+                                    class="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/50"
+                                >
+                                    <Play class="ml-0.5 h-4 w-4 fill-current" />
                                 </div>
                             </div>
                         </div>
 
-                        <div class="p-2.5 bg-white dark:bg-slate-950/40 flex-1 flex flex-col justify-between">
-                            <h4 class="font-bold text-xs text-slate-900 dark:text-white truncate">
-                                {{ isRTL && item.title_ar ? item.title_ar : item.title }}
+                        <div
+                            class="flex flex-1 flex-col justify-between bg-white p-2.5 dark:bg-slate-950/40"
+                        >
+                            <h4
+                                class="truncate text-xs font-bold text-slate-900 dark:text-white"
+                            >
+                                {{
+                                    isRTL && item.title_ar
+                                        ? item.title_ar
+                                        : item.title
+                                }}
                             </h4>
-                            <div class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                            <div
+                                class="mt-1 flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400"
+                            >
                                 <span>{{ item.release_year }}</span>
-                                <span v-if="item.rating" class="text-amber-400 font-bold flex items-center gap-0.5">
+                                <span
+                                    v-if="item.rating"
+                                    class="flex items-center gap-0.5 font-bold text-amber-400"
+                                >
                                     ★ {{ item.rating }}
                                 </span>
                             </div>
@@ -318,44 +460,77 @@ const handleHeroDetails = (item: any) => {
                 </div>
 
                 <!-- Empty Matches State for Vibe -->
-                <div v-else class="text-center py-6 text-xs text-slate-500 italic">
-                    {{ isRTL ? 'لا توجد وسائط متطابقة حالياً مع هذا المزاج في مكتبتك.' : 'No media items currently match this vibe in your library.' }}
+                <div
+                    v-else
+                    class="py-6 text-center text-xs text-slate-500 italic"
+                >
+                    {{
+                        isRTL
+                            ? 'لا توجد وسائط متطابقة حالياً مع هذا المزاج في مكتبتك.'
+                            : 'No media items currently match this vibe in your library.'
+                    }}
                 </div>
             </div>
         </div>
 
         <!-- 5. Catalog Highlights (Tabs: Recently Added Movies vs Top TV Series) -->
         <div class="mb-12">
-            <div class="flex items-center justify-between flex-wrap gap-4 mb-6">
+            <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
                 <!-- Tabs -->
-                <div class="flex items-center p-1 rounded-2xl glass-panel border border-slate-200 dark:border-white/10">
+                <div
+                    class="glass-panel flex items-center rounded-2xl border border-slate-200 p-1 dark:border-white/10"
+                >
                     <button
                         @click="activeTab = 'movies'"
-                        class="px-5 py-2 rounded-xl font-extrabold text-xs transition-all cursor-pointer"
-                        :class="activeTab === 'movies' ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/30' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'"
+                        class="cursor-pointer rounded-xl px-5 py-2 text-xs font-extrabold transition-all"
+                        :class="
+                            activeTab === 'movies'
+                                ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/30'
+                                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                        "
                     >
-                        {{ isRTL ? 'أحدث الأفلام المضافة' : 'Recently Added Movies' }}
+                        {{
+                            isRTL
+                                ? 'أحدث الأفلام المضافة'
+                                : 'Recently Added Movies'
+                        }}
                     </button>
                     <button
                         @click="activeTab = 'series'"
-                        class="px-5 py-2 rounded-xl font-extrabold text-xs transition-all cursor-pointer"
-                        :class="activeTab === 'series' ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/30' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'"
+                        class="cursor-pointer rounded-xl px-5 py-2 text-xs font-extrabold transition-all"
+                        :class="
+                            activeTab === 'series'
+                                ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/30'
+                                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                        "
                     >
-                        {{ isRTL ? 'المسلسلات الأكثر تقييماً' : 'Top Rated TV Series' }}
+                        {{
+                            isRTL
+                                ? 'المسلسلات الأكثر تقييماً'
+                                : 'Top Rated TV Series'
+                        }}
                     </button>
                 </div>
 
                 <Link
                     :href="activeTab === 'movies' ? '/movies' : '/series'"
-                    class="flex items-center gap-1.5 text-xs font-bold text-cyan-600 dark:text-cyan-400 hover:underline transition-colors"
+                    class="flex items-center gap-1.5 text-xs font-bold text-cyan-600 transition-colors hover:underline dark:text-cyan-400"
                 >
-                    <span>{{ isRTL ? 'تصفح الكل في المكتبة' : 'View Complete Library' }}</span>
-                    <component :is="isRTL ? ChevronLeft : ChevronRight" class="w-3.5 h-3.5" />
+                    <span>{{
+                        isRTL ? 'تصفح الكل في المكتبة' : 'View Complete Library'
+                    }}</span>
+                    <component
+                        :is="isRTL ? ChevronLeft : ChevronRight"
+                        class="h-3.5 w-3.5"
+                    />
                 </Link>
             </div>
 
             <!-- Movies Grid Tab -->
-            <div v-if="activeTab === 'movies'" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
+            <div
+                v-if="activeTab === 'movies'"
+                class="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-6 md:grid-cols-4 lg:grid-cols-6"
+            >
                 <MediaCard
                     v-for="item in recentlyAddedMovies"
                     :key="`m-${item.id}`"
@@ -367,41 +542,65 @@ const handleHeroDetails = (item: any) => {
             </div>
 
             <!-- Series Grid Tab -->
-            <div v-if="activeTab === 'series'" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
+            <div
+                v-if="activeTab === 'series'"
+                class="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-6 md:grid-cols-4 lg:grid-cols-6"
+            >
                 <Link
                     v-for="s in popularSeries"
                     :key="`s-${s.id}`"
                     :href="`/series/${s.slug || s.id}`"
-                    class="glass-card group relative rounded-2xl overflow-hidden cursor-pointer flex flex-col border border-slate-200 dark:border-white/10 hover:border-indigo-500/50 transition-all duration-300 shadow-sm hover:shadow-lg hover:-translate-y-1"
+                    class="glass-card group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-slate-200 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-indigo-500/50 hover:shadow-lg dark:border-white/10"
                 >
-                    <div class="relative aspect-[2/3] w-full overflow-hidden bg-slate-900">
+                    <div
+                        class="relative aspect-[2/3] w-full overflow-hidden bg-slate-900"
+                    >
                         <img
                             :src="s.poster_path || '/placeholder.jpg'"
                             :alt="s.title"
-                            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                         />
-                        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-60"></div>
+                        <div
+                            class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-60"
+                        ></div>
 
                         <!-- Seasons Count Badge -->
-                        <div class="absolute top-2.5 inset-x-2.5 flex items-center justify-between">
-                            <span class="cinema-badge bg-black/70 text-cyan-300 border border-cyan-500/30 text-[10px] flex items-center gap-1">
-                                <Layers class="w-3 h-3" />
-                                {{ s.seasons?.length || 1 }} {{ t('common.seasons') }}
+                        <div
+                            class="absolute inset-x-2.5 top-2.5 flex items-center justify-between"
+                        >
+                            <span
+                                class="cinema-badge flex items-center gap-1 border border-cyan-500/30 bg-black/70 text-[10px] text-cyan-300"
+                            >
+                                <Layers class="h-3 w-3" />
+                                {{ s.seasons?.length || 1 }}
+                                {{ t('common.seasons') }}
                             </span>
-                            <div v-if="s.rating" class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/70 text-amber-300 text-[10px] font-bold">
-                                <Star class="w-3 h-3 fill-current" />
+                            <div
+                                v-if="s.rating"
+                                class="flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-amber-300"
+                            >
+                                <Star class="h-3 w-3 fill-current" />
                                 <span>{{ s.rating }}</span>
                             </div>
                         </div>
                     </div>
 
-                    <div class="p-3 flex flex-col justify-between bg-white dark:bg-slate-950/40">
-                        <h3 class="font-bold text-xs text-slate-900 dark:text-slate-100 truncate group-hover:text-indigo-400 transition-colors">
+                    <div
+                        class="flex flex-col justify-between bg-white p-3 dark:bg-slate-950/40"
+                    >
+                        <h3
+                            class="truncate text-xs font-bold text-slate-900 transition-colors group-hover:text-indigo-400 dark:text-slate-100"
+                        >
                             {{ isRTL && s.title_ar ? s.title_ar : s.title }}
                         </h3>
-                        <div class="flex items-center justify-between mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                        <div
+                            class="mt-1 flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400"
+                        >
                             <span>{{ s.release_year }}</span>
-                            <span class="text-indigo-400 font-bold uppercase tracking-wider text-[9px]">TV Series</span>
+                            <span
+                                class="text-[9px] font-bold tracking-wider text-indigo-400 uppercase"
+                                >TV Series</span
+                            >
                         </div>
                     </div>
                 </Link>
@@ -415,7 +614,12 @@ const handleHeroDetails = (item: any) => {
             :type="selectedMedia.type || 'movie'"
             :is-open="isModalOpen"
             @close="closeDetail"
-            @play="(item) => { closeDetail(); play(item); }"
+            @play="
+                (item) => {
+                    closeDetail();
+                    play(item);
+                }
+            "
         />
     </AppLayout>
 </template>

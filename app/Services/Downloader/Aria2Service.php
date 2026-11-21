@@ -94,7 +94,7 @@ class Aria2Service
                         if (empty($line) || str_contains($line, 'No tasks')) {
                             continue;
                         }
-                        $parts = str_getcsv($line);
+                        $parts = str_getcsv($line, ',', '"', '');
                         if (! empty($parts[1]) && is_numeric($parts[1])) {
                             $pids[] = (int) $parts[1];
                         }

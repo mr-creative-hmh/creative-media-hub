@@ -56,7 +56,6 @@ class TorrentSubtitleAcquisitionTest extends TestCase
         $service = app(LibraryAcquisitionService::class);
         $reflection = new \ReflectionClass($service);
         $method = $reflection->getMethod('moveCompanionSubtitles');
-        $method->setAccessible(true);
 
         $method->invoke($service, $sourceVideo, $destVideo);
 

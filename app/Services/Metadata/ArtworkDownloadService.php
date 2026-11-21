@@ -53,7 +53,7 @@ class ArtworkDownloadService
 
         // Relative TMDB image path
         if (str_starts_with($trimmed, '/') && ! str_starts_with($trimmed, '//')) {
-            return "https://image.tmdb.org/t/p/{$tmdbSize}".ltrim($trimmed, '/');
+            return "https://image.tmdb.org/t/p/{$tmdbSize}/".ltrim($trimmed, '/');
         }
 
         if (filter_var($trimmed, FILTER_VALIDATE_URL)) {

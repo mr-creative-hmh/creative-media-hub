@@ -3,18 +3,60 @@ import { ref, computed, onMounted } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
-import { useDownloader, DownloadItem, DownloaderInspection, TorrentFileItem, TorrentTreeNode } from '@/composables/useDownloader';
+import {
+    useDownloader,
+    DownloadItem,
+    DownloaderInspection,
+    TorrentFileItem,
+    TorrentTreeNode,
+} from '@/composables/useDownloader';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import TorrentTreeItem from '@/components/downloader/TorrentTreeItem.vue';
 import FastOrganizeModal from '@/components/scout/FastOrganizeModal.vue';
 import {
-    DownloadCloud, Plus, CheckCircle2, ArrowDown, ArrowUp,
-    Play, Pause, Trash2, FolderSync, Sparkles, HelpCircle,
-    Info, HardDrive, ShieldCheck, Film, Tv, Radio, Clock,
-    RotateCcw, AlertTriangle, ExternalLink, Settings, Check,
-    Folder, FolderOpen, FolderTree, ListFilter, Magnet, Zap,
-    FileText, File, FileUp, CheckSquare, MinusSquare, Square,
-    ChevronDown, ChevronUp, Copy, Eye, Layers, Activity, PlayCircle, FolderCheck
+    DownloadCloud,
+    Plus,
+    CheckCircle2,
+    ArrowDown,
+    ArrowUp,
+    Play,
+    Pause,
+    Trash2,
+    FolderSync,
+    Sparkles,
+    HelpCircle,
+    Info,
+    HardDrive,
+    ShieldCheck,
+    Film,
+    Tv,
+    Radio,
+    Clock,
+    RotateCcw,
+    AlertTriangle,
+    ExternalLink,
+    Settings,
+    Check,
+    Folder,
+    FolderOpen,
+    FolderTree,
+    ListFilter,
+    Magnet,
+    Zap,
+    FileText,
+    File,
+    FileUp,
+    CheckSquare,
+    MinusSquare,
+    Square,
+    ChevronDown,
+    ChevronUp,
+    Copy,
+    Eye,
+    Layers,
+    Activity,
+    PlayCircle,
+    FolderCheck,
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -84,9 +126,16 @@ const torrentFileInputRef = ref<HTMLInputElement | null>(null);
 
 // Downloader Settings State
 const settingsForm = ref({
-    default_download_path: props.settings?.default_download_path || 'H:\\Entertainment\\Downloads',
-    movies_download_path: props.settings?.movies_download_path || props.destinations?.movies || 'H:\\Entertainment\\Movies',
-    series_download_path: props.settings?.series_download_path || props.destinations?.series || 'H:\\Entertainment\\TV Shows',
+    default_download_path:
+        props.settings?.default_download_path || 'H:\\Entertainment\\Downloads',
+    movies_download_path:
+        props.settings?.movies_download_path ||
+        props.destinations?.movies ||
+        'H:\\Entertainment\\Movies',
+    series_download_path:
+        props.settings?.series_download_path ||
+        props.destinations?.series ||
+        'H:\\Entertainment\\TV Shows',
     max_concurrent_downloads: props.settings?.max_concurrent_downloads || 3,
     download_speed_limit_kb: props.settings?.download_speed_limit_kb || 0,
 });
@@ -94,7 +143,11 @@ const isSavingSettings = ref(false);
 
 onMounted(() => {
     fetchDaemonStatus();
-    if (props.initialDownloads && props.initialDownloads.length > 0 && downloads.value.length === 0) {
+    if (
+        props.initialDownloads &&
+        props.initialDownloads.length > 0 &&
+        downloads.value.length === 0
+    ) {
         downloads.value = props.initialDownloads;
     }
     fetchDownloads();
@@ -103,16 +156,26 @@ onMounted(() => {
 const filteredItems = computed(() => {
     if (activeFilter.value === 'all') return downloads.value;
     if (activeFilter.value === 'downloading') {
-        return downloads.value.filter(d => d.status === 'downloading' || d.status === 'queued');
+        return downloads.value.filter(
+            (d) => d.status === 'downloading' || d.status === 'queued',
+        );
     }
-    return downloads.value.filter(d => d.status === activeFilter.value);
+    return downloads.value.filter((d) => d.status === activeFilter.value);
 });
 
 const defaultTargetFolder = computed(() => {
     if (newType.value === 'series') {
-        return settingsForm.value.series_download_path || props.destinations?.series || 'H:\\Entertainment\\TV Shows';
+        return (
+            settingsForm.value.series_download_path ||
+            props.destinations?.series ||
+            'H:\\Entertainment\\TV Shows'
+        );
     }
-    return settingsForm.value.movies_download_path || props.destinations?.movies || 'H:\\Entertainment\\Movies';
+    return (
+        settingsForm.value.movies_download_path ||
+        props.destinations?.movies ||
+        'H:\\Entertainment\\Movies'
+    );
 });
 
 const effectiveFolder = computed(() => {
@@ -137,13 +200,23 @@ async function copyInfoHash(hash: string) {
         setTimeout(() => {
             if (copiedHash.value === hash) copiedHash.value = null;
         }, 2500);
-        toast.success(isRTL.value ? 'تم نسخ InfoHash بنجاح' : 'InfoHash copied to clipboard');
+        toast.success(
+            isRTL.value
+                ? 'تم نسخ InfoHash بنجاح'
+                : 'InfoHash copied to clipboard',
+        );
     } catch {
         // fallback
     }
 }
 
-const STAGES = ['downloading', 'verifying', 'organizing', 'scanning', 'ready'] as const;
+const STAGES = [
+    'downloading',
+    'verifying',
+    'organizing',
+    'scanning',
+    'ready',
+] as const;
 
 function getStageIndex(stage?: string | null): number {
     if (!stage) return 0;
@@ -151,12 +224,22 @@ function getStageIndex(stage?: string | null): number {
     return idx >= 0 ? idx : 0;
 }
 
-function getStageState(item: DownloadItem, stage: typeof STAGES[number]): 'completed' | 'active' | 'pending' | 'failed' {
+function getStageState(
+    item: DownloadItem,
+    stage: (typeof STAGES)[number],
+): 'completed' | 'active' | 'pending' | 'failed' {
     if (item.status === 'failed') {
-        return item.workflow_stage === stage ? 'failed' : (getStageIndex(item.workflow_stage) > getStageIndex(stage) ? 'completed' : 'pending');
+        return item.workflow_stage === stage
+            ? 'failed'
+            : getStageIndex(item.workflow_stage) > getStageIndex(stage)
+              ? 'completed'
+              : 'pending';
     }
 
-    if (item.workflow_stage === 'ready' || (item.status === 'completed' && !item.workflow_stage)) {
+    if (
+        item.workflow_stage === 'ready' ||
+        (item.status === 'completed' && !item.workflow_stage)
+    ) {
         return 'completed';
     }
 
@@ -164,13 +247,18 @@ function getStageState(item: DownloadItem, stage: typeof STAGES[number]): 'compl
     const stageIdx = getStageIndex(stage);
 
     if (stageIdx < currentIdx) return 'completed';
-    if (stageIdx === currentIdx) return (item.status === 'downloading' || item.status === 'completed') ? 'active' : 'pending';
+    if (stageIdx === currentIdx)
+        return item.status === 'downloading' || item.status === 'completed'
+            ? 'active'
+            : 'pending';
     return 'pending';
 }
 
 function getItemWatchUrl(item: DownloadItem): string | null {
     if (!item.indexed_id) return null;
-    return item.media_type === 'series' ? `/series/${item.indexed_id}` : `/movies/${item.indexed_id}`;
+    return item.media_type === 'series'
+        ? `/series/${item.indexed_id}`
+        : `/movies/${item.indexed_id}`;
 }
 
 const organizingIds = ref<Record<number, boolean>>({});
@@ -179,10 +267,24 @@ const handleOrganize = async (item: DownloadItem) => {
     organizingIds.value[item.id] = true;
     try {
         const res = await organizeDownload(item.id);
-        if (res && (res.success || res.workflow_stage === 'ready' || res.organize_status === 'completed')) {
-            toast.success(isRTL.value ? 'تم تنظيم وفهرسة الملف في المكتبة بنجاح!' : 'Successfully organized and indexed into library!');
+        if (
+            res &&
+            (res.success ||
+                res.workflow_stage === 'ready' ||
+                res.organize_status === 'completed')
+        ) {
+            toast.success(
+                isRTL.value
+                    ? 'تم تنظيم وفهرسة الملف في المكتبة بنجاح!'
+                    : 'Successfully organized and indexed into library!',
+            );
         } else {
-            toast.error(res?.error || (isRTL.value ? 'تعذر تنظيم الملف' : 'Could not organize media'));
+            toast.error(
+                res?.error ||
+                    (isRTL.value
+                        ? 'تعذر تنظيم الملف'
+                        : 'Could not organize media'),
+            );
         }
     } catch (e: any) {
         toast.error(e.message || 'Organize error');
@@ -201,7 +303,11 @@ const handleStop = async (item: DownloadItem) => {
 const getItemFiles = (item: DownloadItem) => {
     const tf = item.torrent_files;
     let rawFiles: any[] = [];
-    if (tf && Array.isArray(tf.detailed_files) && tf.detailed_files.length > 0) {
+    if (
+        tf &&
+        Array.isArray(tf.detailed_files) &&
+        tf.detailed_files.length > 0
+    ) {
         rawFiles = tf.detailed_files;
     } else if (tf && Array.isArray(tf.files) && tf.files.length > 0) {
         rawFiles = tf.files;
@@ -211,36 +317,64 @@ const getItemFiles = (item: DownloadItem) => {
 
     if (rawFiles.length === 0) {
         const total = item.total_bytes || 0;
-        const downloaded = item.status === 'completed' ? total : (item.downloaded_bytes || 0);
-        const pct = item.status === 'completed' ? 100 : (total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : 0);
-        const fileName = item.destination_path ? item.destination_path.split(/[\\/]/).pop() : (item.title || 'Media File');
+        const downloaded =
+            item.status === 'completed' ? total : item.downloaded_bytes || 0;
+        const pct =
+            item.status === 'completed'
+                ? 100
+                : total > 0
+                  ? Math.min(100, Math.round((downloaded / total) * 100))
+                  : 0;
+        const fileName = item.destination_path
+            ? item.destination_path.split(/[\\/]/).pop()
+            : item.title || 'Media File';
 
-        return [{
-            index: 1,
-            path: fileName || 'Media File',
-            name: fileName || 'Media File',
-            length: total,
-            completedLength: downloaded,
-            percent: pct,
-            selected: true,
-        }];
+        return [
+            {
+                index: 1,
+                path: fileName || 'Media File',
+                name: fileName || 'Media File',
+                length: total,
+                completedLength: downloaded,
+                percent: pct,
+                selected: true,
+            },
+        ];
     }
 
     return rawFiles.map((f: any, idx: number) => {
         const length = Number(f.length ?? f.size ?? 0);
-        let completedLength = Number(f.completedLength ?? f.completed_length ?? 0);
-        if (item.status === 'completed' && completedLength === 0 && length > 0) {
+        let completedLength = Number(
+            f.completedLength ?? f.completed_length ?? 0,
+        );
+        if (
+            item.status === 'completed' &&
+            completedLength === 0 &&
+            length > 0
+        ) {
             completedLength = length;
         }
         let percent = f.percent ?? f.progress_percent;
         if (percent === undefined || percent === null) {
-            percent = length > 0 ? Math.min(100, Math.round((completedLength / length) * 100)) : (item.status === 'completed' ? 100 : 0);
+            percent =
+                length > 0
+                    ? Math.min(
+                          100,
+                          Math.round((completedLength / length) * 100),
+                      )
+                    : item.status === 'completed'
+                      ? 100
+                      : 0;
         }
         const filePath = f.path || f.name || f.filename || `File ${idx + 1}`;
-        const fileName = f.name || f.filename || filePath.split(/[\\/]/).pop() || `File ${idx + 1}`;
+        const fileName =
+            f.name ||
+            f.filename ||
+            filePath.split(/[\\/]/).pop() ||
+            `File ${idx + 1}`;
 
         return {
-            index: f.index ?? (idx + 1),
+            index: f.index ?? idx + 1,
             path: filePath,
             name: fileName,
             length,
@@ -259,7 +393,11 @@ const getItemLogs = (item: DownloadItem) => {
     const synthetic: any[] = [];
     if (item.created_at) {
         synthetic.push({
-            time: new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            time: new Date(item.created_at).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+            }),
             stage: 'download',
             message: 'Task created and queued for downloading.',
             level: 'info',
@@ -267,9 +405,18 @@ const getItemLogs = (item: DownloadItem) => {
     }
     if (item.downloaded_bytes > 0) {
         synthetic.push({
-            time: item.updated_at ? new Date(item.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--',
+            time: item.updated_at
+                ? new Date(item.updated_at).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                  })
+                : '--:--',
             stage: 'download',
-            message: item.status === 'completed' ? `Download payload finished (${formatBytes(item.total_bytes || item.downloaded_bytes)}).` : `Downloading (${formatBytes(item.downloaded_bytes)} / ${formatBytes(item.total_bytes)}).`,
+            message:
+                item.status === 'completed'
+                    ? `Download payload finished (${formatBytes(item.total_bytes || item.downloaded_bytes)}).`
+                    : `Downloading (${formatBytes(item.downloaded_bytes)} / ${formatBytes(item.total_bytes)}).`,
             level: item.status === 'completed' ? 'success' : 'info',
         });
     }
@@ -338,13 +485,17 @@ const handleTorrentFileChange = async (event: Event) => {
         if (res) {
             applyInspectionResult(res);
             toast.success(
-                isRTL.value ? 'تم فحص ملف التورنت وقراءة هيكل المجلدات بنجاح!' : 'Torrent file inspected and folder hierarchy parsed successfully!',
-                isRTL.value ? 'فحص ناجح' : 'Inspected'
+                isRTL.value
+                    ? 'تم فحص ملف التورنت وقراءة هيكل المجلدات بنجاح!'
+                    : 'Torrent file inspected and folder hierarchy parsed successfully!',
+                isRTL.value ? 'فحص ناجح' : 'Inspected',
             );
         } else {
             toast.error(
-                isRTL.value ? 'تعذر قراءة ملف التورنت. يرجى التأكد من سلامة الملف.' : 'Failed to parse torrent file. Please check file integrity.',
-                isRTL.value ? 'خطأ' : 'Error'
+                isRTL.value
+                    ? 'تعذر قراءة ملف التورنت. يرجى التأكد من سلامة الملف.'
+                    : 'Failed to parse torrent file. Please check file integrity.',
+                isRTL.value ? 'خطأ' : 'Error',
             );
         }
     } catch (err: any) {
@@ -367,14 +518,14 @@ const applyInspectionResult = (res: DownloaderInspection) => {
     }
     // Select video files by default
     const videoIndexes = res.files
-        .filter(f => f.is_video || f.selected)
-        .map(f => f.index);
+        .filter((f) => f.is_video || f.selected)
+        .map((f) => f.index);
 
     if (videoIndexes.length > 0) {
         selectedFileIndexes.value = videoIndexes;
     } else if (res.files.length > 0) {
         // Fallback: select all files
-        selectedFileIndexes.value = res.files.map(f => f.index);
+        selectedFileIndexes.value = res.files.map((f) => f.index);
     }
     // Default to tree view if tree nodes exist
     if (res.tree && res.tree.length > 0) {
@@ -396,13 +547,16 @@ const handleUrlPasteOrChange = () => {
 
 const selectAllFiles = () => {
     if (!inspectionData.value) return;
-    selectedFileIndexes.value = inspectionData.value.files.map(f => f.index);
+    selectedFileIndexes.value = inspectionData.value.files.map((f) => f.index);
 };
 
 const selectVideosOnly = () => {
     if (!inspectionData.value) return;
-    const vids = inspectionData.value.files.filter(f => f.is_video).map(f => f.index);
-    selectedFileIndexes.value = vids.length > 0 ? vids : inspectionData.value.files.map(f => f.index);
+    const vids = inspectionData.value.files
+        .filter((f) => f.is_video)
+        .map((f) => f.index);
+    selectedFileIndexes.value =
+        vids.length > 0 ? vids : inspectionData.value.files.map((f) => f.index);
 };
 
 const clearAllFiles = () => {
@@ -411,7 +565,9 @@ const clearAllFiles = () => {
 
 const toggleFileSelection = (idx: number) => {
     if (selectedFileIndexes.value.includes(idx)) {
-        selectedFileIndexes.value = selectedFileIndexes.value.filter(i => i !== idx);
+        selectedFileIndexes.value = selectedFileIndexes.value.filter(
+            (i) => i !== idx,
+        );
     } else {
         selectedFileIndexes.value.push(idx);
     }
@@ -419,17 +575,21 @@ const toggleFileSelection = (idx: number) => {
 
 const handleToggleFolder = (indexes: number[], targetState: boolean) => {
     if (targetState) {
-        const toAdd = indexes.filter(i => !selectedFileIndexes.value.includes(i));
+        const toAdd = indexes.filter(
+            (i) => !selectedFileIndexes.value.includes(i),
+        );
         selectedFileIndexes.value = [...selectedFileIndexes.value, ...toAdd];
     } else {
-        selectedFileIndexes.value = selectedFileIndexes.value.filter(i => !indexes.includes(i));
+        selectedFileIndexes.value = selectedFileIndexes.value.filter(
+            (i) => !indexes.includes(i),
+        );
     }
 };
 
 const selectedTotalBytes = computed(() => {
     if (!inspectionData.value) return 0;
     return inspectionData.value.files
-        .filter(f => selectedFileIndexes.value.includes(f.index))
+        .filter((f) => selectedFileIndexes.value.includes(f.index))
         .reduce((sum, f) => sum + (f.size || 0), 0);
 });
 
@@ -464,8 +624,10 @@ const handleSaveSettings = async () => {
         const ok = await saveSettings(settingsForm.value);
         if (ok) {
             toast.success(
-                isRTL.value ? 'تم حفظ إعدادات التنزيل بنجاح!' : 'Downloader settings saved successfully!',
-                isRTL.value ? 'تم الحفظ' : 'Saved'
+                isRTL.value
+                    ? 'تم حفظ إعدادات التنزيل بنجاح!'
+                    : 'Downloader settings saved successfully!',
+                isRTL.value ? 'تم الحفظ' : 'Saved',
             );
             showSettingsModal.value = false;
         }
@@ -476,142 +638,252 @@ const handleSaveSettings = async () => {
 </script>
 
 <template>
-    <Head :title="t('nav.downloads')" />
-
     <AppLayout v-slot="{ play }">
+        <Head :title="t('nav.downloads')" />
         <!-- Top Header & Metrics -->
-        <div class="mb-8 flex items-center justify-between flex-wrap gap-4">
+        <div class="mb-8 flex flex-wrap items-center justify-between gap-4">
             <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-2xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 flex items-center justify-center shadow-lg shadow-cyan-500/10">
-                    <DownloadCloud class="w-5 h-5" />
+                <div
+                    class="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/20 text-cyan-400 shadow-lg shadow-cyan-500/10"
+                >
+                    <DownloadCloud class="h-5 w-5" />
                 </div>
                 <div>
-                    <h1 class="text-2xl sm:text-3xl font-extrabold text-white">
+                    <h1 class="text-2xl font-extrabold text-white sm:text-3xl">
                         {{ t('nav.downloads') }}
                     </h1>
-                    <p class="text-xs sm:text-sm text-slate-400 mt-0.5">
-                        {{ isRTL ? 'إدارة التنزيلات الحقيقية في الخلفية، ملفات التورنت المحددة بشجرة المجلدات، ومجلدات الوجهة المخصصة.' : 'High-speed background downloads, selective folder tree torrents, and custom destination folders.' }}
+                    <p class="mt-0.5 text-xs text-slate-400 sm:text-sm">
+                        {{
+                            isRTL
+                                ? 'إدارة التنزيلات الحقيقية في الخلفية، ملفات التورنت المحددة بشجرة المجلدات، ومجلدات الوجهة المخصصة.'
+                                : 'High-speed background downloads, selective folder tree torrents, and custom destination folders.'
+                        }}
                     </p>
                 </div>
             </div>
 
             <div class="flex items-center gap-3">
                 <!-- Daemon Engine Status Pill -->
-                <div v-if="daemonStatus" class="flex items-center gap-2 px-3 py-2 rounded-xl glass-panel border text-xs font-mono"
-                    :class="daemonStatus.running ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300' : 'border-slate-700 bg-slate-900/40 text-slate-400'">
-                    <span class="w-2 h-2 rounded-full" :class="daemonStatus.running ? 'bg-cyan-400 animate-pulse' : 'bg-slate-500'"></span>
-                    <span class="font-bold font-sans">{{ isRTL ? 'محرك التنزيل:' : 'Engine:' }}</span>
-                    <span>{{ daemonStatus.running ? (daemonStatus.pids?.length > 0 ? `PID ${daemonStatus.pids[0]}` : 'Active') : (isRTL ? 'خامل (متوقف)' : 'Idle') }}</span>
-                    <button v-if="daemonStatus.running && activeDownloads.length === 0"
+                <div
+                    v-if="daemonStatus"
+                    class="glass-panel flex items-center gap-2 rounded-xl border px-3 py-2 font-mono text-xs"
+                    :class="
+                        daemonStatus.running
+                            ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300'
+                            : 'border-slate-700 bg-slate-900/40 text-slate-400'
+                    "
+                >
+                    <span
+                        class="h-2 w-2 rounded-full"
+                        :class="
+                            daemonStatus.running
+                                ? 'animate-pulse bg-cyan-400'
+                                : 'bg-slate-500'
+                        "
+                    ></span>
+                    <span class="font-sans font-bold">{{
+                        isRTL ? 'محرك التنزيل:' : 'Engine:'
+                    }}</span>
+                    <span>{{
+                        daemonStatus.running
+                            ? daemonStatus.pids?.length > 0
+                                ? `PID ${daemonStatus.pids[0]}`
+                                : 'Active'
+                            : isRTL
+                              ? 'خامل (متوقف)'
+                              : 'Idle'
+                    }}</span>
+                    <button
+                        v-if="
+                            daemonStatus.running && activeDownloads.length === 0
+                        "
                         @click="stopDaemon"
-                        class="ml-1 px-2 py-0.5 rounded text-[10px] bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 transition-all cursor-pointer"
-                        :title="isRTL ? 'إيقاف المحرك وتحرير الذاكرة' : 'Stop Engine & Free RAM'">
+                        class="ml-1 cursor-pointer rounded border border-red-500/40 bg-red-500/20 px-2 py-0.5 text-[10px] text-red-300 transition-all hover:bg-red-500/30"
+                        :title="
+                            isRTL
+                                ? 'إيقاف المحرك وتحرير الذاكرة'
+                                : 'Stop Engine & Free RAM'
+                        "
+                    >
                         {{ isRTL ? 'إيقاف' : 'Stop' }}
                     </button>
                 </div>
                 <button
                     @click="showFastOrganize = true"
-                    class="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 font-bold text-xs transition-all cursor-pointer shadow-sm"
+                    class="flex cursor-pointer items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-600/20 px-3.5 py-2.5 text-xs font-bold text-emerald-300 shadow-sm transition-all hover:bg-emerald-600/30"
                     :title="t('scout.organize_and_scan_help')"
                 >
-                    <FolderSync class="w-4 h-4 text-emerald-400" />
-                    <span class="hidden sm:inline">{{ t('scout.organize_and_scan') }}</span>
+                    <FolderSync class="h-4 w-4 text-emerald-400" />
+                    <span class="hidden sm:inline">{{
+                        t('scout.organize_and_scan')
+                    }}</span>
                 </button>
 
                 <button
                     @click="showSettingsModal = true"
-                    class="flex items-center gap-2 px-3.5 py-2.5 rounded-xl glass-panel border border-white/10 hover:border-cyan-500/40 text-slate-300 hover:text-white font-bold text-xs transition-all cursor-pointer shadow-sm"
+                    class="glass-panel flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 px-3.5 py-2.5 text-xs font-bold text-slate-300 shadow-sm transition-all hover:border-cyan-500/40 hover:text-white"
                     title="Downloader Settings"
                 >
-                    <Settings class="w-4 h-4 text-cyan-400" />
-                    <span class="hidden sm:inline">{{ isRTL ? 'إعدادات التنزيل' : 'Settings' }}</span>
+                    <Settings class="h-4 w-4 text-cyan-400" />
+                    <span class="hidden sm:inline">{{
+                        isRTL ? 'إعدادات التنزيل' : 'Settings'
+                    }}</span>
                 </button>
 
                 <button
                     @click="showExplainModal = true"
-                    class="flex items-center gap-2 px-4 py-2.5 rounded-xl glass-panel border border-white/10 hover:border-cyan-500/40 text-slate-300 hover:text-white font-bold text-xs transition-all cursor-pointer shadow-sm"
+                    class="glass-panel flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-xs font-bold text-slate-300 shadow-sm transition-all hover:border-cyan-500/40 hover:text-white"
                 >
-                    <HelpCircle class="w-4 h-4 text-cyan-400" />
+                    <HelpCircle class="h-4 w-4 text-cyan-400" />
                     <span>{{ isRTL ? 'دليل المحرك' : 'Guide' }}</span>
                 </button>
 
                 <button
                     @click="showAddModal = true"
-                    class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
+                    class="flex cursor-pointer items-center gap-2 rounded-xl bg-cyan-500 px-5 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:bg-cyan-400 active:scale-95"
                 >
-                    <Plus class="w-4 h-4" />
-                    <span>{{ isRTL ? 'إضافة تنزيل / تورنت' : 'Add Download' }}</span>
+                    <Plus class="h-4 w-4" />
+                    <span>{{
+                        isRTL ? 'إضافة تنزيل / تورنت' : 'Add Download'
+                    }}</span>
                 </button>
             </div>
         </div>
 
         <!-- Real-Time Bandwidth & Queue Metrics Bar -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div class="glass-panel rounded-2xl p-4 border border-cyan-500/30 bg-cyan-500/5 flex items-center justify-between">
+        <div class="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <div
+                class="glass-panel flex items-center justify-between rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-4"
+            >
                 <div>
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'سرعة التنزيل' : 'Download Speed' }}</span>
-                    <span class="text-xl font-black text-cyan-400 mt-1 block font-mono">{{ totalSpeedDownFormatted }}</span>
+                    <span
+                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        >{{ isRTL ? 'سرعة التنزيل' : 'Download Speed' }}</span
+                    >
+                    <span
+                        class="mt-1 block font-mono text-xl font-black text-cyan-400"
+                        >{{ totalSpeedDownFormatted }}</span
+                    >
                 </div>
-                <div class="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
-                    <ArrowDown class="w-4 h-4" />
+                <div
+                    class="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-400"
+                >
+                    <ArrowDown class="h-4 w-4" />
                 </div>
             </div>
 
-            <div class="glass-panel rounded-2xl p-4 border border-indigo-500/30 bg-indigo-500/5 flex items-center justify-between">
+            <div
+                class="glass-panel flex items-center justify-between rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-4"
+            >
                 <div>
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'سرعة الرفع / التغذية' : 'Seeding Speed' }}</span>
-                    <span class="text-xl font-black text-indigo-400 mt-1 block font-mono">{{ totalSpeedUpFormatted }}</span>
+                    <span
+                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        >{{
+                            isRTL ? 'سرعة الرفع / التغذية' : 'Seeding Speed'
+                        }}</span
+                    >
+                    <span
+                        class="mt-1 block font-mono text-xl font-black text-indigo-400"
+                        >{{ totalSpeedUpFormatted }}</span
+                    >
                 </div>
-                <div class="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
-                    <ArrowUp class="w-4 h-4" />
+                <div
+                    class="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-400"
+                >
+                    <ArrowUp class="h-4 w-4" />
                 </div>
             </div>
 
-            <div class="glass-panel rounded-2xl p-4 border border-emerald-500/30 bg-emerald-500/5 flex items-center justify-between">
+            <div
+                class="glass-panel flex items-center justify-between rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4"
+            >
                 <div>
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'المهام النشطة' : 'Active Jobs' }}</span>
-                    <span class="text-xl font-black text-emerald-400 mt-1 block font-mono">{{ activeDownloads.length }}</span>
+                    <span
+                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        >{{ isRTL ? 'المهام النشطة' : 'Active Jobs' }}</span
+                    >
+                    <span
+                        class="mt-1 block font-mono text-xl font-black text-emerald-400"
+                        >{{ activeDownloads.length }}</span
+                    >
                 </div>
-                <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                    <Radio class="w-4 h-4" />
+                <div
+                    class="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400"
+                >
+                    <Radio class="h-4 w-4" />
                 </div>
             </div>
 
-            <div class="glass-panel rounded-2xl p-4 border border-white/10 bg-white/5 flex items-center justify-between">
+            <div
+                class="glass-panel flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-4"
+            >
                 <div>
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">{{ isRTL ? 'مكتملة ومفهرسة' : 'Completed' }}</span>
-                    <span class="text-xl font-black text-white mt-1 block font-mono">{{ completedDownloads.length }}</span>
+                    <span
+                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        >{{ isRTL ? 'مكتملة ومفهرسة' : 'Completed' }}</span
+                    >
+                    <span
+                        class="mt-1 block font-mono text-xl font-black text-white"
+                        >{{ completedDownloads.length }}</span
+                    >
                 </div>
-                <div class="w-9 h-9 rounded-xl bg-white/10 text-slate-300 flex items-center justify-center">
-                    <CheckCircle2 class="w-4 h-4" />
+                <div
+                    class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-slate-300"
+                >
+                    <CheckCircle2 class="h-4 w-4" />
                 </div>
             </div>
         </div>
 
         <!-- Filter Pills Bar -->
-        <div class="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
+        <div class="mb-6 flex items-center gap-2 overflow-x-auto pb-2">
             <button
                 v-for="filter in [
                     { id: 'all', label_en: 'All Downloads', label_ar: 'الكل' },
-                    { id: 'downloading', label_en: 'Downloading', label_ar: 'قيد التنزيل' },
+                    {
+                        id: 'downloading',
+                        label_en: 'Downloading',
+                        label_ar: 'قيد التنزيل',
+                    },
                     { id: 'paused', label_en: 'Paused', label_ar: 'متوقف' },
-                    { id: 'completed', label_en: 'Completed', label_ar: 'المكتملة' },
+                    {
+                        id: 'completed',
+                        label_en: 'Completed',
+                        label_ar: 'المكتملة',
+                    },
                 ]"
                 :key="filter.id"
                 @click="activeFilter = filter.id as any"
-                class="px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer"
-                :class="activeFilter === filter.id ? 'bg-cyan-500 text-slate-950 font-black shadow-md shadow-cyan-500/20' : 'glass-panel border border-white/10 text-slate-400 hover:text-white'"
+                class="shrink-0 cursor-pointer rounded-xl px-4 py-2 text-xs font-bold transition-all"
+                :class="
+                    activeFilter === filter.id
+                        ? 'bg-cyan-500 font-black text-slate-950 shadow-md shadow-cyan-500/20'
+                        : 'glass-panel border border-white/10 text-slate-400 hover:text-white'
+                "
             >
                 {{ isRTL ? filter.label_ar : filter.label_en }}
             </button>
         </div>
 
         <!-- Downloads Table / Cards -->
-        <div v-if="filteredItems.length === 0" class="glass-panel rounded-3xl p-12 text-center border border-white/10 space-y-4">
-            <DownloadCloud class="w-12 h-12 text-slate-600 mx-auto" />
-            <h3 class="text-base font-bold text-white">{{ isRTL ? 'لا توجد تنزيلات في هذه القائمة' : 'No downloads in this view' }}</h3>
-            <p class="text-xs text-slate-400 max-w-sm mx-auto">
-                {{ isRTL ? 'أضف رابط تورنت أو ملف .torrent أو تحميل مباشر لبدء تنزيل المحتوى بدقة دون أي تلف.' : 'Add a torrent file, magnet link, or direct stream to start downloading directly without corruption.' }}
+        <div
+            v-if="filteredItems.length === 0"
+            class="glass-panel space-y-4 rounded-3xl border border-white/10 p-12 text-center"
+        >
+            <DownloadCloud class="mx-auto h-12 w-12 text-slate-600" />
+            <h3 class="text-base font-bold text-white">
+                {{
+                    isRTL
+                        ? 'لا توجد تنزيلات في هذه القائمة'
+                        : 'No downloads in this view'
+                }}
+            </h3>
+            <p class="mx-auto max-w-sm text-xs text-slate-400">
+                {{
+                    isRTL
+                        ? 'أضف رابط تورنت أو ملف .torrent أو تحميل مباشر لبدء تنزيل المحتوى بدقة دون أي تلف.'
+                        : 'Add a torrent file, magnet link, or direct stream to start downloading directly without corruption.'
+                }}
             </p>
         </div>
 
@@ -619,81 +891,212 @@ const handleSaveSettings = async () => {
             <div
                 v-for="item in filteredItems"
                 :key="item.id"
-                class="glass-panel rounded-2xl p-5 border border-white/10 hover:border-cyan-500/40 transition-all space-y-4 group bg-white/[0.02] relative overflow-hidden"
+                class="glass-panel group relative space-y-4 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] p-5 transition-all hover:border-cyan-500/40"
             >
                 <!-- Top Row: Icon, Title, Status Badges & Action Buttons -->
-                <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                    <div class="flex items-center gap-3.5 flex-1 min-w-0">
+                <div
+                    class="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center"
+                >
+                    <div class="flex min-w-0 flex-1 items-center gap-3.5">
                         <div
-                            class="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border shadow-inner"
-                            :class="item.media_type === 'series' ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'"
+                            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border shadow-inner"
+                            :class="
+                                item.media_type === 'series'
+                                    ? 'border-indigo-500/30 bg-indigo-500/10 text-indigo-400'
+                                    : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-400'
+                            "
                         >
-                            <Magnet v-if="item.download_type === 'torrent'" class="w-5 h-5 text-purple-400" />
-                            <Tv v-else-if="item.media_type === 'series'" class="w-5 h-5" />
-                            <Film v-else class="w-5 h-5" />
+                            <Magnet
+                                v-if="item.download_type === 'torrent'"
+                                class="h-5 w-5 text-purple-400"
+                            />
+                            <Tv
+                                v-else-if="item.media_type === 'series'"
+                                class="h-5 w-5"
+                            />
+                            <Film v-else class="h-5 w-5" />
                         </div>
 
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-2 mb-1 flex-wrap">
-                                <h4 class="font-extrabold text-sm sm:text-base text-white truncate max-w-lg" :title="item.title">
+                        <div class="min-w-0 flex-1">
+                            <div class="mb-1 flex flex-wrap items-center gap-2">
+                                <h4
+                                    class="max-w-lg truncate text-sm font-extrabold text-white sm:text-base"
+                                    :title="item.title"
+                                >
                                     {{ item.title }}
                                 </h4>
                                 <span
-                                    class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider"
+                                    class="rounded-full px-2 py-0.5 font-mono text-[10px] font-bold tracking-wider uppercase"
                                     :class="{
-                                        'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30': item.status === 'downloading',
-                                        'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30': item.status === 'completed',
-                                        'bg-amber-500/20 text-amber-300 border border-amber-500/30': item.status === 'paused',
-                                        'bg-blue-500/20 text-blue-300 border border-blue-500/30': item.status === 'queued',
-                                        'bg-rose-500/20 text-rose-300 border border-rose-500/30': item.status === 'failed',
+                                        'border border-cyan-500/30 bg-cyan-500/20 text-cyan-300':
+                                            item.status === 'downloading',
+                                        'border border-emerald-500/30 bg-emerald-500/20 text-emerald-300':
+                                            item.status === 'completed',
+                                        'border border-amber-500/30 bg-amber-500/20 text-amber-300':
+                                            item.status === 'paused',
+                                        'border border-blue-500/30 bg-blue-500/20 text-blue-300':
+                                            item.status === 'queued',
+                                        'border border-rose-500/30 bg-rose-500/20 text-rose-300':
+                                            item.status === 'failed',
                                     }"
                                 >
                                     {{ item.status }}
                                 </span>
-                                <span v-if="item.download_type === 'torrent'" class="px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-mono font-bold">
+                                <span
+                                    v-if="item.download_type === 'torrent'"
+                                    class="rounded-md border border-purple-500/30 bg-purple-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-purple-300"
+                                >
                                     🧲 Torrent
                                 </span>
 
                                 <!-- Live Seeder / Peer Pills -->
-                                <span v-if="item.download_type === 'torrent' && (item.status === 'downloading' || item.status === 'paused')"
-                                    class="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold flex items-center gap-1 border"
-                                    :class="(item.num_seeders || 0) > 0 ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'"
+                                <span
+                                    v-if="
+                                        item.download_type === 'torrent' &&
+                                        (item.status === 'downloading' ||
+                                            item.status === 'paused')
+                                    "
+                                    class="flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold"
+                                    :class="
+                                        (item.num_seeders || 0) > 0
+                                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                                            : 'border-slate-700 bg-slate-800 text-slate-400'
+                                    "
                                 >
-                                    <span class="w-1.5 h-1.5 rounded-full" :class="(item.num_seeders || 0) > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'"></span>
-                                    <span>{{ item.num_seeders || 0 }} {{ isRTL ? 'موزع (Seeds)' : 'seeds' }}</span>
+                                    <span
+                                        class="h-1.5 w-1.5 rounded-full"
+                                        :class="
+                                            (item.num_seeders || 0) > 0
+                                                ? 'animate-pulse bg-emerald-400'
+                                                : 'bg-slate-500'
+                                        "
+                                    ></span>
+                                    <span
+                                        >{{ item.num_seeders || 0 }}
+                                        {{
+                                            isRTL ? 'موزع (Seeds)' : 'seeds'
+                                        }}</span
+                                    >
                                 </span>
 
-                                <span v-if="item.download_type === 'torrent' && (item.status === 'downloading' || item.status === 'paused')"
-                                    class="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold flex items-center gap-1 border"
-                                    :class="(item.connections || 0) > 0 ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'"
+                                <span
+                                    v-if="
+                                        item.download_type === 'torrent' &&
+                                        (item.status === 'downloading' ||
+                                            item.status === 'paused')
+                                    "
+                                    class="flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold"
+                                    :class="
+                                        (item.connections || 0) > 0
+                                            ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300'
+                                            : 'border-slate-700 bg-slate-800 text-slate-400'
+                                    "
                                 >
-                                    <span class="w-1.5 h-1.5 rounded-full" :class="(item.connections || 0) > 0 ? 'bg-cyan-400' : 'bg-slate-500'"></span>
-                                    <span>{{ item.connections || 0 }} {{ isRTL ? 'متصل (Peers)' : 'peers' }}</span>
+                                    <span
+                                        class="h-1.5 w-1.5 rounded-full"
+                                        :class="
+                                            (item.connections || 0) > 0
+                                                ? 'bg-cyan-400'
+                                                : 'bg-slate-500'
+                                        "
+                                    ></span>
+                                    <span
+                                        >{{ item.connections || 0 }}
+                                        {{
+                                            isRTL ? 'متصل (Peers)' : 'peers'
+                                        }}</span
+                                    >
                                 </span>
                             </div>
 
                             <!-- Progress Bar & Specs -->
-                            <div class="space-y-1.5 max-w-2xl">
-                                <div class="w-full h-2 rounded-full bg-white/10 overflow-hidden shadow-inner">
+                            <div class="max-w-2xl space-y-1.5">
+                                <div
+                                    class="h-2 w-full overflow-hidden rounded-full bg-white/10 shadow-inner"
+                                >
                                     <div
-                                        class="h-full rounded-full transition-all duration-300 relative"
-                                        :class="item.status === 'completed' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500'"
-                                        :style="{ width: `${getProgressPercent(item)}%` }"
+                                        class="relative h-full rounded-full transition-all duration-300"
+                                        :class="
+                                            item.status === 'completed'
+                                                ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
+                                                : 'bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500'
+                                        "
+                                        :style="{
+                                            width: `${getProgressPercent(item)}%`,
+                                        }"
                                     ></div>
                                 </div>
 
-                                <div class="flex items-center gap-3 text-[11px] text-slate-400 font-mono flex-wrap">
-                                    <span>{{ formatBytes(item.status === 'completed' ? (item.downloaded_bytes || item.total_bytes) : item.downloaded_bytes) }} / {{ formatBytes(item.total_bytes) }} ({{ getProgressPercent(item) }}%)</span>
+                                <div
+                                    class="flex flex-wrap items-center gap-3 font-mono text-[11px] text-slate-400"
+                                >
+                                    <span
+                                        >{{
+                                            formatBytes(
+                                                item.status === 'completed'
+                                                    ? item.downloaded_bytes ||
+                                                          item.total_bytes
+                                                    : item.downloaded_bytes,
+                                            )
+                                        }}
+                                        /
+                                        {{ formatBytes(item.total_bytes) }} ({{
+                                            getProgressPercent(item)
+                                        }}%)</span
+                                    >
                                     <span>•</span>
-                                    <span v-if="item.status === 'downloading'" class="text-cyan-300 font-bold">
-                                        ⚡ ⬇ {{ (item.speed_bytes_sec / (1024 * 1024)).toFixed(1) }} MB/s
+                                    <span
+                                        v-if="item.status === 'downloading'"
+                                        class="font-bold text-cyan-300"
+                                    >
+                                        ⚡ ⬇
+                                        {{
+                                            (
+                                                item.speed_bytes_sec /
+                                                (1024 * 1024)
+                                            ).toFixed(1)
+                                        }}
+                                        MB/s
                                     </span>
-                                    <span v-if="item.status === 'downloading' && (item.upload_speed_bytes_sec || 0) > 0" class="text-indigo-300">
-                                        ⬆ {{ ((item.upload_speed_bytes_sec || 0) / (1024 * 1024)).toFixed(1) }} MB/s
+                                    <span
+                                        v-if="
+                                            item.status === 'downloading' &&
+                                            (item.upload_speed_bytes_sec || 0) >
+                                                0
+                                        "
+                                        class="text-indigo-300"
+                                    >
+                                        ⬆
+                                        {{
+                                            (
+                                                (item.upload_speed_bytes_sec ||
+                                                    0) /
+                                                (1024 * 1024)
+                                            ).toFixed(1)
+                                        }}
+                                        MB/s
                                     </span>
-                                    <span v-if="item.status === 'downloading'" class="text-slate-300">ETA: {{ getETA(item) }}</span>
-                                    <span v-if="item.destination_folder || item.destination_path" class="text-slate-500 text-[10px] truncate max-w-xs" :title="item.destination_folder || item.destination_path">
-                                        📁 {{ item.destination_folder || item.destination_path }}
+                                    <span
+                                        v-if="item.status === 'downloading'"
+                                        class="text-slate-300"
+                                        >ETA: {{ getETA(item) }}</span
+                                    >
+                                    <span
+                                        v-if="
+                                            item.destination_folder ||
+                                            item.destination_path
+                                        "
+                                        class="max-w-xs truncate text-[10px] text-slate-500"
+                                        :title="
+                                            item.destination_folder ||
+                                            item.destination_path
+                                        "
+                                    >
+                                        📁
+                                        {{
+                                            item.destination_folder ||
+                                            item.destination_path
+                                        }}
                                     </span>
                                 </div>
                             </div>
@@ -701,116 +1104,192 @@ const handleSaveSettings = async () => {
                     </div>
 
                     <!-- Action Buttons & Drawer Toggle -->
-                    <div class="flex items-center gap-2 shrink-0 self-end md:self-center">
+                    <div
+                        class="flex shrink-0 items-center gap-2 self-end md:self-center"
+                    >
                         <Link
-                            v-if="(item.workflow_stage === 'ready' || item.status === 'completed') && getItemWatchUrl(item)"
+                            v-if="
+                                (item.workflow_stage === 'ready' ||
+                                    item.status === 'completed') &&
+                                getItemWatchUrl(item)
+                            "
                             :href="getItemWatchUrl(item)!"
-                            class="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
+                            class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-1.5 text-xs font-black text-slate-950 shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-400"
                         >
-                            <PlayCircle class="w-4 h-4" />
+                            <PlayCircle class="h-4 w-4" />
                             <span>{{ isRTL ? 'شاهد الآن' : 'Watch Now' }}</span>
                         </Link>
 
                         <button
-                            v-if="(item.status === 'completed' || item.workflow_stage === 'failed' || (!item.organized_path && item.downloaded_bytes > 0)) && !getItemWatchUrl(item)"
+                            v-if="
+                                (item.status === 'completed' ||
+                                    item.workflow_stage === 'failed' ||
+                                    (!item.organized_path &&
+                                        item.downloaded_bytes > 0)) &&
+                                !getItemWatchUrl(item)
+                            "
                             @click="handleOrganize(item)"
                             :disabled="organizingIds[item.id]"
-                            class="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                            :title="isRTL ? 'تنظيم وفهرسة في المكتبة الآن' : 'Organize and Scan into Library Now'"
+                            class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-cyan-500/40 bg-cyan-500/20 px-3 py-1.5 text-xs font-bold text-cyan-300 transition-all hover:bg-cyan-500/30 disabled:opacity-50"
+                            :title="
+                                isRTL
+                                    ? 'تنظيم وفهرسة في المكتبة الآن'
+                                    : 'Organize and Scan into Library Now'
+                            "
                         >
-                            <FolderCheck class="w-4 h-4" :class="{ 'animate-spin': organizingIds[item.id] }" />
-                            <span>{{ organizingIds[item.id] ? (isRTL ? 'جاري التنظيم...' : 'Organizing...') : (isRTL ? 'تنظيم وفهرسة' : 'Organize & Scan') }}</span>
+                            <FolderCheck
+                                class="h-4 w-4"
+                                :class="{
+                                    'animate-spin': organizingIds[item.id],
+                                }"
+                            />
+                            <span>{{
+                                organizingIds[item.id]
+                                    ? isRTL
+                                        ? 'جاري التنظيم...'
+                                        : 'Organizing...'
+                                    : isRTL
+                                      ? 'تنظيم وفهرسة'
+                                      : 'Organize & Scan'
+                            }}</span>
                         </button>
 
                         <button
                             v-if="item.status === 'downloading'"
                             @click="pauseDownload(item.id)"
-                            class="p-2 rounded-xl bg-white/5 hover:bg-amber-500/20 border border-white/10 hover:border-amber-500/40 text-slate-300 hover:text-amber-300 transition-all cursor-pointer"
+                            class="cursor-pointer rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition-all hover:border-amber-500/40 hover:bg-amber-500/20 hover:text-amber-300"
                             title="Pause"
                         >
-                            <Pause class="w-4 h-4" />
+                            <Pause class="h-4 w-4" />
                         </button>
 
                         <button
-                            v-if="item.status === 'downloading' || item.status === 'paused'"
+                            v-if="
+                                item.status === 'downloading' ||
+                                item.status === 'paused'
+                            "
                             @click="handleStop(item)"
-                            class="p-2 rounded-xl bg-white/5 hover:bg-rose-500/20 border border-white/10 hover:border-rose-500/40 text-slate-300 hover:text-rose-300 transition-all cursor-pointer"
+                            class="cursor-pointer rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition-all hover:border-rose-500/40 hover:bg-rose-500/20 hover:text-rose-300"
                             title="Stop"
                         >
-                            <Square class="w-4 h-4" />
+                            <Square class="h-4 w-4" />
                         </button>
 
                         <button
                             v-if="item.status === 'paused'"
                             @click="resumeDownload(item.id)"
-                            class="p-2 rounded-xl bg-white/5 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-500/40 text-slate-300 hover:text-cyan-300 transition-all cursor-pointer"
+                            class="cursor-pointer rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition-all hover:border-cyan-500/40 hover:bg-cyan-500/20 hover:text-cyan-300"
                             title="Resume"
                         >
-                            <Play class="w-4 h-4" />
+                            <Play class="h-4 w-4" />
                         </button>
 
                         <button
                             v-if="item.status === 'failed'"
                             @click="retryDownload(item.id)"
-                            class="p-2 rounded-xl bg-white/5 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-500/40 text-slate-300 hover:text-cyan-300 transition-all cursor-pointer"
+                            class="cursor-pointer rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition-all hover:border-cyan-500/40 hover:bg-cyan-500/20 hover:text-cyan-300"
                             title="Retry"
                         >
-                            <RotateCcw class="w-4 h-4" />
+                            <RotateCcw class="h-4 w-4" />
                         </button>
 
                         <!-- Details Drawer Toggle -->
                         <button
                             @click="toggleDetails(item.id)"
-                            class="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
-                            :title="isRTL ? 'عرض تفاصيل التورنت والملفات' : 'Toggle Torrent Details & Files'"
+                            class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-slate-300 transition-all hover:bg-white/10"
+                            :title="
+                                isRTL
+                                    ? 'عرض تفاصيل التورنت والملفات'
+                                    : 'Toggle Torrent Details & Files'
+                            "
                         >
-                            <Layers class="w-3.5 h-3.5 text-cyan-400" />
-                            <span class="hidden sm:inline">{{ isRTL ? 'التفاصيل' : 'Details' }}</span>
-                            <ChevronDown v-if="!expandedDetails[item.id]" class="w-3.5 h-3.5 text-slate-400" />
-                            <ChevronUp v-else class="w-3.5 h-3.5 text-cyan-400" />
+                            <Layers class="h-3.5 w-3.5 text-cyan-400" />
+                            <span class="hidden sm:inline">{{
+                                isRTL ? 'التفاصيل' : 'Details'
+                            }}</span>
+                            <ChevronDown
+                                v-if="!expandedDetails[item.id]"
+                                class="h-3.5 w-3.5 text-slate-400"
+                            />
+                            <ChevronUp
+                                v-else
+                                class="h-3.5 w-3.5 text-cyan-400"
+                            />
                         </button>
 
                         <button
                             @click="deleteDownload(item.id)"
-                            class="p-2 rounded-xl bg-white/5 hover:bg-rose-500/20 border border-white/10 hover:border-rose-500/40 text-slate-400 hover:text-rose-400 transition-all cursor-pointer"
+                            class="cursor-pointer rounded-xl border border-white/10 bg-white/5 p-2 text-slate-400 transition-all hover:border-rose-500/40 hover:bg-rose-500/20 hover:text-rose-400"
                             title="Delete"
                         >
-                            <Trash2 class="w-4 h-4" />
+                            <Trash2 class="h-4 w-4" />
                         </button>
                     </div>
                 </div>
 
                 <!-- 5-Stage Post-Download Workflow Stepper -->
-                <div class="pt-2 border-t border-white/5">
-                    <div class="flex items-center justify-between gap-1 sm:gap-2 overflow-x-auto py-1">
+                <div class="border-t border-white/5 pt-2">
+                    <div
+                        class="flex items-center justify-between gap-1 overflow-x-auto py-1 sm:gap-2"
+                    >
                         <div
                             v-for="(stageKey, idx) in STAGES"
                             :key="stageKey"
-                            class="flex items-center gap-1.5 flex-1 min-w-[90px] sm:min-w-[110px]"
+                            class="flex min-w-[90px] flex-1 items-center gap-1.5 sm:min-w-[110px]"
                         >
-                            <div class="flex items-center gap-1.5 flex-1">
+                            <div class="flex flex-1 items-center gap-1.5">
                                 <!-- Stage Badge -->
                                 <div
-                                    class="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold font-mono transition-all"
+                                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-bold transition-all"
                                     :class="{
-                                        'bg-emerald-500 text-slate-950 ring-2 ring-emerald-500/30': getStageState(item, stageKey) === 'completed',
-                                        'bg-cyan-500 text-slate-950 animate-pulse ring-2 ring-cyan-500/40': getStageState(item, stageKey) === 'active',
-                                        'bg-slate-800 text-slate-500 border border-slate-700': getStageState(item, stageKey) === 'pending',
-                                        'bg-rose-500 text-white': getStageState(item, stageKey) === 'failed',
+                                        'bg-emerald-500 text-slate-950 ring-2 ring-emerald-500/30':
+                                            getStageState(item, stageKey) ===
+                                            'completed',
+                                        'animate-pulse bg-cyan-500 text-slate-950 ring-2 ring-cyan-500/40':
+                                            getStageState(item, stageKey) ===
+                                            'active',
+                                        'border border-slate-700 bg-slate-800 text-slate-500':
+                                            getStageState(item, stageKey) ===
+                                            'pending',
+                                        'bg-rose-500 text-white':
+                                            getStageState(item, stageKey) ===
+                                            'failed',
                                     }"
                                 >
-                                    <Check v-if="getStageState(item, stageKey) === 'completed'" class="w-3.5 h-3.5 stroke-[3]" />
+                                    <Check
+                                        v-if="
+                                            getStageState(item, stageKey) ===
+                                            'completed'
+                                        "
+                                        class="h-3.5 w-3.5 stroke-[3]"
+                                    />
                                     <span v-else>{{ idx + 1 }}</span>
                                 </div>
 
                                 <div class="min-w-0 flex-1">
                                     <span
-                                        class="text-[11px] font-bold block truncate capitalize"
+                                        class="block truncate text-[11px] font-bold capitalize"
                                         :class="{
-                                            'text-emerald-300': getStageState(item, stageKey) === 'completed',
-                                            'text-cyan-300 font-black': getStageState(item, stageKey) === 'active',
-                                            'text-slate-500': getStageState(item, stageKey) === 'pending',
-                                            'text-rose-400': getStageState(item, stageKey) === 'failed',
+                                            'text-emerald-300':
+                                                getStageState(
+                                                    item,
+                                                    stageKey,
+                                                ) === 'completed',
+                                            'font-black text-cyan-300':
+                                                getStageState(
+                                                    item,
+                                                    stageKey,
+                                                ) === 'active',
+                                            'text-slate-500':
+                                                getStageState(
+                                                    item,
+                                                    stageKey,
+                                                ) === 'pending',
+                                            'text-rose-400':
+                                                getStageState(
+                                                    item,
+                                                    stageKey,
+                                                ) === 'failed',
                                         }"
                                     >
                                         {{ stageKey }}
@@ -821,8 +1300,15 @@ const handleSaveSettings = async () => {
                             <!-- Connector Line (except for last step) -->
                             <div
                                 v-if="idx < STAGES.length - 1"
-                                class="h-0.5 w-3 sm:w-6 shrink-0 transition-all rounded-full"
-                                :class="getStageState(item, STAGES[idx + 1]) === 'completed' || getStageState(item, STAGES[idx]) === 'completed' ? 'bg-emerald-500/50' : 'bg-slate-800'"
+                                class="h-0.5 w-3 shrink-0 rounded-full transition-all sm:w-6"
+                                :class="
+                                    getStageState(item, STAGES[idx + 1]) ===
+                                        'completed' ||
+                                    getStageState(item, STAGES[idx]) ===
+                                        'completed'
+                                        ? 'bg-emerald-500/50'
+                                        : 'bg-slate-800'
+                                "
                             ></div>
                         </div>
                     </div>
@@ -830,19 +1316,28 @@ const handleSaveSettings = async () => {
 
                 <!-- Stalled / Error Warning Banner -->
                 <div
-                    v-if="item.error_details && item.error_details.includes('Stalled')"
-                    class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-3 flex-wrap"
+                    v-if="
+                        item.error_details &&
+                        item.error_details.includes('Stalled')
+                    "
+                    class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300"
                 >
                     <div class="flex items-center gap-2">
-                        <AlertTriangle class="w-4 h-4 text-amber-400 shrink-0" />
+                        <AlertTriangle
+                            class="h-4 w-4 shrink-0 text-amber-400"
+                        />
                         <span>{{ item.error_details }}</span>
                     </div>
                     <div class="flex items-center gap-2">
                         <button
                             @click="retryDownload(item.id)"
-                            class="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 text-[11px] font-bold transition-all cursor-pointer"
+                            class="cursor-pointer rounded-lg border border-amber-500/40 bg-amber-500/20 px-2.5 py-1 text-[11px] font-bold text-amber-200 transition-all hover:bg-amber-500/30"
                         >
-                            {{ isRTL ? 'إعادة الفحص والاتصال' : 'Force Re-check' }}
+                            {{
+                                isRTL
+                                    ? 'إعادة الفحص والاتصال'
+                                    : 'Force Re-check'
+                            }}
                         </button>
                     </div>
                 </div>
@@ -851,107 +1346,223 @@ const handleSaveSettings = async () => {
                 <transition name="fade">
                     <div
                         v-if="expandedDetails[item.id]"
-                        class="p-4 rounded-xl glass-panel border border-cyan-500/20 bg-slate-950/60 space-y-4 text-xs font-mono"
+                        class="glass-panel space-y-4 rounded-xl border border-cyan-500/20 bg-slate-950/60 p-4 font-mono text-xs"
                     >
                         <!-- Metadata Grid -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                            <div v-if="item.info_hash" class="p-2.5 rounded-lg bg-white/5 border border-white/10">
-                                <span class="text-[10px] text-slate-400 block uppercase font-sans font-bold mb-1">InfoHash</span>
-                                <div class="flex items-center justify-between gap-1">
-                                    <span class="truncate text-slate-300 text-[11px]" :title="item.info_hash">{{ item.info_hash }}</span>
+                        <div
+                            class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4"
+                        >
+                            <div
+                                v-if="item.info_hash"
+                                class="rounded-lg border border-white/10 bg-white/5 p-2.5"
+                            >
+                                <span
+                                    class="mb-1 block font-sans text-[10px] font-bold text-slate-400 uppercase"
+                                    >InfoHash</span
+                                >
+                                <div
+                                    class="flex items-center justify-between gap-1"
+                                >
+                                    <span
+                                        class="truncate text-[11px] text-slate-300"
+                                        :title="item.info_hash"
+                                        >{{ item.info_hash }}</span
+                                    >
                                     <button
                                         @click="copyInfoHash(item.info_hash)"
-                                        class="p-1 rounded bg-white/10 hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-300 shrink-0 cursor-pointer"
-                                        :title="isRTL ? 'نسخ Hash' : 'Copy Hash'"
+                                        class="shrink-0 cursor-pointer rounded bg-white/10 p-1 text-slate-300 hover:bg-cyan-500/20 hover:text-cyan-300"
+                                        :title="
+                                            isRTL ? 'نسخ Hash' : 'Copy Hash'
+                                        "
                                     >
-                                        <Check v-if="copiedHash === item.info_hash" class="w-3.5 h-3.5 text-emerald-400" />
-                                        <Copy v-else class="w-3.5 h-3.5" />
+                                        <Check
+                                            v-if="copiedHash === item.info_hash"
+                                            class="h-3.5 w-3.5 text-emerald-400"
+                                        />
+                                        <Copy v-else class="h-3.5 w-3.5" />
                                     </button>
                                 </div>
                             </div>
 
-                            <div v-if="item.aria2_gid" class="p-2.5 rounded-lg bg-white/5 border border-white/10">
-                                <span class="text-[10px] text-slate-400 block uppercase font-sans font-bold mb-1">Aria2 GID</span>
-                                <span class="text-cyan-300 text-[11px]">{{ item.aria2_gid }}</span>
+                            <div
+                                v-if="item.aria2_gid"
+                                class="rounded-lg border border-white/10 bg-white/5 p-2.5"
+                            >
+                                <span
+                                    class="mb-1 block font-sans text-[10px] font-bold text-slate-400 uppercase"
+                                    >Aria2 GID</span
+                                >
+                                <span class="text-[11px] text-cyan-300">{{
+                                    item.aria2_gid
+                                }}</span>
                             </div>
 
-                            <div v-if="item.torrent_files?.piece_length" class="p-2.5 rounded-lg bg-white/5 border border-white/10">
-                                <span class="text-[10px] text-slate-400 block uppercase font-sans font-bold mb-1">{{ isRTL ? 'حجم القطع (Pieces)' : 'Piece Size' }}</span>
-                                <span class="text-slate-300 text-[11px]">
-                                    {{ formatBytes(item.torrent_files.piece_length) }} • {{ item.torrent_files.num_pieces || 0 }} {{ isRTL ? 'قطعة' : 'pieces' }}
+                            <div
+                                v-if="item.torrent_files?.piece_length"
+                                class="rounded-lg border border-white/10 bg-white/5 p-2.5"
+                            >
+                                <span
+                                    class="mb-1 block font-sans text-[10px] font-bold text-slate-400 uppercase"
+                                    >{{
+                                        isRTL
+                                            ? 'حجم القطع (Pieces)'
+                                            : 'Piece Size'
+                                    }}</span
+                                >
+                                <span class="text-[11px] text-slate-300">
+                                    {{
+                                        formatBytes(
+                                            item.torrent_files.piece_length,
+                                        )
+                                    }}
+                                    • {{ item.torrent_files.num_pieces || 0 }}
+                                    {{ isRTL ? 'قطعة' : 'pieces' }}
                                 </span>
                             </div>
 
-                            <div v-if="item.organized_path" class="p-2.5 rounded-lg bg-white/5 border border-white/10">
-                                <span class="text-[10px] text-slate-400 block uppercase font-sans font-bold mb-1">{{ isRTL ? 'المسار المنظم النهائي' : 'Organized Library Path' }}</span>
-                                <span class="text-emerald-300 text-[11px] truncate block" :title="item.organized_path">
+                            <div
+                                v-if="item.organized_path"
+                                class="rounded-lg border border-white/10 bg-white/5 p-2.5"
+                            >
+                                <span
+                                    class="mb-1 block font-sans text-[10px] font-bold text-slate-400 uppercase"
+                                    >{{
+                                        isRTL
+                                            ? 'المسار المنظم النهائي'
+                                            : 'Organized Library Path'
+                                    }}</span
+                                >
+                                <span
+                                    class="block truncate text-[11px] text-emerald-300"
+                                    :title="item.organized_path"
+                                >
                                     {{ item.organized_path }}
                                 </span>
                             </div>
                         </div>
 
                         <!-- Per-File Breakdown List -->
-                        <div v-if="getItemFiles(item).length > 0" class="space-y-2">
-                            <span class="text-[11px] font-sans font-bold text-slate-300 flex items-center gap-1.5">
-                                <FileText class="w-3.5 h-3.5 text-cyan-400" />
-                                <span>{{ isRTL ? 'ملفات التنزيل ونسب الإنجاز' : 'Download Payload Files Progress' }} ({{ getItemFiles(item).length }})</span>
+                        <div
+                            v-if="getItemFiles(item).length > 0"
+                            class="space-y-2"
+                        >
+                            <span
+                                class="flex items-center gap-1.5 font-sans text-[11px] font-bold text-slate-300"
+                            >
+                                <FileText class="h-3.5 w-3.5 text-cyan-400" />
+                                <span
+                                    >{{
+                                        isRTL
+                                            ? 'ملفات التنزيل ونسب الإنجاز'
+                                            : 'Download Payload Files Progress'
+                                    }}
+                                    ({{ getItemFiles(item).length }})</span
+                                >
                             </span>
 
-                            <div class="max-h-56 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
+                            <div
+                                class="custom-scrollbar max-h-56 space-y-1.5 overflow-y-auto pr-1"
+                            >
                                 <div
                                     v-for="file in getItemFiles(item)"
                                     :key="file.index"
-                                    class="p-2 rounded-lg bg-white/[0.03] border border-white/5 flex items-center justify-between gap-3 text-[11px]"
+                                    class="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-white/[0.03] p-2 text-[11px]"
                                 >
                                     <div class="min-w-0 flex-1">
-                                        <span class="text-slate-300 truncate block font-mono" :title="file.path">{{ file.name || file.path }}</span>
-                                        <div class="flex items-center gap-2 mt-1">
-                                            <div class="w-28 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                                        <span
+                                            class="block truncate font-mono text-slate-300"
+                                            :title="file.path"
+                                            >{{ file.name || file.path }}</span
+                                        >
+                                        <div
+                                            class="mt-1 flex items-center gap-2"
+                                        >
+                                            <div
+                                                class="h-1.5 w-28 overflow-hidden rounded-full bg-white/10"
+                                            >
                                                 <div
-                                                    class="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full transition-all duration-300"
-                                                    :style="{ width: `${file.percent}%` }"
+                                                    class="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-all duration-300"
+                                                    :style="{
+                                                        width: `${file.percent}%`,
+                                                    }"
                                                 ></div>
                                             </div>
-                                            <span class="text-[10px] text-cyan-400 font-mono font-bold">{{ file.percent }}%</span>
+                                            <span
+                                                class="font-mono text-[10px] font-bold text-cyan-400"
+                                                >{{ file.percent }}%</span
+                                            >
                                         </div>
                                     </div>
-                                    <div class="text-right shrink-0 font-mono">
-                                        <span class="text-slate-300 font-semibold">{{ formatBytes(file.completedLength) }}</span>
+                                    <div class="shrink-0 text-right font-mono">
+                                        <span
+                                            class="font-semibold text-slate-300"
+                                            >{{
+                                                formatBytes(
+                                                    file.completedLength,
+                                                )
+                                            }}</span
+                                        >
                                         <span class="text-slate-500"> / </span>
-                                        <span class="text-slate-400">{{ formatBytes(file.length) }}</span>
+                                        <span class="text-slate-400">{{
+                                            formatBytes(file.length)
+                                        }}</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Ongoing Pipeline Operations & Event Log -->
-                        <div class="space-y-2 pt-3 border-t border-white/5">
+                        <div class="space-y-2 border-t border-white/5 pt-3">
                             <div class="flex items-center justify-between">
-                                <span class="text-[11px] font-sans font-bold text-slate-300 flex items-center gap-1.5">
-                                    <Activity class="w-3.5 h-3.5 text-emerald-400" />
-                                    <span>{{ isRTL ? 'سجل العمليات والمراحل النشطة' : 'Ongoing Pipeline Operations Log' }}</span>
+                                <span
+                                    class="flex items-center gap-1.5 font-sans text-[11px] font-bold text-slate-300"
+                                >
+                                    <Activity
+                                        class="h-3.5 w-3.5 text-emerald-400"
+                                    />
+                                    <span>{{
+                                        isRTL
+                                            ? 'سجل العمليات والمراحل النشطة'
+                                            : 'Ongoing Pipeline Operations Log'
+                                    }}</span>
                                 </span>
-                                <span v-if="getItemLogs(item).length > 0" class="text-[10px] text-slate-500 font-mono">
-                                    {{ getItemLogs(item).length }} {{ isRTL ? 'حدث' : 'events' }}
+                                <span
+                                    v-if="getItemLogs(item).length > 0"
+                                    class="font-mono text-[10px] text-slate-500"
+                                >
+                                    {{ getItemLogs(item).length }}
+                                    {{ isRTL ? 'حدث' : 'events' }}
                                 </span>
                             </div>
 
-                            <div v-if="getItemLogs(item).length > 0" class="max-h-40 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar bg-black/40 rounded-xl p-3 border border-white/5 font-mono text-[11px]">
+                            <div
+                                v-if="getItemLogs(item).length > 0"
+                                class="custom-scrollbar max-h-40 space-y-1.5 overflow-y-auto rounded-xl border border-white/5 bg-black/40 p-3 pr-1 font-mono text-[11px]"
+                            >
                                 <div
                                     v-for="(log, lIdx) in getItemLogs(item)"
                                     :key="lIdx"
                                     class="flex items-start gap-2 py-0.5 leading-relaxed"
                                 >
-                                    <span class="text-slate-500 shrink-0 text-[10px] mt-0.5">{{ log.time }}</span>
                                     <span
-                                        class="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase shrink-0"
+                                        class="mt-0.5 shrink-0 text-[10px] text-slate-500"
+                                        >{{ log.time }}</span
+                                    >
+                                    <span
+                                        class="py-0.2 shrink-0 rounded px-1.5 text-[9px] font-bold uppercase"
                                         :class="{
-                                            'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30': log.stage === 'download',
-                                            'bg-purple-500/20 text-purple-300 border border-purple-500/30': log.stage === 'verify',
-                                            'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30': log.stage === 'organize',
-                                            'bg-amber-500/20 text-amber-300 border border-amber-500/30': log.stage === 'scan',
-                                            'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30': log.stage === 'ready',
-                                            'bg-rose-500/20 text-rose-300 border border-rose-500/30': log.stage === 'error',
+                                            'border border-cyan-500/30 bg-cyan-500/20 text-cyan-300':
+                                                log.stage === 'download',
+                                            'border border-purple-500/30 bg-purple-500/20 text-purple-300':
+                                                log.stage === 'verify',
+                                            'border border-indigo-500/30 bg-indigo-500/20 text-indigo-300':
+                                                log.stage === 'organize',
+                                            'border border-amber-500/30 bg-amber-500/20 text-amber-300':
+                                                log.stage === 'scan',
+                                            'border border-emerald-500/30 bg-emerald-500/20 text-emerald-300':
+                                                log.stage === 'ready',
+                                            'border border-rose-500/30 bg-rose-500/20 text-rose-300':
+                                                log.stage === 'error',
                                         }"
                                     >
                                         {{ log.stage }}
@@ -959,18 +1570,30 @@ const handleSaveSettings = async () => {
                                     <span
                                         class="min-w-0 flex-1 break-words"
                                         :class="{
-                                            'text-emerald-300': log.level === 'success',
-                                            'text-rose-400': log.level === 'error',
-                                            'text-amber-300': log.level === 'warning',
-                                            'text-slate-300': !log.level || log.level === 'info',
+                                            'text-emerald-300':
+                                                log.level === 'success',
+                                            'text-rose-400':
+                                                log.level === 'error',
+                                            'text-amber-300':
+                                                log.level === 'warning',
+                                            'text-slate-300':
+                                                !log.level ||
+                                                log.level === 'info',
                                         }"
                                     >
                                         {{ log.message }}
                                     </span>
                                 </div>
                             </div>
-                            <div v-else class="text-[11px] text-slate-500 italic p-2.5 bg-black/20 rounded-lg">
-                                {{ isRTL ? 'لا توجد سجلات بعد لهذه العملية' : 'No recorded operations yet for this task.' }}
+                            <div
+                                v-else
+                                class="rounded-lg bg-black/20 p-2.5 text-[11px] text-slate-500 italic"
+                            >
+                                {{
+                                    isRTL
+                                        ? 'لا توجد سجلات بعد لهذه العملية'
+                                        : 'No recorded operations yet for this task.'
+                                }}
                             </div>
                         </div>
                     </div>
@@ -982,52 +1605,106 @@ const handleSaveSettings = async () => {
         <transition name="fade">
             <div
                 v-if="showAddModal"
-                class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
                 @click.self="showAddModal = false"
             >
-                <div class="glass-panel rounded-3xl p-6 sm:p-8 max-w-2xl w-full border border-cyan-500/30 shadow-2xl space-y-5 max-h-[92vh] flex flex-col">
-                    <div class="flex items-center justify-between border-b border-white/10 pb-3">
-                        <h3 class="font-extrabold text-base text-white flex items-center gap-2">
-                            <DownloadCloud class="w-5 h-5 text-cyan-400" />
-                            <span>{{ isRTL ? 'إضافة تنزيل وتورنت بهيكل المجلدات' : 'Add Download / Torrent Job' }}</span>
+                <div
+                    class="glass-panel flex max-h-[92vh] w-full max-w-2xl flex-col space-y-5 rounded-3xl border border-cyan-500/30 p-6 shadow-2xl sm:p-8"
+                >
+                    <div
+                        class="flex items-center justify-between border-b border-white/10 pb-3"
+                    >
+                        <h3
+                            class="flex items-center gap-2 text-base font-extrabold text-white"
+                        >
+                            <DownloadCloud class="h-5 w-5 text-cyan-400" />
+                            <span>{{
+                                isRTL
+                                    ? 'إضافة تنزيل وتورنت بهيكل المجلدات'
+                                    : 'Add Download / Torrent Job'
+                            }}</span>
                         </h3>
                     </div>
 
-                    <div class="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
+                    <div
+                        class="custom-scrollbar flex-1 space-y-4 overflow-y-auto pr-1"
+                    >
                         <!-- Mode Selector: Direct vs Torrent -->
                         <div>
-                            <label class="text-xs font-bold text-slate-400 mb-1.5 block">{{ isRTL ? 'نوع التنزيل' : 'Download Mode' }}</label>
+                            <label
+                                class="mb-1.5 block text-xs font-bold text-slate-400"
+                                >{{
+                                    isRTL ? 'نوع التنزيل' : 'Download Mode'
+                                }}</label
+                            >
                             <div class="grid grid-cols-2 gap-2">
                                 <button
                                     type="button"
                                     @click="downloadMode = 'torrent'"
-                                    class="py-2.5 px-4 rounded-xl text-xs font-bold border cursor-pointer flex items-center justify-center gap-2 transition-all"
-                                    :class="downloadMode === 'torrent' ? 'bg-purple-600 text-white border-purple-400 shadow-md shadow-purple-600/30' : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'"
+                                    class="flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold transition-all"
+                                    :class="
+                                        downloadMode === 'torrent'
+                                            ? 'border-purple-400 bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                                            : 'border-white/10 bg-white/5 text-slate-400 hover:text-white'
+                                    "
                                 >
-                                    <Magnet class="w-4 h-4" />
-                                    <span>🧲 {{ isRTL ? 'تورنت / رابط Magnet / ملف .torrent' : 'Torrent / Magnet / File' }}</span>
+                                    <Magnet class="h-4 w-4" />
+                                    <span
+                                        >🧲
+                                        {{
+                                            isRTL
+                                                ? 'تورنت / رابط Magnet / ملف .torrent'
+                                                : 'Torrent / Magnet / File'
+                                        }}</span
+                                    >
                                 </button>
                                 <button
                                     type="button"
                                     @click="downloadMode = 'direct'"
-                                    class="py-2.5 px-4 rounded-xl text-xs font-bold border cursor-pointer flex items-center justify-center gap-2 transition-all"
-                                    :class="downloadMode === 'direct' ? 'bg-cyan-500 text-slate-950 font-black border-cyan-400 shadow-md shadow-cyan-500/30' : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'"
+                                    class="flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold transition-all"
+                                    :class="
+                                        downloadMode === 'direct'
+                                            ? 'border-cyan-400 bg-cyan-500 font-black text-slate-950 shadow-md shadow-cyan-500/30'
+                                            : 'border-white/10 bg-white/5 text-slate-400 hover:text-white'
+                                    "
                                 >
-                                    <Zap class="w-4 h-4" />
-                                    <span>⚡ {{ isRTL ? 'تحميل مباشر (HTTP/HTTPS)' : 'Direct HTTP / Stream' }}</span>
+                                    <Zap class="h-4 w-4" />
+                                    <span
+                                        >⚡
+                                        {{
+                                            isRTL
+                                                ? 'تحميل مباشر (HTTP/HTTPS)'
+                                                : 'Direct HTTP / Stream'
+                                        }}</span
+                                    >
                                 </button>
                             </div>
                         </div>
 
                         <!-- URL or File Input -->
                         <div>
-                            <div class="flex items-center justify-between mb-1">
+                            <div class="mb-1 flex items-center justify-between">
                                 <label class="text-xs font-bold text-slate-400">
-                                    {{ downloadMode === 'torrent' ? (isRTL ? 'رابط Magnet أو مسار .torrent' : 'Magnet Link or Torrent File URL') : (isRTL ? 'رابط الملف المباشر' : 'Direct File URL') }}
+                                    {{
+                                        downloadMode === 'torrent'
+                                            ? isRTL
+                                                ? 'رابط Magnet أو مسار .torrent'
+                                                : 'Magnet Link or Torrent File URL'
+                                            : isRTL
+                                              ? 'رابط الملف المباشر'
+                                              : 'Direct File URL'
+                                    }}
                                 </label>
-                                <span v-if="isInspecting || isUploadingTorrent" class="text-[11px] text-cyan-400 flex items-center gap-1 font-mono">
-                                    <Clock class="w-3 h-3 animate-spin" />
-                                    {{ isRTL ? 'جاري فحص الملفات...' : 'Inspecting files...' }}
+                                <span
+                                    v-if="isInspecting || isUploadingTorrent"
+                                    class="flex items-center gap-1 font-mono text-[11px] text-cyan-400"
+                                >
+                                    <Clock class="h-3 w-3 animate-spin" />
+                                    {{
+                                        isRTL
+                                            ? 'جاري فحص الملفات...'
+                                            : 'Inspecting files...'
+                                    }}
                                 </span>
                             </div>
 
@@ -1046,18 +1723,28 @@ const handleSaveSettings = async () => {
                                     v-model="newUrl"
                                     @blur="handleUrlPasteOrChange"
                                     @keyup.enter="handleInspectUrl"
-                                    :placeholder="downloadMode === 'torrent' ? 'magnet:?xt=urn:btih:... or https://.../file.torrent' : 'https://example.com/movie.mp4'"
-                                    class="flex-1 h-11 rounded-xl bg-white/[0.04] border border-white/15 px-4 text-xs font-mono text-cyan-300 focus:border-cyan-500 outline-none"
+                                    :placeholder="
+                                        downloadMode === 'torrent'
+                                            ? 'magnet:?xt=urn:btih:... or https://.../file.torrent'
+                                            : 'https://example.com/movie.mp4'
+                                    "
+                                    class="h-11 flex-1 rounded-xl border border-white/15 bg-white/[0.04] px-4 font-mono text-xs text-cyan-300 outline-none focus:border-cyan-500"
                                 />
 
                                 <button
                                     type="button"
                                     @click="handleInspectUrl"
                                     :disabled="isInspecting || !newUrl.trim()"
-                                    class="px-3.5 h-11 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all cursor-pointer disabled:opacity-40 flex items-center gap-1.5 shrink-0"
-                                    :title="isRTL ? 'فحص الرابط وقراءة الملفات' : 'Inspect URL and parse files'"
+                                    class="flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl bg-white/10 px-3.5 text-xs font-bold text-white transition-all hover:bg-white/20 disabled:opacity-40"
+                                    :title="
+                                        isRTL
+                                            ? 'فحص الرابط وقراءة الملفات'
+                                            : 'Inspect URL and parse files'
+                                    "
                                 >
-                                    <Sparkles class="w-3.5 h-3.5 text-cyan-400" />
+                                    <Sparkles
+                                        class="h-3.5 w-3.5 text-cyan-400"
+                                    />
                                     <span>{{ isRTL ? 'فحص' : 'Inspect' }}</span>
                                 </button>
 
@@ -1065,101 +1752,182 @@ const handleSaveSettings = async () => {
                                     v-if="downloadMode === 'torrent'"
                                     type="button"
                                     @click="triggerTorrentFileInput"
-                                    :disabled="isUploadingTorrent || isInspecting"
-                                    class="px-3.5 h-11 rounded-xl bg-purple-600/25 hover:bg-purple-600/40 border border-purple-500/40 text-purple-200 hover:text-white text-xs font-bold transition-all cursor-pointer disabled:opacity-40 flex items-center gap-1.5 shrink-0 shadow-sm"
-                                    :title="isRTL ? 'رفع ملف .torrent من جهازك وفحصه محلياً' : 'Upload local .torrent file directly'"
+                                    :disabled="
+                                        isUploadingTorrent || isInspecting
+                                    "
+                                    class="flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-purple-500/40 bg-purple-600/25 px-3.5 text-xs font-bold text-purple-200 shadow-sm transition-all hover:bg-purple-600/40 hover:text-white disabled:opacity-40"
+                                    :title="
+                                        isRTL
+                                            ? 'رفع ملف .torrent من جهازك وفحصه محلياً'
+                                            : 'Upload local .torrent file directly'
+                                    "
                                 >
-                                    <FileUp v-if="!isUploadingTorrent" class="w-3.5 h-3.5 text-purple-400" />
-                                    <Clock v-else class="w-3.5 h-3.5 animate-spin text-purple-400" />
-                                    <span class="hidden sm:inline">{{ isRTL ? 'رفع .torrent' : 'Upload .torrent' }}</span>
+                                    <FileUp
+                                        v-if="!isUploadingTorrent"
+                                        class="h-3.5 w-3.5 text-purple-400"
+                                    />
+                                    <Clock
+                                        v-else
+                                        class="h-3.5 w-3.5 animate-spin text-purple-400"
+                                    />
+                                    <span class="hidden sm:inline">{{
+                                        isRTL
+                                            ? 'رفع .torrent'
+                                            : 'Upload .torrent'
+                                    }}</span>
                                 </button>
                             </div>
                         </div>
 
                         <!-- Media Title & Type -->
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                             <div class="sm:col-span-2">
-                                <label class="text-xs font-bold text-slate-400 mb-1 block">{{ isRTL ? 'عنوان العمل' : 'Title & Year' }}</label>
+                                <label
+                                    class="mb-1 block text-xs font-bold text-slate-400"
+                                    >{{
+                                        isRTL ? 'عنوان العمل' : 'Title & Year'
+                                    }}</label
+                                >
                                 <input
                                     type="text"
                                     v-model="newTitle"
                                     placeholder="e.g. Inception (2010)"
-                                    class="w-full h-11 rounded-xl bg-white/[0.04] border border-white/15 px-4 text-xs text-white focus:border-cyan-500 outline-none"
+                                    class="h-11 w-full rounded-xl border border-white/15 bg-white/[0.04] px-4 text-xs text-white outline-none focus:border-cyan-500"
                                 />
                             </div>
 
                             <div>
-                                <label class="text-xs font-bold text-slate-400 mb-1 block">{{ isRTL ? 'نوع المحتوى' : 'Media Type' }}</label>
+                                <label
+                                    class="mb-1 block text-xs font-bold text-slate-400"
+                                    >{{
+                                        isRTL ? 'نوع المحتوى' : 'Media Type'
+                                    }}</label
+                                >
                                 <select
                                     v-model="newType"
-                                    class="w-full h-11 rounded-xl bg-slate-900 border border-white/15 px-3 text-xs text-white focus:border-cyan-500 outline-none cursor-pointer"
+                                    class="h-11 w-full cursor-pointer rounded-xl border border-white/15 bg-slate-900 px-3 text-xs text-white outline-none focus:border-cyan-500"
                                 >
-                                    <option value="movie">🎬 {{ isRTL ? 'فيلم' : 'Movie' }}</option>
-                                    <option value="series">📺 {{ isRTL ? 'مسلسل' : 'Series' }}</option>
-                                    <option value="subtitle">💬 {{ isRTL ? 'ترجمة' : 'Subtitle' }}</option>
+                                    <option value="movie">
+                                        🎬 {{ isRTL ? 'فيلم' : 'Movie' }}
+                                    </option>
+                                    <option value="series">
+                                        📺 {{ isRTL ? 'مسلسل' : 'Series' }}
+                                    </option>
+                                    <option value="subtitle">
+                                        💬 {{ isRTL ? 'ترجمة' : 'Subtitle' }}
+                                    </option>
                                 </select>
                             </div>
                         </div>
 
                         <!-- Multi-File & Folder Selection for Torrent Mode -->
-                        <div v-if="inspectionData && inspectionData.files && inspectionData.files.length > 0" class="border border-purple-500/30 rounded-2xl p-4 bg-purple-950/20 space-y-3">
+                        <div
+                            v-if="
+                                inspectionData &&
+                                inspectionData.files &&
+                                inspectionData.files.length > 0
+                            "
+                            class="space-y-3 rounded-2xl border border-purple-500/30 bg-purple-950/20 p-4"
+                        >
                             <!-- Header with view toggle and filter actions -->
-                            <div class="flex items-center justify-between flex-wrap gap-2.5 pb-2 border-b border-purple-500/20">
+                            <div
+                                class="flex flex-wrap items-center justify-between gap-2.5 border-b border-purple-500/20 pb-2"
+                            >
                                 <div class="flex items-center gap-2">
-                                    <span class="text-xs font-bold text-purple-200 flex items-center gap-1.5">
-                                        <FolderTree class="w-4 h-4 text-purple-400" />
-                                        <span>{{ isRTL ? 'هيكل الملفات والمجلدات' : 'Torrent Files & Folders' }}</span>
+                                    <span
+                                        class="flex items-center gap-1.5 text-xs font-bold text-purple-200"
+                                    >
+                                        <FolderTree
+                                            class="h-4 w-4 text-purple-400"
+                                        />
+                                        <span>{{
+                                            isRTL
+                                                ? 'هيكل الملفات والمجلدات'
+                                                : 'Torrent Files & Folders'
+                                        }}</span>
                                     </span>
-                                    <span class="px-2 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/30 text-[10px] font-mono text-purple-300">
-                                        {{ selectedFileIndexes.length }}/{{ inspectionData.files.length }}
+                                    <span
+                                        class="rounded-full border border-purple-500/30 bg-purple-500/20 px-2 py-0.5 font-mono text-[10px] text-purple-300"
+                                    >
+                                        {{ selectedFileIndexes.length }}/{{
+                                            inspectionData.files.length
+                                        }}
                                     </span>
                                 </div>
 
                                 <div class="flex items-center gap-2">
                                     <!-- View Mode Tabs (Tree vs Flat) -->
-                                    <div class="flex items-center rounded-lg bg-black/40 p-0.5 border border-white/10 text-[11px]">
+                                    <div
+                                        class="flex items-center rounded-lg border border-white/10 bg-black/40 p-0.5 text-[11px]"
+                                    >
                                         <button
                                             type="button"
                                             @click="viewMode = 'tree'"
-                                            class="px-2.5 py-1 rounded-md transition-all flex items-center gap-1 cursor-pointer font-medium"
-                                            :class="viewMode === 'tree' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'"
-                                            :title="isRTL ? 'عرض شجرة المجلدات المتداخلة' : 'View hierarchical folder tree'"
+                                            class="flex cursor-pointer items-center gap-1 rounded-md px-2.5 py-1 font-medium transition-all"
+                                            :class="
+                                                viewMode === 'tree'
+                                                    ? 'bg-purple-600 text-white shadow-sm'
+                                                    : 'text-slate-400 hover:text-white'
+                                            "
+                                            :title="
+                                                isRTL
+                                                    ? 'عرض شجرة المجلدات المتداخلة'
+                                                    : 'View hierarchical folder tree'
+                                            "
                                         >
-                                            <FolderTree class="w-3 h-3" />
-                                            <span>{{ isRTL ? 'شجرة' : 'Tree' }}</span>
+                                            <FolderTree class="h-3 w-3" />
+                                            <span>{{
+                                                isRTL ? 'شجرة' : 'Tree'
+                                            }}</span>
                                         </button>
                                         <button
                                             type="button"
                                             @click="viewMode = 'flat'"
-                                            class="px-2.5 py-1 rounded-md transition-all flex items-center gap-1 cursor-pointer font-medium"
-                                            :class="viewMode === 'flat' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'"
-                                            :title="isRTL ? 'عرض قائمة مسطحة بالملفات' : 'View flat list of files'"
+                                            class="flex cursor-pointer items-center gap-1 rounded-md px-2.5 py-1 font-medium transition-all"
+                                            :class="
+                                                viewMode === 'flat'
+                                                    ? 'bg-purple-600 text-white shadow-sm'
+                                                    : 'text-slate-400 hover:text-white'
+                                            "
+                                            :title="
+                                                isRTL
+                                                    ? 'عرض قائمة مسطحة بالملفات'
+                                                    : 'View flat list of files'
+                                            "
                                         >
-                                            <ListFilter class="w-3 h-3" />
-                                            <span>{{ isRTL ? 'قائمة' : 'List' }}</span>
+                                            <ListFilter class="h-3 w-3" />
+                                            <span>{{
+                                                isRTL ? 'قائمة' : 'List'
+                                            }}</span>
                                         </button>
                                     </div>
 
                                     <!-- Quick Filters -->
-                                    <div class="flex items-center gap-1 text-[10px]">
+                                    <div
+                                        class="flex items-center gap-1 text-[10px]"
+                                    >
                                         <button
                                             @click="selectAllFiles"
                                             type="button"
-                                            class="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white cursor-pointer transition-all"
+                                            class="cursor-pointer rounded-md bg-white/10 px-2 py-1 text-white transition-all hover:bg-white/20"
                                         >
                                             {{ isRTL ? 'تحديد الكل' : 'All' }}
                                         </button>
                                         <button
                                             @click="selectVideosOnly"
                                             type="button"
-                                            class="px-2 py-1 rounded-md bg-purple-500/30 hover:bg-purple-500/50 text-purple-200 cursor-pointer transition-all"
+                                            class="cursor-pointer rounded-md bg-purple-500/30 px-2 py-1 text-purple-200 transition-all hover:bg-purple-500/50"
                                         >
-                                            {{ isRTL ? 'الفيديوهات فقط' : 'Videos' }}
+                                            {{
+                                                isRTL
+                                                    ? 'الفيديوهات فقط'
+                                                    : 'Videos'
+                                            }}
                                         </button>
                                         <button
                                             @click="clearAllFiles"
                                             type="button"
-                                            class="px-2 py-1 rounded-md bg-white/5 hover:bg-white/15 text-slate-400 cursor-pointer transition-all"
+                                            class="cursor-pointer rounded-md bg-white/5 px-2 py-1 text-slate-400 transition-all hover:bg-white/15"
                                         >
                                             {{ isRTL ? 'تفريغ' : 'Clear' }}
                                         </button>
@@ -1169,8 +1937,12 @@ const handleSaveSettings = async () => {
 
                             <!-- TREE VIEW -->
                             <div
-                                v-if="viewMode === 'tree' && inspectionData.tree && inspectionData.tree.length > 0"
-                                class="max-h-64 sm:max-h-72 overflow-y-auto space-y-1 custom-scrollbar pr-1"
+                                v-if="
+                                    viewMode === 'tree' &&
+                                    inspectionData.tree &&
+                                    inspectionData.tree.length > 0
+                                "
+                                class="custom-scrollbar max-h-64 space-y-1 overflow-y-auto pr-1 sm:max-h-72"
                             >
                                 <TorrentTreeItem
                                     v-for="node in inspectionData.tree"
@@ -1186,68 +1958,130 @@ const handleSaveSettings = async () => {
                             <!-- FLAT LIST VIEW -->
                             <div
                                 v-else
-                                class="max-h-64 sm:max-h-72 overflow-y-auto space-y-1.5 custom-scrollbar pr-1"
+                                class="custom-scrollbar max-h-64 space-y-1.5 overflow-y-auto pr-1 sm:max-h-72"
                             >
                                 <div
                                     v-for="file in inspectionData.files"
                                     :key="file.index"
                                     @click="toggleFileSelection(file.index)"
-                                    class="p-2 rounded-xl flex items-center justify-between gap-2 text-xs cursor-pointer transition-all border"
-                                    :class="selectedFileIndexes.includes(file.index)
-                                        ? 'bg-purple-500/20 border-purple-500/40 text-white shadow-sm'
-                                        : 'bg-black/20 border-transparent text-slate-400 hover:bg-white/5'"
+                                    class="flex cursor-pointer items-center justify-between gap-2 rounded-xl border p-2 text-xs transition-all"
+                                    :class="
+                                        selectedFileIndexes.includes(file.index)
+                                            ? 'border-purple-500/40 bg-purple-500/20 text-white shadow-sm'
+                                            : 'border-transparent bg-black/20 text-slate-400 hover:bg-white/5'
+                                    "
                                 >
-                                    <div class="flex items-center gap-2 min-w-0 flex-1">
+                                    <div
+                                        class="flex min-w-0 flex-1 items-center gap-2"
+                                    >
                                         <div
-                                            class="w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all"
-                                            :class="selectedFileIndexes.includes(file.index)
-                                                ? 'border-purple-400 bg-purple-500 text-slate-950'
-                                                : 'border-slate-600 bg-black/40'"
+                                            class="flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all"
+                                            :class="
+                                                selectedFileIndexes.includes(
+                                                    file.index,
+                                                )
+                                                    ? 'border-purple-400 bg-purple-500 text-slate-950'
+                                                    : 'border-slate-600 bg-black/40'
+                                            "
                                         >
-                                            <Check v-if="selectedFileIndexes.includes(file.index)" class="w-3 h-3 stroke-[3]" />
+                                            <Check
+                                                v-if="
+                                                    selectedFileIndexes.includes(
+                                                        file.index,
+                                                    )
+                                                "
+                                                class="h-3 w-3 stroke-[3]"
+                                            />
                                         </div>
 
-                                        <Film v-if="file.is_video" class="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                                        <FileText v-else-if="file.is_subtitle" class="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                                        <File v-else class="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                                        <Film
+                                            v-if="file.is_video"
+                                            class="h-3.5 w-3.5 shrink-0 text-cyan-400"
+                                        />
+                                        <FileText
+                                            v-else-if="file.is_subtitle"
+                                            class="h-3.5 w-3.5 shrink-0 text-emerald-400"
+                                        />
+                                        <File
+                                            v-else
+                                            class="h-3.5 w-3.5 shrink-0 text-slate-500"
+                                        />
 
-                                        <span class="truncate text-[11px] font-mono" :title="file.path">
+                                        <span
+                                            class="truncate font-mono text-[11px]"
+                                            :title="file.path"
+                                        >
                                             {{ file.path }}
                                         </span>
                                     </div>
 
-                                    <div class="flex items-center gap-2 shrink-0">
+                                    <div
+                                        class="flex shrink-0 items-center gap-2"
+                                    >
                                         <span
                                             v-if="file.is_video"
-                                            class="px-1.5 py-0.2 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 text-[9px] font-bold uppercase"
+                                            class="py-0.2 rounded border border-cyan-500/30 bg-cyan-500/15 px-1.5 text-[9px] font-bold text-cyan-300 uppercase"
                                         >
                                             video
                                         </span>
-                                        <span class="text-[10px] font-mono text-slate-400">{{ formatBytes(file.size) }}</span>
+                                        <span
+                                            class="font-mono text-[10px] text-slate-400"
+                                            >{{ formatBytes(file.size) }}</span
+                                        >
                                     </div>
                                 </div>
                             </div>
 
                             <!-- Footer Stats -->
-                            <div class="text-[11px] font-mono text-purple-300 flex items-center justify-between pt-2 border-t border-purple-500/20">
+                            <div
+                                class="flex items-center justify-between border-t border-purple-500/20 pt-2 font-mono text-[11px] text-purple-300"
+                            >
                                 <span class="flex items-center gap-2">
-                                    <span>{{ isRTL ? 'الحجم المحدد:' : 'Selected size:' }}</span>
-                                    <strong class="text-white">{{ formatBytes(selectedTotalBytes) }}</strong>
-                                    <span class="text-slate-500 text-[10px]">/ {{ formatBytes(inspectionData.total_bytes) }}</span>
+                                    <span>{{
+                                        isRTL
+                                            ? 'الحجم المحدد:'
+                                            : 'Selected size:'
+                                    }}</span>
+                                    <strong class="text-white">{{
+                                        formatBytes(selectedTotalBytes)
+                                    }}</strong>
+                                    <span class="text-[10px] text-slate-500"
+                                        >/
+                                        {{
+                                            formatBytes(
+                                                inspectionData.total_bytes,
+                                            )
+                                        }}</span
+                                    >
                                 </span>
 
-                                <span v-if="inspectionData.folder_count" class="text-slate-400 text-[10px]">
-                                    {{ inspectionData.folder_count }} {{ isRTL ? 'مجلد' : 'folders' }}
+                                <span
+                                    v-if="inspectionData.folder_count"
+                                    class="text-[10px] text-slate-400"
+                                >
+                                    {{ inspectionData.folder_count }}
+                                    {{ isRTL ? 'مجلد' : 'folders' }}
                                 </span>
                             </div>
                         </div>
 
                         <!-- Destination Folder Selector: Default vs Custom -->
-                        <div class="space-y-2 pt-1 border-t border-white/10">
+                        <div class="space-y-2 border-t border-white/10 pt-1">
                             <div class="flex items-center justify-between">
-                                <label class="text-xs font-bold text-slate-400 block">{{ isRTL ? 'مجلد الحفظ النهائي' : 'Destination Download Folder' }}</label>
+                                <label
+                                    class="block text-xs font-bold text-slate-400"
+                                    >{{
+                                        isRTL
+                                            ? 'مجلد الحفظ النهائي'
+                                            : 'Destination Download Folder'
+                                    }}</label
+                                >
                                 <span class="text-[10px] text-slate-500">
-                                    {{ isRTL ? 'يتم حفظ الملفات مباشرة بالهيكل الداخلي' : 'Preserves internal folder layout' }}
+                                    {{
+                                        isRTL
+                                            ? 'يتم حفظ الملفات مباشرة بالهيكل الداخلي'
+                                            : 'Preserves internal folder layout'
+                                    }}
                                 </span>
                             </div>
 
@@ -1255,56 +2089,98 @@ const handleSaveSettings = async () => {
                                 <button
                                     type="button"
                                     @click="destinationType = 'default'"
-                                    class="py-2 px-3 rounded-xl text-xs font-bold border cursor-pointer flex items-center gap-1.5 transition-all text-left"
-                                    :class="destinationType === 'default' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'bg-white/5 border-white/10 text-slate-400'"
+                                    class="flex cursor-pointer items-center gap-1.5 rounded-xl border px-3 py-2 text-left text-xs font-bold transition-all"
+                                    :class="
+                                        destinationType === 'default'
+                                            ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-300'
+                                            : 'border-white/10 bg-white/5 text-slate-400'
+                                    "
                                 >
-                                    <Folder class="w-3.5 h-3.5 shrink-0" />
+                                    <Folder class="h-3.5 w-3.5 shrink-0" />
                                     <div class="truncate">
-                                        <div class="text-[11px] font-bold">{{ isRTL ? 'المجلد الافتراضي' : 'Default Library' }}</div>
-                                        <div class="text-[9px] text-slate-400 truncate">{{ defaultTargetFolder }}</div>
+                                        <div class="text-[11px] font-bold">
+                                            {{
+                                                isRTL
+                                                    ? 'المجلد الافتراضي'
+                                                    : 'Default Library'
+                                            }}
+                                        </div>
+                                        <div
+                                            class="truncate text-[9px] text-slate-400"
+                                        >
+                                            {{ defaultTargetFolder }}
+                                        </div>
                                     </div>
                                 </button>
 
                                 <button
                                     type="button"
                                     @click="destinationType = 'custom'"
-                                    class="py-2 px-3 rounded-xl text-xs font-bold border cursor-pointer flex items-center gap-1.5 transition-all text-left"
-                                    :class="destinationType === 'custom' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'bg-white/5 border-white/10 text-slate-400'"
+                                    class="flex cursor-pointer items-center gap-1.5 rounded-xl border px-3 py-2 text-left text-xs font-bold transition-all"
+                                    :class="
+                                        destinationType === 'custom'
+                                            ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-300'
+                                            : 'border-white/10 bg-white/5 text-slate-400'
+                                    "
                                 >
-                                    <HardDrive class="w-3.5 h-3.5 shrink-0" />
+                                    <HardDrive class="h-3.5 w-3.5 shrink-0" />
                                     <div>
-                                        <div class="text-[11px] font-bold">{{ isRTL ? 'مجلد مخصص' : 'Custom Folder' }}</div>
-                                        <div class="text-[9px] text-slate-400">{{ isRTL ? 'تحديد مسار يدوي' : 'Select custom path' }}</div>
+                                        <div class="text-[11px] font-bold">
+                                            {{
+                                                isRTL
+                                                    ? 'مجلد مخصص'
+                                                    : 'Custom Folder'
+                                            }}
+                                        </div>
+                                        <div class="text-[9px] text-slate-400">
+                                            {{
+                                                isRTL
+                                                    ? 'تحديد مسار يدوي'
+                                                    : 'Select custom path'
+                                            }}
+                                        </div>
                                     </div>
                                 </button>
                             </div>
 
-                            <div v-if="destinationType === 'custom'" class="pt-1">
+                            <div
+                                v-if="destinationType === 'custom'"
+                                class="pt-1"
+                            >
                                 <input
                                     type="text"
                                     v-model="customFolder"
                                     placeholder="e.g. D:\Downloads\Special"
-                                    class="w-full h-10 rounded-xl bg-white/[0.04] border border-cyan-500/40 px-3 text-xs font-mono text-cyan-200 focus:border-cyan-400 outline-none"
+                                    class="h-10 w-full rounded-xl border border-cyan-500/40 bg-white/[0.04] px-3 font-mono text-xs text-cyan-200 outline-none focus:border-cyan-400"
                                 />
                             </div>
                         </div>
                     </div>
 
-                    <div class="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                    <div
+                        class="flex items-center justify-end gap-3 border-t border-white/10 pt-3"
+                    >
                         <button
                             type="button"
                             @click="showAddModal = false"
-                            class="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-slate-300 cursor-pointer"
+                            class="cursor-pointer rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-white/10"
                         >
                             {{ t('common.close') }}
                         </button>
                         <button
                             type="button"
                             @click="handleAddSubmit"
-                            :disabled="isSubmitting || !newTitle.trim() || (downloadMode === 'torrent' && selectedFileIndexes.length === 0)"
-                            class="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 text-xs font-black cursor-pointer shadow-lg shadow-cyan-500/20"
+                            :disabled="
+                                isSubmitting ||
+                                !newTitle.trim() ||
+                                (downloadMode === 'torrent' &&
+                                    selectedFileIndexes.length === 0)
+                            "
+                            class="cursor-pointer rounded-xl bg-cyan-500 px-6 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-cyan-500/20 hover:bg-cyan-400 disabled:opacity-50"
                         >
-                            {{ isRTL ? 'بدء التنزيل المباشر' : 'Start Download' }}
+                            {{
+                                isRTL ? 'بدء التنزيل المباشر' : 'Start Download'
+                            }}
                         </button>
                     </div>
                 </div>
@@ -1315,73 +2191,124 @@ const handleSaveSettings = async () => {
         <transition name="fade">
             <div
                 v-if="showSettingsModal"
-                class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
                 @click.self="showSettingsModal = false"
             >
-                <div class="glass-panel rounded-3xl p-6 sm:p-8 max-w-lg w-full border border-white/20 shadow-2xl space-y-5">
-                    <div class="flex items-center justify-between border-b border-white/10 pb-3">
-                        <h3 class="font-extrabold text-base text-white flex items-center gap-2">
-                            <Settings class="w-5 h-5 text-cyan-400" />
-                            <span>{{ isRTL ? 'إعدادات مسارات التنزيل ومجلدات المكتبة' : 'Downloader & Destination Folders' }}</span>
+                <div
+                    class="glass-panel w-full max-w-lg space-y-5 rounded-3xl border border-white/20 p-6 shadow-2xl sm:p-8"
+                >
+                    <div
+                        class="flex items-center justify-between border-b border-white/10 pb-3"
+                    >
+                        <h3
+                            class="flex items-center gap-2 text-base font-extrabold text-white"
+                        >
+                            <Settings class="h-5 w-5 text-cyan-400" />
+                            <span>{{
+                                isRTL
+                                    ? 'إعدادات مسارات التنزيل ومجلدات المكتبة'
+                                    : 'Downloader & Destination Folders'
+                            }}</span>
                         </h3>
                     </div>
 
                     <div class="space-y-3.5 text-xs">
                         <div>
-                            <label class="font-bold text-slate-300 block mb-1">{{ isRTL ? 'مجلد الأفلام الافتراضي' : 'Default Movies Destination' }}</label>
+                            <label
+                                class="mb-1 block font-bold text-slate-300"
+                                >{{
+                                    isRTL
+                                        ? 'مجلد الأفلام الافتراضي'
+                                        : 'Default Movies Destination'
+                                }}</label
+                            >
                             <input
                                 type="text"
                                 v-model="settingsForm.movies_download_path"
-                                class="w-full h-10 rounded-xl bg-white/5 border border-white/15 px-3 text-xs font-mono text-cyan-300 focus:border-cyan-500 outline-none"
+                                class="h-10 w-full rounded-xl border border-white/15 bg-white/5 px-3 font-mono text-xs text-cyan-300 outline-none focus:border-cyan-500"
                             />
                         </div>
 
                         <div>
-                            <label class="font-bold text-slate-300 block mb-1">{{ isRTL ? 'مجلد المسلسلات الافتراضي' : 'Default Series Destination' }}</label>
+                            <label
+                                class="mb-1 block font-bold text-slate-300"
+                                >{{
+                                    isRTL
+                                        ? 'مجلد المسلسلات الافتراضي'
+                                        : 'Default Series Destination'
+                                }}</label
+                            >
                             <input
                                 type="text"
                                 v-model="settingsForm.series_download_path"
-                                class="w-full h-10 rounded-xl bg-white/5 border border-white/15 px-3 text-xs font-mono text-indigo-300 focus:border-indigo-500 outline-none"
+                                class="h-10 w-full rounded-xl border border-white/15 bg-white/5 px-3 font-mono text-xs text-indigo-300 outline-none focus:border-indigo-500"
                             />
                         </div>
 
                         <div>
-                            <label class="font-bold text-slate-300 block mb-1">{{ isRTL ? 'مجلد التنزيل المؤقت' : 'Default Download Staging Directory' }}</label>
+                            <label
+                                class="mb-1 block font-bold text-slate-300"
+                                >{{
+                                    isRTL
+                                        ? 'مجلد التنزيل المؤقت'
+                                        : 'Default Download Staging Directory'
+                                }}</label
+                            >
                             <input
                                 type="text"
                                 v-model="settingsForm.default_download_path"
-                                class="w-full h-10 rounded-xl bg-white/5 border border-white/15 px-3 text-xs font-mono text-slate-300 focus:border-cyan-500 outline-none"
+                                class="h-10 w-full rounded-xl border border-white/15 bg-white/5 px-3 font-mono text-xs text-slate-300 outline-none focus:border-cyan-500"
                             />
                         </div>
 
                         <div class="grid grid-cols-2 gap-3 pt-1">
                             <div>
-                                <label class="font-bold text-slate-300 block mb-1">{{ isRTL ? 'أقصى تنزيلات متزامنة' : 'Max Concurrent' }}</label>
+                                <label
+                                    class="mb-1 block font-bold text-slate-300"
+                                    >{{
+                                        isRTL
+                                            ? 'أقصى تنزيلات متزامنة'
+                                            : 'Max Concurrent'
+                                    }}</label
+                                >
                                 <input
                                     type="number"
                                     min="1"
                                     max="10"
-                                    v-model.number="settingsForm.max_concurrent_downloads"
-                                    class="w-full h-10 rounded-xl bg-white/5 border border-white/15 px-3 text-xs text-white focus:border-cyan-500 outline-none font-mono"
+                                    v-model.number="
+                                        settingsForm.max_concurrent_downloads
+                                    "
+                                    class="h-10 w-full rounded-xl border border-white/15 bg-white/5 px-3 font-mono text-xs text-white outline-none focus:border-cyan-500"
                                 />
                             </div>
                             <div>
-                                <label class="font-bold text-slate-300 block mb-1">{{ isRTL ? 'حد السرعة (0 = غير محدود)' : 'Speed Limit (KB/s)' }}</label>
+                                <label
+                                    class="mb-1 block font-bold text-slate-300"
+                                    >{{
+                                        isRTL
+                                            ? 'حد السرعة (0 = غير محدود)'
+                                            : 'Speed Limit (KB/s)'
+                                    }}</label
+                                >
                                 <input
                                     type="number"
                                     min="0"
-                                    v-model.number="settingsForm.download_speed_limit_kb"
-                                    class="w-full h-10 rounded-xl bg-white/5 border border-white/15 px-3 text-xs text-white focus:border-cyan-500 outline-none font-mono"
+                                    v-model.number="
+                                        settingsForm.download_speed_limit_kb
+                                    "
+                                    class="h-10 w-full rounded-xl border border-white/15 bg-white/5 px-3 font-mono text-xs text-white outline-none focus:border-cyan-500"
                                 />
                             </div>
                         </div>
                     </div>
 
-                    <div class="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                    <div
+                        class="flex items-center justify-end gap-3 border-t border-white/10 pt-3"
+                    >
                         <button
                             type="button"
                             @click="showSettingsModal = false"
-                            class="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-slate-300 cursor-pointer"
+                            class="cursor-pointer rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-white/10"
                         >
                             {{ t('common.close') }}
                         </button>
@@ -1389,9 +2316,17 @@ const handleSaveSettings = async () => {
                             type="button"
                             @click="handleSaveSettings"
                             :disabled="isSavingSettings"
-                            class="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs cursor-pointer shadow-lg shadow-cyan-500/20"
+                            class="cursor-pointer rounded-xl bg-cyan-500 px-5 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-cyan-500/20 hover:bg-cyan-400"
                         >
-                            {{ isSavingSettings ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (isRTL ? 'حفظ التغييرات' : 'Save Settings') }}
+                            {{
+                                isSavingSettings
+                                    ? isRTL
+                                        ? 'جاري الحفظ...'
+                                        : 'Saving...'
+                                    : isRTL
+                                      ? 'حفظ التغييرات'
+                                      : 'Save Settings'
+                            }}
                         </button>
                     </div>
                 </div>
@@ -1402,31 +2337,88 @@ const handleSaveSettings = async () => {
         <transition name="fade">
             <div
                 v-if="showExplainModal"
-                class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
                 @click.self="showExplainModal = false"
             >
-                <div class="glass-panel rounded-3xl p-6 sm:p-8 max-w-lg w-full border border-cyan-500/30 shadow-2xl space-y-5">
-                    <div class="flex items-center justify-between border-b border-white/10 pb-3">
-                        <h3 class="font-extrabold text-base text-white flex items-center gap-2">
-                            <Info class="w-5 h-5 text-cyan-400" />
-                            <span>{{ isRTL ? 'دليل محرك التنزيل المدمج' : 'Downloader Engine Guide' }}</span>
+                <div
+                    class="glass-panel w-full max-w-lg space-y-5 rounded-3xl border border-cyan-500/30 p-6 shadow-2xl sm:p-8"
+                >
+                    <div
+                        class="flex items-center justify-between border-b border-white/10 pb-3"
+                    >
+                        <h3
+                            class="flex items-center gap-2 text-base font-extrabold text-white"
+                        >
+                            <Info class="h-5 w-5 text-cyan-400" />
+                            <span>{{
+                                isRTL
+                                    ? 'دليل محرك التنزيل المدمج'
+                                    : 'Downloader Engine Guide'
+                            }}</span>
                         </h3>
                     </div>
 
-                    <div class="space-y-3 text-xs text-slate-300 leading-relaxed">
-                        <div class="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
-                            <span class="font-bold text-cyan-400 block">1. {{ isRTL ? 'فحص التورنت وشجرة المجلدات' : 'Torrent Inspection & Folder Tree' }}</span>
-                            <p class="text-slate-400">{{ isRTL ? 'يقوم المحرك بقراءة بنية ملف التورنت بالكامل وتوليد شجرة المجلدات الحقيقية لتحديد أي مجلد أو ملف دون أخطاء.' : 'Inspects the full torrent hierarchy and renders real folder trees so you can accurately select specific folders or files.' }}</p>
+                    <div
+                        class="space-y-3 text-xs leading-relaxed text-slate-300"
+                    >
+                        <div
+                            class="space-y-1 rounded-xl border border-white/10 bg-white/5 p-3"
+                        >
+                            <span class="block font-bold text-cyan-400"
+                                >1.
+                                {{
+                                    isRTL
+                                        ? 'فحص التورنت وشجرة المجلدات'
+                                        : 'Torrent Inspection & Folder Tree'
+                                }}</span
+                            >
+                            <p class="text-slate-400">
+                                {{
+                                    isRTL
+                                        ? 'يقوم المحرك بقراءة بنية ملف التورنت بالكامل وتوليد شجرة المجلدات الحقيقية لتحديد أي مجلد أو ملف دون أخطاء.'
+                                        : 'Inspects the full torrent hierarchy and renders real folder trees so you can accurately select specific folders or files.'
+                                }}
+                            </p>
                         </div>
 
-                        <div class="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
-                            <span class="font-bold text-indigo-400 block">2. {{ isRTL ? 'تنزيل حقيقي دون ملفات تالفة' : 'Direct BitTorrent & Stream Engine' }}</span>
-                            <p class="text-slate-400">{{ isRTL ? 'يتم تنزيل المحتوى الفعلي عبر بروتوكول BitTorrent والتحميل المباشر وحفظ الملفات في المجلد المختار مباشرة دون تعديل أو تلف.' : 'Downloads real files with genuine chunk hashing directly into your destination directory without dummy placeholders or corruption.' }}</p>
+                        <div
+                            class="space-y-1 rounded-xl border border-white/10 bg-white/5 p-3"
+                        >
+                            <span class="block font-bold text-indigo-400"
+                                >2.
+                                {{
+                                    isRTL
+                                        ? 'تنزيل حقيقي دون ملفات تالفة'
+                                        : 'Direct BitTorrent & Stream Engine'
+                                }}</span
+                            >
+                            <p class="text-slate-400">
+                                {{
+                                    isRTL
+                                        ? 'يتم تنزيل المحتوى الفعلي عبر بروتوكول BitTorrent والتحميل المباشر وحفظ الملفات في المجلد المختار مباشرة دون تعديل أو تلف.'
+                                        : 'Downloads real files with genuine chunk hashing directly into your destination directory without dummy placeholders or corruption.'
+                                }}
+                            </p>
                         </div>
 
-                        <div class="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
-                            <span class="font-bold text-emerald-400 block">3. {{ isRTL ? 'تنظيم وفهرسة اختيارية' : 'Optional Disk Organizer' }}</span>
-                            <p class="text-slate-400">{{ isRTL ? 'تظل ملفاتك محتفظة بهيكلها كما هي في التورنت، ويمكنك استخدام منظم الأقراص لاحقاً لترتيبها ومطابقتها متى أردت.' : 'Your files stay in their original downloaded structure. You can use Disk Organizer at any time if you wish to reorganize them.' }}</p>
+                        <div
+                            class="space-y-1 rounded-xl border border-white/10 bg-white/5 p-3"
+                        >
+                            <span class="block font-bold text-emerald-400"
+                                >3.
+                                {{
+                                    isRTL
+                                        ? 'تنظيم وفهرسة اختيارية'
+                                        : 'Optional Disk Organizer'
+                                }}</span
+                            >
+                            <p class="text-slate-400">
+                                {{
+                                    isRTL
+                                        ? 'تظل ملفاتك محتفظة بهيكلها كما هي في التورنت، ويمكنك استخدام منظم الأقراص لاحقاً لترتيبها ومطابقتها متى أردت.'
+                                        : 'Your files stay in their original downloaded structure. You can use Disk Organizer at any time if you wish to reorganize them.'
+                                }}
+                            </p>
                         </div>
                     </div>
 
@@ -1434,7 +2426,7 @@ const handleSaveSettings = async () => {
                         <button
                             type="button"
                             @click="showExplainModal = false"
-                            class="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-black cursor-pointer"
+                            class="cursor-pointer rounded-xl bg-cyan-500 px-5 py-2.5 text-xs font-black text-slate-950 hover:bg-cyan-400"
                         >
                             {{ isRTL ? 'فهمت ذلك' : 'Got it' }}
                         </button>

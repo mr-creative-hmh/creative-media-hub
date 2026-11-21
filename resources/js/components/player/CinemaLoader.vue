@@ -26,52 +26,69 @@ const defaultTitle = computed(() => {
 </script>
 
 <template>
-    <div class="cinema-loader-wrapper flex flex-col items-center justify-center gap-4 select-none pointer-events-none" dir="ltr">
+    <div
+        class="cinema-loader-wrapper pointer-events-none flex flex-col items-center justify-center gap-4 select-none"
+        dir="ltr"
+    >
         <!-- Ambient Glow Aura behind the loader -->
         <div class="relative flex items-center justify-center">
-            <div class="absolute -inset-4 bg-gradient-to-r from-cyan-500/20 via-purple-500/20 to-blue-500/20 rounded-full blur-xl animate-pulse"></div>
+            <div
+                class="absolute -inset-4 animate-pulse rounded-full bg-gradient-to-r from-cyan-500/20 via-purple-500/20 to-blue-500/20 blur-xl"
+            ></div>
 
             <!-- Outer Orbital Track & Comet Ring -->
             <div
                 class="relative flex items-center justify-center"
                 :class="{
-                    'w-16 h-16': size === 'sm',
-                    'w-24 h-24': size === 'md',
-                    'w-32 h-32': size === 'lg',
+                    'h-16 w-16': size === 'sm',
+                    'h-24 w-24': size === 'md',
+                    'h-32 w-32': size === 'lg',
                 }"
             >
                 <!-- Outer Gradient Orbit Track -->
-                <div class="absolute inset-0 rounded-full border border-white/10 shadow-[inset_0_0_12px_rgba(255,255,255,0.05)]"></div>
+                <div
+                    class="absolute inset-0 rounded-full border border-white/10 shadow-[inset_0_0_12px_rgba(255,255,255,0.05)]"
+                ></div>
 
                 <!-- Primary Rotating Cyan Comet Ring -->
-                <div class="absolute inset-0 rounded-full border-2 border-transparent border-t-cyan-400 border-r-cyan-500/50 animate-spin-glow"></div>
+                <div
+                    class="animate-spin-glow absolute inset-0 rounded-full border-2 border-transparent border-t-cyan-400 border-r-cyan-500/50"
+                ></div>
 
                 <!-- Secondary Counter-Rotating Purple Accent Ring -->
-                <div class="absolute inset-1.5 rounded-full border-2 border-transparent border-b-purple-400 border-l-fuchsia-500/40 animate-spin-reverse-glow"></div>
+                <div
+                    class="animate-spin-reverse-glow absolute inset-1.5 rounded-full border-2 border-transparent border-b-purple-400 border-l-fuchsia-500/40"
+                ></div>
 
                 <!-- Inner Ambient Pulse Core with Film Icon -->
                 <div
-                    class="relative flex items-center justify-center rounded-full bg-slate-950/90 border border-white/15 shadow-2xl backdrop-blur-md"
+                    class="relative flex items-center justify-center rounded-full border border-white/15 bg-slate-950/90 shadow-2xl backdrop-blur-md"
                     :class="{
-                        'w-8 h-8': size === 'sm',
-                        'w-12 h-12': size === 'md',
-                        'w-16 h-16': size === 'lg',
+                        'h-8 w-8': size === 'sm',
+                        'h-12 w-12': size === 'md',
+                        'h-16 w-16': size === 'lg',
                     }"
                 >
-                    <div class="absolute inset-0 rounded-full bg-gradient-to-tr from-cyan-500/20 to-purple-500/20 animate-core-breath"></div>
+                    <div
+                        class="animate-core-breath absolute inset-0 rounded-full bg-gradient-to-tr from-cyan-500/20 to-purple-500/20"
+                    ></div>
                     <Film
-                        class="text-cyan-300 relative z-10 animate-pulse"
+                        class="relative z-10 animate-pulse text-cyan-300"
                         :class="{
-                            'w-3.5 h-3.5': size === 'sm',
-                            'w-5 h-5': size === 'md',
-                            'w-7 h-7': size === 'lg',
+                            'h-3.5 w-3.5': size === 'sm',
+                            'h-5 w-5': size === 'md',
+                            'h-7 w-7': size === 'lg',
                         }"
                     />
                 </div>
 
                 <!-- Satellite Orbiting Sparkle Bead -->
-                <div class="satellite-orbit absolute inset-0 pointer-events-none">
-                    <div class="satellite-bead w-2 h-2 rounded-full bg-cyan-300 shadow-[0_0_8px_#22d3ee]"></div>
+                <div
+                    class="satellite-orbit pointer-events-none absolute inset-0"
+                >
+                    <div
+                        class="satellite-bead h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_8px_#22d3ee]"
+                    ></div>
                 </div>
             </div>
         </div>
@@ -80,28 +97,46 @@ const defaultTitle = computed(() => {
         <transition name="fade">
             <div
                 v-if="showStatus"
-                class="status-pill px-4 py-2 sm:px-5 sm:py-2.5 rounded-2xl bg-slate-950/85 border border-white/15 backdrop-blur-xl shadow-2xl shadow-cyan-950/50 flex items-center gap-3"
+                class="status-pill flex items-center gap-3 rounded-2xl border border-white/15 bg-slate-950/85 px-4 py-2 shadow-2xl shadow-cyan-950/50 backdrop-blur-xl sm:px-5 sm:py-2.5"
             >
                 <!-- Mini Animated Equalizer Soundwaves -->
-                <div class="flex items-center gap-0.5 h-3.5 px-0.5" title="Buffering">
-                    <span class="eq-bar w-0.5 bg-cyan-400 rounded-full animate-eq-1"></span>
-                    <span class="eq-bar w-0.5 bg-purple-400 rounded-full animate-eq-2"></span>
-                    <span class="eq-bar w-0.5 bg-cyan-300 rounded-full animate-eq-3"></span>
-                    <span class="eq-bar w-0.5 bg-purple-300 rounded-full animate-eq-4"></span>
+                <div
+                    class="flex h-3.5 items-center gap-0.5 px-0.5"
+                    title="Buffering"
+                >
+                    <span
+                        class="eq-bar animate-eq-1 w-0.5 rounded-full bg-cyan-400"
+                    ></span>
+                    <span
+                        class="eq-bar animate-eq-2 w-0.5 rounded-full bg-purple-400"
+                    ></span>
+                    <span
+                        class="eq-bar animate-eq-3 w-0.5 rounded-full bg-cyan-300"
+                    ></span>
+                    <span
+                        class="eq-bar animate-eq-4 w-0.5 rounded-full bg-purple-300"
+                    ></span>
                 </div>
 
                 <!-- Main Status Text & Optional Subtext -->
                 <div class="flex flex-col text-center sm:text-start">
-                    <span class="text-xs font-black tracking-wide text-slate-100 flex items-center gap-1.5 font-sans">
+                    <span
+                        class="flex items-center gap-1.5 font-sans text-xs font-black tracking-wide text-slate-100"
+                    >
                         <span>{{ defaultTitle }}</span>
                     </span>
-                    <span v-if="subText" class="text-[10px] font-semibold text-slate-400 font-mono">
+                    <span
+                        v-if="subText"
+                        class="font-mono text-[10px] font-semibold text-slate-400"
+                    >
                         {{ subText }}
                     </span>
                 </div>
 
                 <!-- Subtle Ambient Sparkle -->
-                <Sparkles class="w-3.5 h-3.5 text-cyan-400/80 animate-pulse hidden sm:block shrink-0" />
+                <Sparkles
+                    class="hidden h-3.5 w-3.5 shrink-0 animate-pulse text-cyan-400/80 sm:block"
+                />
             </div>
         </transition>
     </div>
@@ -137,7 +172,8 @@ const defaultTitle = computed(() => {
 }
 
 @keyframes core-breath {
-    0%, 100% {
+    0%,
+    100% {
         opacity: 0.4;
         transform: scale(0.9);
     }
@@ -157,23 +193,51 @@ const defaultTitle = computed(() => {
 }
 
 @keyframes eq-wave-1 {
-    0%, 100% { height: 4px; opacity: 0.4; }
-    50% { height: 14px; opacity: 1; }
+    0%,
+    100% {
+        height: 4px;
+        opacity: 0.4;
+    }
+    50% {
+        height: 14px;
+        opacity: 1;
+    }
 }
 
 @keyframes eq-wave-2 {
-    0%, 100% { height: 12px; opacity: 0.9; }
-    50% { height: 5px; opacity: 0.5; }
+    0%,
+    100% {
+        height: 12px;
+        opacity: 0.9;
+    }
+    50% {
+        height: 5px;
+        opacity: 0.5;
+    }
 }
 
 @keyframes eq-wave-3 {
-    0%, 100% { height: 6px; opacity: 0.6; }
-    50% { height: 16px; opacity: 1; }
+    0%,
+    100% {
+        height: 6px;
+        opacity: 0.6;
+    }
+    50% {
+        height: 16px;
+        opacity: 1;
+    }
 }
 
 @keyframes eq-wave-4 {
-    0%, 100% { height: 14px; opacity: 1; }
-    50% { height: 4px; opacity: 0.4; }
+    0%,
+    100% {
+        height: 14px;
+        opacity: 1;
+    }
+    50% {
+        height: 4px;
+        opacity: 0.4;
+    }
 }
 
 .animate-spin-glow {
@@ -181,7 +245,8 @@ const defaultTitle = computed(() => {
 }
 
 .animate-spin-reverse-glow {
-    animation: spin-reverse-glow 2.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+    animation: spin-reverse-glow 2.2s cubic-bezier(0.45, 0.05, 0.55, 0.95)
+        infinite;
 }
 
 .animate-core-breath {
@@ -214,7 +279,9 @@ const defaultTitle = computed(() => {
 
 .fade-enter-active,
 .fade-leave-active {
-    transition: opacity 0.25s ease, transform 0.25s ease;
+    transition:
+        opacity 0.25s ease,
+        transform 0.25s ease;
 }
 
 .fade-enter-from,

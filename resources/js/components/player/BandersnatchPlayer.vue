@@ -3,9 +3,29 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
 import {
-    Play, Pause, RotateCcw, Maximize2, Minimize2, ArrowLeft, ArrowRight,
-    X, Volume2, VolumeX, Sparkles, Sliders, MessageSquare, Clock, Subtitles,
-    SkipBack, SkipForward, AlertTriangle, RefreshCw, Check, Type, Plus, Minus
+    Play,
+    Pause,
+    RotateCcw,
+    Maximize2,
+    Minimize2,
+    ArrowLeft,
+    ArrowRight,
+    X,
+    Volume2,
+    VolumeX,
+    Sparkles,
+    Sliders,
+    MessageSquare,
+    Clock,
+    Subtitles,
+    SkipBack,
+    SkipForward,
+    AlertTriangle,
+    RefreshCw,
+    Check,
+    Type,
+    Plus,
+    Minus,
 } from 'lucide-vue-next';
 
 interface CueItem {
@@ -14,12 +34,15 @@ interface CueItem {
     text: string;
 }
 
-const props = withDefaults(defineProps<{
-    episode?: any;
-    episodeId?: number;
-}>(), {
-    episodeId: 5764,
-});
+const props = withDefaults(
+    defineProps<{
+        episode?: any;
+        episodeId?: number;
+    }>(),
+    {
+        episodeId: 5764,
+    },
+);
 
 const emit = defineEmits<{
     (e: 'close'): void;
@@ -51,11 +74,19 @@ const durationMsDisplay = ref(18734000); // 5h 12m exact
 const currentChapterName = ref<string>('1A');
 
 // Stream URL (Standard Direct HTTP Range)
-const activeEpisodeId = computed(() => props.episode?.id || props.episode?.watchable_id || props.episodeId || 5764);
+const activeEpisodeId = computed(
+    () =>
+        props.episode?.id ||
+        props.episode?.watchable_id ||
+        props.episodeId ||
+        5764,
+);
 const streamUrl = computed(() => `/stream/episode/${activeEpisodeId.value}`);
 
 // Choice Translation automatically derived from app language (top bar selector removed)
-const choiceLang = computed<'ar' | 'en' | 'fr'>(() => isRTL.value ? 'ar' : 'en');
+const choiceLang = computed<'ar' | 'en' | 'fr'>(() =>
+    isRTL.value ? 'ar' : 'en',
+);
 
 // Interactive Choice HUD State
 const currentChoiceMoment = ref<any>(null);
@@ -64,7 +95,9 @@ const choiceProgress = ref<number>(0);
 const highlightedChoiceIndex = ref<number>(-1);
 const isChoiceSelected = ref<boolean>(false);
 const selectedDigits = ref<string[]>([]);
-const isPhoneScene = computed(() => currentChoiceMoment.value?.type === 'scene:cs_bs_phone');
+const isPhoneScene = computed(
+    () => currentChoiceMoment.value?.type === 'scene:cs_bs_phone',
+);
 
 // Subtitles Engine State (matching CinemaPlayer)
 const showSubtitles = ref(true);
@@ -75,10 +108,10 @@ const parsedCues = ref<CueItem[]>([]);
 const activeCueText = ref<string>('');
 const subtitleDelay = ref<number>(0); // in seconds
 const subtitleFont = ref<'cairo' | 'jakarta' | 'system'>(
-    (localStorage.getItem('cinema_subtitle_font') as any) || 'cairo'
+    (localStorage.getItem('cinema_subtitle_font') as any) || 'cairo',
 );
 const subtitleFontSize = ref<'sm' | 'md' | 'lg' | 'xl'>(
-    (localStorage.getItem('cinema_subtitle_font_size') as any) || 'md'
+    (localStorage.getItem('cinema_subtitle_font_size') as any) || 'md',
 );
 const isFetchingSubtitle = ref<boolean>(false);
 
@@ -170,12 +203,15 @@ const initEngine = async () => {
 
         const w = window as any;
         if (!w.bandersnatch || !w.SegmentMap) {
-            throw new Error('Interactive metadata variables failed to initialize');
+            throw new Error(
+                'Interactive metadata variables failed to initialize',
+            );
         }
 
         segmentMap = w.SegmentMap;
         bv = w.bandersnatch.videos['80988062'].interactiveVideoMoments.value;
-        choicePoints = bv.choicePointNavigatorMetadata.choicePointsMetadata.choicePoints;
+        choicePoints =
+            bv.choicePointNavigatorMetadata.choicePointsMetadata.choicePoints;
         momentsBySegment = bv.momentsBySegment;
         segmentGroups = bv.segmentGroups;
 
@@ -213,7 +249,9 @@ const initEngine = async () => {
         }
     } catch (err: any) {
         console.error('Failed to init Bandersnatch engine:', err);
-        videoError.value = err.message || 'Failed to initialize Bandersnatch interactive engine';
+        videoError.value =
+            err.message ||
+            'Failed to initialize Bandersnatch interactive engine';
         isLoadingAssets.value = false;
     }
 };
@@ -316,7 +354,9 @@ const resolveSegmentGroup = (sg: string): string => {
 
 const getSegmentId = (ms: number): string | null => {
     if (!segmentMap?.segments) return null;
-    for (const [k, v] of Object.entries(segmentMap.segments as Record<string, any>)) {
+    for (const [k, v] of Object.entries(
+        segmentMap.segments as Record<string, any>,
+    )) {
         if (ms >= v.startTimeMs && (!v.endTimeMs || ms < v.endTimeMs)) {
             return k;
         }
@@ -331,11 +371,18 @@ const getSegmentMs = (segmentId: string): number => {
 
 const getMoments = (segmentId: string, ms: number): Record<string, any> => {
     const result: Record<string, any> = {};
-    const segMoments = (moments && moments[segmentId]) ? moments[segmentId] : (momentsBySegment?.[segmentId] || []);
+    const segMoments =
+        moments && moments[segmentId]
+            ? moments[segmentId]
+            : momentsBySegment?.[segmentId] || [];
     for (let i = 0; i < segMoments.length; i++) {
         const m = segMoments[i];
         const momentId = `${segmentId}/${i}`;
-        if (ms >= m.startMs && ms < m.endMs && evalPrecondition(m.precondition)) {
+        if (
+            ms >= m.startMs &&
+            ms < m.endMs &&
+            evalPrecondition(m.precondition)
+        ) {
             result[momentId] = m;
         }
     }
@@ -406,10 +453,14 @@ const onTimeUpdate = () => {
     // High resolution timer
     let nextEvent = segment ? segment.endTimeMs : 0;
     for (let k in currentMoments) {
-        if (currentMoments[k].endMs < nextEvent) nextEvent = currentMoments[k].endMs;
+        if (currentMoments[k].endMs < nextEvent)
+            nextEvent = currentMoments[k].endMs;
     }
     if (currentSegment) {
-        const segMoments = (moments && moments[currentSegment]) || (momentsBySegment && momentsBySegment[currentSegment]) || [];
+        const segMoments =
+            (moments && moments[currentSegment]) ||
+            (momentsBySegment && momentsBySegment[currentSegment]) ||
+            [];
         for (let m of segMoments) {
             if (ms < m.startMs && m.startMs < nextEvent) nextEvent = m.startMs;
         }
@@ -439,7 +490,13 @@ const momentStart = (m: any) => {
 
 const momentUpdate = (m: any, ms: number) => {
     if (m.choices) {
-        const p = Math.max(0, Math.min(100, 100 - ((ms - m.startMs) * 100.0 / (m.endMs - m.startMs))));
+        const p = Math.max(
+            0,
+            Math.min(
+                100,
+                100 - ((ms - m.startMs) * 100.0) / (m.endMs - m.startMs),
+            ),
+        );
         choiceProgress.value = p;
     }
 };
@@ -454,7 +511,9 @@ const momentEnd = (m: any) => {
 
 const applyImpression = (impressionData: any) => {
     if (impressionData && impressionData.type === 'userState') {
-        for (const [variable, value] of Object.entries(impressionData.data.persistent)) {
+        for (const [variable, value] of Object.entries(
+            impressionData.data.persistent,
+        )) {
             ls.setItem('persistentState_' + variable, JSON.stringify(value));
         }
     }
@@ -470,7 +529,10 @@ const playNextSegment = (prevSeg: string): boolean => {
         chosenImpressionData = null;
         isChoiceSelected.value = false;
         currentChoiceMoment.value = null;
-    } else if (nextChoice >= 0 && currentChoiceMoment.value?.choices?.[nextChoice]) {
+    } else if (
+        nextChoice >= 0 &&
+        currentChoiceMoment.value?.choices?.[nextChoice]
+    ) {
         const x = currentChoiceMoment.value.choices[nextChoice];
         if (x.segmentId) nextSeg = x.segmentId;
         else if (x.sg) nextSeg = resolveSegmentGroup(x.sg);
@@ -544,7 +606,8 @@ const playHash = (hash: string) => {
 };
 
 const handleChoice = (index: number | string) => {
-    if (!currentChoiceMoment.value || !currentChoiceMoment.value.choices) return;
+    if (!currentChoiceMoment.value || !currentChoiceMoment.value.choices)
+        return;
     if (isChoiceSelected.value) return;
 
     const numIndex = Number(index);
@@ -609,7 +672,10 @@ const jumpForward = () => {
     let interactionMs = 0;
     const segMoments = momentsBySegment[segmentId] || [];
     for (let m of segMoments) {
-        if (m.startMs > ms && (interactionMs === 0 || m.startMs < interactionMs)) {
+        if (
+            m.startMs > ms &&
+            (interactionMs === 0 || m.startMs < interactionMs)
+        ) {
             interactionMs = m.startMs;
         }
     }
@@ -632,8 +698,14 @@ const jumpBack = () => {
     const segMoments = momentsBySegment[segmentId] || [];
     let inMoment = false;
     for (let m of segMoments) {
-        if (m.endMs < ms && m.startMs > interactionMs) interactionMs = m.startMs;
-        if (m.startMs !== segment?.startTimeMs && m.startMs <= ms && ms < m.endMs) inMoment = true;
+        if (m.endMs < ms && m.startMs > interactionMs)
+            interactionMs = m.startMs;
+        if (
+            m.startMs !== segment?.startTimeMs &&
+            m.startMs <= ms &&
+            ms < m.endMs
+        )
+            inMoment = true;
     }
 
     segmentTransition = true;
@@ -662,7 +734,11 @@ const jumpBack = () => {
 const resetStory = () => {
     try {
         for (let k in localStorage) {
-            if (k.startsWith('persistentState_') || k.startsWith('breadcrumb_') || k === 'bandersnatch_place') {
+            if (
+                k.startsWith('persistentState_') ||
+                k.startsWith('breadcrumb_') ||
+                k === 'bandersnatch_place'
+            ) {
                 localStorage.removeItem(k);
             }
         }
@@ -688,9 +764,12 @@ const resetStory = () => {
 
     if (videoRef.value) {
         videoRef.value.currentTime = 0;
-        videoRef.value.play().then(() => {
-            isPlaying.value = true;
-        }).catch(() => {});
+        videoRef.value
+            .play()
+            .then(() => {
+                isPlaying.value = true;
+            })
+            .catch(() => {});
     }
 
     toast.success(t('player.bandersnatch.reset_success'));
@@ -721,19 +800,24 @@ const onVideoError = () => {
     isBuffering.value = false;
     const err = videoRef.value?.error;
     console.error('Video error:', err);
-    videoError.value = err ? `Error (${err.code}): ${err.message || 'Stream disconnected'}` : 'Unable to play video';
+    videoError.value = err
+        ? `Error (${err.code}): ${err.message || 'Stream disconnected'}`
+        : 'Unable to play video';
 };
 
 const togglePlay = () => {
     if (!videoRef.value) return;
     if (videoRef.value.paused) {
-        videoRef.value.play().then(() => {
-            isPlaying.value = true;
-            showControls.value = false;
-        }).catch((err) => {
-            console.error('Playback failed:', err);
-            toast.error(err.message || 'Unable to start playback');
-        });
+        videoRef.value
+            .play()
+            .then(() => {
+                isPlaying.value = true;
+                showControls.value = false;
+            })
+            .catch((err) => {
+                console.error('Playback failed:', err);
+                toast.error(err.message || 'Unable to start playback');
+            });
     } else {
         videoRef.value.pause();
         isPlaying.value = false;
@@ -757,18 +841,29 @@ const onVolumeChange = (newVal: number) => {
 
 const toggleFullscreen = () => {
     if (!containerRef.value) return;
-    const isCurrentlyFullscreen = Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
+    const isCurrentlyFullscreen = Boolean(
+        document.fullscreenElement || (document as any).webkitFullscreenElement,
+    );
     if (!isCurrentlyFullscreen) {
         const el = containerRef.value;
         if (el.requestFullscreen) {
-            el.requestFullscreen().then(() => { isFullscreen.value = true; }).catch(() => {});
+            el.requestFullscreen()
+                .then(() => {
+                    isFullscreen.value = true;
+                })
+                .catch(() => {});
         } else if ((el as any).webkitRequestFullscreen) {
             (el as any).webkitRequestFullscreen();
             isFullscreen.value = true;
         }
     } else {
         if (document.exitFullscreen) {
-            document.exitFullscreen().then(() => { isFullscreen.value = false; }).catch(() => {});
+            document
+                .exitFullscreen()
+                .then(() => {
+                    isFullscreen.value = false;
+                })
+                .catch(() => {});
         } else if ((document as any).webkitExitFullscreen) {
             (document as any).webkitExitFullscreen();
             isFullscreen.value = false;
@@ -777,14 +872,21 @@ const toggleFullscreen = () => {
 };
 
 const onFullscreenChange = () => {
-    isFullscreen.value = Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
+    isFullscreen.value = Boolean(
+        document.fullscreenElement || (document as any).webkitFullscreenElement,
+    );
 };
 
 const onMouseMove = () => {
     showControls.value = true;
     clearTimeout(controlsTimer);
     controlsTimer = setTimeout(() => {
-        if (isPlaying.value && !currentChoiceMoment.value && !showSubtitlesMenu.value && !showSettings.value) {
+        if (
+            isPlaying.value &&
+            !currentChoiceMoment.value &&
+            !showSubtitlesMenu.value &&
+            !showSettings.value
+        ) {
             showControls.value = false;
         }
     }, 3500);
@@ -792,7 +894,11 @@ const onMouseMove = () => {
 
 // Keyboard listener
 const onKeyDown = (e: KeyboardEvent) => {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+    )
+        return;
 
     if (e.code === 'Space') {
         e.preventDefault();
@@ -817,14 +923,22 @@ const onKeyDown = (e: KeyboardEvent) => {
         }
     } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        if (currentChoiceMoment.value && currentChoiceMoment.value.choices?.length > 0 && !isChoiceSelected.value) {
+        if (
+            currentChoiceMoment.value &&
+            currentChoiceMoment.value.choices?.length > 0 &&
+            !isChoiceSelected.value
+        ) {
             handleChoice(0);
         } else {
             jumpBack();
         }
     } else if (e.key === 'ArrowRight') {
         e.preventDefault();
-        if (currentChoiceMoment.value && currentChoiceMoment.value.choices?.length > 1 && !isChoiceSelected.value) {
+        if (
+            currentChoiceMoment.value &&
+            currentChoiceMoment.value.choices?.length > 1 &&
+            !isChoiceSelected.value
+        ) {
             handleChoice(1);
         } else {
             jumpForward();
@@ -836,7 +950,11 @@ const onKeyDown = (e: KeyboardEvent) => {
 const parseTimestampToSeconds = (ts: string): number => {
     const parts = ts.trim().replace(',', '.').split(':');
     if (parts.length === 3) {
-        return parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
+        return (
+            parseFloat(parts[0]) * 3600 +
+            parseFloat(parts[1]) * 60 +
+            parseFloat(parts[2])
+        );
     } else if (parts.length === 2) {
         return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
     }
@@ -844,13 +962,17 @@ const parseTimestampToSeconds = (ts: string): number => {
 };
 
 const parseWebVTTContent = (content: string): CueItem[] => {
-    const lines = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    const lines = content
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .split('\n');
     const cues: CueItem[] = [];
     let currentStart = -1;
     let currentEnd = -1;
     let currentTextLines: string[] = [];
 
-    const timeRegex = /((?:\d{1,2}:)?\d{2}:\d{2}[\.,]\d{2,3})\s*-->\s*((?:\d{1,2}:)?\d{2}:\d{2}[\.,]\d{2,3})/;
+    const timeRegex =
+        /((?:\d{1,2}:)?\d{2}:\d{2}[.,]\d{2,3})\s*-->\s*((?:\d{1,2}:)?\d{2}:\d{2}[.,]\d{2,3})/;
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
@@ -859,7 +981,7 @@ const parseWebVTTContent = (content: string): CueItem[] => {
                 cues.push({
                     start: currentStart,
                     end: currentEnd,
-                    text: currentTextLines.join('<br>')
+                    text: currentTextLines.join('<br>'),
                 });
                 currentStart = -1;
                 currentEnd = -1;
@@ -874,7 +996,7 @@ const parseWebVTTContent = (content: string): CueItem[] => {
                 cues.push({
                     start: currentStart,
                     end: currentEnd,
-                    text: currentTextLines.join('<br>')
+                    text: currentTextLines.join('<br>'),
                 });
                 currentTextLines = [];
             }
@@ -889,7 +1011,7 @@ const parseWebVTTContent = (content: string): CueItem[] => {
         cues.push({
             start: currentStart,
             end: currentEnd,
-            text: currentTextLines.join('<br>')
+            text: currentTextLines.join('<br>'),
         });
     }
 
@@ -922,28 +1044,39 @@ const loadSubtitleTrack = async (subId: number | string) => {
 };
 
 const updateActiveCue = (timeSec: number) => {
-    if (!showSubtitles.value || selectedSubtitleId.value === 'off' || !parsedCues.value.length) {
+    if (
+        !showSubtitles.value ||
+        selectedSubtitleId.value === 'off' ||
+        !parsedCues.value.length
+    ) {
         activeCueText.value = '';
         return;
     }
 
     const adjustedTime = timeSec + subtitleDelay.value;
-    const active = parsedCues.value.find(c => adjustedTime >= c.start && adjustedTime <= c.end);
+    const active = parsedCues.value.find(
+        (c) => adjustedTime >= c.start && adjustedTime <= c.end,
+    );
     activeCueText.value = active ? active.text : '';
 };
 
 const fetchEpisodeSubtitles = async () => {
     try {
-        const res = await fetch(`/api/subtitles/for-media?type=episode&id=${activeEpisodeId.value}`);
+        const res = await fetch(
+            `/api/subtitles/for-media?type=episode&id=${activeEpisodeId.value}`,
+        );
         if (res.ok) {
             const data = await res.json();
             if (data.subtitles && Array.isArray(data.subtitles)) {
                 availableSubtitles.value = data.subtitles;
 
                 // Auto-select Arabic if in RTL mode, otherwise match default or English
-                const target = availableSubtitles.value.find(s => isRTL.value ? s.language === 'ar' : s.language === 'en')
-                    || availableSubtitles.value.find(s => s.is_default)
-                    || availableSubtitles.value[0];
+                const target =
+                    availableSubtitles.value.find((s) =>
+                        isRTL.value ? s.language === 'ar' : s.language === 'en',
+                    ) ||
+                    availableSubtitles.value.find((s) => s.is_default) ||
+                    availableSubtitles.value[0];
 
                 if (target) {
                     await loadSubtitleTrack(target.id);
@@ -959,7 +1092,8 @@ const fetchEpisodeSubtitles = async () => {
 const initAudioContext = () => {
     if (!videoRef.value || audioCtx) return;
     try {
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        const AudioContextClass =
+            window.AudioContext || (window as any).webkitAudioContext;
         if (!AudioContextClass) return;
         audioCtx = new AudioContextClass();
         if (audioCtx.state === 'suspended') {
@@ -977,7 +1111,11 @@ const updateAudioDelay = (val: number) => {
     audioDelayMs.value = val;
     initAudioContext();
     if (delayNode && audioCtx) {
-        delayNode.delayTime.setTargetAtTime(Math.max(0, val / 1000.0), audioCtx.currentTime, 0.05);
+        delayNode.delayTime.setTargetAtTime(
+            Math.max(0, val / 1000.0),
+            audioCtx.currentTime,
+            0.05,
+        );
     }
 };
 
@@ -1017,38 +1155,56 @@ onBeforeUnmount(() => {
         ref="containerRef"
         dir="ltr"
         @mousemove="onMouseMove"
-        class="fixed inset-0 z-[100] bg-black text-white select-none overflow-hidden flex flex-col font-sans"
+        class="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-black font-sans text-white select-none"
     >
         <!-- LOADING SPINNER -->
-        <div v-if="isLoadingAssets" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/95 backdrop-blur-md">
-            <div class="relative w-16 h-16 mb-4">
-                <div class="absolute inset-0 rounded-full border-4 border-red-500/20 animate-ping"></div>
-                <div class="w-16 h-16 rounded-full border-4 border-t-red-500 border-r-transparent border-b-white/20 border-l-transparent animate-spin"></div>
+        <div
+            v-if="isLoadingAssets"
+            class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/95 backdrop-blur-md"
+        >
+            <div class="relative mb-4 h-16 w-16">
+                <div
+                    class="absolute inset-0 animate-ping rounded-full border-4 border-red-500/20"
+                ></div>
+                <div
+                    class="h-16 w-16 animate-spin rounded-full border-4 border-t-red-500 border-r-transparent border-b-white/20 border-l-transparent"
+                ></div>
             </div>
-            <h3 class="text-lg font-black tracking-widest uppercase text-red-500 font-mono">
+            <h3
+                class="font-mono text-lg font-black tracking-widest text-red-500 uppercase"
+            >
                 {{ t('player.bandersnatch.loading_interactive') }}
             </h3>
-            <p class="text-xs text-slate-400 mt-1">Black Mirror: Bandersnatch</p>
+            <p class="mt-1 text-xs text-slate-400">
+                Black Mirror: Bandersnatch
+            </p>
         </div>
 
         <!-- ERROR STATE -->
-        <div v-if="videoError" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/95 p-6 text-center">
-            <div class="w-16 h-16 rounded-full bg-red-600/20 text-red-500 flex items-center justify-center mb-4 border border-red-500/30">
-                <AlertTriangle class="w-8 h-8" />
+        <div
+            v-if="videoError"
+            class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/95 p-6 text-center"
+        >
+            <div
+                class="mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-red-500/30 bg-red-600/20 text-red-500"
+            >
+                <AlertTriangle class="h-8 w-8" />
             </div>
-            <h3 class="text-lg font-bold text-white mb-2">{{ t('player.bandersnatch.playback_failed') }}</h3>
-            <p class="text-xs text-slate-400 mb-6 max-w-md">{{ videoError }}</p>
+            <h3 class="mb-2 text-lg font-bold text-white">
+                {{ t('player.bandersnatch.playback_failed') }}
+            </h3>
+            <p class="mb-6 max-w-md text-xs text-slate-400">{{ videoError }}</p>
             <div class="flex items-center gap-3">
                 <button
                     @click="initEngine"
-                    class="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-red-600/40"
+                    class="flex cursor-pointer items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-red-600/40 hover:bg-red-500"
                 >
-                    <RefreshCw class="w-4 h-4" />
+                    <RefreshCw class="h-4 w-4" />
                     <span>{{ t('player.bandersnatch.retry') }}</span>
                 </button>
                 <button
                     @click="emit('close')"
-                    class="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 font-bold text-xs cursor-pointer"
+                    class="cursor-pointer rounded-xl bg-white/10 px-5 py-2.5 text-xs font-bold text-slate-300 hover:bg-white/20"
                 >
                     {{ t('player.bandersnatch.close') }}
                 </button>
@@ -1056,33 +1212,46 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- BUFFERING SPINNER -->
-        <div v-if="isBuffering && !isLoadingAssets" class="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-black/30">
-            <div class="w-12 h-12 rounded-full border-3 border-t-red-500 border-white/20 animate-spin"></div>
+        <div
+            v-if="isBuffering && !isLoadingAssets"
+            class="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/30"
+        >
+            <div
+                class="h-12 w-12 animate-spin rounded-full border-3 border-white/20 border-t-red-500"
+            ></div>
         </div>
 
         <!-- TOP BAR (AUTO-HIDES ON IDLE) - Top selector removed as requested -->
         <transition name="fade">
             <div
                 v-if="showControls"
-                class="absolute top-0 inset-x-0 z-40 p-4 bg-gradient-to-b from-black/90 via-black/50 to-transparent flex items-center justify-between pointer-events-auto"
+                class="pointer-events-auto absolute inset-x-0 top-0 z-40 flex items-center justify-between bg-gradient-to-b from-black/90 via-black/50 to-transparent p-4"
             >
                 <div class="flex items-center gap-3">
                     <button
                         @click="emit('close')"
-                        class="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer backdrop-blur-md border border-white/15 active:scale-95"
+                        class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3.5 py-2 text-xs font-bold text-white backdrop-blur-md transition-all hover:bg-white/20 active:scale-95"
                     >
-                        <ArrowLeft class="w-4 h-4" />
-                        <span>{{ t('player.bandersnatch.back_to_library') }}</span>
+                        <ArrowLeft class="h-4 w-4" />
+                        <span>{{
+                            t('player.bandersnatch.back_to_library')
+                        }}</span>
                     </button>
 
                     <div class="flex items-center gap-2">
-                        <span class="px-2 py-0.5 rounded-md bg-red-600/30 border border-red-500/50 text-red-400 text-[10px] font-mono font-black uppercase tracking-wider animate-pulse">
+                        <span
+                            class="animate-pulse rounded-md border border-red-500/50 bg-red-600/30 px-2 py-0.5 font-mono text-[10px] font-black tracking-wider text-red-400 uppercase"
+                        >
                             INTERACTIVE
                         </span>
-                        <h2 class="font-extrabold text-sm sm:text-base text-white tracking-wide truncate max-w-xs sm:max-w-md">
+                        <h2
+                            class="max-w-xs truncate text-sm font-extrabold tracking-wide text-white sm:max-w-md sm:text-base"
+                        >
                             Black Mirror: Bandersnatch
                         </h2>
-                        <span class="text-xs font-mono px-2 py-0.5 rounded bg-white/10 text-slate-300 border border-white/10">
+                        <span
+                            class="rounded border border-white/10 bg-white/10 px-2 py-0.5 font-mono text-xs text-slate-300"
+                        >
                             Chapter {{ currentChapterName }}
                         </span>
                     </div>
@@ -1092,40 +1261,51 @@ onBeforeUnmount(() => {
                     <!-- Reset Story (Instant, Reliable) -->
                     <button
                         @click="resetStory"
-                        class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-red-500/20 border border-white/15 hover:border-red-500/40 text-slate-300 hover:text-red-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                        class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-300 transition-all hover:border-red-500/40 hover:bg-red-500/20 hover:text-red-300"
                         :title="t('player.bandersnatch.reset_story_title')"
                     >
-                        <RotateCcw class="w-3.5 h-3.5" />
-                        <span class="hidden sm:inline">{{ t('player.bandersnatch.reset_story') }}</span>
+                        <RotateCcw class="h-3.5 w-3.5" />
+                        <span class="hidden sm:inline">{{
+                            t('player.bandersnatch.reset_story')
+                        }}</span>
                     </button>
 
                     <!-- Settings (Audio Sync) -->
                     <button
-                        @click="showSettings = !showSettings; showSubtitlesMenu = false;"
-                        class="p-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-slate-300 hover:text-white text-xs transition-all cursor-pointer"
-                        :class="showSettings ? 'bg-red-600 text-white border-red-500' : ''"
+                        @click="
+                            showSettings = !showSettings;
+                            showSubtitlesMenu = false;
+                        "
+                        class="cursor-pointer rounded-xl border border-white/15 bg-white/10 p-2 text-xs text-slate-300 transition-all hover:bg-white/20 hover:text-white"
+                        :class="
+                            showSettings
+                                ? 'border-red-500 bg-red-600 text-white'
+                                : ''
+                        "
                         title="Audio Delay"
                     >
-                        <Sliders class="w-4 h-4" />
+                        <Sliders class="h-4 w-4" />
                     </button>
 
                     <!-- Fullscreen -->
                     <button
                         @click="toggleFullscreen"
-                        class="p-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-slate-300 hover:text-white text-xs transition-all cursor-pointer"
-                        :title="isFullscreen ? 'Exit Fullscreen' : 'Fullscreen (F)'"
+                        class="cursor-pointer rounded-xl border border-white/15 bg-white/10 p-2 text-xs text-slate-300 transition-all hover:bg-white/20 hover:text-white"
+                        :title="
+                            isFullscreen ? 'Exit Fullscreen' : 'Fullscreen (F)'
+                        "
                     >
-                        <Minimize2 v-if="isFullscreen" class="w-4 h-4" />
-                        <Maximize2 v-else class="w-4 h-4" />
+                        <Minimize2 v-if="isFullscreen" class="h-4 w-4" />
+                        <Maximize2 v-else class="h-4 w-4" />
                     </button>
 
                     <!-- Close -->
                     <button
                         @click="emit('close')"
-                        class="p-2 rounded-xl bg-white/10 hover:bg-rose-500/30 border border-white/15 hover:border-rose-500/50 text-slate-300 hover:text-rose-200 text-xs transition-all cursor-pointer"
+                        class="cursor-pointer rounded-xl border border-white/15 bg-white/10 p-2 text-xs text-slate-300 transition-all hover:border-rose-500/50 hover:bg-rose-500/30 hover:text-rose-200"
                         title="Close (Esc)"
                     >
-                        <X class="w-4 h-4" />
+                        <X class="h-4 w-4" />
                     </button>
                 </div>
             </div>
@@ -1135,22 +1315,37 @@ onBeforeUnmount(() => {
         <transition name="fade">
             <div
                 v-if="showSettings"
-                class="absolute top-16 right-4 z-50 p-4 rounded-2xl bg-black/90 border border-white/20 backdrop-blur-xl text-xs space-y-3 w-72 shadow-2xl"
+                class="absolute top-16 right-4 z-50 w-72 space-y-3 rounded-2xl border border-white/20 bg-black/90 p-4 text-xs shadow-2xl backdrop-blur-xl"
             >
-                <div class="flex items-center justify-between border-b border-white/10 pb-2">
-                    <span class="font-bold text-white flex items-center gap-1.5">
-                        <Sliders class="w-3.5 h-3.5 text-red-500" />
-                        <span>{{ t('player.bandersnatch.audio_sync_delay') }}</span>
+                <div
+                    class="flex items-center justify-between border-b border-white/10 pb-2"
+                >
+                    <span
+                        class="flex items-center gap-1.5 font-bold text-white"
+                    >
+                        <Sliders class="h-3.5 w-3.5 text-red-500" />
+                        <span>{{
+                            t('player.bandersnatch.audio_sync_delay')
+                        }}</span>
                     </span>
-                    <button @click="showSettings = false" class="text-slate-400 hover:text-white cursor-pointer">
-                        <X class="w-3.5 h-3.5" />
+                    <button
+                        @click="showSettings = false"
+                        class="cursor-pointer text-slate-400 hover:text-white"
+                    >
+                        <X class="h-3.5 w-3.5" />
                     </button>
                 </div>
 
                 <div>
-                    <div class="flex items-center justify-between text-[11px] mb-1 font-mono">
-                        <span class="text-slate-400">{{ t('player.bandersnatch.audio_delay_label') }}</span>
-                        <span class="text-red-400 font-bold">{{ audioDelayMs }}ms</span>
+                    <div
+                        class="mb-1 flex items-center justify-between font-mono text-[11px]"
+                    >
+                        <span class="text-slate-400">{{
+                            t('player.bandersnatch.audio_delay_label')
+                        }}</span>
+                        <span class="font-bold text-red-400"
+                            >{{ audioDelayMs }}ms</span
+                        >
                     </div>
                     <input
                         type="range"
@@ -1158,19 +1353,27 @@ onBeforeUnmount(() => {
                         max="2000"
                         step="50"
                         :value="audioDelayMs"
-                        @input="updateAudioDelay(Number(($event.target as HTMLInputElement).value))"
-                        class="w-full accent-red-500 cursor-pointer"
+                        @input="
+                            updateAudioDelay(
+                                Number(
+                                    ($event.target as HTMLInputElement).value,
+                                ),
+                            )
+                        "
+                        class="w-full cursor-pointer accent-red-500"
                     />
                 </div>
 
                 <div class="flex items-center justify-between pt-1">
                     <button
                         @click="updateAudioDelay(0)"
-                        class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-[10px] text-slate-300 cursor-pointer"
+                        class="cursor-pointer rounded bg-white/10 px-2 py-1 text-[10px] text-slate-300 hover:bg-white/20"
                     >
                         {{ t('player.bandersnatch.reset_delay') }}
                     </button>
-                    <span class="text-[9px] text-slate-500 font-mono">Direct Range Streaming</span>
+                    <span class="font-mono text-[9px] text-slate-500"
+                        >Direct Range Streaming</span
+                    >
                 </div>
             </div>
         </transition>
@@ -1179,60 +1382,111 @@ onBeforeUnmount(() => {
         <transition name="fade">
             <div
                 v-if="showSubtitlesMenu"
-                class="absolute bottom-16 right-4 z-50 text-left w-84 max-w-[90vw] bg-slate-950/95 border border-white/15 rounded-2xl p-3.5 shadow-2xl backdrop-blur-xl flex flex-col gap-3 max-h-[80vh] overflow-y-auto custom-scrollbar"
+                class="custom-scrollbar absolute right-4 bottom-16 z-50 flex max-h-[80vh] w-84 max-w-[90vw] flex-col gap-3 overflow-y-auto rounded-2xl border border-white/15 bg-slate-950/95 p-3.5 text-left shadow-2xl backdrop-blur-xl"
             >
-                <div class="flex items-center justify-between border-b border-white/10 pb-2">
-                    <span class="text-xs font-bold text-white flex items-center gap-1.5">
-                        <MessageSquare class="w-3.5 h-3.5 text-purple-400" />
+                <div
+                    class="flex items-center justify-between border-b border-white/10 pb-2"
+                >
+                    <span
+                        class="flex items-center gap-1.5 text-xs font-bold text-white"
+                    >
+                        <MessageSquare class="h-3.5 w-3.5 text-purple-400" />
                         {{ t('player.subtitle_tracks') }}
                     </span>
                     <div class="flex items-center gap-2">
-                        <span class="text-[10px] text-slate-400">{{ availableSubtitles.length }} {{ t('player.bandersnatch.available') }}</span>
-                        <button @click="showSubtitlesMenu = false" class="text-slate-400 hover:text-white cursor-pointer">
-                            <X class="w-3.5 h-3.5" />
+                        <span class="text-[10px] text-slate-400"
+                            >{{ availableSubtitles.length }}
+                            {{ t('player.bandersnatch.available') }}</span
+                        >
+                        <button
+                            @click="showSubtitlesMenu = false"
+                            class="cursor-pointer text-slate-400 hover:text-white"
+                        >
+                            <X class="h-3.5 w-3.5" />
                         </button>
                     </div>
                 </div>
 
                 <!-- Tracks List -->
-                <div class="flex flex-col gap-1 max-h-40 overflow-y-auto custom-scrollbar">
+                <div
+                    class="custom-scrollbar flex max-h-40 flex-col gap-1 overflow-y-auto"
+                >
                     <button
                         @click="loadSubtitleTrack('off')"
-                        class="px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-all cursor-pointer"
-                        :class="selectedSubtitleId === 'off' ? 'bg-purple-600 text-white' : 'text-slate-300 hover:bg-white/10'"
+                        class="flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all"
+                        :class="
+                            selectedSubtitleId === 'off'
+                                ? 'bg-purple-600 text-white'
+                                : 'text-slate-300 hover:bg-white/10'
+                        "
                     >
                         <span>{{ t('player.off') }}</span>
-                        <Check v-if="selectedSubtitleId === 'off'" class="w-3.5 h-3.5" />
+                        <Check
+                            v-if="selectedSubtitleId === 'off'"
+                            class="h-3.5 w-3.5"
+                        />
                     </button>
 
                     <button
                         v-for="sub in availableSubtitles"
                         :key="sub.id"
                         @click="loadSubtitleTrack(sub.id)"
-                        class="px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-all cursor-pointer"
-                        :class="selectedSubtitleId === sub.id ? 'bg-purple-600 text-white' : 'text-slate-300 hover:bg-white/10'"
+                        class="flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all"
+                        :class="
+                            selectedSubtitleId === sub.id
+                                ? 'bg-purple-600 text-white'
+                                : 'text-slate-300 hover:bg-white/10'
+                        "
                     >
                         <div class="flex items-center gap-1.5 truncate">
-                            <span class="uppercase text-[10px] px-1 py-0.5 rounded bg-black/40">{{ sub.language || 'CC' }}</span>
-                            <span class="truncate">{{ sub.language_name || 'Subtitle' }}</span>
-                            <span v-if="sub.is_default" class="text-[9px] px-1.5 py-0.5 rounded bg-white/15 text-slate-300 font-mono">Default</span>
+                            <span
+                                class="rounded bg-black/40 px-1 py-0.5 text-[10px] uppercase"
+                                >{{ sub.language || 'CC' }}</span
+                            >
+                            <span class="truncate">{{
+                                sub.language_name || 'Subtitle'
+                            }}</span>
+                            <span
+                                v-if="sub.is_default"
+                                class="rounded bg-white/15 px-1.5 py-0.5 font-mono text-[9px] text-slate-300"
+                                >Default</span
+                            >
                         </div>
-                        <Check v-if="selectedSubtitleId === sub.id" class="w-3.5 h-3.5 shrink-0" />
+                        <Check
+                            v-if="selectedSubtitleId === sub.id"
+                            class="h-3.5 w-3.5 shrink-0"
+                        />
                     </button>
                 </div>
 
                 <!-- Subtitle Size, Font & Sync Options (matching CinemaPlayer) -->
-                <div v-if="selectedSubtitleId !== 'off'" class="border-t border-white/10 pt-2.5 flex flex-col gap-2.5">
+                <div
+                    v-if="selectedSubtitleId !== 'off'"
+                    class="flex flex-col gap-2.5 border-t border-white/10 pt-2.5"
+                >
                     <!-- Font Size -->
                     <div class="flex items-center justify-between">
-                        <span class="text-[11px] text-slate-400">{{ t('player.font_size') }}</span>
-                        <div class="flex items-center gap-1 bg-white/5 p-0.5 rounded-lg border border-white/10">
+                        <span class="text-[11px] text-slate-400">{{
+                            t('player.font_size')
+                        }}</span>
+                        <div
+                            class="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-0.5"
+                        >
                             <button
-                                v-for="size in (['sm', 'md', 'lg', 'xl'] as const)"
+                                v-for="size in [
+                                    'sm',
+                                    'md',
+                                    'lg',
+                                    'xl',
+                                ] as const"
                                 :key="size"
                                 @click="setSubtitleFontSize(size)"
-                                class="px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all cursor-pointer"
-                                :class="subtitleFontSize === size ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'"
+                                class="cursor-pointer rounded px-2 py-0.5 text-[10px] font-bold uppercase transition-all"
+                                :class="
+                                    subtitleFontSize === size
+                                        ? 'bg-purple-600 text-white'
+                                        : 'text-slate-400 hover:text-white'
+                                "
                             >
                                 {{ size }}
                             </button>
@@ -1241,18 +1495,26 @@ onBeforeUnmount(() => {
 
                     <!-- Font Family / Style (Cairo, Jakarta, System) -->
                     <div class="flex items-center justify-between">
-                        <span class="text-[11px] text-slate-400">{{ t('player.font_style') }}</span>
-                        <div class="flex items-center gap-1 bg-white/5 p-0.5 rounded-lg border border-white/10">
+                        <span class="text-[11px] text-slate-400">{{
+                            t('player.font_style')
+                        }}</span>
+                        <div
+                            class="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-0.5"
+                        >
                             <button
-                                v-for="font in ([
+                                v-for="font in [
                                     { id: 'cairo', label: 'Cairo' },
                                     { id: 'jakarta', label: 'Jakarta' },
                                     { id: 'system', label: 'System' },
-                                ] as const)"
+                                ] as const"
                                 :key="font.id"
                                 @click="setSubtitleFont(font.id)"
-                                class="px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer"
-                                :class="subtitleFont === font.id ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'"
+                                class="cursor-pointer rounded px-2 py-0.5 text-[10px] font-bold transition-all"
+                                :class="
+                                    subtitleFont === font.id
+                                        ? 'bg-purple-600 text-white'
+                                        : 'text-slate-400 hover:text-white'
+                                "
                             >
                                 {{ font.label }}
                             </button>
@@ -1261,19 +1523,27 @@ onBeforeUnmount(() => {
 
                     <!-- Subtitle Delay Sync -->
                     <div class="flex items-center justify-between">
-                        <span class="text-[11px] text-slate-400">{{ t('player.timing_sync') }}</span>
+                        <span class="text-[11px] text-slate-400">{{
+                            t('player.timing_sync')
+                        }}</span>
                         <div class="flex items-center gap-1.5 font-mono">
                             <button
                                 @click="adjustSubtitleDelay(-0.5)"
-                                class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold cursor-pointer"
+                                class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg bg-white/10 text-xs font-bold text-white hover:bg-white/20"
                                 title="-0.5s"
                             >
                                 -
                             </button>
-                            <span class="text-purple-400 font-bold px-1 text-xs">{{ subtitleDelay >= 0 ? `+${subtitleDelay}` : subtitleDelay }}s</span>
+                            <span class="px-1 text-xs font-bold text-purple-400"
+                                >{{
+                                    subtitleDelay >= 0
+                                        ? `+${subtitleDelay}`
+                                        : subtitleDelay
+                                }}s</span
+                            >
                             <button
                                 @click="adjustSubtitleDelay(0.5)"
-                                class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold cursor-pointer"
+                                class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg bg-white/10 text-xs font-bold text-white hover:bg-white/20"
                                 title="+0.5s"
                             >
                                 +
@@ -1281,7 +1551,7 @@ onBeforeUnmount(() => {
                             <button
                                 v-if="subtitleDelay !== 0"
                                 @click="adjustSubtitleDelay(-subtitleDelay)"
-                                class="text-[10px] text-slate-400 hover:text-white ml-1 cursor-pointer"
+                                class="ml-1 cursor-pointer text-[10px] text-slate-400 hover:text-white"
                             >
                                 {{ t('player.bandersnatch.reset') }}
                             </button>
@@ -1292,11 +1562,13 @@ onBeforeUnmount(() => {
         </transition>
 
         <!-- VIDEO CONTAINER -->
-        <div class="relative flex-1 w-full h-full flex items-center justify-center bg-black overflow-hidden">
+        <div
+            class="relative flex h-full w-full flex-1 items-center justify-center overflow-hidden bg-black"
+        >
             <video
                 ref="videoRef"
                 :src="streamUrl"
-                class="w-full h-full object-contain cursor-pointer"
+                class="h-full w-full cursor-pointer object-contain"
                 @timeupdate="onTimeUpdate"
                 @loadedmetadata="onLoadedMetadata"
                 @canplay="onCanPlay"
@@ -1314,17 +1586,23 @@ onBeforeUnmount(() => {
 
             <!-- SUBTITLE OVERLAY (Dynamic WebVTT with selected Font and Size) -->
             <div
-                v-if="showSubtitles && selectedSubtitleId !== 'off' && activeCueText"
-                class="absolute inset-x-0 flex items-center justify-center px-4 sm:px-8 pointer-events-none transition-all duration-150 ease-out subtitle-overlay-container"
+                v-if="
+                    showSubtitles &&
+                    selectedSubtitleId !== 'off' &&
+                    activeCueText
+                "
+                class="subtitle-overlay-container pointer-events-none absolute inset-x-0 flex items-center justify-center px-4 transition-all duration-150 ease-out sm:px-8"
                 :style="{
                     bottom: currentChoiceMoment
                         ? '10.5rem'
-                        : (showControls ? '7.5rem' : '3.5rem'),
-                    zIndex: 60
+                        : showControls
+                          ? '7.5rem'
+                          : '3.5rem',
+                    zIndex: 60,
                 }"
             >
                 <div
-                    class="subtitle-pill px-3.5 py-1 sm:px-5 sm:py-1.5 rounded-xl bg-black/45 text-white text-center font-bold tracking-normal shadow-lg transition-all duration-100 max-w-4xl pointer-events-none border border-white/10"
+                    class="subtitle-pill pointer-events-none max-w-4xl rounded-xl border border-white/10 bg-black/45 px-3.5 py-1 text-center font-bold tracking-normal text-white shadow-lg transition-all duration-100 sm:px-5 sm:py-1.5"
                     dir="auto"
                     :class="{
                         'text-sm sm:text-base': subtitleFontSize === 'sm',
@@ -1334,7 +1612,8 @@ onBeforeUnmount(() => {
                     }"
                     :style="{
                         fontFamily: subtitleFontFamily,
-                        textShadow: '0 2px 4px rgba(0,0,0,0.95), 0 0 3px #000, 1px 1px 2px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000',
+                        textShadow:
+                            '0 2px 4px rgba(0,0,0,0.95), 0 0 3px #000, 1px 1px 2px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000',
                         lineHeight: 1.5,
                     }"
                     v-html="activeCueText"
@@ -1346,12 +1625,16 @@ onBeforeUnmount(() => {
                 <div
                     v-if="!isPlaying && !isLoadingAssets && !videoError"
                     @click="togglePlay"
-                    class="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-xs cursor-pointer z-20"
+                    class="absolute inset-0 z-20 flex cursor-pointer flex-col items-center justify-center bg-black/40 backdrop-blur-xs"
                 >
-                    <div class="w-22 h-22 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-2xl shadow-red-600/50 hover:scale-110 active:scale-95 transition-all">
-                        <Play class="w-10 h-10 fill-current ml-1" />
+                    <div
+                        class="flex h-22 w-22 items-center justify-center rounded-full bg-red-600/90 text-white shadow-2xl shadow-red-600/50 transition-all hover:scale-110 active:scale-95"
+                    >
+                        <Play class="ml-1 h-10 w-10 fill-current" />
                     </div>
-                    <span class="mt-4 px-4 py-1.5 rounded-full bg-black/70 text-xs font-mono font-bold text-slate-200 border border-white/10">
+                    <span
+                        class="mt-4 rounded-full border border-white/10 bg-black/70 px-4 py-1.5 font-mono text-xs font-bold text-slate-200"
+                    >
                         {{ t('player.bandersnatch.click_to_play') }}
                     </span>
                 </div>
@@ -1360,76 +1643,110 @@ onBeforeUnmount(() => {
             <!-- INTERACTIVE CHOICE HUD OVERLAY -->
             <transition name="fade">
                 <div
-                    v-if="currentChoiceMoment && currentChoiceMoment.choices && currentChoiceMoment.choices.length > 0"
-                    class="absolute bottom-16 inset-x-0 z-30 flex flex-col items-center px-4 pointer-events-auto"
+                    v-if="
+                        currentChoiceMoment &&
+                        currentChoiceMoment.choices &&
+                        currentChoiceMoment.choices.length > 0
+                    "
+                    class="pointer-events-auto absolute inset-x-0 bottom-16 z-30 flex flex-col items-center px-4"
                 >
                     <!-- Choice Caption Question -->
                     <div v-if="choiceCaption" class="mb-4">
-                        <span class="px-5 py-2 rounded-full bg-black/90 border border-white/30 backdrop-blur-md text-xs sm:text-sm font-black uppercase tracking-widest text-slate-100 shadow-2xl">
+                        <span
+                            class="rounded-full border border-white/30 bg-black/90 px-5 py-2 text-xs font-black tracking-widest text-slate-100 uppercase shadow-2xl backdrop-blur-md sm:text-sm"
+                        >
                             {{ choiceCaption }}
                         </span>
                     </div>
 
                     <!-- STANDARD 2-CHOICE BRANCH -->
-                    <div v-if="!isPhoneScene" class="flex items-center justify-center gap-6 sm:gap-12 w-full max-w-2xl mb-4">
+                    <div
+                        v-if="!isPhoneScene"
+                        class="mb-4 flex w-full max-w-2xl items-center justify-center gap-6 sm:gap-12"
+                    >
                         <button
                             v-for="(c, idx) in currentChoiceMoment.choices"
                             :key="c.id || idx"
                             @click.stop="handleChoice(Number(idx))"
                             :disabled="isChoiceSelected"
-                            class="flex-1 py-3.5 sm:py-5 px-6 sm:px-8 rounded-2xl font-extrabold text-sm sm:text-lg tracking-wider uppercase transition-all duration-200 shadow-2xl backdrop-blur-md flex items-center justify-center text-center cursor-pointer active:scale-95"
+                            class="flex flex-1 cursor-pointer items-center justify-center rounded-2xl px-6 py-3.5 text-center text-sm font-extrabold tracking-wider uppercase shadow-2xl backdrop-blur-md transition-all duration-200 active:scale-95 sm:px-8 sm:py-5 sm:text-lg"
                             :class="[
                                 highlightedChoiceIndex === Number(idx)
-                                    ? 'ring-4 ring-red-500 bg-red-600 text-white border-2 border-white scale-105 shadow-red-600/60'
-                                    : (isChoiceSelected
-                                        ? 'bg-black/40 text-slate-500 border border-white/10 opacity-50 cursor-not-allowed'
-                                        : 'bg-black/80 hover:bg-red-600 text-white border-2 border-white/30 hover:border-red-500 hover:scale-105')
+                                    ? 'scale-105 border-2 border-white bg-red-600 text-white ring-4 shadow-red-600/60 ring-red-500'
+                                    : isChoiceSelected
+                                      ? 'cursor-not-allowed border border-white/10 bg-black/40 text-slate-500 opacity-50'
+                                      : 'border-2 border-white/30 bg-black/80 text-white hover:scale-105 hover:border-red-500 hover:bg-red-600',
                             ]"
                         >
                             <span class="flex items-center gap-2">
-                                <span v-if="highlightedChoiceIndex === Number(idx)" class="w-2.5 h-2.5 rounded-full bg-white animate-ping"></span>
+                                <span
+                                    v-if="
+                                        highlightedChoiceIndex === Number(idx)
+                                    "
+                                    class="h-2.5 w-2.5 animate-ping rounded-full bg-white"
+                                ></span>
                                 {{ c.text || c.id }}
                             </span>
                         </button>
                     </div>
 
                     <!-- PHONE SCENE 5-DIGIT KEYPAD -->
-                    <div v-else class="flex flex-col items-center bg-black/90 p-6 rounded-3xl border border-white/20 backdrop-blur-xl shadow-2xl mb-4 max-w-sm w-full">
-                        <div class="text-xs font-mono text-slate-300 mb-3 font-bold">
+                    <div
+                        v-else
+                        class="mb-4 flex w-full max-w-sm flex-col items-center rounded-3xl border border-white/20 bg-black/90 p-6 shadow-2xl backdrop-blur-xl"
+                    >
+                        <div
+                            class="mb-3 font-mono text-xs font-bold text-slate-300"
+                        >
                             {{ t('player.bandersnatch.enter_code') }}
                         </div>
-                        <div class="flex items-center gap-3 mb-4 font-mono text-2xl font-bold">
+                        <div
+                            class="mb-4 flex items-center gap-3 font-mono text-2xl font-bold"
+                        >
                             <span
                                 v-for="i in 5"
                                 :key="i"
-                                class="w-9 h-12 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center text-white"
+                                class="flex h-12 w-9 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-white"
                             >
                                 {{ selectedDigits[i - 1] || '-' }}
                             </span>
                         </div>
-                        <div class="grid grid-cols-5 gap-2 w-full">
+                        <div class="grid w-full grid-cols-5 gap-2">
                             <button
-                                v-for="d in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']"
+                                v-for="d in [
+                                    '1',
+                                    '2',
+                                    '3',
+                                    '4',
+                                    '5',
+                                    '6',
+                                    '7',
+                                    '8',
+                                    '9',
+                                    '0',
+                                ]"
                                 :key="d"
                                 @click.stop="selectDigit(d)"
                                 :disabled="isChoiceSelected"
-                                class="h-10 rounded-xl bg-white/10 hover:bg-red-600 border border-white/15 hover:border-red-500 font-bold font-mono text-base transition-all cursor-pointer flex items-center justify-center active:scale-90"
+                                class="flex h-10 cursor-pointer items-center justify-center rounded-xl border border-white/15 bg-white/10 font-mono text-base font-bold transition-all hover:border-red-500 hover:bg-red-600 active:scale-90"
                             >
                                 {{ d }}
                             </button>
                         </div>
                         <button
                             @click.stop="backspaceDigit"
-                            class="mt-3 text-[11px] text-slate-400 hover:text-white cursor-pointer"
+                            class="mt-3 cursor-pointer text-[11px] text-slate-400 hover:text-white"
                         >
                             {{ t('player.bandersnatch.backspace') }}
                         </button>
                     </div>
 
                     <!-- COUNTDOWN TIMER PROGRESS BAR (NETFLIX STYLE) -->
-                    <div class="w-full max-w-xl h-2 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
+                    <div
+                        class="h-2 w-full max-w-xl overflow-hidden rounded-full bg-white/20 backdrop-blur-sm"
+                    >
                         <div
-                            class="h-full bg-gradient-to-r from-red-600 via-rose-500 to-white transition-all duration-100 ease-linear rounded-full"
+                            class="h-full rounded-full bg-gradient-to-r from-red-600 via-rose-500 to-white transition-all duration-100 ease-linear"
                             :style="{ width: `${choiceProgress}%` }"
                         ></div>
                     </div>
@@ -1441,44 +1758,47 @@ onBeforeUnmount(() => {
         <transition name="fade">
             <div
                 v-if="showControls"
-                class="absolute bottom-0 inset-x-0 z-40 p-4 bg-gradient-to-t from-black/95 via-black/60 to-transparent flex items-center justify-between pointer-events-auto"
+                class="pointer-events-auto absolute inset-x-0 bottom-0 z-40 flex items-center justify-between bg-gradient-to-t from-black/95 via-black/60 to-transparent p-4"
             >
                 <div class="flex items-center gap-3">
                     <!-- Play / Pause -->
                     <button
                         @click="togglePlay"
-                        class="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                        class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl bg-white/10 text-white transition-all hover:bg-white/20 active:scale-90"
                     >
-                        <Pause v-if="isPlaying" class="w-5 h-5 fill-current" />
-                        <Play v-else class="w-5 h-5 fill-current ml-0.5" />
+                        <Pause v-if="isPlaying" class="h-5 w-5 fill-current" />
+                        <Play v-else class="ml-0.5 h-5 w-5 fill-current" />
                     </button>
 
                     <!-- Jump Back (Previous Scene) -->
                     <button
                         @click="jumpBack"
-                        class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all cursor-pointer active:scale-90"
+                        class="cursor-pointer rounded-xl bg-white/10 p-2.5 text-slate-300 transition-all hover:bg-white/20 hover:text-white active:scale-90"
                         :title="t('player.bandersnatch.prev_scene')"
                     >
-                        <SkipBack class="w-4 h-4" />
+                        <SkipBack class="h-4 w-4" />
                     </button>
 
                     <!-- Jump Forward (Next Scene) -->
                     <button
                         @click="jumpForward"
-                        class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all cursor-pointer active:scale-90"
+                        class="cursor-pointer rounded-xl bg-white/10 p-2.5 text-slate-300 transition-all hover:bg-white/20 hover:text-white active:scale-90"
                         :title="t('player.bandersnatch.next_scene')"
                     >
-                        <SkipForward class="w-4 h-4" />
+                        <SkipForward class="h-4 w-4" />
                     </button>
 
                     <!-- Volume Control -->
-                    <div class="flex items-center gap-2 ml-2">
+                    <div class="ml-2 flex items-center gap-2">
                         <button
                             @click="toggleMute"
-                            class="p-2 text-slate-300 hover:text-white cursor-pointer"
+                            class="cursor-pointer p-2 text-slate-300 hover:text-white"
                         >
-                            <VolumeX v-if="isMuted || volume === 0" class="w-5 h-5" />
-                            <Volume2 v-else class="w-5 h-5" />
+                            <VolumeX
+                                v-if="isMuted || volume === 0"
+                                class="h-5 w-5"
+                            />
+                            <Volume2 v-else class="h-5 w-5" />
                         </button>
                         <input
                             type="range"
@@ -1486,16 +1806,25 @@ onBeforeUnmount(() => {
                             max="1"
                             step="0.05"
                             :value="isMuted ? 0 : volume"
-                            @input="onVolumeChange(Number(($event.target as HTMLInputElement).value))"
-                            class="w-20 accent-red-500 cursor-pointer hidden sm:block"
+                            @input="
+                                onVolumeChange(
+                                    Number(
+                                        ($event.target as HTMLInputElement)
+                                            .value,
+                                    ),
+                                )
+                            "
+                            class="hidden w-20 cursor-pointer accent-red-500 sm:block"
                         />
                     </div>
 
                     <!-- Time Display -->
-                    <div class="font-mono text-xs text-slate-300 ml-2">
+                    <div class="ml-2 font-mono text-xs text-slate-300">
                         <span>{{ formatTime(currentMsDisplay) }}</span>
-                        <span class="text-slate-500 mx-1">/</span>
-                        <span class="text-slate-500">{{ formatTime(durationMsDisplay) }}</span>
+                        <span class="mx-1 text-slate-500">/</span>
+                        <span class="text-slate-500">{{
+                            formatTime(durationMsDisplay)
+                        }}</span>
                     </div>
                 </div>
 
@@ -1503,12 +1832,19 @@ onBeforeUnmount(() => {
                     <!-- Subtitles Menu Button (matching CinemaPlayer) -->
                     <div class="relative">
                         <button
-                            @click="showSubtitlesMenu = !showSubtitlesMenu; showSettings = false;"
-                            class="px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                            :class="selectedSubtitleId !== 'off' ? 'bg-purple-600/30 border-purple-500 text-purple-200 shadow-lg shadow-purple-600/20' : 'bg-white/10 border-white/15 text-slate-400 hover:text-white'"
+                            @click="
+                                showSubtitlesMenu = !showSubtitlesMenu;
+                                showSettings = false;
+                            "
+                            class="flex cursor-pointer items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all"
+                            :class="
+                                selectedSubtitleId !== 'off'
+                                    ? 'border-purple-500 bg-purple-600/30 text-purple-200 shadow-lg shadow-purple-600/20'
+                                    : 'border-white/15 bg-white/10 text-slate-400 hover:text-white'
+                            "
                             title="Subtitles & Audio (C)"
                         >
-                            <MessageSquare class="w-3.5 h-3.5" />
+                            <MessageSquare class="h-3.5 w-3.5" />
                             <span>CC</span>
                         </button>
                     </div>
@@ -1516,11 +1852,13 @@ onBeforeUnmount(() => {
                     <!-- Fullscreen -->
                     <button
                         @click="toggleFullscreen"
-                        class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white cursor-pointer active:scale-90"
-                        :title="isFullscreen ? 'Exit Fullscreen' : 'Fullscreen (F)'"
+                        class="cursor-pointer rounded-xl bg-white/10 p-2 text-slate-300 hover:bg-white/20 hover:text-white active:scale-90"
+                        :title="
+                            isFullscreen ? 'Exit Fullscreen' : 'Fullscreen (F)'
+                        "
                     >
-                        <Minimize2 v-if="isFullscreen" class="w-4 h-4" />
-                        <Maximize2 v-else class="w-4 h-4" />
+                        <Minimize2 v-if="isFullscreen" class="h-4 w-4" />
+                        <Maximize2 v-else class="h-4 w-4" />
                     </button>
                 </div>
             </div>

@@ -19,6 +19,7 @@ use App\Services\Organizer\SceneNameParserService;
 use App\Services\Subtitles\EmbeddedSubtitleDetectorService;
 use App\Services\Subtitles\SubtitleLanguageDetectorService;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class VirtualLibraryScannerService
@@ -401,15 +402,17 @@ class VirtualLibraryScannerService
                 $subExt = strtolower(pathinfo($subFilename, PATHINFO_EXTENSION));
                 $detection = $subDetector->detectLanguage($subFile, $subFilename);
                 $lang = $detection['language'] ?? 'und';
+                $languageName = $detection['name_en'] ?? null;
                 if ($lang === 'und') {
                     $lang = (bool) preg_match('/(\.ar|\.arabic)\b/i', $subFilename) ? 'ar' : 'en';
+                    $languageName = SubtitleLanguageDetectorService::$languageInfo[$lang]['name_en'] ?? 'Unknown';
                 }
                 $subs[] = [
                     'path' => $normSubPath,
                     'filename' => $subFilename,
                     'extension' => $subExt,
                     'language' => $lang,
-                    'language_name' => $detection['name_en'] ?? $subDetector->getLanguageName($lang),
+                    'language_name' => $languageName ?? (SubtitleLanguageDetectorService::$languageInfo[$lang]['name_en'] ?? 'Unknown'),
                     'format' => $subExt,
                 ];
             }
@@ -520,7 +523,7 @@ class VirtualLibraryScannerService
     protected function relocateSubtitlesForMovie(MediaItem $movie, string $newVideoPath): void
     {
         $newDir = dirname($newVideoPath);
-        $subs = Subtitle::where('media_item_id', $movie->id)->get();
+        $subs = $movie->subtitles()->get();
         foreach ($subs as $sub) {
             if (! file_exists($sub->file_path)) {
                 $base = pathinfo($sub->file_path, PATHINFO_BASENAME);

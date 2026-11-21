@@ -700,8 +700,9 @@ class SubtitleController extends Controller
 
     private function secondsToTime(float $seconds): string
     {
-        $h = floor($seconds / 3600);
-        $m = floor(($seconds % 3600) / 60);
+        $wholeSeconds = (int) floor($seconds);
+        $h = intdiv($wholeSeconds, 3600);
+        $m = intdiv($wholeSeconds % 3600, 60);
         $s = $seconds - ($h * 3600) - ($m * 60);
 
         return sprintf('%02d:%02d:%06.3f', $h, $m, $s);

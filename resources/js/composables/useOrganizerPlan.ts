@@ -1,4 +1,8 @@
-import { isActivityCenterOpen, openActivityCenter, closeActivityCenter } from './useActivityCenterState';
+import {
+    isActivityCenterOpen,
+    openActivityCenter,
+    closeActivityCenter,
+} from './useActivityCenterState';
 import { ref, computed } from 'vue';
 
 export interface PlanJobLog {
@@ -8,7 +12,13 @@ export interface PlanJobLog {
 }
 
 export interface PlanJobStatus {
-    status: 'idle' | 'scanning' | 'generating' | 'paused' | 'completed' | 'cancelled';
+    status:
+        | 'idle'
+        | 'scanning'
+        | 'generating'
+        | 'paused'
+        | 'completed'
+        | 'cancelled';
     progress_percent: number;
     total_files: number;
     processed_count: number;
@@ -39,9 +49,18 @@ const planJobStatus = ref<PlanJobStatus>({
 });
 
 export function useOrganizerPlan() {
-    const isAnalyzing = computed(() => planJobStatus.value.status === 'scanning' || planJobStatus.value.status === 'generating');
-    const isPaused = computed(() => planJobStatus.value.status === 'paused' || isExplicitlyPaused.value);
-    const isCompleted = computed(() => planJobStatus.value.status === 'completed');
+    const isAnalyzing = computed(
+        () =>
+            planJobStatus.value.status === 'scanning' ||
+            planJobStatus.value.status === 'generating',
+    );
+    const isPaused = computed(
+        () =>
+            planJobStatus.value.status === 'paused' || isExplicitlyPaused.value,
+    );
+    const isCompleted = computed(
+        () => planJobStatus.value.status === 'completed',
+    );
 
     const openPlanModal = () => {
         openActivityCenter('organizer');
@@ -51,7 +70,9 @@ export function useOrganizerPlan() {
         closeActivityCenter();
     };
 
-    const getCsrfToken = () => (document.querySelector('meta[name="csrf-token"]') as any)?.content || '';
+    const getCsrfToken = () =>
+        (document.querySelector('meta[name="csrf-token"]') as any)?.content ||
+        '';
 
     const fetchPlanStatus = async () => {
         try {
@@ -66,9 +87,15 @@ export function useOrganizerPlan() {
                         data.status = 'cancelled';
                     }
                     planJobStatus.value = data;
-                    if ((data.status === 'generating' || data.status === 'scanning') && !isWorkerRunning.value && !isExplicitlyPaused.value && !isExplicitlyCancelled.value) {
+                    if (
+                        (data.status === 'generating' ||
+                            data.status === 'scanning') &&
+                        !isWorkerRunning.value &&
+                        !isExplicitlyPaused.value &&
+                        !isExplicitlyCancelled.value
+                    ) {
                         isPlanModalOpen.value = true;
-                        runBackgroundWorker();
+                        void runBackgroundWorker();
                     }
                 }
             }
@@ -83,8 +110,16 @@ export function useOrganizerPlan() {
 
         let consecutiveErrors = 0;
 
-        while (!isExplicitlyCancelled.value && (planJobStatus.value.status === 'generating' || planJobStatus.value.status === 'paused' || isExplicitlyPaused.value)) {
-            if (isExplicitlyPaused.value || planJobStatus.value.status === 'paused') {
+        while (
+            !isExplicitlyCancelled.value &&
+            (planJobStatus.value.status === 'generating' ||
+                planJobStatus.value.status === 'paused' ||
+                isExplicitlyPaused.value)
+        ) {
+            if (
+                isExplicitlyPaused.value ||
+                planJobStatus.value.status === 'paused'
+            ) {
                 await new Promise((r) => setTimeout(r, 400));
                 continue;
             }
@@ -102,7 +137,7 @@ export function useOrganizerPlan() {
                 if (res.ok) {
                     consecutiveErrors = 0;
                     const data = await res.json();
-                    
+
                     if (isExplicitlyCancelled.value) {
                         planJobStatus.value.status = 'cancelled';
                         break;
@@ -115,7 +150,11 @@ export function useOrganizerPlan() {
                         planJobStatus.value = data.status;
                     }
 
-                    if (!data.has_more || planJobStatus.value.status === 'completed' || planJobStatus.value.status === 'cancelled') {
+                    if (
+                        !data.has_more ||
+                        planJobStatus.value.status === 'completed' ||
+                        planJobStatus.value.status === 'cancelled'
+                    ) {
                         break;
                     }
                 } else {
@@ -126,7 +165,7 @@ export function useOrganizerPlan() {
                     }
                     await new Promise((r) => setTimeout(r, 1000));
                 }
-            } catch (e) {
+            } catch {
                 consecutiveErrors++;
                 if (consecutiveErrors >= 5) {
                     await fetchPlanStatus();
@@ -155,11 +194,13 @@ export function useOrganizerPlan() {
         isExplicitlyPaused.value = false;
         openPlanModal();
         planJobStatus.value.status = 'scanning';
-        planJobStatus.value.logs = [{
-            time: new Date().toLocaleTimeString(),
-            level: 'info',
-            message: 'Initializing media discovery...',
-        }];
+        planJobStatus.value.logs = [
+            {
+                time: new Date().toLocaleTimeString(),
+                level: 'info',
+                message: 'Initializing media discovery...',
+            },
+        ];
 
         try {
             const res = await fetch('/api/organizer/plan/start', {
@@ -176,11 +217,14 @@ export function useOrganizerPlan() {
                 if (data.status && typeof data.status === 'object') {
                     planJobStatus.value = data.status;
                 }
-                runBackgroundWorker();
+                void runBackgroundWorker();
             } else {
                 const errData = await res.json().catch(() => ({}));
                 planJobStatus.value.status = 'idle';
-                alert(errData.message || 'No media files found in the specified source.');
+                alert(
+                    errData.message ||
+                        'No media files found in the specified source.',
+                );
                 closePlanModal();
             }
         } catch (e) {
@@ -227,7 +271,7 @@ export function useOrganizerPlan() {
             if (res.ok) {
                 const data = await res.json();
                 if (data.status) planJobStatus.value = data.status;
-                runBackgroundWorker();
+                void runBackgroundWorker();
             }
         } catch (e) {
             console.error('Resume plan job error:', e);

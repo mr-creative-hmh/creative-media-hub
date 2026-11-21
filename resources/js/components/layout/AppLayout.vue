@@ -66,21 +66,30 @@ onUnmounted(() => {
 
 <template>
     <div
-        class="min-h-screen bg-[#07090E] text-slate-100 flex flex-col font-sans relative transition-colors duration-300 selection:bg-cyan-500/30 selection:text-cyan-300"
+        class="relative flex min-h-screen flex-col bg-[#07090E] font-sans text-slate-100 transition-colors duration-300 selection:bg-cyan-500/30 selection:text-cyan-300"
         :dir="isRTL ? 'rtl' : 'ltr'"
     >
         <!-- Ambient Decorative Lighting Spheres -->
-        <div class="ambient-glow bg-cyan-500/20 w-96 h-96 top-0 left-1/4 pointer-events-none"></div>
-        <div class="ambient-glow bg-indigo-500/15 w-[30rem] h-[30rem] top-96 right-10 pointer-events-none"></div>
+        <div
+            class="ambient-glow pointer-events-none top-0 left-1/4 h-96 w-96 bg-cyan-500/20"
+        ></div>
+        <div
+            class="ambient-glow pointer-events-none top-96 right-10 h-[30rem] w-[30rem] bg-indigo-500/15"
+        ></div>
 
         <!-- Sticky Header Navbar -->
         <Navbar />
 
-                <!-- Main Body Wrapper -->
-        <div class="flex-1 flex w-full">
+        <!-- Main Body Wrapper -->
+        <div class="flex w-full flex-1">
             <Sidebar />
-            <main class="flex-1 p-4 lg:p-8 pb-24 lg:pb-8 max-w-7xl mx-auto w-full overflow-x-hidden relative z-10">
-                <slot :play="handlePlay" :play-bandersnatch="handlePlayBandersnatch" />
+            <main
+                class="relative z-10 mx-auto w-full max-w-7xl flex-1 overflow-x-hidden p-4 pb-24 lg:p-8 lg:pb-8"
+            >
+                <slot
+                    :play="handlePlay"
+                    :play-bandersnatch="handlePlayBandersnatch"
+                />
             </main>
         </div>
 
@@ -88,25 +97,43 @@ onUnmounted(() => {
         <MobileBottomNav />
 
         <!-- Global Premium App Footer -->
-        <footer class="border-t border-slate-800/80 bg-[#07090E]/90 backdrop-blur-md py-6 px-4 lg:px-8 mt-auto relative z-10">
-            <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+        <footer
+            class="relative z-10 mt-auto border-t border-slate-800/80 bg-[#07090E]/90 px-4 py-6 backdrop-blur-md lg:px-8"
+        >
+            <div
+                class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 text-xs text-slate-400 sm:flex-row"
+            >
                 <div class="flex items-center gap-3">
-                    <img src="/favicon.svg" alt="Creative Media Hub" class="w-6 h-6 shrink-0" />
-                    <span class="font-bold text-slate-200 tracking-wide">Creative Media Hub</span>
+                    <img
+                        src="/favicon.svg"
+                        alt="Creative Media Hub"
+                        class="h-6 w-6 shrink-0"
+                    />
+                    <span class="font-bold tracking-wide text-slate-200"
+                        >Creative Media Hub</span
+                    >
                 </div>
                 <div class="flex items-center gap-2 text-center sm:text-right">
-                    <span class="text-slate-400 font-medium">{{ t('created_by') }}</span>
-                    <span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
+                    <span class="font-medium text-slate-400">{{
+                        t('created_by')
+                    }}</span>
+                    <span
+                        class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-500"
+                    ></span>
                 </div>
             </div>
         </footer>
 
-                <!-- Global Cinema Video Player Modal -->
+        <!-- Global Cinema Video Player Modal -->
         <CinemaPlayer
             v-if="activePlayerItem"
             :item="activePlayerItem"
             :playlist="activePlayerItem.playlist || []"
-            :initial-progress="activePlayerItem.progress_seconds || activePlayerItem.initial_progress || 0"
+            :initial-progress="
+                activePlayerItem.progress_seconds ||
+                activePlayerItem.initial_progress ||
+                0
+            "
             @close="closePlayer"
         />
 

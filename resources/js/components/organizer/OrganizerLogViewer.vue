@@ -18,29 +18,37 @@ const { isRTL } = useI18n();
 const isExpanded = ref(true);
 const logContainerRef = ref<HTMLDivElement | null>(null);
 
-watch(() => props.logs.length, () => {
-    nextTick(() => {
-        if (logContainerRef.value) {
-            logContainerRef.value.scrollTop = logContainerRef.value.scrollHeight;
-        }
-    });
-});
+watch(
+    () => props.logs.length,
+    () => {
+        nextTick(() => {
+            if (logContainerRef.value) {
+                logContainerRef.value.scrollTop =
+                    logContainerRef.value.scrollHeight;
+            }
+        });
+    },
+);
 </script>
 
 <template>
-    <div class="rounded-3xl bg-slate-950/80 border border-white/10 overflow-hidden shadow-2xl backdrop-blur-xl">
+    <div
+        class="overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl backdrop-blur-xl"
+    >
         <!-- Terminal Header -->
         <div
             @click="isExpanded = !isExpanded"
-            class="px-5 py-3.5 bg-white/5 border-b border-white/10 flex items-center justify-between cursor-pointer select-none"
+            class="flex cursor-pointer items-center justify-between border-b border-white/10 bg-white/5 px-5 py-3.5 select-none"
         >
-            <div class="flex items-center gap-2.5 text-xs font-mono font-bold text-slate-300">
-                <Terminal class="w-4 h-4 text-cyan-400" />
+            <div
+                class="flex items-center gap-2.5 font-mono text-xs font-bold text-slate-300"
+            >
+                <Terminal class="h-4 w-4 text-cyan-400" />
                 <span>Execution Logs ({{ logs.length }})</span>
             </div>
-            <button class="text-slate-400 hover:text-white transition-colors">
-                <ChevronUp v-if="isExpanded" class="w-4 h-4" />
-                <ChevronDown v-else class="w-4 h-4" />
+            <button class="text-slate-400 transition-colors hover:text-white">
+                <ChevronUp v-if="isExpanded" class="h-4 w-4" />
+                <ChevronDown v-else class="h-4 w-4" />
             </button>
         </div>
 
@@ -48,9 +56,12 @@ watch(() => props.logs.length, () => {
         <div
             v-show="isExpanded"
             ref="logContainerRef"
-            class="p-4 max-h-64 overflow-y-auto font-mono text-[11px] space-y-1 select-text scrollbar-thin"
+            class="max-h-64 scrollbar-thin space-y-1 overflow-y-auto p-4 font-mono text-[11px] select-text"
         >
-            <div v-if="logs.length === 0" class="text-slate-500 py-4 text-center">
+            <div
+                v-if="logs.length === 0"
+                class="py-4 text-center text-slate-500"
+            >
                 Waiting for operation logs...
             </div>
             <div
@@ -58,12 +69,15 @@ watch(() => props.logs.length, () => {
                 :key="idx"
                 class="flex items-start gap-2 leading-relaxed"
             >
-                <span class="text-slate-500 shrink-0 font-mono">{{ log.time }}</span>
+                <span class="shrink-0 font-mono text-slate-500">{{
+                    log.time
+                }}</span>
                 <span
-                    class="font-bold shrink-0 uppercase text-[9px] px-1 rounded"
+                    class="shrink-0 rounded px-1 text-[9px] font-bold uppercase"
                     :class="{
                         'bg-cyan-500/20 text-cyan-300': log.level === 'info',
-                        'bg-emerald-500/20 text-emerald-300': log.level === 'success',
+                        'bg-emerald-500/20 text-emerald-300':
+                            log.level === 'success',
                         'bg-rose-500/20 text-rose-300': log.level === 'error',
                     }"
                 >
@@ -83,4 +97,3 @@ watch(() => props.logs.length, () => {
         </div>
     </div>
 </template>
-

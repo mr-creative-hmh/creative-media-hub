@@ -41,71 +41,102 @@ const formatDuration = (sec?: number) => {
 <template>
     <div
         v-if="isOpen"
-        class="absolute inset-0 bg-black/60 backdrop-blur-md z-40 flex justify-end animate-in fade-in duration-200"
+        class="animate-in fade-in absolute inset-0 z-40 flex justify-end bg-black/60 backdrop-blur-md duration-200"
         @click.self="emit('close')"
     >
-        <div class="w-full max-w-sm sm:max-w-md h-full bg-slate-900/95 border-l border-white/10 shadow-2xl p-6 flex flex-col space-y-4">
+        <div
+            class="flex h-full w-full max-w-sm flex-col space-y-4 border-l border-white/10 bg-slate-900/95 p-6 shadow-2xl sm:max-w-md"
+        >
             <!-- Header -->
-            <div class="flex items-center justify-between pb-3 border-b border-white/10">
+            <div
+                class="flex items-center justify-between border-b border-white/10 pb-3"
+            >
                 <div class="flex items-center gap-2">
-                    <Tv v-if="isEpisode" class="w-5 h-5 text-purple-400" />
-                    <Film v-else class="w-5 h-5 text-cyan-400" />
+                    <Tv v-if="isEpisode" class="h-5 w-5 text-purple-400" />
+                    <Film v-else class="h-5 w-5 text-cyan-400" />
                     <h3 class="text-base font-bold text-white">
-                        {{ isEpisode ? (t('player.episodes_list') || 'Episodes') : (t('player.collection_items') || 'Playlist') }}
+                        {{
+                            isEpisode
+                                ? t('player.episodes_list') || 'Episodes'
+                                : t('player.collection_items') || 'Playlist'
+                        }}
                     </h3>
                 </div>
                 <button
                     @click="emit('close')"
-                    class="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+                    class="rounded-xl p-2 text-slate-400 transition-all hover:bg-white/10 hover:text-white"
                 >
-                    <X class="w-5 h-5" />
+                    <X class="h-5 w-5" />
                 </button>
             </div>
 
             <!-- List -->
-            <div class="flex-1 overflow-y-auto space-y-2 pr-1">
+            <div class="flex-1 space-y-2 overflow-y-auto pr-1">
                 <button
                     v-for="item in playlist"
                     :key="item.id"
                     @click="emit('select', item)"
-                    class="w-full p-3 rounded-2xl border text-left transition-all flex items-center gap-3 group"
-                    :class="String(item.id) === String(currentItemId)
-                        ? 'bg-cyan-500/20 text-white border-cyan-500/40 shadow-md shadow-cyan-500/10'
-                        : 'bg-white/5 text-slate-300 border-white/5 hover:bg-white/10'"
+                    class="group flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition-all"
+                    :class="
+                        String(item.id) === String(currentItemId)
+                            ? 'border-cyan-500/40 bg-cyan-500/20 text-white shadow-md shadow-cyan-500/10'
+                            : 'border-white/5 bg-white/5 text-slate-300 hover:bg-white/10'
+                    "
                 >
                     <!-- Thumbnail or Placeholder -->
-                    <div class="w-16 h-10 rounded-lg overflow-hidden bg-slate-800 shrink-0 relative flex items-center justify-center border border-white/10">
+                    <div
+                        class="relative flex h-10 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-slate-800"
+                    >
                         <img
                             v-if="item.still_path || item.poster_path"
                             :src="item.still_path || item.poster_path"
                             :alt="item.title"
-                            class="w-full h-full object-cover"
+                            class="h-full w-full object-cover"
                             loading="lazy"
                         />
-                        <div v-else class="text-slate-500 text-[10px] font-bold">
-                            {{ item.episode_number ? `EP ${item.episode_number}` : 'MEDIA' }}
+                        <div
+                            v-else
+                            class="text-[10px] font-bold text-slate-500"
+                        >
+                            {{
+                                item.episode_number
+                                    ? `EP ${item.episode_number}`
+                                    : 'MEDIA'
+                            }}
                         </div>
 
                         <!-- Active playing overlay -->
                         <div
                             v-if="String(item.id) === String(currentItemId)"
-                            class="absolute inset-0 bg-cyan-500/40 backdrop-blur-[1px] flex items-center justify-center"
+                            class="absolute inset-0 flex items-center justify-center bg-cyan-500/40 backdrop-blur-[1px]"
                         >
-                            <Play class="w-4 h-4 text-white fill-current animate-pulse" />
+                            <Play
+                                class="h-4 w-4 animate-pulse fill-current text-white"
+                            />
                         </div>
                     </div>
 
                     <!-- Meta -->
-                    <div class="flex-1 min-w-0">
-                        <div class="text-xs font-bold text-white truncate group-hover:text-cyan-300 transition-colors">
+                    <div class="min-w-0 flex-1">
+                        <div
+                            class="truncate text-xs font-bold text-white transition-colors group-hover:text-cyan-300"
+                        >
                             {{ getTitle(item) }}
                         </div>
-                        <div class="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
-                            <span v-if="item.duration_seconds" class="flex items-center gap-1 font-mono">
-                                <Clock class="w-3 h-3 text-slate-500" />
+                        <div
+                            class="mt-0.5 flex items-center gap-2 text-[11px] text-slate-400"
+                        >
+                            <span
+                                v-if="item.duration_seconds"
+                                class="flex items-center gap-1 font-mono"
+                            >
+                                <Clock class="h-3 w-3 text-slate-500" />
                                 {{ formatDuration(item.duration_seconds) }}
                             </span>
-                            <span v-if="item.resolution" class="px-1.5 py-0.2 rounded text-[9px] bg-white/10 text-slate-300">
+                            <span
+                                v-if="item.resolution"
+                                class="py-0.2 rounded bg-white/10 px-1.5 text-[9px] text-slate-300"
+                            >
                                 {{ item.resolution }}
                             </span>
                         </div>
@@ -115,4 +146,3 @@ const formatDuration = (sec?: number) => {
         </div>
     </div>
 </template>
-

@@ -1,13 +1,40 @@
 import { computed } from 'vue';
-import { isActivityCenterOpen, activeActivityTab, openActivityCenter as rawOpen, closeActivityCenter as rawClose, type ActivityTab } from './useActivityCenterState';
+import {
+    isActivityCenterOpen,
+    activeActivityTab,
+    openActivityCenter as rawOpen,
+    closeActivityCenter as rawClose,
+    type ActivityTab,
+} from './useActivityCenterState';
 import { useScanner } from './useScanner';
 import { useOrganizerPlan } from './useOrganizerPlan';
 import { useSubtitleJob } from './useSubtitleJob';
 
 export function useActivityCenter() {
-    const { isScanning, isPaused: isScanPaused, scanStatus, pauseScan, resumeScan, cancelScan } = useScanner();
-    const { isAnalyzing, isPaused: isOrgPaused, planJobStatus, pausePlanJob, resumePlanJob, cancelPlanJob } = useOrganizerPlan();
-    const { isSubtitleRunning, isSubtitlePaused, subtitleStatus, pauseHealthJob, resumeHealthJob, cancelHealthJob } = useSubtitleJob();
+    const {
+        isScanning,
+        isPaused: isScanPaused,
+        scanStatus,
+        pauseScan,
+        resumeScan,
+        cancelScan,
+    } = useScanner();
+    const {
+        isAnalyzing,
+        isPaused: isOrgPaused,
+        planJobStatus,
+        pausePlanJob,
+        resumePlanJob,
+        cancelPlanJob,
+    } = useOrganizerPlan();
+    const {
+        isSubtitleRunning,
+        isSubtitlePaused,
+        subtitleStatus,
+        pauseHealthJob,
+        resumeHealthJob,
+        cancelHealthJob,
+    } = useSubtitleJob();
 
     const activeJobsCount = computed(() => {
         let count = 0;
@@ -17,8 +44,12 @@ export function useActivityCenter() {
         return count;
     });
 
-    const isAnyRunning = computed(() => isScanning.value || isAnalyzing.value || isSubtitleRunning.value);
-    const isAnyPaused = computed(() => isScanPaused.value || isOrgPaused.value || isSubtitlePaused.value);
+    const isAnyRunning = computed(
+        () => isScanning.value || isAnalyzing.value || isSubtitleRunning.value,
+    );
+    const isAnyPaused = computed(
+        () => isScanPaused.value || isOrgPaused.value || isSubtitlePaused.value,
+    );
     const isAnyActive = computed(() => activeJobsCount.value > 0);
 
     const openActivityCenter = (tab?: ActivityTab) => {
@@ -61,8 +92,10 @@ export function useActivityCenter() {
     const cancelAll = async () => {
         const promises: Promise<any>[] = [];
         if (isScanning.value || isScanPaused.value) promises.push(cancelScan());
-        if (isAnalyzing.value || isOrgPaused.value) promises.push(cancelPlanJob());
-        if (isSubtitleRunning.value || isSubtitlePaused.value) promises.push(cancelHealthJob());
+        if (isAnalyzing.value || isOrgPaused.value)
+            promises.push(cancelPlanJob());
+        if (isSubtitleRunning.value || isSubtitlePaused.value)
+            promises.push(cancelHealthJob());
         await Promise.allSettled(promises);
     };
 

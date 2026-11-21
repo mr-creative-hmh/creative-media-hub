@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
-import { Play, Clock, X, Tv, Film, Layers, Gamepad2, Subtitles } from 'lucide-vue-next';
+import {
+    Play,
+    Clock,
+    X,
+    Tv,
+    Film,
+    Layers,
+    Gamepad2,
+    Subtitles,
+} from 'lucide-vue-next';
 import { getCleanEpisodeTitle } from '@/lib/mediaTitle';
 
 export interface WatchHistoryItem {
@@ -50,19 +59,26 @@ const emit = defineEmits<{
 const { t, isRTL } = useI18n();
 
 const isEpisode = computed(() => {
-    return props.item.type === 'episode' ||
+    return (
+        props.item.type === 'episode' ||
         props.item.category === 'series' ||
-        props.item.watchable_type === 'episode';
+        props.item.watchable_type === 'episode'
+    );
 });
 
 const isCollection = computed(() => {
-    return props.item.category === 'collection' || Boolean(props.item.collection_name);
+    return (
+        props.item.category === 'collection' ||
+        Boolean(props.item.collection_name)
+    );
 });
 
 const isInteractive = computed(() => {
-    return props.item.id === 5764 ||
+    return (
+        props.item.id === 5764 ||
         props.item.watchable_id === 5764 ||
-        (props.item.title && /bandersnatch/i.test(props.item.title));
+        (props.item.title && /bandersnatch/i.test(props.item.title))
+    );
 });
 
 // Series title extracted cleanly
@@ -75,7 +91,10 @@ const seriesName = computed(() => {
         return props.item.series_title;
     }
     // Fallback: strip season/episode patterns from main title
-    const raw = (isRTL.value && props.item.title_ar) ? props.item.title_ar : props.item.title;
+    const raw =
+        isRTL.value && props.item.title_ar
+            ? props.item.title_ar
+            : props.item.title;
     const parts = (raw || '').split(/\s*-\s*(?:Season|الموسم|S\d+)/i);
     return parts[0]?.trim() || raw;
 });
@@ -103,7 +122,9 @@ const episodeTitle = computed(() => {
     }
     const clean = getCleanEpisodeTitle(props.item, isRTL.value);
     if (clean) return clean;
-    return isRTL.value ? `الحلقة ${episodeNum.value}` : `Episode ${episodeNum.value}`;
+    return isRTL.value
+        ? `الحلقة ${episodeNum.value}`
+        : `Episode ${episodeNum.value}`;
 });
 
 // Main title (Heading Line)
@@ -111,7 +132,9 @@ const mainTitle = computed(() => {
     if (isEpisode.value) {
         return seriesName.value || props.item.title;
     }
-    return (isRTL.value && props.item.title_ar) ? props.item.title_ar : props.item.title;
+    return isRTL.value && props.item.title_ar
+        ? props.item.title_ar
+        : props.item.title;
 });
 
 // Remaining time string
@@ -126,16 +149,23 @@ const remainingText = computed(() => {
             const mins = parseInt(parts[1], 10);
             return isRTL.value ? `${hrs} س ${mins} د` : `${hrs}h ${mins}m left`;
         }
-        return isRTL.value ? `${props.item.remaining_formatted} متبقي` : `${props.item.remaining_formatted} left`;
+        return isRTL.value
+            ? `${props.item.remaining_formatted} متبقي`
+            : `${props.item.remaining_formatted} left`;
     }
 
     if (props.item.duration_seconds && props.item.progress_seconds) {
-        const remainingSec = Math.max(0, props.item.duration_seconds - props.item.progress_seconds);
+        const remainingSec = Math.max(
+            0,
+            props.item.duration_seconds - props.item.progress_seconds,
+        );
         const mins = Math.round(remainingSec / 60);
         if (mins > 60) {
             const hrs = Math.floor(mins / 60);
             const rMins = mins % 60;
-            return isRTL.value ? `${hrs} س ${rMins} د` : `${hrs}h ${rMins}m left`;
+            return isRTL.value
+                ? `${hrs} س ${rMins} د`
+                : `${hrs}h ${rMins}m left`;
         }
         return isRTL.value ? `${mins} د متبقية` : `${mins}m left`;
     }
@@ -156,86 +186,111 @@ const progressGradient = computed(() => {
 
 // Subtitle count badge
 const subtitlesCount = computed(() => {
-    return Array.isArray(props.item.subtitles) ? props.item.subtitles.length : 0;
+    return Array.isArray(props.item.subtitles)
+        ? props.item.subtitles.length
+        : 0;
 });
 </script>
 
 <template>
     <div
         @click="emit('play', item, item.playlist)"
-        class="glass-panel group relative rounded-2xl overflow-hidden cursor-pointer border border-slate-200/80 dark:border-white/10 hover:border-cyan-500/40 hover:shadow-xl hover:shadow-cyan-500/10 transition-all duration-300 flex flex-col bg-white dark:bg-[#07090E]"
+        class="glass-panel group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white transition-all duration-300 hover:border-cyan-500/40 hover:shadow-xl hover:shadow-cyan-500/10 dark:border-white/10 dark:bg-[#07090E]"
     >
         <!-- Thumbnail Media Frame (16:9 Aspect Ratio) -->
         <div class="relative aspect-video w-full overflow-hidden bg-slate-950">
             <img
                 :src="item.backdrop_path || item.poster_path"
                 :alt="mainTitle"
-                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-85 group-hover:opacity-100"
+                class="h-full w-full object-cover opacity-85 transition-transform duration-500 group-hover:scale-105 group-hover:opacity-100"
                 loading="lazy"
             />
 
             <!-- Top Vignette Gradient -->
-            <div class="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/80 via-black/30 to-transparent pointer-events-none z-10"></div>
+            <div
+                class="pointer-events-none absolute inset-x-0 top-0 z-10 h-16 bg-gradient-to-b from-black/80 via-black/30 to-transparent"
+            ></div>
             <!-- Bottom Vignette Gradient -->
-            <div class="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/85 via-black/40 to-transparent pointer-events-none z-10"></div>
+            <div
+                class="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-16 bg-gradient-to-t from-black/85 via-black/40 to-transparent"
+            ></div>
 
             <!-- Center Hover Play Overlay (z-20) -->
-            <div v-if="isInteractive" class="absolute inset-0 z-20 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-xs">
+            <div
+                v-if="isInteractive"
+                class="absolute inset-0 z-20 flex items-center justify-center gap-2 bg-black/40 opacity-0 backdrop-blur-xs transition-opacity group-hover:opacity-100"
+            >
                 <button
                     @click.stop="emit('play', item, item.playlist)"
-                    class="w-10 h-10 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center shadow-xl shadow-cyan-500/50 hover:scale-110 active:scale-95 transition-transform cursor-pointer"
+                    class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-cyan-500 text-slate-950 shadow-xl shadow-cyan-500/50 transition-transform hover:scale-110 hover:bg-cyan-400 active:scale-95"
                     :title="isRTL ? 'مشاهدة عادية' : 'Normal Playback'"
                 >
-                    <Play class="w-4 h-4 fill-current ml-0.5" />
+                    <Play class="ml-0.5 h-4 w-4 fill-current" />
                 </button>
                 <button
                     @click.stop="(e) => emit('play-interactive', item, e)"
-                    class="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400 text-white flex items-center gap-1.5 shadow-xl shadow-rose-600/50 hover:scale-105 active:scale-95 transition-transform text-xs font-bold cursor-pointer"
-                    :title="isRTL ? 'بدء التجربة التفاعلية' : 'Launch Interactive Experience'"
+                    class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-500 px-2.5 py-1.5 text-xs font-bold text-white shadow-xl shadow-rose-600/50 transition-transform hover:scale-105 hover:from-rose-500 hover:to-red-400 active:scale-95"
+                    :title="
+                        isRTL
+                            ? 'بدء التجربة التفاعلية'
+                            : 'Launch Interactive Experience'
+                    "
                 >
-                    <Gamepad2 class="w-3.5 h-3.5" />
+                    <Gamepad2 class="h-3.5 w-3.5" />
                     <span>{{ isRTL ? 'تفاعلي' : 'Interactive' }}</span>
                 </button>
             </div>
-            <div v-else class="absolute inset-0 z-20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-xs pointer-events-none">
-                <div class="w-11 h-11 rounded-full bg-cyan-500 text-slate-950 flex items-center justify-center shadow-xl shadow-cyan-500/50 group-hover:scale-110 active:scale-95 transition-transform pointer-events-auto">
-                    <Play class="w-4.5 h-4.5 fill-current ml-0.5" />
+            <div
+                v-else
+                class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/40 opacity-0 backdrop-blur-xs transition-opacity group-hover:opacity-100"
+            >
+                <div
+                    class="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-cyan-500 text-slate-950 shadow-xl shadow-cyan-500/50 transition-transform group-hover:scale-110 active:scale-95"
+                >
+                    <Play class="ml-0.5 h-4.5 w-4.5 fill-current" />
                 </div>
             </div>
 
             <!-- Top Badges & Action Row (z-30, strictly above blur overlay) -->
-            <div class="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-30 pointer-events-none">
+            <div
+                class="pointer-events-none absolute inset-x-2.5 top-2.5 z-30 flex items-center justify-between"
+            >
                 <!-- Left: Media Type / Episode / Collection Pill -->
-                <div class="flex items-center gap-1.5 flex-wrap pointer-events-auto">
+                <div
+                    class="pointer-events-auto flex flex-wrap items-center gap-1.5"
+                >
                     <span
                         v-if="isInteractive"
-                        class="px-2 py-0.5 rounded-md bg-gradient-to-r from-red-600 to-rose-500 backdrop-blur-md text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-lg shadow-rose-600/30 animate-pulse pointer-events-auto"
+                        class="pointer-events-auto flex animate-pulse items-center gap-1 rounded-md bg-gradient-to-r from-red-600 to-rose-500 px-2 py-0.5 text-[10px] font-black tracking-wider text-white uppercase shadow-lg shadow-rose-600/30 backdrop-blur-md"
                     >
-                        <Gamepad2 class="w-3 h-3" />
+                        <Gamepad2 class="h-3 w-3" />
                         <span>{{ isRTL ? 'تفاعلي' : 'Interactive' }}</span>
                     </span>
 
                     <span
                         v-else-if="isEpisode"
-                        class="px-2 py-0.5 rounded-md bg-indigo-600/90 backdrop-blur-md text-white text-[10px] font-mono font-black tracking-wider flex items-center gap-1 shadow-md border border-indigo-400/30 pointer-events-auto"
+                        class="pointer-events-auto flex items-center gap-1 rounded-md border border-indigo-400/30 bg-indigo-600/90 px-2 py-0.5 font-mono text-[10px] font-black tracking-wider text-white shadow-md backdrop-blur-md"
                     >
-                        <Tv class="w-3 h-3" />
+                        <Tv class="h-3 w-3" />
                         <span>{{ episodeCode }}</span>
                     </span>
 
                     <span
                         v-else-if="isCollection"
-                        class="px-2 py-0.5 rounded-md bg-amber-500/90 backdrop-blur-md text-slate-950 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-md pointer-events-auto"
+                        class="pointer-events-auto flex items-center gap-1 rounded-md bg-amber-500/90 px-2 py-0.5 text-[10px] font-black tracking-wider text-slate-950 uppercase shadow-md backdrop-blur-md"
                     >
-                        <Layers class="w-3 h-3" />
-                        <span class="max-w-[120px] truncate">{{ item.collection_name || t('watch_history.collections') }}</span>
+                        <Layers class="h-3 w-3" />
+                        <span class="max-w-[120px] truncate">{{
+                            item.collection_name ||
+                            t('watch_history.collections')
+                        }}</span>
                     </span>
 
                     <span
                         v-else
-                        class="px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-cyan-300 text-[10px] font-bold tracking-wider flex items-center gap-1 border border-cyan-500/30 pointer-events-auto"
+                        class="pointer-events-auto flex items-center gap-1 rounded-md border border-cyan-500/30 bg-black/60 px-2 py-0.5 text-[10px] font-bold tracking-wider text-cyan-300 backdrop-blur-md"
                     >
-                        <Film class="w-3 h-3" />
+                        <Film class="h-3 w-3" />
                         <span>{{ isRTL ? 'فيلم' : 'Movie' }}</span>
                     </span>
                 </div>
@@ -245,27 +300,31 @@ const subtitlesCount = computed(() => {
                     @click.stop="(e) => emit('remove', item, e)"
                     :title="t('watch_history.remove_tooltip')"
                     aria-label="Remove from history"
-                    class="w-7 h-7 rounded-full bg-black/80 hover:bg-rose-600 text-slate-200 hover:text-white flex items-center justify-center transition-all opacity-80 sm:opacity-0 group-hover:opacity-100 backdrop-blur-md border border-white/20 hover:border-rose-500 cursor-pointer shadow-xl active:scale-90 pointer-events-auto shrink-0 z-40"
+                    class="pointer-events-auto z-40 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-black/80 text-slate-200 opacity-80 shadow-xl backdrop-blur-md transition-all group-hover:opacity-100 hover:border-rose-500 hover:bg-rose-600 hover:text-white active:scale-90 sm:opacity-0"
                 >
-                    <X class="w-3.5 h-3.5" />
+                    <X class="h-3.5 w-3.5" />
                 </button>
             </div>
 
             <!-- Floating Remaining Time Badge (Bottom-End of Thumbnail, z-30) -->
             <div
                 v-if="remainingText"
-                class="absolute bottom-2.5 end-2.5 z-30 pointer-events-none"
+                class="pointer-events-none absolute end-2.5 bottom-2.5 z-30"
             >
-                <span class="px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md text-[10px] font-mono font-bold text-slate-200 border border-white/10 shadow-sm flex items-center gap-1">
-                    <Clock class="w-2.5 h-2.5 text-cyan-400" />
+                <span
+                    class="flex items-center gap-1 rounded-md border border-white/10 bg-black/80 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-200 shadow-sm backdrop-blur-md"
+                >
+                    <Clock class="h-2.5 w-2.5 text-cyan-400" />
                     <span>{{ remainingText }}</span>
                 </span>
             </div>
 
             <!-- Progress Bar at Base of Thumbnail (z-30) -->
-            <div class="absolute bottom-0 inset-x-0 h-1.5 bg-black/70 z-30 pointer-events-none">
+            <div
+                class="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-1.5 bg-black/70"
+            >
                 <div
-                    class="h-full bg-gradient-to-r rounded-r-full shadow-sm transition-all duration-300"
+                    class="h-full rounded-r-full bg-gradient-to-r shadow-sm transition-all duration-300"
                     :class="progressGradient"
                     :style="{ width: `${item.percent}%` }"
                 ></div>
@@ -273,27 +332,31 @@ const subtitlesCount = computed(() => {
         </div>
 
         <!-- Structured Info Body -->
-        <div class="p-3.5 flex flex-col justify-between flex-1 gap-1.5">
+        <div class="flex flex-1 flex-col justify-between gap-1.5 p-3.5">
             <!-- Line 1: Main Title (Series Name or Movie Name) -->
-            <div class="flex items-center justify-between gap-2 min-w-0">
+            <div class="flex min-w-0 items-center justify-between gap-2">
                 <h4
-                    class="font-black text-sm text-slate-900 dark:text-white truncate group-hover:text-cyan-400 transition-colors tracking-tight flex-1"
+                    class="flex-1 truncate text-sm font-black tracking-tight text-slate-900 transition-colors group-hover:text-cyan-400 dark:text-white"
                     :title="mainTitle"
                 >
                     {{ mainTitle }}
                 </h4>
-                <div class="flex items-center gap-1 shrink-0">
+                <div class="flex shrink-0 items-center gap-1">
                     <span
                         v-if="subtitlesCount > 0"
-                        class="px-1.5 py-0.5 rounded bg-emerald-500/10 text-[9px] font-mono font-bold text-emerald-400 border border-emerald-500/30 flex items-center gap-1"
-                        :title="isRTL ? `يتوفر ${subtitlesCount} ملفات ترجمة` : `${subtitlesCount} subtitle tracks available`"
+                        class="flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[9px] font-bold text-emerald-400"
+                        :title="
+                            isRTL
+                                ? `يتوفر ${subtitlesCount} ملفات ترجمة`
+                                : `${subtitlesCount} subtitle tracks available`
+                        "
                     >
-                        <Subtitles class="w-2.5 h-2.5" />
+                        <Subtitles class="h-2.5 w-2.5" />
                         <span>{{ subtitlesCount }} CC</span>
                     </span>
                     <span
                         v-if="item.resolution"
-                        class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/5 text-[9px] font-mono text-cyan-600 dark:text-cyan-300 border border-slate-200 dark:border-white/10 shrink-0"
+                        class="shrink-0 rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[9px] text-cyan-600 dark:border-white/10 dark:bg-white/5 dark:text-cyan-300"
                     >
                         {{ item.resolution }}
                     </span>
@@ -302,12 +365,17 @@ const subtitlesCount = computed(() => {
 
             <!-- Line 2: Dedicated Subtitle (Episode info or Collection info) -->
             <!-- Case A: Episode with separate badge and episode name -->
-            <div v-if="isEpisode" class="flex items-center gap-1.5 min-w-0 text-xs">
-                <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/25 font-mono text-[10px] font-bold shrink-0">
+            <div
+                v-if="isEpisode"
+                class="flex min-w-0 items-center gap-1.5 text-xs"
+            >
+                <span
+                    class="inline-flex shrink-0 items-center rounded border border-indigo-500/25 bg-indigo-500/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400"
+                >
                     {{ episodeCode }}
                 </span>
                 <span
-                    class="truncate font-medium text-slate-600 dark:text-slate-300 text-xs flex-1"
+                    class="flex-1 truncate text-xs font-medium text-slate-600 dark:text-slate-300"
                     :title="episodeTitle"
                 >
                     {{ episodeTitle }}
@@ -315,34 +383,54 @@ const subtitlesCount = computed(() => {
             </div>
 
             <!-- Case B: Movie in Collection -->
-            <div v-else-if="isCollection" class="flex items-center gap-1.5 min-w-0 text-xs text-amber-500 dark:text-amber-400 font-medium">
-                <Layers class="w-3.5 h-3.5 shrink-0" />
+            <div
+                v-else-if="isCollection"
+                class="flex min-w-0 items-center gap-1.5 text-xs font-medium text-amber-500 dark:text-amber-400"
+            >
+                <Layers class="h-3.5 w-3.5 shrink-0" />
                 <span class="truncate" :title="item.collection_name">
                     {{ item.collection_name }}
                 </span>
             </div>
 
             <!-- Case C: Standalone Movie -->
-            <div v-else class="flex items-center gap-2 min-w-0 text-xs text-slate-500 dark:text-slate-400">
+            <div
+                v-else
+                class="flex min-w-0 items-center gap-2 text-xs text-slate-500 dark:text-slate-400"
+            >
                 <span class="flex items-center gap-1">
-                    <Film class="w-3 h-3 text-cyan-500" />
+                    <Film class="h-3 w-3 text-cyan-500" />
                     <span>{{ isRTL ? 'فيلم سينمائي' : 'Feature Film' }}</span>
                 </span>
-                <span v-if="item.release_year" class="text-slate-400 dark:text-slate-500">
+                <span
+                    v-if="item.release_year"
+                    class="text-slate-400 dark:text-slate-500"
+                >
                     • {{ item.release_year }}
                 </span>
             </div>
 
             <!-- Line 3: Structured Footer with Timestamp & Percentage -->
-            <div class="flex items-center justify-between mt-1.5 pt-2 border-t border-slate-100 dark:border-white/5 text-[11px]">
-                <div class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
-                    <span class="text-cyan-600 dark:text-cyan-400 font-semibold">{{ item.current_time_formatted }}</span>
+            <div
+                class="mt-1.5 flex items-center justify-between border-t border-slate-100 pt-2 text-[11px] dark:border-white/5"
+            >
+                <div
+                    class="flex items-center gap-1.5 font-mono text-[11px] text-slate-500 dark:text-slate-400"
+                >
+                    <span
+                        class="font-semibold text-cyan-600 dark:text-cyan-400"
+                        >{{ item.current_time_formatted }}</span
+                    >
                     <span class="text-slate-400 dark:text-slate-600">/</span>
-                    <span class="text-slate-500 dark:text-slate-400">{{ item.duration_formatted }}</span>
+                    <span class="text-slate-500 dark:text-slate-400">{{
+                        item.duration_formatted
+                    }}</span>
                 </div>
 
                 <div class="flex items-center gap-1.5">
-                    <span class="font-bold font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/5">
+                    <span
+                        class="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700 dark:border-white/5 dark:bg-white/5 dark:text-slate-300"
+                    >
                         {{ item.percent }}%
                     </span>
                 </div>

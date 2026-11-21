@@ -18,7 +18,6 @@ use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\StreamController;
 use App\Http\Controllers\SubtitleController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
 // Global Instant Live Search (YTS Style)
 Route::get('/api/search/instant', [SearchController::class, 'instantSearch'])->name('api.search.instant');
@@ -193,9 +192,7 @@ Route::post('/api/downloads/{id}/organize', [DownloadManagerController::class, '
 Route::delete('/api/downloads/{id}', [DownloadManagerController::class, 'destroy'])->name('api.downloads.destroy');
 
 // Documentation Hub
-Route::get('/docs', function () {
-    return Inertia::render('Docs/Index');
-})->name('docs.index');
+Route::inertia('/docs', 'Docs/Index')->name('docs.index');
 
 // System Settings & API Providers
 Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');

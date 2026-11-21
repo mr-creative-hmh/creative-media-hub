@@ -11,55 +11,110 @@ withDefaults(
         size: 'md',
         showText: true,
         animated: true,
-    }
+    },
 );
 
 const { t, isRTL } = useI18n();
 </script>
 
 <template>
-    <div class="inline-flex items-center gap-3 group select-none cursor-pointer">
+    <div
+        class="group inline-flex cursor-pointer items-center gap-3 select-none"
+    >
         <!-- CMH Cinema Marquee Vector Mark (Creative Media Hub) -->
         <div
-            class="relative shrink-0 flex items-center justify-center transition-all duration-300"
+            class="relative flex shrink-0 items-center justify-center transition-all duration-300"
             :class="[
                 size === 'sm'
-                    ? 'w-8 h-8'
+                    ? 'h-8 w-8'
                     : size === 'lg'
-                      ? 'w-12 h-12'
+                      ? 'h-12 w-12'
                       : size === 'xl'
-                        ? 'w-16 h-16'
-                        : 'w-10 h-10',
-                animated ? 'group-hover:scale-105 group-hover:drop-shadow-[0_0_18px_var(--accent-glow)]' : '',
+                        ? 'h-16 w-16'
+                        : 'h-10 w-10',
+                animated
+                    ? 'group-hover:scale-105 group-hover:drop-shadow-[0_0_18px_var(--accent-glow)]'
+                    : '',
             ]"
         >
             <svg
                 viewBox="0 0 100 100"
-                class="w-full h-full"
+                class="h-full w-full"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
             >
                 <defs>
                     <!-- Dynamic Accent Gradients -->
-                    <linearGradient id="cmh-border-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stop-color="var(--accent-primary, #06B6D4)" stop-opacity="0.9" />
-                        <stop offset="50%" stop-color="rgba(255, 255, 255, 0.25)" />
-                        <stop offset="100%" stop-color="var(--accent-secondary, #3B82F6)" stop-opacity="0.7" />
+                    <linearGradient
+                        id="cmh-border-grad"
+                        x1="0%"
+                        y1="0%"
+                        x2="100%"
+                        y2="100%"
+                    >
+                        <stop
+                            offset="0%"
+                            stop-color="var(--accent-primary, #06B6D4)"
+                            stop-opacity="0.9"
+                        />
+                        <stop
+                            offset="50%"
+                            stop-color="rgba(255, 255, 255, 0.25)"
+                        />
+                        <stop
+                            offset="100%"
+                            stop-color="var(--accent-secondary, #3B82F6)"
+                            stop-opacity="0.7"
+                        />
                     </linearGradient>
 
-                    <linearGradient id="cmh-timeline-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stop-color="var(--accent-primary, #06B6D4)" />
-                        <stop offset="100%" stop-color="var(--accent-secondary, #3B82F6)" />
+                    <linearGradient
+                        id="cmh-timeline-grad"
+                        x1="0%"
+                        y1="0%"
+                        x2="100%"
+                        y2="100%"
+                    >
+                        <stop
+                            offset="0%"
+                            stop-color="var(--accent-primary, #06B6D4)"
+                        />
+                        <stop
+                            offset="100%"
+                            stop-color="var(--accent-secondary, #3B82F6)"
+                        />
                     </linearGradient>
 
-                    <linearGradient id="cmh-play-core-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <linearGradient
+                        id="cmh-play-core-grad"
+                        x1="0%"
+                        y1="0%"
+                        x2="100%"
+                        y2="100%"
+                    >
                         <stop offset="0%" stop-color="#FFFFFF" />
-                        <stop offset="100%" stop-color="var(--accent-primary, #06B6D4)" />
+                        <stop
+                            offset="100%"
+                            stop-color="var(--accent-primary, #06B6D4)"
+                        />
                     </linearGradient>
 
-                    <radialGradient id="cmh-ambient-glow" cx="50%" cy="50%" r="50%">
-                        <stop offset="0%" stop-color="var(--accent-primary, #06B6D4)" stop-opacity="0.45" />
-                        <stop offset="100%" stop-color="transparent" stop-opacity="0" />
+                    <radialGradient
+                        id="cmh-ambient-glow"
+                        cx="50%"
+                        cy="50%"
+                        r="50%"
+                    >
+                        <stop
+                            offset="0%"
+                            stop-color="var(--accent-primary, #06B6D4)"
+                            stop-opacity="0.45"
+                        />
+                        <stop
+                            offset="100%"
+                            stop-color="transparent"
+                            stop-opacity="0"
+                        />
                     </radialGradient>
                 </defs>
 
@@ -86,11 +141,54 @@ const { t, isRTL } = useI18n();
                 />
 
                 <!-- 3. Top Cinema Film Strip / Clapper Perforations -->
-                <rect x="14" y="12" width="72" height="8" rx="2" fill="rgba(255, 255, 255, 0.06)" />
-                <rect x="18" y="13.5" width="6" height="5" rx="1" fill="#080C16" stroke="var(--accent-primary, #06B6D4)" stroke-width="0.75" />
-                <rect x="37" y="13.5" width="6" height="5" rx="1" fill="#080C16" stroke="var(--accent-primary, #06B6D4)" stroke-width="0.75" />
-                <rect x="57" y="13.5" width="6" height="5" rx="1" fill="#080C16" stroke="var(--accent-primary, #06B6D4)" stroke-width="0.75" />
-                <rect x="76" y="13.5" width="6" height="5" rx="1" fill="#080C16" stroke="var(--accent-primary, #06B6D4)" stroke-width="0.75" />
+                <rect
+                    x="14"
+                    y="12"
+                    width="72"
+                    height="8"
+                    rx="2"
+                    fill="rgba(255, 255, 255, 0.06)"
+                />
+                <rect
+                    x="18"
+                    y="13.5"
+                    width="6"
+                    height="5"
+                    rx="1"
+                    fill="#080C16"
+                    stroke="var(--accent-primary, #06B6D4)"
+                    stroke-width="0.75"
+                />
+                <rect
+                    x="37"
+                    y="13.5"
+                    width="6"
+                    height="5"
+                    rx="1"
+                    fill="#080C16"
+                    stroke="var(--accent-primary, #06B6D4)"
+                    stroke-width="0.75"
+                />
+                <rect
+                    x="57"
+                    y="13.5"
+                    width="6"
+                    height="5"
+                    rx="1"
+                    fill="#080C16"
+                    stroke="var(--accent-primary, #06B6D4)"
+                    stroke-width="0.75"
+                />
+                <rect
+                    x="76"
+                    y="13.5"
+                    width="6"
+                    height="5"
+                    rx="1"
+                    fill="#080C16"
+                    stroke="var(--accent-primary, #06B6D4)"
+                    stroke-width="0.75"
+                />
 
                 <!-- 4. Bold Letter C (Creative) - Cinema Curve in Brilliant White -->
                 <path
@@ -101,7 +199,10 @@ const { t, isRTL } = useI18n();
                 <!-- 5. Bold Letter M (Media) - Cinema Play Core -->
                 <path d="M 37 26 L 44 26 L 44 74 L 37 74 Z" fill="#FFFFFF" />
                 <path d="M 56 26 L 63 26 L 63 74 L 56 74 Z" fill="#FFFFFF" />
-                <path d="M 44 26 L 50 38 L 56 26 L 56 34 L 50 45 L 44 34 Z" fill="#FFFFFF" />
+                <path
+                    d="M 44 26 L 50 38 L 56 26 L 56 34 L 50 45 L 44 34 Z"
+                    fill="#FFFFFF"
+                />
                 <!-- Embedded Cinema Play Arrow (▶) in Media Core -->
                 <path
                     d="M 46 47 C 46 45.8 47.4 45.1 48.4 45.8 L 56.5 52.8 C 57.5 53.6 57.5 55.2 56.5 56.0 L 48.4 63.0 C 47.4 63.7 46 63.0 46 61.8 Z"
@@ -124,10 +225,22 @@ const { t, isRTL } = useI18n();
                     stroke-width="1.8"
                     :class="animated ? 'cmh-hub-ring' : ''"
                 />
-                <circle cx="77" cy="50" r="2.2" fill="var(--accent-primary, #06B6D4)" />
+                <circle
+                    cx="77"
+                    cy="50"
+                    r="2.2"
+                    fill="var(--accent-primary, #06B6D4)"
+                />
 
                 <!-- 7. Bottom Cinema Streaming Timeline -->
-                <rect x="14" y="81" width="72" height="3" rx="1.5" fill="rgba(255, 255, 255, 0.12)" />
+                <rect
+                    x="14"
+                    y="81"
+                    width="72"
+                    height="3"
+                    rx="1.5"
+                    fill="rgba(255, 255, 255, 0.12)"
+                />
                 <rect
                     x="14"
                     y="81"
@@ -148,10 +261,13 @@ const { t, isRTL } = useI18n();
         </div>
 
         <!-- Typography Branding using centralized translations -->
-        <div v-if="showText" class="flex flex-col select-none leading-none items-start">
+        <div
+            v-if="showText"
+            class="flex flex-col items-start leading-none select-none"
+        >
             <span
                 dir="ltr"
-                class="font-black tracking-tight text-white whitespace-nowrap inline-flex items-center gap-1.5"
+                class="inline-flex items-center gap-1.5 font-black tracking-tight whitespace-nowrap text-white"
                 :class="[
                     size === 'sm'
                         ? 'text-sm'
@@ -165,13 +281,17 @@ const { t, isRTL } = useI18n();
                 <span>{{ t('app_name_first') }}</span>
                 <span
                     class="font-black"
-                    :class="animated ? 'cmh-brand-gradient' : 'text-transparent bg-clip-text bg-gradient-to-r from-accent-400 via-accent-300 to-accent-500'"
+                    :class="
+                        animated
+                            ? 'cmh-brand-gradient'
+                            : 'from-accent-400 via-accent-300 to-accent-500 bg-gradient-to-r bg-clip-text text-transparent'
+                    "
                 >
                     {{ t('app_name_second') }}
                 </span>
             </span>
             <span
-                class="text-zinc-400 font-semibold tracking-wider uppercase mt-1 leading-none truncate max-w-[280px]"
+                class="mt-1 max-w-[280px] truncate leading-none font-semibold tracking-wider text-zinc-400 uppercase"
                 :class="size === 'sm' ? 'text-[9px]' : 'text-[10px]'"
             >
                 {{ t('app_tagline') }}
@@ -182,7 +302,8 @@ const { t, isRTL } = useI18n();
 
 <style scoped>
 @keyframes cmh-breathe {
-    0%, 100% {
+    0%,
+    100% {
         opacity: 0.35;
         transform: scale(0.96);
     }
@@ -193,18 +314,20 @@ const { t, isRTL } = useI18n();
 }
 
 @keyframes cmh-play-pulse {
-    0%, 100% {
-        filter: drop-shadow(0 0 2px var(--accent-primary, #06B6D4));
+    0%,
+    100% {
+        filter: drop-shadow(0 0 2px var(--accent-primary, #06b6d4));
         transform: scale(1);
     }
     50% {
-        filter: drop-shadow(0 0 7px var(--accent-primary, #06B6D4));
+        filter: drop-shadow(0 0 7px var(--accent-primary, #06b6d4));
         transform: scale(1.06);
     }
 }
 
 @keyframes cmh-hub-beacon {
-    0%, 100% {
+    0%,
+    100% {
         r: 4.8px;
         opacity: 0.45;
     }
@@ -215,7 +338,8 @@ const { t, isRTL } = useI18n();
 }
 
 @keyframes cmh-timeline-stream {
-    0%, 100% {
+    0%,
+    100% {
         width: 48px;
     }
     50% {
@@ -224,7 +348,8 @@ const { t, isRTL } = useI18n();
 }
 
 @keyframes cmh-playhead-glide {
-    0%, 100% {
+    0%,
+    100% {
         transform: translateX(0px);
     }
     50% {
@@ -256,7 +381,7 @@ const { t, isRTL } = useI18n();
 
 .group:hover .cmh-play-core {
     transform: scale(1.12);
-    filter: drop-shadow(0 0 10px var(--accent-primary, #06B6D4));
+    filter: drop-shadow(0 0 10px var(--accent-primary, #06b6d4));
 }
 
 .cmh-hub-ring {
@@ -272,7 +397,13 @@ const { t, isRTL } = useI18n();
 }
 
 .cmh-brand-gradient {
-    background-image: linear-gradient(110deg, var(--accent-400, #38BDF8) 0%, var(--accent-300, #67E8F9) 35%, var(--accent-500, #06B6D4) 70%, var(--accent-400, #38BDF8) 100%);
+    background-image: linear-gradient(
+        110deg,
+        var(--accent-400, #38bdf8) 0%,
+        var(--accent-300, #67e8f9) 35%,
+        var(--accent-500, #06b6d4) 70%,
+        var(--accent-400, #38bdf8) 100%
+    );
     background-size: 200% auto;
     -webkit-background-clip: text;
     background-clip: text;

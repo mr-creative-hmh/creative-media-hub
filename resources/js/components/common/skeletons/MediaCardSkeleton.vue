@@ -7,7 +7,7 @@ withDefaults(
     }>(),
     {
         count: 1,
-    }
+    },
 );
 </script>
 
@@ -15,10 +15,12 @@ withDefaults(
     <div
         v-for="i in count"
         :key="i"
-        class="group relative flex flex-col rounded-2xl bg-black/40 border border-white/[0.06] p-2.5 overflow-hidden backdrop-blur-sm"
+        class="group relative flex flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-black/40 p-2.5 backdrop-blur-sm"
     >
         <!-- Poster Aspect 2/3 -->
-        <div class="relative w-full aspect-[2/3] rounded-xl overflow-hidden mb-3">
+        <div
+            class="relative mb-3 aspect-[2/3] w-full overflow-hidden rounded-xl"
+        >
             <CinemaSkeleton className="w-full h-full" rounded="rounded-xl" />
             <!-- Simulated floating badge in top corner -->
             <div class="absolute top-2.5 right-2.5">
@@ -36,4 +38,3 @@ withDefaults(
         </div>
     </div>
 </template>
-

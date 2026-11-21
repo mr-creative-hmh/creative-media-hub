@@ -106,7 +106,8 @@ class MediaController extends Controller
         }
 
         $sort = $request->input('sort', 'rating');
-        $direction = $request->input('direction', 'desc');
+        $rawDirection = strtolower((string) $request->input('direction', 'desc'));
+        $direction = in_array($rawDirection, ['asc', 'desc'], true) ? $rawDirection : 'desc';
 
         match ($sort) {
             'year' => $query->orderBy('release_year', $direction),

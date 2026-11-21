@@ -559,7 +559,7 @@ class TorrentDiscoveryService
             return null;
         }
 
-        $apiKey = AppSetting::get('tmdb_api_key') ?? config('services.tmdb.key') ?? env('TMDB_API_KEY');
+        $apiKey = AppSetting::get('tmdb_api_key') ?? config('services.tmdb.key');
         if (empty($apiKey)) {
             return null;
         }

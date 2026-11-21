@@ -48,7 +48,6 @@ class OrganizerHardlinkTest extends TestCase
         File::put($source, 'Simulated video stream data for zero-copy test');
 
         $method = new \ReflectionMethod(PhysicalOrganizerService::class, 'moveOrCopyFile');
-        $method->setAccessible(true);
 
         $result = $method->invoke($organizer, $source, $dest, 'hardlink');
 

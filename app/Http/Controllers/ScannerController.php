@@ -103,8 +103,17 @@ class ScannerController extends Controller
         ]);
     }
 
-    public function removeDirectory($index): JsonResponse
+    public function removeDirectory(string|int|null $index = null): JsonResponse
     {
+        $index = $index ?? request()->input('index') ?? request()->input('id') ?? request()->input('path');
+
+        if ($index === null || $index === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Directory index or identifier is required.',
+            ], 422);
+        }
+
         $setting = AppSetting::where('key', 'scanner_monitored_directories')->first();
         if (! $setting) {
             return response()->json(['success' => true, 'directories' => []]);

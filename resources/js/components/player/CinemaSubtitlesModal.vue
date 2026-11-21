@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { X, Check, Search, Type, Clock, RotateCcw, Sparkles, Loader2, Volume2 } from 'lucide-vue-next';
+import {
+    X,
+    Check,
+    Search,
+    Type,
+    Clock,
+    RotateCcw,
+    Sparkles,
+    Loader2,
+    Volume2,
+} from 'lucide-vue-next';
 import { useI18n } from '@/i18n/useI18n';
 import type { SubtitleItem } from '@/composables/player/useCinemaSubtitles';
 
@@ -11,7 +21,12 @@ const props = defineProps<{
     font: 'cairo' | 'jakarta' | 'system';
     fontSize: 'sm' | 'md' | 'lg' | 'xl';
     isTranslating?: boolean;
-    audioTracks?: Array<{ id: number | string; name: string; language?: string; isSelected?: boolean }>;
+    audioTracks?: Array<{
+        id: number | string;
+        name: string;
+        language?: string;
+        isSelected?: boolean;
+    }>;
 }>();
 
 const emit = defineEmits<{
@@ -32,44 +47,58 @@ const { t } = useI18n();
 <template>
     <div
         v-if="isOpen"
-        class="absolute inset-0 bg-black/60 backdrop-blur-md z-40 flex items-center justify-center p-4 animate-in fade-in duration-200"
+        class="animate-in fade-in absolute inset-0 z-40 flex items-center justify-center bg-black/60 p-4 backdrop-blur-md duration-200"
         @click.self="emit('close')"
     >
-        <div class="w-full max-w-md rounded-3xl bg-slate-900/95 border border-white/10 shadow-2xl overflow-hidden p-6 space-y-6">
+        <div
+            class="w-full max-w-md space-y-6 overflow-hidden rounded-3xl border border-white/10 bg-slate-900/95 p-6 shadow-2xl"
+        >
             <!-- Header -->
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/30">
-                        <Type class="w-4 h-4" />
+                    <div
+                        class="flex h-8 w-8 items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/20 text-cyan-400"
+                    >
+                        <Type class="h-4 w-4" />
                     </div>
                     <h3 class="text-base font-bold text-white">
-                        {{ t('player.subtitles_settings') || 'Subtitles & Typography' }}
+                        {{
+                            t('player.subtitles_settings') ||
+                            'Subtitles & Typography'
+                        }}
                     </h3>
                 </div>
                 <button
                     @click="emit('close')"
-                    class="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+                    class="rounded-xl p-2 text-slate-400 transition-all hover:bg-white/10 hover:text-white"
                 >
-                    <X class="w-5 h-5" />
+                    <X class="h-5 w-5" />
                 </button>
             </div>
 
             <!-- Track Selection List -->
             <div class="space-y-2">
-                <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                <label
+                    class="block text-xs font-semibold tracking-wider text-slate-400 uppercase"
+                >
                     {{ t('player.select_track') || 'Select Subtitle Track' }}
                 </label>
-                <div class="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+                <div class="max-h-44 space-y-1.5 overflow-y-auto pr-1">
                     <!-- Off Option -->
                     <button
                         @click="emit('select', 'off')"
-                        class="w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold transition-all flex items-center justify-between border"
-                        :class="selectedId === 'off'
-                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm'
-                            : 'bg-white/5 text-slate-300 border-white/5 hover:bg-white/10'"
+                        class="flex w-full items-center justify-between rounded-xl border px-3.5 py-2.5 text-left text-xs font-bold transition-all"
+                        :class="
+                            selectedId === 'off'
+                                ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-300 shadow-sm'
+                                : 'border-white/5 bg-white/5 text-slate-300 hover:bg-white/10'
+                        "
                     >
                         <span>{{ t('player.subtitles_off') || 'Off' }}</span>
-                        <Check v-if="selectedId === 'off'" class="w-4 h-4 text-cyan-400" />
+                        <Check
+                            v-if="selectedId === 'off'"
+                            class="h-4 w-4 text-cyan-400"
+                        />
                     </button>
 
                     <!-- Available Tracks -->
@@ -77,88 +106,114 @@ const { t } = useI18n();
                         v-for="sub in subtitles"
                         :key="sub.id"
                         @click="emit('select', sub.id)"
-                        class="w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold transition-all flex items-center justify-between border"
-                        :class="String(selectedId) === String(sub.id)
-                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm'
-                            : 'bg-white/5 text-slate-300 border-white/5 hover:bg-white/10'"
+                        class="flex w-full items-center justify-between rounded-xl border px-3.5 py-2.5 text-left text-xs font-bold transition-all"
+                        :class="
+                            String(selectedId) === String(sub.id)
+                                ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-300 shadow-sm'
+                                : 'border-white/5 bg-white/5 text-slate-300 hover:bg-white/10'
+                        "
                     >
                         <div class="flex items-center gap-2 truncate">
                             <span
-                                class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border shrink-0"
-                                :class="['ar', 'ara', 'arabic'].includes((sub.language || '').toLowerCase())
-                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                                    : 'bg-sky-500/20 text-sky-300 border-sky-500/30'"
+                                class="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                                :class="
+                                    ['ar', 'ara', 'arabic'].includes(
+                                        (sub.language || '').toLowerCase(),
+                                    )
+                                        ? 'border-emerald-500/30 bg-emerald-500/20 text-emerald-300'
+                                        : 'border-sky-500/30 bg-sky-500/20 text-sky-300'
+                                "
                             >
                                 {{ sub.language || 'sub' }}
                             </span>
-                            <span class="truncate">{{ sub.language_name || sub.language || 'Subtitle' }}</span>
+                            <span class="truncate">{{
+                                sub.language_name || sub.language || 'Subtitle'
+                            }}</span>
                             <span
                                 v-if="sub.source_type === 'ai_translated'"
-                                class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0"
+                                class="shrink-0 rounded border border-emerald-500/30 bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-300"
                             >
                                 AI Arabic
                             </span>
                             <span
-                                v-else-if="sub.is_embedded || sub.source_type === 'embedded'"
-                                class="px-1.5 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0"
+                                v-else-if="
+                                    sub.is_embedded ||
+                                    sub.source_type === 'embedded'
+                                "
+                                class="shrink-0 rounded border border-purple-500/30 bg-purple-500/20 px-1.5 py-0.5 text-[10px] text-purple-300"
                             >
                                 {{ t('player.embedded') || 'Embedded' }}
                             </span>
                             <span
                                 v-else
-                                class="px-1.5 py-0.5 rounded text-[10px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 shrink-0"
+                                class="shrink-0 rounded border border-cyan-500/30 bg-cyan-500/15 px-1.5 py-0.5 text-[10px] text-cyan-300"
                             >
                                 {{ t('player.downloaded') || 'Downloaded' }}
                             </span>
-                            <span v-if="sub.format" class="px-1.5 py-0.5 rounded text-[10px] bg-white/10 text-slate-300 uppercase shrink-0">
+                            <span
+                                v-if="sub.format"
+                                class="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-slate-300 uppercase"
+                            >
                                 {{ sub.format }}
                             </span>
                         </div>
-                        <Check v-if="String(selectedId) === String(sub.id)" class="w-4 h-4 text-cyan-400 shrink-0" />
+                        <Check
+                            v-if="String(selectedId) === String(sub.id)"
+                            class="h-4 w-4 shrink-0 text-cyan-400"
+                        />
                     </button>
                 </div>
             </div>
 
             <!-- Subtitle Delay Sync -->
-            <div class="space-y-2 pt-2 border-t border-white/10">
+            <div class="space-y-2 border-t border-white/10 pt-2">
                 <div class="flex items-center justify-between text-xs">
-                    <span class="font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <Clock class="w-3.5 h-3.5 text-cyan-400" />
-                        {{ t('player.subtitle_delay') || 'Subtitle Timing Sync' }}
+                    <span
+                        class="flex items-center gap-1.5 font-semibold tracking-wider text-slate-400 uppercase"
+                    >
+                        <Clock class="h-3.5 w-3.5 text-cyan-400" />
+                        {{
+                            t('player.subtitle_delay') || 'Subtitle Timing Sync'
+                        }}
                     </span>
-                    <span class="font-mono font-bold" :class="delay === 0 ? 'text-slate-400' : 'text-cyan-400'">
+                    <span
+                        class="font-mono font-bold"
+                        :class="
+                            delay === 0 ? 'text-slate-400' : 'text-cyan-400'
+                        "
+                    >
                         {{ delay > 0 ? `+${delay}s` : `${delay}s` }}
                     </span>
                 </div>
                 <div class="flex items-center gap-2">
                     <button
                         @click="emit('adjust-delay', -0.5)"
-                        class="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-bold transition-all"
+                        class="rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-white transition-all hover:bg-white/10"
                     >
                         -0.5s
                     </button>
                     <button
                         @click="emit('adjust-delay', -0.1)"
-                        class="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-bold transition-all"
+                        class="rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-white transition-all hover:bg-white/10"
                     >
                         -0.1s
                     </button>
                     <button
                         @click="emit('reset-delay')"
-                        class="flex-1 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-400 hover:text-white text-xs font-bold transition-all flex items-center justify-center gap-1"
+                        class="flex flex-1 items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 py-1.5 text-xs font-bold text-slate-400 transition-all hover:bg-white/10 hover:text-white"
                     >
-                        <RotateCcw class="w-3 h-3" />
+                        <RotateCcw class="h-3 w-3" />
                         {{ t('player.reset') || 'Reset' }}
                     </button>
                     <button
                         @click="emit('adjust-delay', 0.1)"
-                        class="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-bold transition-all"
+                        class="rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-white transition-all hover:bg-white/10"
                     >
                         +0.1s
                     </button>
                     <button
                         @click="emit('adjust-delay', 0.5)"
-                        class="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-bold transition-all"
+                        class="rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-white transition-all hover:bg-white/10"
                     >
                         +0.5s
                     </button>
@@ -166,37 +221,55 @@ const { t } = useI18n();
             </div>
 
             <!-- Typography & Sizing -->
-            <div class="grid grid-cols-2 gap-4 pt-2 border-t border-white/10">
+            <div class="grid grid-cols-2 gap-4 border-t border-white/10 pt-2">
                 <!-- Font Family -->
                 <div class="space-y-2">
-                    <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                    <label
+                        class="block text-xs font-semibold tracking-wider text-slate-400 uppercase"
+                    >
                         {{ t('player.font_family') || 'Font' }}
                     </label>
                     <div class="grid grid-cols-3 gap-1.5">
                         <button
-                            v-for="f in (['cairo', 'jakarta', 'system'] as const)"
+                            v-for="f in ['cairo', 'jakarta', 'system'] as const"
                             :key="f"
                             @click="emit('set-font', f)"
-                            class="py-1.5 rounded-lg text-xs font-bold transition-all border capitalize"
-                            :class="font === f ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm' : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/10'"
+                            class="rounded-lg border py-1.5 text-xs font-bold capitalize transition-all"
+                            :class="
+                                font === f
+                                    ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-300 shadow-sm'
+                                    : 'border-white/5 bg-white/5 text-slate-400 hover:bg-white/10'
+                            "
                         >
-                            {{ f === 'cairo' ? 'Cairo' : f === 'jakarta' ? 'Jakarta' : 'System' }}
+                            {{
+                                f === 'cairo'
+                                    ? 'Cairo'
+                                    : f === 'jakarta'
+                                      ? 'Jakarta'
+                                      : 'System'
+                            }}
                         </button>
                     </div>
                 </div>
 
                 <!-- Font Size -->
                 <div class="space-y-2">
-                    <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                    <label
+                        class="block text-xs font-semibold tracking-wider text-slate-400 uppercase"
+                    >
                         {{ t('player.font_size') || 'Size' }}
                     </label>
                     <div class="grid grid-cols-4 gap-1">
                         <button
-                            v-for="s in (['sm', 'md', 'lg', 'xl'] as const)"
+                            v-for="s in ['sm', 'md', 'lg', 'xl'] as const"
                             :key="s"
                             @click="emit('set-size', s)"
-                            class="py-1.5 rounded-lg text-xs font-bold transition-all border uppercase"
-                            :class="fontSize === s ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm' : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/10'"
+                            class="rounded-lg border py-1.5 text-xs font-bold uppercase transition-all"
+                            :class="
+                                fontSize === s
+                                    ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-300 shadow-sm'
+                                    : 'border-white/5 bg-white/5 text-slate-400 hover:bg-white/10'
+                            "
                         >
                             {{ s }}
                         </button>
@@ -205,47 +278,65 @@ const { t } = useI18n();
             </div>
 
             <!-- AI Arabic Translator & Online Search Triggers -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <button
                     type="button"
                     @click="emit('translate')"
                     :disabled="props.isTranslating"
-                    class="py-2.5 px-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    class="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-600/20 px-3 py-2.5 text-xs font-bold text-emerald-300 transition-all hover:bg-emerald-600/30 disabled:opacity-50"
                 >
-                    <Loader2 v-if="props.isTranslating" class="w-4 h-4 animate-spin text-emerald-400" />
-                    <Sparkles v-else class="w-4 h-4 text-emerald-400" />
-                    <span>{{ props.isTranslating ? (t('player.translating') || 'Translating...') : (t('player.translate_now') || 'AI Arabic Translate') }}</span>
+                    <Loader2
+                        v-if="props.isTranslating"
+                        class="h-4 w-4 animate-spin text-emerald-400"
+                    />
+                    <Sparkles v-else class="h-4 w-4 text-emerald-400" />
+                    <span>{{
+                        props.isTranslating
+                            ? t('player.translating') || 'Translating...'
+                            : t('player.translate_now') || 'AI Arabic Translate'
+                    }}</span>
                 </button>
 
                 <button
                     @click="emit('open-search')"
-                    class="py-2.5 px-3 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    class="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2.5 text-xs font-bold text-cyan-300 transition-all hover:bg-cyan-500/20"
                 >
-                    <Search class="w-4 h-4" />
+                    <Search class="h-4 w-4" />
                     {{ t('player.search_online_subtitles') || 'Search Online' }}
                 </button>
             </div>
 
             <!-- Optional Audio Tracks Selection -->
-            <div v-if="audioTracks && audioTracks.length > 1" class="space-y-2 pt-2 border-t border-white/10">
-                <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Volume2 class="w-3.5 h-3.5 text-cyan-400" />
+            <div
+                v-if="audioTracks && audioTracks.length > 1"
+                class="space-y-2 border-t border-white/10 pt-2"
+            >
+                <label
+                    class="flex items-center gap-1.5 text-xs font-semibold tracking-wider text-slate-400 uppercase"
+                >
+                    <Volume2 class="h-3.5 w-3.5 text-cyan-400" />
                     {{ t('player.audio_track') || 'Audio Track' }}
                 </label>
-                <div class="max-h-28 overflow-y-auto space-y-1 pr-1">
+                <div class="max-h-28 space-y-1 overflow-y-auto pr-1">
                     <button
                         v-for="track in audioTracks"
                         :key="track.id"
                         @click="emit('select-audio', track.id)"
-                        class="w-full px-3 py-1.5 rounded-lg text-left text-xs font-bold transition-all flex items-center justify-between border"
-                        :class="track.isSelected ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'bg-white/5 text-slate-300 border-white/5 hover:bg-white/10'"
+                        class="flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-left text-xs font-bold transition-all"
+                        :class="
+                            track.isSelected
+                                ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-300'
+                                : 'border-white/5 bg-white/5 text-slate-300 hover:bg-white/10'
+                        "
                     >
                         <span>{{ track.name }}</span>
-                        <Check v-if="track.isSelected" class="w-3.5 h-3.5 text-cyan-400" />
+                        <Check
+                            v-if="track.isSelected"
+                            class="h-3.5 w-3.5 text-cyan-400"
+                        />
                     </button>
                 </div>
             </div>
         </div>
     </div>
 </template>
-

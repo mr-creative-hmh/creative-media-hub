@@ -26,19 +26,19 @@ const fontSizeClasses = computed(() => {
 <template>
     <div
         v-if="activeCueText"
-        class="absolute inset-x-0 flex items-center justify-center px-4 sm:px-8 pointer-events-none transition-all duration-200 ease-out z-20"
+        class="pointer-events-none absolute inset-x-0 z-20 flex items-center justify-center px-4 transition-all duration-200 ease-out sm:px-8"
         :style="{ bottom: isControlsVisible ? '6.5rem' : '2.5rem' }"
     >
         <div
-            class="px-4 py-2 sm:px-6 sm:py-2.5 rounded-2xl bg-black/60 text-white text-center font-bold tracking-normal shadow-2xl backdrop-blur-md pointer-events-none border border-white/10 max-w-4xl transition-all duration-150"
+            class="pointer-events-none max-w-4xl rounded-2xl border border-white/10 bg-black/60 px-4 py-2 text-center font-bold tracking-normal text-white shadow-2xl backdrop-blur-md transition-all duration-150 sm:px-6 sm:py-2.5"
             dir="auto"
             :class="fontSizeClasses"
             :style="{
                 fontFamily: fontFamily,
-                textShadow: '0 2px 4px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.8)',
+                textShadow:
+                    '0 2px 4px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.8)',
             }"
             v-html="activeCueText"
         />
     </div>
 </template>
-
