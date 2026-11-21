@@ -28,9 +28,13 @@ class DatabaseBackupService
         'download_items',
     ];
 
+    public function __construct(
+        protected ?string $backupPath = null,
+    ) {}
+
     public function getBackupPath(): string
     {
-        $path = storage_path('app/backups');
+        $path = $this->backupPath ?? storage_path('app/backups');
         File::ensureDirectoryExists($path);
 
         return str_replace('\\', '/', $path);

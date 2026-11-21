@@ -14,18 +14,27 @@ class DatabaseBackupAndRestoreTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected string $backupDir;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->backupDir = str_replace('\\', '/', sys_get_temp_dir().'/cmh_backup_test_'.uniqid('', true));
+        File::ensureDirectoryExists($this->backupDir);
+
+        $this->app->singleton(
+            DatabaseBackupService::class,
+            fn (): DatabaseBackupService => new DatabaseBackupService($this->backupDir)
+        );
+    }
+
     protected function tearDown(): void
     {
-        // Clean any test backups created in storage/app/backups
-        $backupDir = storage_path('app/backups');
-        if (File::isDirectory($backupDir)) {
-            $files = File::files($backupDir);
-            foreach ($files as $file) {
-                if (str_contains($file->getFilename(), 'test_')) {
-                    @unlink($file->getRealPath());
-                }
-            }
+        if (isset($this->backupDir) && File::isDirectory($this->backupDir)) {
+            File::deleteDirectory($this->backupDir);
         }
+
         parent::tearDown();
     }
 
@@ -36,7 +45,8 @@ class DatabaseBackupAndRestoreTest extends TestCase
             ->assertJsonStructure([
                 'success',
                 'backups',
-            ]);
+            ])
+            ->assertJsonCount(0, 'backups');
     }
 
     public function test_can_create_local_backup_snapshot(): void
@@ -77,7 +87,9 @@ class DatabaseBackupAndRestoreTest extends TestCase
         $service = app(DatabaseBackupService::class);
         $exportData = $service->exportData();
 
-        $tempJson = tempnam(sys_get_temp_dir(), 'test_restore_').'.json';
+        $uploadDir = $this->backupDir.'/uploads';
+        File::ensureDirectoryExists($uploadDir);
+        $tempJson = $uploadDir.'/test_upload_backup.json';
         file_put_contents($tempJson, json_encode($exportData));
 
         $uploadedFile = new UploadedFile(
@@ -100,7 +112,7 @@ class DatabaseBackupAndRestoreTest extends TestCase
                 'mode' => 'merge',
             ]);
 
-        @unlink($tempJson);
+        $this->assertFileExists($this->backupDir.'/auto_pre_restore_safety_backup.json');
     }
 
     public function test_selective_restore_movies_only_leaves_series_untouched(): void
@@ -219,6 +231,8 @@ class DatabaseBackupAndRestoreTest extends TestCase
                 'success' => true,
                 'sections' => ['movies', 'settings'],
             ]);
+
+        $this->assertFileExists($this->backupDir.'/auto_pre_restore_safety_backup.json');
     }
 
     public function test_can_delete_local_backup(): void

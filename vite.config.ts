@@ -4,8 +4,30 @@ import { wayfinder } from '@laravel/vite-plugin-wayfinder';
 import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
 import laravel from 'laravel-vite-plugin';
-import { bunny } from 'laravel-vite-plugin/fonts';
 import { defineConfig, lazyPlugins } from 'vite-plus';
+
+const sharedIgnorePatterns = [
+    '.agents/**',
+    '.claude/**',
+    '.codex/**',
+    '.cursor/**',
+    '.github/**',
+    'bootstrap/ssr/**',
+    'composer.json',
+    'dist/**',
+    'graphify-out/**',
+    'node_modules/**',
+    'public/**',
+    'resources/js/actions/**',
+    'resources/js/components/ui/*',
+    'resources/js/routes/**',
+    'resources/js/wayfinder/**',
+    'resources/views/mail/*',
+    'scratch/**',
+    'storage/**',
+    'tailwind.config.js',
+    'vendor/**',
+];
 
 export default defineConfig({
     resolve: {
@@ -17,11 +39,6 @@ export default defineConfig({
         laravel({
             input: ['resources/css/app.css', 'resources/js/app.ts'],
             refresh: true,
-            fonts: [
-                bunny('Instrument Sans', {
-                    weights: [400, 500, 600],
-                }),
-            ],
         }),
         inertia(),
         tailwindcss(),
@@ -43,24 +60,17 @@ export default defineConfig({
             ignored: [
                 '**/.agents/**',
                 '**/.claude/**',
+                '**/.codex/**',
                 '**/.cursor/**',
                 '**/.junie/**',
+                '**/graphify-out/**',
+                '**/scratch/**',
                 '**/vendor/**',
             ],
         },
     },
     lint: {
-        ignorePatterns: [
-            'vendor/**',
-            'node_modules/**',
-            'public/**',
-            'bootstrap/ssr/**',
-            'tailwind.config.js',
-            'resources/js/actions/**',
-            'resources/js/components/ui/*',
-            'resources/js/routes/**',
-            'resources/js/wayfinder/**',
-        ],
+        ignorePatterns: sharedIgnorePatterns,
         options: {
             denyWarnings: true,
             typeAware: true,
@@ -73,12 +83,7 @@ export default defineConfig({
         semi: true,
         singleAttributePerLine: false,
         htmlWhitespaceSensitivity: 'css',
-        ignorePatterns: [
-            '.github/**',
-            'composer.json',
-            'resources/js/components/ui/*',
-            'resources/views/mail/*',
-        ],
+        ignorePatterns: sharedIgnorePatterns,
         sortTailwindcss: {
             functions: ['clsx', 'cn', 'cva'],
             entryPoint: 'resources/css/app.css',
