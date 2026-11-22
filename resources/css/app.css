@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import 'vue-sonner/style.css';
 
 /* Local Bundled WOFF2-Only Fonts (Latin + Arabic Subsets for 100% Offline Capability) */
 @font-face {
@@ -179,12 +180,15 @@
 @source not '../../.cursor';
 @source not '../../scratch';
 
+@custom-variant dark (&:is(.dark *));
+
 @theme {
     --font-sans:
         'Outfit', 'Plus Jakarta Sans', 'Cairo', ui-sans-serif, system-ui,
         -apple-system, sans-serif;
     --font-cairo: 'Cairo', system-ui, sans-serif;
     --font-outfit: 'Outfit', sans-serif;
+
     --color-accent-50: var(--accent-50);
     --color-accent-100: var(--accent-100);
     --color-accent-200: var(--accent-200);
@@ -204,9 +208,114 @@
     --color-cyan-600: var(--accent-600);
 }
 
+@theme inline {
+    --font-karla: var(--font-sans);
+    --font-arabic: 'Cairo', ui-sans-serif, system-ui, sans-serif;
+
+    /* 8-Point Spatial Grid Tokens */
+    --spacing-grid-1: 0.25rem;
+    --spacing-grid-2: 0.5rem;
+    --spacing-grid-3: 0.75rem;
+    --spacing-grid-4: 1rem;
+    --spacing-grid-6: 1.5rem;
+    --spacing-grid-8: 2rem;
+    --spacing-grid-12: 3rem;
+    --spacing-grid-16: 4rem;
+
+    /* Standardized Control Heights & Touch Targets (WCAG 2.5.5) */
+    --height-control-sm: 2rem;
+    --height-control-md: 2.5rem;
+    --height-control-lg: 3rem;
+    --size-touch-target: 2.75rem;
+
+    /* Motion Tokens (Snap + Silk) */
+    --duration-snap: 140ms;
+    --duration-silk: 200ms;
+    --ease-snap: cubic-bezier(0.2, 0, 0, 1);
+    --ease-silk: cubic-bezier(0.16, 1, 0.3, 1);
+
+    --radius-lg: var(--radius);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-sm: calc(var(--radius) - 4px);
+
+    /* CreativeFlow Semantic Color Tokens */
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-ring: var(--sidebar-ring);
+
+    --color-priority-urgent: var(--priority-urgent);
+    --color-priority-major: var(--priority-major);
+    --color-priority-medium: var(--priority-medium);
+    --color-priority-minor: var(--priority-minor);
+}
+
 /* ==========================================================================
-   CINEMA ACCENT COLOR PALETTES (UI/UX PRO MAX - DARK CINEMA SPECIFICATION)
+   PURE CINEMA DARK MODE TOKENS & ACCENT PALETTES
    ========================================================================== */
+:root,
+html.dark {
+    --background: hsl(222 47% 7%);
+    --foreground: hsl(210 40% 98%);
+    --card: hsl(222 47% 11%);
+    --card-foreground: hsl(210 40% 98%);
+    --popover: hsl(222 47% 11%);
+    --popover-foreground: hsl(210 40% 98%);
+    --secondary: hsl(215 20% 65%);
+    --secondary-foreground: hsl(210 40% 98%);
+    --muted: hsl(217 33% 17%);
+    --muted-foreground: hsl(215 20% 65%);
+    --accent: hsl(217 33% 17%);
+    --destructive: hsl(0 62.8% 50.6%);
+    --destructive-foreground: hsl(210 40% 98%);
+    --border: hsl(217 33% 18%);
+    --input: hsl(217 33% 18%);
+    --radius: 0.75rem;
+
+    --sidebar-background: #0a0d14;
+    --sidebar: #0a0d14;
+    --sidebar-foreground: hsl(210 40% 98%);
+    --sidebar-border: hsl(217 33% 18%);
+
+    --priority-urgent: #fb7185;
+    --priority-major: #fb923c;
+    --priority-medium: #60a5fa;
+    --priority-minor: #94a3b8;
+}
+
+/* 1. Cyan Accent (Default Cinema Glow) */
 :root,
 html[data-accent='cyan'] {
     --accent-50: #ecfeff;
@@ -224,8 +333,19 @@ html[data-accent='cyan'] {
     --accent-secondary: #3b82f6;
     --accent-glow: rgba(6, 182, 212, 0.45);
     --accent-glow-subtle: rgba(6, 182, 212, 0.15);
+
+    --primary: var(--accent-500);
+    --primary-foreground: #020617;
+    --ring: var(--accent-500);
+    --sidebar-primary: var(--accent-400);
+    --sidebar-primary-foreground: #020617;
+    --accent-foreground: var(--accent-400);
+    --sidebar-accent: color-mix(in oklab, var(--accent-500) 16%, transparent);
+    --sidebar-accent-foreground: var(--accent-300);
+    --sidebar-ring: var(--accent-500);
 }
 
+/* 2. Red Accent */
 html[data-accent='red'] {
     --accent-50: #fef2f2;
     --accent-100: #fee2e2;
@@ -242,8 +362,19 @@ html[data-accent='red'] {
     --accent-secondary: #e11d48;
     --accent-glow: rgba(239, 68, 68, 0.45);
     --accent-glow-subtle: rgba(239, 68, 68, 0.15);
+
+    --primary: var(--accent-500);
+    --primary-foreground: #ffffff;
+    --ring: var(--accent-500);
+    --sidebar-primary: var(--accent-400);
+    --sidebar-primary-foreground: #ffffff;
+    --accent-foreground: var(--accent-400);
+    --sidebar-accent: color-mix(in oklab, var(--accent-500) 16%, transparent);
+    --sidebar-accent-foreground: var(--accent-300);
+    --sidebar-ring: var(--accent-500);
 }
 
+/* 3. Amber Accent */
 html[data-accent='amber'] {
     --accent-50: #fffbeb;
     --accent-100: #fef3c7;
@@ -260,8 +391,19 @@ html[data-accent='amber'] {
     --accent-secondary: #ea580c;
     --accent-glow: rgba(245, 158, 11, 0.45);
     --accent-glow-subtle: rgba(245, 158, 11, 0.15);
+
+    --primary: var(--accent-500);
+    --primary-foreground: #020617;
+    --ring: var(--accent-500);
+    --sidebar-primary: var(--accent-400);
+    --sidebar-primary-foreground: #020617;
+    --accent-foreground: var(--accent-400);
+    --sidebar-accent: color-mix(in oklab, var(--accent-500) 16%, transparent);
+    --sidebar-accent-foreground: var(--accent-300);
+    --sidebar-ring: var(--accent-500);
 }
 
+/* 4. Emerald Accent */
 html[data-accent='emerald'] {
     --accent-50: #ecfdf5;
     --accent-100: #d1fae5;
@@ -278,8 +420,19 @@ html[data-accent='emerald'] {
     --accent-secondary: #0d9488;
     --accent-glow: rgba(16, 185, 129, 0.45);
     --accent-glow-subtle: rgba(16, 185, 129, 0.15);
+
+    --primary: var(--accent-500);
+    --primary-foreground: #020617;
+    --ring: var(--accent-500);
+    --sidebar-primary: var(--accent-400);
+    --sidebar-primary-foreground: #020617;
+    --accent-foreground: var(--accent-400);
+    --sidebar-accent: color-mix(in oklab, var(--accent-500) 16%, transparent);
+    --sidebar-accent-foreground: var(--accent-300);
+    --sidebar-ring: var(--accent-500);
 }
 
+/* 5. Violet Accent */
 html[data-accent='violet'] {
     --accent-50: #f5f3ff;
     --accent-100: #ede9fe;
@@ -296,8 +449,19 @@ html[data-accent='violet'] {
     --accent-secondary: #7c3aed;
     --accent-glow: rgba(139, 92, 246, 0.45);
     --accent-glow-subtle: rgba(139, 92, 246, 0.15);
+
+    --primary: var(--accent-500);
+    --primary-foreground: #ffffff;
+    --ring: var(--accent-500);
+    --sidebar-primary: var(--accent-400);
+    --sidebar-primary-foreground: #ffffff;
+    --accent-foreground: var(--accent-400);
+    --sidebar-accent: color-mix(in oklab, var(--accent-500) 16%, transparent);
+    --sidebar-accent-foreground: var(--accent-300);
+    --sidebar-ring: var(--accent-500);
 }
 
+/* 6. Rose Accent */
 html[data-accent='rose'] {
     --accent-50: #fff1f2;
     --accent-100: #ffe4e6;
@@ -314,8 +478,19 @@ html[data-accent='rose'] {
     --accent-secondary: #db2777;
     --accent-glow: rgba(244, 63, 94, 0.45);
     --accent-glow-subtle: rgba(244, 63, 94, 0.15);
+
+    --primary: var(--accent-500);
+    --primary-foreground: #ffffff;
+    --ring: var(--accent-500);
+    --sidebar-primary: var(--accent-400);
+    --sidebar-primary-foreground: #ffffff;
+    --accent-foreground: var(--accent-400);
+    --sidebar-accent: color-mix(in oklab, var(--accent-500) 16%, transparent);
+    --sidebar-accent-foreground: var(--accent-300);
+    --sidebar-ring: var(--accent-500);
 }
 
+/* 7. Orange Accent */
 html[data-accent='orange'] {
     --accent-50: #fff7ed;
     --accent-100: #ffedd5;
@@ -332,8 +507,19 @@ html[data-accent='orange'] {
     --accent-secondary: #d97706;
     --accent-glow: rgba(249, 115, 22, 0.45);
     --accent-glow-subtle: rgba(249, 115, 22, 0.15);
+
+    --primary: var(--accent-500);
+    --primary-foreground: #020617;
+    --ring: var(--accent-500);
+    --sidebar-primary: var(--accent-400);
+    --sidebar-primary-foreground: #020617;
+    --accent-foreground: var(--accent-400);
+    --sidebar-accent: color-mix(in oklab, var(--accent-500) 16%, transparent);
+    --sidebar-accent-foreground: var(--accent-300);
+    --sidebar-ring: var(--accent-500);
 }
 
+/* 8. Blue Accent */
 html[data-accent='blue'] {
     --accent-50: #eff6ff;
     --accent-100: #dbeafe;
@@ -350,13 +536,33 @@ html[data-accent='blue'] {
     --accent-secondary: #6366f1;
     --accent-glow: rgba(59, 130, 246, 0.45);
     --accent-glow-subtle: rgba(59, 130, 246, 0.15);
+
+    --primary: var(--accent-500);
+    --primary-foreground: #ffffff;
+    --ring: var(--accent-500);
+    --sidebar-primary: var(--accent-400);
+    --sidebar-primary-foreground: #ffffff;
+    --accent-foreground: var(--accent-400);
+    --sidebar-accent: color-mix(in oklab, var(--accent-500) 16%, transparent);
+    --sidebar-accent-foreground: var(--accent-300);
+    --sidebar-ring: var(--accent-500);
 }
 
 @layer base {
     :root {
-        --font-sans: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
-        --font-arabic: 'Cairo', 'Tajawal', system-ui, sans-serif;
+        --font-sans:
+            'Outfit', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+        --font-arabic: 'Cairo', system-ui, sans-serif;
         color-scheme: dark;
+    }
+
+    html,
+    body,
+    input,
+    button,
+    select,
+    textarea {
+        font-variant-numeric: tabular-nums lining-nums;
     }
 
     [dir='rtl'],
@@ -365,32 +571,19 @@ html[data-accent='blue'] {
     [dir='rtl'] * {
         font-family:
             'Cairo',
-            'Tajawal',
             system-ui,
             -apple-system,
             sans-serif !important;
     }
 
-    /* Light Theme Defaults */
-    html:not(.dark) {
-        color-scheme: light;
-    }
-    html:not(.dark) body {
-        background-color: #f8fafc;
-        color: #0f172a;
-    }
-
-    /* Dark Theme Defaults */
-    html.dark {
+    html {
         color-scheme: dark;
-    }
-    html.dark body {
-        background-color: #07090e;
-        color: #f1f5f9;
     }
 
     body {
         font-family: var(--font-sans);
+        background-color: #07090e;
+        color: #f1f5f9;
         overflow-x: hidden;
         transition:
             background-color 0.3s ease,
@@ -423,7 +616,479 @@ html[data-accent='blue'] {
     border-radius: 4px;
 }
 
-/* Glassmorphism & Cinema Aesthetic Classes */
+/* ==========================================================================
+   CREATIVEFLOW GLASSMORPHISM & SURFACE PRIMITIVES
+   ========================================================================== */
+@layer components {
+    .cf-glass {
+        background-color: color-mix(in oklab, var(--card) 68%, transparent);
+        backdrop-filter: blur(18px) saturate(145%);
+        -webkit-backdrop-filter: blur(18px) saturate(145%);
+        border: 1px solid
+            color-mix(in oklab, var(--border) 72%, rgba(255, 255, 255, 0.78));
+        box-shadow:
+            0 4px 20px -4px rgba(15, 23, 42, 0.06),
+            0 1px 2px rgba(15, 23, 42, 0.04),
+            inset 0 1px 0 rgba(255, 255, 255, 0.72);
+    }
+
+    .dark .cf-glass,
+    .cf-glass {
+        background-color: color-mix(in oklab, var(--card) 56%, transparent);
+        border-color: rgba(255, 255, 255, 0.11);
+        box-shadow:
+            0 8px 28px -6px rgba(2, 6, 23, 0.48),
+            0 1px 3px rgba(2, 6, 23, 0.35),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+
+    .cf-glass-elevated {
+        background-color: color-mix(in oklab, var(--card) 64%, transparent);
+        backdrop-filter: blur(22px) saturate(155%);
+        -webkit-backdrop-filter: blur(22px) saturate(155%);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        box-shadow:
+            0 18px 42px -12px rgba(2, 6, 23, 0.65),
+            inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    }
+
+    .cf-glass-popover {
+        background-color: color-mix(in oklab, var(--popover) 76%, transparent);
+        backdrop-filter: blur(24px) saturate(160%);
+        -webkit-backdrop-filter: blur(24px) saturate(160%);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        box-shadow:
+            0 22px 48px -12px rgba(2, 6, 23, 0.72),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+
+    .cf-table-wrapper {
+        background-color: color-mix(in oklab, var(--card) 56%, transparent);
+        backdrop-filter: blur(18px) saturate(145%);
+        -webkit-backdrop-filter: blur(18px) saturate(145%);
+        border: 1px solid rgba(255, 255, 255, 0.11);
+        border-radius: 1.5rem;
+        overflow: hidden;
+        box-shadow:
+            0 6px 24px -6px rgba(2, 6, 23, 0.45),
+            inset 0 1px 0 rgba(255, 255, 255, 0.11);
+    }
+
+    .cf-table {
+        width: 100%;
+        border-collapse: collapse;
+        background-color: transparent;
+    }
+
+    .cf-table thead {
+        background-color: color-mix(in oklab, var(--muted) 52%, transparent);
+    }
+
+    .cf-table tbody tr {
+        transition: background-color 140ms var(--ease-snap);
+    }
+
+    .cf-table tbody tr:hover {
+        background-color: color-mix(in oklab, var(--accent) 42%, transparent);
+    }
+
+    .cf-field {
+        height: 2.75rem;
+        border-radius: 0.75rem;
+        padding-inline: 0.875rem;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+        background-color: color-mix(in oklab, var(--card) 45%, transparent);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        transition:
+            border-color 150ms ease,
+            box-shadow 150ms ease,
+            background-color 150ms ease;
+    }
+
+    .cf-field:focus-visible {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px
+            color-mix(in oklab, var(--primary) 20%, transparent);
+    }
+}
+
+/* GPU-Composited Ambient Aurora Orbs */
+@keyframes cf-aurora-drift-a {
+    0% {
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+        transform: translate3d(38px, 24px, 0) scale(1.06);
+    }
+    100% {
+        transform: translate3d(-22px, 44px, 0) scale(0.96);
+    }
+}
+
+@keyframes cf-aurora-drift-b {
+    0% {
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+        transform: translate3d(-44px, -26px, 0) scale(1.05);
+    }
+    100% {
+        transform: translate3d(26px, -38px, 0) scale(0.95);
+    }
+}
+
+@keyframes cf-aurora-drift-c {
+    0% {
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+        transform: translate3d(28px, -34px, 0) scale(1.07);
+    }
+    100% {
+        transform: translate3d(-32px, 18px, 0) scale(0.97);
+    }
+}
+
+.cf-aurora-orb-a {
+    will-change: transform;
+    animation: cf-aurora-drift-a 24s ease-in-out infinite alternate;
+}
+
+.cf-aurora-orb-b {
+    will-change: transform;
+    animation: cf-aurora-drift-b 30s ease-in-out infinite alternate;
+}
+
+.cf-aurora-orb-c {
+    will-change: transform;
+    animation: cf-aurora-drift-c 36s ease-in-out infinite alternate;
+}
+
+/* Enterprise Motion Primitives (Snap + Silk + RTL-Aware Shimmer) */
+@keyframes cf-shimmer {
+    0% {
+        transform: translate3d(-100%, 0, 0);
+    }
+    100% {
+        transform: translate3d(100%, 0, 0);
+    }
+}
+
+.cf-shimmer {
+    position: relative;
+    overflow: hidden;
+}
+
+.cf-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translate3d(-100%, 0, 0);
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        color-mix(in oklab, var(--primary) 14%, transparent) 50%,
+        transparent 100%
+    );
+    animation: cf-shimmer 1.45s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    pointer-events: none;
+}
+
+[dir='rtl'] .cf-shimmer::after {
+    animation-direction: reverse;
+}
+
+/* Form Validation Shake Motion */
+@keyframes cf-error-shake {
+    0%,
+    100% {
+        transform: translate3d(0, 0, 0);
+    }
+    20% {
+        transform: translate3d(-5px, 0, 0);
+    }
+    40% {
+        transform: translate3d(5px, 0, 0);
+    }
+    60% {
+        transform: translate3d(-3px, 0, 0);
+    }
+    80% {
+        transform: translate3d(3px, 0, 0);
+    }
+}
+
+.cf-animate-error-shake,
+.animate-shake {
+    animation: cf-error-shake 320ms var(--ease-snap) both;
+}
+
+/* Route / Page Entry Transition (Silk) */
+.cf-page-enter-active {
+    transition:
+        opacity var(--duration-silk) var(--ease-silk),
+        transform var(--duration-silk) var(--ease-silk);
+}
+
+.cf-page-leave-active {
+    transition: opacity 90ms var(--ease-snap);
+    pointer-events: none;
+}
+
+.cf-page-enter-from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+}
+
+.cf-page-leave-to {
+    opacity: 0;
+}
+
+/* Animated Filter / Card List */
+.cf-list-move,
+.cf-list-enter-active,
+.cf-list-leave-active {
+    transition:
+        opacity var(--duration-silk) var(--ease-silk),
+        transform var(--duration-silk) var(--ease-silk);
+}
+
+.cf-list-enter-from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0) scale(0.96);
+}
+
+.cf-list-leave-to {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0) scale(0.96);
+}
+
+.cf-list-leave-active {
+    position: absolute;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Mobile Menu Drawer Backdrop & RTL-Aware Slide */
+.cf-drawer-backdrop-enter-active,
+.cf-drawer-backdrop-leave-active {
+    transition: opacity 180ms var(--ease-snap);
+}
+
+.cf-drawer-backdrop-enter-from,
+.cf-drawer-backdrop-leave-to {
+    opacity: 0;
+}
+
+.cf-drawer-ltr-enter-active,
+.cf-drawer-ltr-leave-active,
+.cf-drawer-rtl-enter-active,
+.cf-drawer-rtl-leave-active {
+    transition:
+        transform 220ms var(--ease-silk),
+        opacity 180ms var(--ease-snap);
+}
+
+.cf-drawer-ltr-enter-from,
+.cf-drawer-ltr-leave-to {
+    transform: translate3d(-100%, 0, 0);
+    opacity: 0.96;
+}
+
+.cf-drawer-rtl-enter-from,
+.cf-drawer-rtl-leave-to {
+    transform: translate3d(100%, 0, 0);
+    opacity: 0.96;
+}
+
+/* Linear / Raycast HUD Card Toaster Style */
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'].ct-hud-toast {
+    display: flex !important;
+    align-items: flex-start !important;
+    gap: 0.75rem !important;
+    padding: 0.8125rem 0.875rem !important;
+    border-radius: 0.875rem !important;
+    background: color-mix(in srgb, var(--card) 96%, #0f172a) !important;
+    backdrop-filter: blur(20px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-inline-start-width: 4px !important;
+    border-inline-start-color: var(--primary) !important;
+    color: var(--foreground) !important;
+    box-shadow:
+        0 20px 44px -8px rgba(0, 0, 0, 0.65),
+        0 6px 16px -3px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.05) !important;
+    transition:
+        transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 220ms cubic-bezier(0.4, 0, 1, 1),
+        height 300ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+[data-sonner-toaster]
+    [data-sonner-toast][data-styled='true'].ct-hud-toast-success,
+[data-sonner-toaster] [data-sonner-toast][data-type='success'] {
+    border-inline-start-color: #10b981 !important;
+}
+
+[data-sonner-toaster]
+    [data-sonner-toast][data-styled='true'].ct-hud-toast-error,
+[data-sonner-toaster] [data-sonner-toast][data-type='error'] {
+    border-inline-start-color: #f43f5e !important;
+}
+
+[data-sonner-toaster]
+    [data-sonner-toast][data-styled='true'].ct-hud-toast-warning,
+[data-sonner-toaster] [data-sonner-toast][data-type='warning'] {
+    border-inline-start-color: #f59e0b !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'].ct-hud-toast-info,
+[data-sonner-toaster] [data-sonner-toast][data-type='info'] {
+    border-inline-start-color: var(--primary) !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-icon] {
+    order: 1 !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+    flex-shrink: 0 !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-icon] svg {
+    margin: 0 !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-content] {
+    order: 2 !important;
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.1875rem !important;
+    padding-top: 0.0625rem !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-title],
+.ct-hud-toast-title {
+    font-size: 0.8125rem !important;
+    font-weight: 800 !important;
+    line-height: 1.35 !important;
+    color: var(--foreground) !important;
+    letter-spacing: -0.01em !important;
+}
+
+[data-sonner-toaster]
+    [data-sonner-toast][data-styled='true']
+    [data-description],
+.ct-hud-toast-description {
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+    line-height: 1.45 !important;
+    color: var(--muted-foreground) !important;
+    font-variant-numeric: tabular-nums lining-nums !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-button] {
+    order: 3 !important;
+    border-radius: 0.5rem !important;
+    height: 1.75rem !important;
+    padding: 0 0.625rem !important;
+    font-size: 0.75rem !important;
+    font-weight: 700 !important;
+    align-self: center !important;
+}
+
+[data-sonner-toaster]
+    [data-sonner-toast][data-styled='true']
+    [data-close-button],
+.ct-hud-toast-close {
+    position: relative !important;
+    inset: auto !important;
+    left: auto !important;
+    right: auto !important;
+    top: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+    order: 99 !important;
+    margin-inline-start: auto !important;
+    align-self: flex-start !important;
+    flex-shrink: 0 !important;
+    width: 1.625rem !important;
+    height: 1.625rem !important;
+    border-radius: 0.5rem !important;
+    border: 1px solid transparent !important;
+    background: transparent !important;
+    color: var(--muted-foreground) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+    transition:
+        background-color 150ms ease,
+        color 150ms ease,
+        border-color 150ms ease !important;
+}
+
+[data-sonner-toaster]
+    [data-sonner-toast][data-styled='true']
+    [data-close-button]:hover,
+[data-sonner-toaster]
+    [data-sonner-toast][data-styled='true']:hover
+    [data-close-button]:hover {
+    background: var(--muted) !important;
+    color: var(--foreground) !important;
+    border-color: var(--border) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .cf-shimmer::after {
+        animation: none !important;
+        display: none !important;
+    }
+
+    .cf-animate-error-shake,
+    .animate-shake,
+    .cf-aurora-orb-a,
+    .cf-aurora-orb-b,
+    .cf-aurora-orb-c {
+        animation: none !important;
+        transform: none !important;
+        will-change: auto !important;
+    }
+
+    .cf-page-enter-active,
+    .cf-page-leave-active,
+    .cf-list-move,
+    .cf-list-enter-active,
+    .cf-list-leave-active,
+    .cf-drawer-backdrop-enter-active,
+    .cf-drawer-backdrop-leave-active,
+    .cf-drawer-ltr-enter-active,
+    .cf-drawer-ltr-leave-active,
+    .cf-drawer-rtl-enter-active,
+    .cf-drawer-rtl-leave-active {
+        transition: none !important;
+        transform: none !important;
+    }
+}
+
+/* Backward-Compatible Cinema Classes */
 .glass-panel {
     background: rgba(13, 18, 28, 0.7);
     backdrop-filter: blur(16px);
