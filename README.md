@@ -180,7 +180,7 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
   - `0001_01_01_000000_create_system_tables.php` (sessions, cache, queue jobs).
   - `2026_09_01_000000_create_media_hub_tables.php` (clean consolidated master schema for media items, series, seasons, episodes, genres, credits, subtitles, watch history, download items with workflow states & diagnostics telemetry, and app settings).
 - **Single-Pass Master Migration Guarantee**: Consolidates all lifecycle workflow columns (`workflow_stage`, `organize_status`, `organized_path`, `indexed_id`, `error_details`) and network performance metrics (`num_seeders`, `connections`, `upload_speed_bytes_sec`) into the authoritative master migration, eliminating migration drift and fragmentation.
-- **Pure Local-First Cinema (Zero Auth Overhead)**: Unnecessary user accounts, password authentication, and session barriers removed for a streamlined home theatre appliance experience.
+- **Local-First Multi-Profile Cinema**: Supports seamless home theatre profile switching with optional PIN protection and per-profile parental controls without external cloud auth dependencies.
 - **Production-Only Clean Seeder**: `MediaLibrarySeeder` seeds pure essential system defaults (15 official TMDb genres with Arabic/English names and core application settings) with zero mock movies, fake series, or dummy subtitle records.
 
 ### 16. ⚡ Unified Universal Activity Center (`UnifiedJobCenterModal.vue`)
@@ -318,6 +318,17 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
 - **Automated Metadata Waterfall Linkage (`MediaCollectionResolverService.php`)**: Automatically synchronizes movie collections with TMDb franchise parts and Wikipedia fallback indexing (`php artisan sync:movie-collections`, `php artisan backfill:movie-collections`).
 - **Synchronous Cache Invalidation Across Operations**: Any collection mutation—whether via manual studio reassignment, automated acquisition, or library scanner indexing—instantly flushes cached views (`CollectionController::clearCache()`), ensuring that the `/collections` catalog and Franchise Management stay 100% in sync without waiting for cache TTL expiration.
 - **Normalized Multilingual Genre Navigation**: Standardized genre extraction and filtering across `Collections/Index.vue` with seamless Arabic/English (`name_en`, `name_ar`, `slug`) fallbacks.
+
+### 29. ✨ CreativeFlow UI/UX Design System
+- **Pure Cinema Dark Mode (`hsl(222 47% 7%)`)**: Unified cinema-first dark surface palette with ambient top radial sheen (`AppAmbientBackground.vue`), `.cf-glass` / `.cf-glass-elevated` / `.cf-glass-popover` frosted surfaces, `.cf-field` inputs, `.cf-table-wrapper` tables, and `tabular-nums` alignment across telemetry and durations.
+- **8 Dynamic Cinema Accents**: Instant theme switching (`cyan`, `red`, `amber`, `emerald`, `violet`, `rose`, `orange`, `blue`) wired directly into `--primary`, `--ring`, and `--sidebar-primary` CSS custom properties with zero-flash persistence.
+- **Floating Glass Shell & Navigation**: Collapsible floating glass sidebar (`Sidebar.vue`) with icon-rail mode and pinned profile card, floating sticky header (`Navbar.vue`) with global `Ctrl+K` / `⌘K` live search (`LiveSearchDropdown.vue`), `MobileBottomNav.vue`, and RTL-aware `MobileMenuDrawer.vue`.
+- **Accessible Primitives & Motion**: Built on `reka-ui` (`Dialog`, `Tooltip`), `vue-sonner` stacked HUD toasts (`GlobalToaster.vue`), GPU-composited RTL-aware `.cf-shimmer` skeletons (`CinemaSkeleton.vue`), `PageBanner`, `FilterPills`, `ConfirmModal`, and `MotionPage` / `MotionList` transitions.
+
+### 30. 🔐 Multi-Profile PIN Authentication & Parental Controls
+- **Theatrical Profile Selector & PIN Pad (`Auth/Login.vue`, `PinPad.vue`)**: Netflix/Plex-style household profile picker with keyboard and touch-friendly PIN entry, quick profile switching, and session token persistence (`AuthController`).
+- **Admin User Management (`Users/Index.vue`, `UserManagementController`)**: Protected by `EnsureAdmin` middleware for creating and editing household profiles, customizing avatars, resetting PINs, and enforcing self-delete / last-admin safeguards.
+- **Parental Controls & Kids Mode (`ParentalControlService`)**: Per-profile Kids mode toggle, MPAA age rating caps (`G`, `PG`, `PG-13`, `R`, `NC-17`), and blocked genre enforcement across catalog queries and playback.
 
 ---
 

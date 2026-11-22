@@ -5,18 +5,15 @@ import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
 import { formatBytes } from '@/lib/formatters';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import PageBanner from '@/components/common/PageBanner.vue';
 import { useThemeAccent } from '@/composables/useThemeAccent';
 import {
     Settings as SettingsIcon,
     Save,
     Key,
-    Globe,
-    Sparkles,
     CheckCircle2,
-    AlertCircle,
     ArrowUp,
     ArrowDown,
-    ShieldCheck,
     Layers,
     Cpu,
     Database,
@@ -30,7 +27,6 @@ import {
     UploadCloud,
     RotateCcw,
     FileText,
-    FileJson,
     Clock,
     AlertTriangle,
     Shield,
@@ -38,8 +34,6 @@ import {
     FolderArchive,
     Film,
     Tv,
-    CheckSquare,
-    Square,
     Palette,
 } from '@lucide/vue';
 import ConfirmModal from '@/components/common/ConfirmModal.vue';
@@ -679,76 +673,64 @@ const promptDeleteBackup = (backup: any) => {
 </script>
 
 <template>
-    <AppLayout v-slot="{ play }">
+    <AppLayout>
         <Head :title="t('settings_view.title')" />
         <!-- Header -->
-        <div class="mb-8">
-            <div class="flex flex-wrap items-center justify-between gap-4">
-                <div class="flex items-center gap-3">
-                    <div
-                        class="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-400"
-                    >
-                        <SettingsIcon class="h-5 w-5" />
-                    </div>
-                    <div>
-                        <h1
-                            class="text-2xl font-extrabold text-white sm:text-3xl"
-                        >
-                            {{ t('settings_view.title') }}
-                        </h1>
-                        <p class="mt-0.5 text-xs text-slate-400 sm:text-sm">
-                            {{ t('settings_view.subtitle') }}
-                        </p>
-                    </div>
-                </div>
-
+        <PageBanner
+            :icon="SettingsIcon"
+            :title="t('settings_view.title')"
+            :description="t('settings_view.subtitle')"
+            class="mb-8"
+        >
+            <template #actions>
                 <button
+                    type="button"
                     @click="saveSettings"
                     :disabled="isSaving"
-                    class="flex cursor-pointer items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-cyan-500/25 transition-all hover:from-cyan-400 hover:to-blue-500 active:scale-95"
+                    class="bg-primary text-primary-foreground shadow-primary/25 flex min-h-10 cursor-pointer items-center gap-2 rounded-xl px-6 py-2.5 text-xs font-black shadow-lg transition-all hover:brightness-105 active:scale-95 disabled:opacity-50"
                 >
-                    <RefreshCw v-if="isSaving" class="h-4 w-4 animate-spin" />
-                    <Save v-else class="h-4 w-4" />
+                    <RefreshCw v-if="isSaving" class="size-4 animate-spin" />
+                    <Save v-else class="size-4" />
                     <span>{{ t('settings_view.save') }}</span>
                 </button>
-            </div>
-        </div>
+            </template>
+        </PageBanner>
 
         <div class="space-y-8">
             <!-- 0. Virtual Cinema Theme & Dynamic Accent Color System -->
             <div
-                class="glass-panel space-y-6 rounded-3xl border border-white/10 p-6 sm:p-8"
+                class="cf-glass border-border/80 space-y-6 rounded-3xl border p-6 sm:p-8"
             >
                 <div
-                    class="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4"
+                    class="border-border/70 flex flex-wrap items-center justify-between gap-4 border-b pb-4"
                 >
                     <div class="flex items-center gap-2.5">
                         <div
-                            class="flex h-9 w-9 items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-400"
+                            class="border-primary/30 bg-primary/10 text-primary flex size-9 items-center justify-center rounded-xl border"
                         >
-                            <Palette class="h-5 w-5" />
+                            <Palette class="size-5" />
                         </div>
                         <div>
-                            <h3 class="text-base font-bold text-white">
+                            <h3 class="text-foreground text-base font-bold">
                                 {{ t('accent_theme.title') }}
                             </h3>
-                            <p class="text-xs text-slate-400">
+                            <p class="text-muted-foreground text-xs">
                                 {{ t('accent_theme.subtitle') }}
                             </p>
                         </div>
                     </div>
 
                     <div
-                        class="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5"
+                        class="border-border/80 bg-card/60 flex items-center gap-2 rounded-xl border px-3 py-1.5"
                     >
                         <span
-                            class="h-3 w-3 rounded-full transition-transform duration-300"
+                            class="size-3 rounded-full transition-transform duration-300"
                             :style="{
                                 backgroundColor: activePalette.color,
                                 boxShadow: '0 0 12px ' + activePalette.color,
                             }"
                         ></span>
-                        <span class="text-xs font-bold text-slate-200">
+                        <span class="text-foreground text-xs font-bold">
                             {{ t(activePalette.nameKey) }}
                         </span>
                     </div>
@@ -763,12 +745,11 @@ const promptDeleteBackup = (backup: any) => {
                         :key="palette.key"
                         type="button"
                         @click="setAccent(palette.key)"
-                        class="group relative flex cursor-pointer flex-col justify-between gap-3 overflow-hidden rounded-2xl border p-4 transition-all"
+                        class="group relative flex cursor-pointer flex-col justify-between gap-3 overflow-hidden rounded-2xl border p-4 text-start transition-all"
                         :class="[
                             currentAccent === palette.key
-                                ? 'border-white/40 bg-white/10 shadow-xl ring-2 shadow-black/60'
-                                : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]',
-                            isRTL ? 'text-right' : 'text-left',
+                                ? 'bg-card/85 shadow-xl ring-2 shadow-black/60'
+                                : 'border-border/80 bg-card/40 hover:border-primary/40 hover:bg-card/70',
                         ]"
                         :style="{
                             borderColor:
@@ -784,7 +765,7 @@ const promptDeleteBackup = (backup: any) => {
                         <!-- Top Row: Swatch & Active Pill -->
                         <div class="flex w-full items-center justify-between">
                             <div
-                                class="flex h-8 w-8 items-center justify-center rounded-xl shadow-md transition-transform group-hover:scale-110"
+                                class="flex size-8 items-center justify-center rounded-xl shadow-md transition-transform group-hover:scale-110"
                                 :style="{
                                     background: `linear-gradient(135deg, ${palette.color} 0%, ${palette.secondaryColor} 100%)`,
                                     boxShadow: `0 0 16px ${palette.glowColor}`,
@@ -792,7 +773,7 @@ const promptDeleteBackup = (backup: any) => {
                             >
                                 <span
                                     v-if="currentAccent === palette.key"
-                                    class="h-2 w-2 rounded-full bg-white shadow-xs"
+                                    class="size-2 rounded-full bg-white shadow-xs"
                                 ></span>
                             </div>
 
@@ -812,12 +793,12 @@ const promptDeleteBackup = (backup: any) => {
                         <!-- Bottom Row: Title & Tone -->
                         <div class="w-full">
                             <div
-                                class="text-sm font-bold text-white transition-colors group-hover:text-white"
+                                class="text-foreground text-sm font-bold transition-colors"
                             >
                                 {{ t(palette.nameKey) }}
                             </div>
                             <div
-                                class="mt-0.5 line-clamp-1 text-[11px] text-slate-400"
+                                class="text-muted-foreground mt-0.5 line-clamp-1 text-[11px]"
                             >
                                 {{ t(palette.descKey) }}
                             </div>
@@ -828,22 +809,22 @@ const promptDeleteBackup = (backup: any) => {
 
             <!-- 1. Metadata Providers Customization, Priority Ordering & Live Testing -->
             <div
-                class="glass-panel space-y-6 rounded-3xl border border-white/10 p-6 sm:p-8"
+                class="cf-glass border-border/80 space-y-6 rounded-3xl border p-6 sm:p-8"
             >
                 <div
-                    class="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4"
+                    class="border-border/70 flex flex-wrap items-center justify-between gap-4 border-b pb-4"
                 >
                     <div class="flex items-center gap-2.5">
-                        <Layers class="h-5 w-5 text-cyan-400" />
+                        <Layers class="text-primary size-5" />
                         <div>
-                            <h3 class="text-base font-bold text-white">
+                            <h3 class="text-foreground text-base font-bold">
                                 {{
                                     isRTL
                                         ? 'أولويات مزودي البيانات والأغلفة وفحص الاتصال (Provider Priority & Test)'
                                         : 'Metadata Providers Priority Chain & Live Verification'
                                 }}
                             </h3>
-                            <p class="text-xs text-slate-400">
+                            <p class="text-muted-foreground text-xs">
                                 {{
                                     isRTL
                                         ? 'رتب أولوية البحث واضغط زر الفحص للتأكد من عمل المزود. المزودات المجانية تعمل مباشرة بدون أي مفتاح.'
@@ -859,19 +840,21 @@ const promptDeleteBackup = (backup: any) => {
                     <div
                         v-for="(prov, pIdx) in sortedProviders"
                         :key="prov.id"
-                        class="group flex flex-col justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 p-4 transition-all hover:border-cyan-500/40 sm:flex-row sm:items-center"
+                        class="border-border/80 bg-card/50 hover:border-primary/45 group flex flex-col justify-between gap-4 rounded-2xl border p-4 transition-all sm:flex-row sm:items-center"
                     >
                         <div class="flex min-w-0 items-center gap-3.5">
                             <!-- Priority Rank Badge -->
                             <div
-                                class="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-xs font-black text-cyan-400"
+                                class="border-primary/30 bg-primary/10 text-primary flex size-7 shrink-0 items-center justify-center rounded-xl border text-xs font-black tabular-nums"
                             >
                                 #{{ pIdx + 1 }}
                             </div>
 
                             <div class="min-w-0 space-y-1">
                                 <div class="flex flex-wrap items-center gap-2">
-                                    <h4 class="text-xs font-black text-white">
+                                    <h4
+                                        class="text-foreground text-xs font-black"
+                                    >
                                         {{ prov.name }}
                                     </h4>
                                     <span
@@ -880,7 +863,7 @@ const promptDeleteBackup = (backup: any) => {
                                             prov.badgeColor === 'emerald'
                                                 ? 'border-emerald-500/30 bg-emerald-500/20 text-emerald-300'
                                                 : prov.badgeColor === 'cyan'
-                                                  ? 'border-cyan-500/30 bg-cyan-500/20 text-cyan-300'
+                                                  ? 'border-primary/30 bg-primary/15 text-primary'
                                                   : 'border-amber-500/30 bg-amber-500/20 text-amber-300'
                                         "
                                     >
@@ -890,25 +873,25 @@ const promptDeleteBackup = (backup: any) => {
                                     <!-- Test Feedback Status Badge -->
                                     <span
                                         v-if="testResults[prov.id]"
-                                        class="cinema-badge flex items-center gap-1 font-mono text-[9px] font-bold"
+                                        class="cinema-badge flex items-center gap-1 font-mono text-[9px] font-bold tabular-nums"
                                         :class="
                                             testResults[prov.id].success
                                                 ? 'border-emerald-500/30 bg-emerald-500/20 text-emerald-300'
-                                                : 'border-rose-500/30 bg-rose-500/20 text-rose-300'
+                                                : 'border-destructive/30 bg-destructive/20 text-destructive'
                                         "
                                     >
                                         <Check
                                             v-if="testResults[prov.id].success"
-                                            class="h-3 w-3"
+                                            class="size-3"
                                         />
-                                        <X v-else class="h-3 w-3" />
+                                        <X v-else class="size-3" />
                                         <span>{{
                                             testResults[prov.id].message
                                         }}</span>
                                     </span>
                                 </div>
                                 <p
-                                    class="line-clamp-1 text-[11px] text-slate-400"
+                                    class="text-muted-foreground line-clamp-1 text-[11px]"
                                 >
                                     {{ isRTL ? prov.descAr : prov.desc }}
                                 </p>
@@ -921,15 +904,16 @@ const promptDeleteBackup = (backup: any) => {
                         >
                             <button
                                 v-if="prov.id !== 'local_nfo'"
+                                type="button"
                                 @click="testSingleProvider(prov.id)"
                                 :disabled="testingProviderId === prov.id"
-                                class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-bold text-slate-300 transition-all hover:bg-cyan-500/20 hover:text-cyan-300"
+                                class="border-border/80 bg-card/70 text-foreground/85 hover:border-primary/40 hover:text-primary flex cursor-pointer items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-bold transition-all"
                             >
                                 <RefreshCw
                                     v-if="testingProviderId === prov.id"
-                                    class="h-3 w-3 animate-spin text-cyan-400"
+                                    class="text-primary size-3 animate-spin"
                                 />
-                                <Zap v-else class="h-3 w-3 text-cyan-400" />
+                                <Zap v-else class="text-primary size-3" />
                                 <span>{{
                                     isRTL ? 'فحص الاتصال' : 'Test Connection'
                                 }}</span>
@@ -937,22 +921,24 @@ const promptDeleteBackup = (backup: any) => {
 
                             <div class="flex items-center gap-1">
                                 <button
+                                    type="button"
                                     @click="moveUp(pIdx)"
                                     :disabled="pIdx === 0"
-                                    class="cursor-pointer rounded-xl bg-white/5 p-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                                    class="bg-card/70 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer rounded-xl p-2 transition-colors disabled:cursor-not-allowed disabled:opacity-30"
                                     title="Move Priority Up"
                                 >
-                                    <ArrowUp class="h-4 w-4" />
+                                    <ArrowUp class="size-4" />
                                 </button>
                                 <button
+                                    type="button"
                                     @click="moveDown(pIdx)"
                                     :disabled="
                                         pIdx === sortedProviders.length - 1
                                     "
-                                    class="cursor-pointer rounded-xl bg-white/5 p-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                                    class="bg-card/70 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer rounded-xl p-2 transition-colors disabled:cursor-not-allowed disabled:opacity-30"
                                     title="Move Priority Down"
                                 >
-                                    <ArrowDown class="h-4 w-4" />
+                                    <ArrowDown class="size-4" />
                                 </button>
                             </div>
                         </div>
@@ -962,21 +948,21 @@ const promptDeleteBackup = (backup: any) => {
 
             <!-- 2. API Keys (For Keyed Providers) -->
             <div
-                class="glass-panel space-y-6 rounded-3xl border border-white/10 p-6 sm:p-8"
+                class="cf-glass border-border/80 space-y-6 rounded-3xl border p-6 sm:p-8"
             >
                 <div
-                    class="flex items-center gap-2.5 border-b border-white/10 pb-4"
+                    class="border-border/70 flex items-center gap-2.5 border-b pb-4"
                 >
-                    <Key class="h-5 w-5 text-amber-400" />
+                    <Key class="size-5 text-amber-400" />
                     <div>
-                        <h3 class="text-base font-bold text-white">
+                        <h3 class="text-foreground text-base font-bold">
                             {{
                                 isRTL
                                     ? 'مفاتيح واجهات برمجة التطبيقات (API Keys)'
                                     : 'Provider API Keys (Optional)'
                             }}
                         </h3>
-                        <p class="text-xs text-slate-400">
+                        <p class="text-muted-foreground text-xs">
                             {{
                                 isRTL
                                     ? 'أدخل مفاتيح API الخاصة بك للمزودات التي تتطلب مفتاحاً للحصول على صور بدقة 4K وتقييمات IMDb.'
@@ -989,10 +975,11 @@ const promptDeleteBackup = (backup: any) => {
                 <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
                     <div class="space-y-1.5">
                         <div class="flex items-center justify-between">
-                            <label class="text-xs font-bold text-slate-300"
+                            <label class="text-foreground/85 text-xs font-bold"
                                 >TMDb API Key</label
                             >
                             <button
+                                type="button"
                                 @click="
                                     testSingleProvider(
                                         'tmdb',
@@ -1000,7 +987,7 @@ const promptDeleteBackup = (backup: any) => {
                                     )
                                 "
                                 :disabled="testingProviderId === 'tmdb'"
-                                class="cursor-pointer text-[10px] font-bold text-cyan-400 hover:underline"
+                                class="text-primary cursor-pointer text-[10px] font-bold hover:underline"
                             >
                                 {{ isRTL ? 'فحص المفتاح' : 'Test Key' }}
                             </button>
@@ -1009,16 +996,17 @@ const promptDeleteBackup = (backup: any) => {
                             v-model="form.tmdb_api_key"
                             type="password"
                             placeholder="Enter TMDb v3 API Read Key"
-                            class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+                            class="cf-field w-full rounded-xl px-4 py-2.5 text-xs"
                         />
                     </div>
 
                     <div class="space-y-1.5">
                         <div class="flex items-center justify-between">
-                            <label class="text-xs font-bold text-slate-300"
+                            <label class="text-foreground/85 text-xs font-bold"
                                 >OMDb API Key</label
                             >
                             <button
+                                type="button"
                                 @click="
                                     testSingleProvider(
                                         'omdb',
@@ -1026,7 +1014,7 @@ const promptDeleteBackup = (backup: any) => {
                                     )
                                 "
                                 :disabled="testingProviderId === 'omdb'"
-                                class="cursor-pointer text-[10px] font-bold text-cyan-400 hover:underline"
+                                class="text-primary cursor-pointer text-[10px] font-bold hover:underline"
                             >
                                 {{ isRTL ? 'فحص المفتاح' : 'Test Key' }}
                             </button>
@@ -1035,16 +1023,17 @@ const promptDeleteBackup = (backup: any) => {
                             v-model="form.omdb_api_key"
                             type="password"
                             placeholder="Enter OMDb API Key"
-                            class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+                            class="cf-field w-full rounded-xl px-4 py-2.5 text-xs"
                         />
                     </div>
 
                     <div class="space-y-1.5 md:col-span-2">
                         <div class="flex items-center justify-between">
-                            <label class="text-xs font-bold text-slate-300"
+                            <label class="text-foreground/85 text-xs font-bold"
                                 >OpenSubtitles.com User Key</label
                             >
                             <button
+                                type="button"
                                 @click="
                                     testSingleProvider(
                                         'opensubtitles',
@@ -1054,7 +1043,7 @@ const promptDeleteBackup = (backup: any) => {
                                 :disabled="
                                     testingProviderId === 'opensubtitles'
                                 "
-                                class="cursor-pointer text-[10px] font-bold text-cyan-400 hover:underline"
+                                class="text-primary cursor-pointer text-[10px] font-bold hover:underline"
                             >
                                 {{ isRTL ? 'فحص الخدمة' : 'Test Service' }}
                             </button>
@@ -1063,7 +1052,7 @@ const promptDeleteBackup = (backup: any) => {
                             v-model="form.opensubtitles_api_key"
                             type="password"
                             placeholder="Enter OpenSubtitles REST API Key"
-                            class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+                            class="cf-field w-full rounded-xl px-4 py-2.5 text-xs"
                         />
                     </div>
                 </div>
@@ -1071,21 +1060,21 @@ const promptDeleteBackup = (backup: any) => {
 
             <!-- 3. Cinema Streaming & Transcoder Configuration -->
             <div
-                class="glass-panel space-y-6 rounded-3xl border border-white/10 p-6 sm:p-8"
+                class="cf-glass border-border/80 space-y-6 rounded-3xl border p-6 sm:p-8"
             >
                 <div
-                    class="flex items-center gap-2.5 border-b border-white/10 pb-4"
+                    class="border-border/70 flex items-center gap-2.5 border-b pb-4"
                 >
-                    <Cpu class="h-5 w-5 text-cyan-400" />
+                    <Cpu class="text-primary size-5" />
                     <div>
-                        <h3 class="text-base font-bold text-white">
+                        <h3 class="text-foreground text-base font-bold">
                             {{
                                 isRTL
                                     ? 'محرك تشغيل وترميز الصوت (Cinema Audio & Codec Engine)'
                                     : 'Cinema Audio & Codec Engine'
                             }}
                         </h3>
-                        <p class="text-xs text-slate-400">
+                        <p class="text-muted-foreground text-xs">
                             {{
                                 isRTL
                                     ? 'دعم تشغيل صيغ الصوت المتقدمة (E-AC-3, AC-3, DTS, TrueHD) بدون مشاكل انقطاع الصوت.'
@@ -1097,7 +1086,7 @@ const promptDeleteBackup = (backup: any) => {
 
                 <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
                     <div class="space-y-1.5">
-                        <label class="text-xs font-bold text-slate-300">{{
+                        <label class="text-foreground/85 text-xs font-bold">{{
                             isRTL
                                 ? 'مسار FFmpeg للترميز الفوري'
                                 : 'FFmpeg Binary Path'
@@ -1106,19 +1095,19 @@ const promptDeleteBackup = (backup: any) => {
                             v-model="form.ffmpeg_path"
                             type="text"
                             placeholder="ffmpeg or C:\ffmpeg\bin\ffmpeg.exe"
-                            class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+                            class="cf-field w-full rounded-xl px-4 py-2.5 text-xs"
                         />
                     </div>
 
                     <div class="space-y-1.5">
-                        <label class="text-xs font-bold text-slate-300">{{
+                        <label class="text-foreground/85 text-xs font-bold">{{
                             isRTL
                                 ? 'لغة الواجهة المفضلة'
                                 : 'Default Interface Language'
                         }}</label>
                         <select
                             v-model="form.default_language"
-                            class="w-full rounded-xl border border-white/10 bg-[#0E121E] px-4 py-2.5 text-xs font-bold text-white focus:border-cyan-500 focus:outline-none"
+                            class="cf-field bg-card w-full rounded-xl px-4 py-2.5 text-xs font-bold"
                         >
                             <option value="ar">
                                 العربية (Arabic) - Default
@@ -1131,22 +1120,22 @@ const promptDeleteBackup = (backup: any) => {
 
             <!-- 4. Media Cache & Storage Management -->
             <div
-                class="glass-panel space-y-6 rounded-3xl border border-white/10 p-6 sm:p-8"
+                class="cf-glass border-border/80 space-y-6 rounded-3xl border p-6 sm:p-8"
             >
                 <div
-                    class="flex items-center justify-between border-b border-white/10 pb-4"
+                    class="border-border/70 flex items-center justify-between border-b pb-4"
                 >
                     <div class="flex items-center gap-2.5">
-                        <HardDrive class="h-5 w-5 text-purple-400" />
+                        <HardDrive class="text-primary size-5" />
                         <div>
-                            <h3 class="text-base font-bold text-white">
+                            <h3 class="text-foreground text-base font-bold">
                                 {{
                                     isRTL
                                         ? 'إدارة التخزين المؤقت للبث (Media Streams & Transcode Cache)'
                                         : 'Media Streams & Transcode Cache'
                                 }}
                             </h3>
-                            <p class="text-xs text-slate-400">
+                            <p class="text-muted-foreground text-xs">
                                 {{
                                     isRTL
                                         ? 'إدارة المساحة المستهلكة من قبل البث المباشر المحسن والملفات المؤقتة المحولة.'
@@ -1156,24 +1145,30 @@ const promptDeleteBackup = (backup: any) => {
                         </div>
                     </div>
                     <button
+                        type="button"
                         @click="refreshCacheStats"
-                        class="cursor-pointer rounded-xl bg-white/5 p-2 text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+                        class="bg-card/70 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer rounded-xl p-2 transition-all"
                         title="Refresh Cache Stats"
                     >
-                        <RefreshCw class="h-4 w-4" />
+                        <RefreshCw class="size-4" />
                     </button>
                 </div>
 
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <!-- Stat: Cache Size -->
                     <div
-                        class="flex flex-col justify-between rounded-2xl border border-white/10 bg-white/5 p-4"
+                        class="border-border/80 bg-card/50 flex flex-col justify-between rounded-2xl border p-4 tabular-nums"
                     >
-                        <span class="text-xs font-semibold text-slate-400">{{
-                            isRTL ? 'حجم الملفات المؤقتة' : 'Current Cache Size'
-                        }}</span>
+                        <span
+                            class="text-muted-foreground text-xs font-semibold"
+                            >{{
+                                isRTL
+                                    ? 'حجم الملفات المؤقتة'
+                                    : 'Current Cache Size'
+                            }}</span
+                        >
                         <div
-                            class="mt-2 font-mono text-2xl font-black text-cyan-400"
+                            class="text-primary mt-2 font-mono text-2xl font-black"
                         >
                             {{ mediaCacheStats.formatted_size }}
                         </div>
@@ -1181,15 +1176,18 @@ const promptDeleteBackup = (backup: any) => {
 
                     <!-- Stat: Cached Items Count -->
                     <div
-                        class="flex flex-col justify-between rounded-2xl border border-white/10 bg-white/5 p-4"
+                        class="border-border/80 bg-card/50 flex flex-col justify-between rounded-2xl border p-4 tabular-nums"
                     >
-                        <span class="text-xs font-semibold text-slate-400">{{
-                            isRTL
-                                ? 'عدد الملفات المؤقتة'
-                                : 'Cached Stream Files'
-                        }}</span>
+                        <span
+                            class="text-muted-foreground text-xs font-semibold"
+                            >{{
+                                isRTL
+                                    ? 'عدد الملفات المؤقتة'
+                                    : 'Cached Stream Files'
+                            }}</span
+                        >
                         <div
-                            class="mt-2 font-mono text-2xl font-black text-purple-400"
+                            class="text-foreground mt-2 font-mono text-2xl font-black"
                         >
                             {{ mediaCacheStats.file_count }}
                         </div>
@@ -1197,11 +1195,14 @@ const promptDeleteBackup = (backup: any) => {
 
                     <!-- Action: Clean Cache Button -->
                     <div
-                        class="flex flex-col justify-between rounded-2xl border border-white/10 bg-white/5 p-4"
+                        class="border-border/80 bg-card/50 flex flex-col justify-between rounded-2xl border p-4"
                     >
-                        <span class="text-xs font-semibold text-slate-400">{{
-                            isRTL ? 'تحرير مساحة القرص' : 'Storage Cleanup'
-                        }}</span>
+                        <span
+                            class="text-muted-foreground text-xs font-semibold"
+                            >{{
+                                isRTL ? 'تحرير مساحة القرص' : 'Storage Cleanup'
+                            }}</span
+                        >
                         <button
                             type="button"
                             @click="clearMediaCache"
@@ -1209,13 +1210,13 @@ const promptDeleteBackup = (backup: any) => {
                                 isClearingCache ||
                                 mediaCacheStats.file_count === 0
                             "
-                            class="mt-2 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/20 px-4 py-2.5 text-xs font-bold text-red-300 shadow-lg transition-all hover:bg-red-500/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                            class="border-destructive/30 bg-destructive/15 text-destructive hover:bg-destructive mt-2 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold shadow-sm transition-all hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                         >
                             <RefreshCw
                                 v-if="isClearingCache"
-                                class="h-4 w-4 animate-spin"
+                                class="size-4 animate-spin"
                             />
-                            <Trash2 v-else class="h-4 w-4 text-red-400" />
+                            <Trash2 v-else class="size-4" />
                             <span>{{
                                 isClearingCache
                                     ? isRTL
@@ -1231,29 +1232,29 @@ const promptDeleteBackup = (backup: any) => {
 
                 <div
                     v-if="cacheSuccessMessage"
-                    class="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/20 p-3 text-xs font-bold text-emerald-300"
+                    class="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/15 p-3 text-xs font-bold text-emerald-300"
                 >
-                    <CheckCircle2 class="h-4 w-4 shrink-0 text-emerald-400" />
+                    <CheckCircle2 class="size-4 shrink-0 text-emerald-400" />
                     <span>{{ cacheSuccessMessage }}</span>
                 </div>
             </div>
 
             <!-- 5. Database Backup & Disaster Recovery -->
             <div
-                class="glass-panel space-y-6 rounded-3xl border border-white/10 p-6 sm:p-8"
+                class="cf-glass border-border/80 space-y-6 rounded-3xl border p-6 sm:p-8"
             >
                 <div
-                    class="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4"
+                    class="border-border/70 flex flex-wrap items-center justify-between gap-4 border-b pb-4"
                 >
                     <div class="flex items-center gap-3">
                         <div
-                            class="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-400"
+                            class="border-primary/30 bg-primary/10 text-primary flex size-10 items-center justify-center rounded-2xl border"
                         >
-                            <Database class="h-5 w-5" />
+                            <Database class="size-5" />
                         </div>
                         <div>
                             <h3
-                                class="flex items-center gap-2 text-base font-bold text-white"
+                                class="text-foreground flex items-center gap-2 text-base font-bold"
                             >
                                 <span>{{
                                     isRTL
@@ -1261,12 +1262,12 @@ const promptDeleteBackup = (backup: any) => {
                                         : 'Database Backup & Disaster Recovery'
                                 }}</span>
                                 <span
-                                    class="rounded-full border border-cyan-500/30 bg-cyan-500/20 px-2 py-0.5 text-[10px] font-black text-cyan-300 uppercase"
+                                    class="border-primary/30 bg-primary/15 text-primary rounded-full border px-2 py-0.5 text-[10px] font-black uppercase"
                                 >
                                     {{ isRTL ? 'مباشر وآمن' : 'Live & Safe' }}
                                 </span>
                             </h3>
-                            <p class="mt-0.5 text-xs text-slate-400">
+                            <p class="text-muted-foreground mt-0.5 text-xs">
                                 {{
                                     isRTL
                                         ? 'حفظ واستعادة فهارس المكتبة والأفلام والمسلسلات والترجمات برابط تنزيل مباشر أو لقطات محلية آمنة.'
@@ -1281,14 +1282,14 @@ const promptDeleteBackup = (backup: any) => {
                         <button
                             type="button"
                             @click="downloadDatabaseBackup"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-cyan-500 px-4 py-2 text-xs font-black text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:bg-cyan-400"
+                            class="bg-primary text-primary-foreground shadow-primary/20 flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-black shadow-lg transition-all hover:brightness-105"
                             :title="
                                 isRTL
                                     ? 'تنزيل نسخة احتياطية مباشرة لجهازك'
                                     : 'Download JSON Backup to your computer'
                             "
                         >
-                            <DownloadCloud class="h-4 w-4" />
+                            <DownloadCloud class="size-4" />
                             <span>{{
                                 isRTL ? 'تنزيل نسخة JSON' : 'Download Backup'
                             }}</span>
@@ -1298,7 +1299,7 @@ const promptDeleteBackup = (backup: any) => {
                             type="button"
                             @click="createServerSnapshot"
                             :disabled="isCreatingBackup"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-white transition-all hover:bg-white/10 disabled:opacity-50"
+                            class="cf-glass border-border/80 text-foreground hover:border-primary/40 flex cursor-pointer items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-bold transition-all disabled:opacity-50"
                             :title="
                                 isRTL
                                     ? 'أخذ لقطة سريعة وحفظها على الخادم'
@@ -1307,9 +1308,9 @@ const promptDeleteBackup = (backup: any) => {
                         >
                             <RefreshCw
                                 v-if="isCreatingBackup"
-                                class="h-4 w-4 animate-spin text-cyan-400"
+                                class="text-primary size-4 animate-spin"
                             />
-                            <Save v-else class="h-4 w-4 text-cyan-400" />
+                            <Save v-else class="text-primary size-4" />
                             <span>{{
                                 isCreatingBackup
                                     ? isRTL
@@ -1326,25 +1327,25 @@ const promptDeleteBackup = (backup: any) => {
                 <!-- Database Metrics Bar -->
                 <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <div
-                        class="rounded-2xl border border-white/10 bg-white/[0.03] p-3.5"
+                        class="border-border/80 bg-card/50 rounded-2xl border p-3.5 tabular-nums"
                     >
                         <span
-                            class="block text-[10px] font-bold text-slate-400 uppercase"
+                            class="text-muted-foreground block text-[10px] font-bold uppercase"
                             >{{
                                 isRTL ? 'الأفلام المفهرسة' : 'Indexed Movies'
                             }}</span
                         >
                         <div
-                            class="mt-1 font-mono text-xl font-black text-white"
+                            class="text-foreground mt-1 font-mono text-xl font-black"
                         >
                             {{ database_stats?.media_items || 0 }}
                         </div>
                     </div>
                     <div
-                        class="rounded-2xl border border-white/10 bg-white/[0.03] p-3.5"
+                        class="border-border/80 bg-card/50 rounded-2xl border p-3.5 tabular-nums"
                     >
                         <span
-                            class="block text-[10px] font-bold text-slate-400 uppercase"
+                            class="text-muted-foreground block text-[10px] font-bold uppercase"
                             >{{
                                 isRTL
                                     ? 'المسلسلات والحلقات'
@@ -1352,34 +1353,35 @@ const promptDeleteBackup = (backup: any) => {
                             }}</span
                         >
                         <div
-                            class="mt-1 font-mono text-xl font-black text-cyan-400"
+                            class="text-primary mt-1 font-mono text-xl font-black"
                         >
                             {{ database_stats?.series || 0 }}
-                            <span class="text-xs font-normal text-slate-400"
+                            <span
+                                class="text-muted-foreground text-xs font-normal"
                                 >({{ database_stats?.episodes || 0 }} ep)</span
                             >
                         </div>
                     </div>
                     <div
-                        class="rounded-2xl border border-white/10 bg-white/[0.03] p-3.5"
+                        class="border-border/80 bg-card/50 rounded-2xl border p-3.5 tabular-nums"
                     >
                         <span
-                            class="block text-[10px] font-bold text-slate-400 uppercase"
+                            class="text-muted-foreground block text-[10px] font-bold uppercase"
                             >{{
                                 isRTL ? 'ملفات الترجمة' : 'Cataloged Subtitles'
                             }}</span
                         >
                         <div
-                            class="mt-1 font-mono text-xl font-black text-purple-400"
+                            class="text-foreground mt-1 font-mono text-xl font-black"
                         >
                             {{ database_stats?.subtitles || 0 }}
                         </div>
                     </div>
                     <div
-                        class="rounded-2xl border border-white/10 bg-white/[0.03] p-3.5"
+                        class="border-border/80 bg-card/50 rounded-2xl border p-3.5 tabular-nums"
                     >
                         <span
-                            class="block text-[10px] font-bold text-slate-400 uppercase"
+                            class="text-muted-foreground block text-[10px] font-bold uppercase"
                             >{{
                                 isRTL ? 'اللقطات المحفوظة' : 'Local Snapshots'
                             }}</span
@@ -1399,11 +1401,12 @@ const promptDeleteBackup = (backup: any) => {
                 >
                     <div class="flex items-center gap-2">
                         <CheckCircle2
-                            class="h-4 w-4 shrink-0 text-emerald-400"
+                            class="size-4 shrink-0 text-emerald-400"
                         />
                         <span>{{ backupSuccessMessage }}</span>
                     </div>
                     <button
+                        type="button"
                         @click="backupSuccessMessage = null"
                         class="cursor-pointer text-emerald-400 hover:text-emerald-200"
                     >
@@ -1413,15 +1416,16 @@ const promptDeleteBackup = (backup: any) => {
 
                 <div
                     v-if="backupErrorMessage"
-                    class="flex items-center justify-between rounded-2xl border border-rose-500/30 bg-rose-500/15 p-3.5 text-xs font-bold text-rose-300"
+                    class="border-destructive/30 bg-destructive/15 text-destructive flex items-center justify-between rounded-2xl border p-3.5 text-xs font-bold"
                 >
                     <div class="flex items-center gap-2">
-                        <AlertTriangle class="h-4 w-4 shrink-0 text-rose-400" />
+                        <AlertTriangle class="size-4 shrink-0" />
                         <span>{{ backupErrorMessage }}</span>
                     </div>
                     <button
+                        type="button"
                         @click="backupErrorMessage = null"
-                        class="cursor-pointer text-rose-400 hover:text-rose-200"
+                        class="cursor-pointer opacity-80 hover:opacity-100"
                     >
                         ✕
                     </button>
@@ -1429,14 +1433,14 @@ const promptDeleteBackup = (backup: any) => {
 
                 <!-- Selective Restore Configuration Panel -->
                 <div
-                    class="space-y-4 rounded-2xl border border-white/10 bg-white/[0.02] p-5"
+                    class="border-border/80 bg-card/40 space-y-4 rounded-2xl border p-5"
                 >
                     <div
-                        class="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3"
+                        class="border-border/70 flex flex-wrap items-center justify-between gap-3 border-b pb-3"
                     >
                         <div>
                             <h4
-                                class="flex items-center gap-2 text-sm font-black text-white"
+                                class="text-foreground flex items-center gap-2 text-sm font-black"
                             >
                                 <span>{{
                                     isRTL
@@ -1444,11 +1448,11 @@ const promptDeleteBackup = (backup: any) => {
                                         : 'Selective Restore Sections'
                                 }}</span>
                                 <span
-                                    class="rounded-full px-2 py-0.5 text-[10px] font-black"
+                                    class="rounded-full border px-2 py-0.5 text-[10px] font-black tabular-nums"
                                     :class="
                                         selectedSections.length > 0
-                                            ? 'border border-cyan-500/30 bg-cyan-500/20 text-cyan-300'
-                                            : 'border border-rose-500/30 bg-rose-500/20 text-rose-300'
+                                            ? 'border-primary/30 bg-primary/15 text-primary'
+                                            : 'border-destructive/30 bg-destructive/15 text-destructive'
                                     "
                                 >
                                     {{ selectedSections.length }} /
@@ -1456,7 +1460,7 @@ const promptDeleteBackup = (backup: any) => {
                                     {{ isRTL ? 'محدد' : 'selected' }}
                                 </span>
                             </h4>
-                            <p class="mt-0.5 text-xs text-slate-400">
+                            <p class="text-muted-foreground mt-0.5 text-xs">
                                 {{
                                     isRTL
                                         ? 'اختر الأقسام التي ترغب في استعادتها تحديداً (مثل الأفلام فقط، أو المسلسلات فقط، أو الترجمات). الأقسام غير المحددة لن تُحذف ولن تتأثر إطلاقاً.'
@@ -1470,9 +1474,9 @@ const promptDeleteBackup = (backup: any) => {
                             <button
                                 type="button"
                                 @click="selectAllSections"
-                                class="flex cursor-pointer items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 transition-all hover:bg-white/10 hover:text-white"
+                                class="bg-card/70 text-foreground/85 hover:bg-muted flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all"
                             >
-                                <CheckCheck class="h-3.5 w-3.5 text-cyan-400" />
+                                <CheckCheck class="text-primary size-3.5" />
                                 <span>{{
                                     isRTL ? 'تحديد الكل' : 'Select All'
                                 }}</span>
@@ -1480,9 +1484,9 @@ const promptDeleteBackup = (backup: any) => {
                             <button
                                 type="button"
                                 @click="clearAllSections"
-                                class="flex cursor-pointer items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 transition-all hover:bg-white/10 hover:text-white"
+                                class="bg-card/70 text-muted-foreground hover:bg-muted hover:text-foreground flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all"
                             >
-                                <X class="h-3.5 w-3.5 text-slate-400" />
+                                <X class="size-3.5" />
                                 <span>{{
                                     isRTL ? 'إلغاء التحديد' : 'Clear All'
                                 }}</span>
@@ -1501,8 +1505,8 @@ const promptDeleteBackup = (backup: any) => {
                             class="group relative flex cursor-pointer flex-col justify-between rounded-xl border p-3.5 transition-all select-none"
                             :class="
                                 selectedSections.includes(section.id)
-                                    ? 'border-cyan-500/40 bg-cyan-500/10 text-white shadow-lg ring-1 shadow-cyan-500/5 ring-cyan-500/30'
-                                    : 'border-white/5 bg-white/[0.02] text-slate-400 hover:border-white/20 hover:text-slate-200'
+                                    ? 'border-primary/45 bg-primary/12 text-foreground ring-primary/30 shadow-sm ring-1'
+                                    : 'border-border/60 bg-card/30 text-muted-foreground hover:border-border hover:text-foreground'
                             "
                         >
                             <div>
@@ -1510,46 +1514,46 @@ const promptDeleteBackup = (backup: any) => {
                                     class="mb-2 flex items-center justify-between gap-2"
                                 >
                                     <div
-                                        class="flex h-7 w-7 items-center justify-center rounded-lg"
+                                        class="flex size-7 items-center justify-center rounded-lg"
                                         :class="
                                             selectedSections.includes(
                                                 section.id,
                                             )
-                                                ? 'bg-cyan-500/20 text-cyan-300'
-                                                : 'bg-white/5 text-slate-400'
+                                                ? 'bg-primary/20 text-primary'
+                                                : 'bg-muted/60 text-muted-foreground'
                                         "
                                     >
                                         <Film
                                             v-if="section.id === 'movies'"
-                                            class="h-4 w-4"
+                                            class="size-4"
                                         />
                                         <Tv
                                             v-else-if="section.id === 'series'"
-                                            class="h-4 w-4"
+                                            class="size-4"
                                         />
                                         <FileText
                                             v-else-if="
                                                 section.id === 'subtitles'
                                             "
-                                            class="h-4 w-4"
+                                            class="size-4"
                                         />
                                         <SettingsIcon
                                             v-else-if="
                                                 section.id === 'settings'
                                             "
-                                            class="h-4 w-4"
+                                            class="size-4"
                                         />
-                                        <Clock v-else class="h-4 w-4" />
+                                        <Clock v-else class="size-4" />
                                     </div>
 
                                     <div
-                                        class="flex h-5 w-5 items-center justify-center rounded-md transition-all"
+                                        class="flex size-5 items-center justify-center rounded-md transition-all"
                                         :class="
                                             selectedSections.includes(
                                                 section.id,
                                             )
-                                                ? 'bg-cyan-500 font-black text-slate-950'
-                                                : 'border border-white/20'
+                                                ? 'bg-primary text-primary-foreground font-black'
+                                                : 'border-border border'
                                         "
                                     >
                                         <Check
@@ -1558,7 +1562,7 @@ const promptDeleteBackup = (backup: any) => {
                                                     section.id,
                                                 )
                                             "
-                                            class="h-3.5 w-3.5"
+                                            class="size-3.5"
                                         />
                                     </div>
                                 </div>
@@ -1567,8 +1571,8 @@ const promptDeleteBackup = (backup: any) => {
                                     class="text-xs font-black"
                                     :class="
                                         selectedSections.includes(section.id)
-                                            ? 'text-white'
-                                            : 'text-slate-300'
+                                            ? 'text-foreground'
+                                            : 'text-foreground/80'
                                     "
                                 >
                                     {{
@@ -1607,7 +1611,7 @@ const promptDeleteBackup = (backup: any) => {
                         <!-- Mode Switcher -->
                         <div class="flex flex-wrap items-center gap-2">
                             <span
-                                class="shrink-0 text-xs font-bold text-slate-300"
+                                class="text-foreground/85 shrink-0 text-xs font-bold"
                             >
                                 {{
                                     isRTL
@@ -1616,7 +1620,7 @@ const promptDeleteBackup = (backup: any) => {
                                 }}
                             </span>
                             <div
-                                class="inline-flex rounded-xl border border-white/10 bg-white/5 p-1"
+                                class="border-border/80 bg-card/70 inline-flex rounded-xl border p-1"
                             >
                                 <button
                                     type="button"
@@ -1624,8 +1628,8 @@ const promptDeleteBackup = (backup: any) => {
                                     class="cursor-pointer rounded-lg px-3 py-1 text-xs font-bold transition-all"
                                     :class="
                                         restoreMode === 'overwrite'
-                                            ? 'bg-cyan-500 font-black text-slate-950 shadow-sm'
-                                            : 'text-slate-400 hover:text-white'
+                                            ? 'bg-primary text-primary-foreground font-black shadow-sm'
+                                            : 'text-muted-foreground hover:text-foreground'
                                     "
                                 >
                                     {{
@@ -1640,8 +1644,8 @@ const promptDeleteBackup = (backup: any) => {
                                     class="cursor-pointer rounded-lg px-3 py-1 text-xs font-bold transition-all"
                                     :class="
                                         restoreMode === 'merge'
-                                            ? 'bg-purple-500 font-black text-white shadow-sm'
-                                            : 'text-slate-400 hover:text-white'
+                                            ? 'bg-primary text-primary-foreground font-black shadow-sm'
+                                            : 'text-muted-foreground hover:text-foreground'
                                     "
                                 >
                                     {{
@@ -1655,9 +1659,9 @@ const promptDeleteBackup = (backup: any) => {
 
                         <!-- Safety Notice -->
                         <div
-                            class="flex items-center gap-2 text-[11px] text-slate-400"
+                            class="text-muted-foreground flex items-center gap-2 text-[11px]"
                         >
-                            <Shield class="h-4 w-4 shrink-0 text-emerald-400" />
+                            <Shield class="size-4 shrink-0 text-emerald-400" />
                             <span>{{
                                 isRTL
                                     ? 'يتم حفظ لقطة أمان احتياطية تلقائياً قبل أي عملية استعادة.'
@@ -1671,20 +1675,22 @@ const promptDeleteBackup = (backup: any) => {
                 <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
                     <!-- Card 1: Restore from File -->
                     <div
-                        class="flex flex-col justify-between space-y-4 rounded-2xl border border-white/10 bg-white/[0.02] p-5"
+                        class="border-border/80 bg-card/40 flex flex-col justify-between space-y-4 rounded-2xl border p-5"
                     >
                         <div class="space-y-3">
                             <div
-                                class="flex items-center gap-2 text-sm font-bold text-white"
+                                class="text-foreground flex items-center gap-2 text-sm font-bold"
                             >
-                                <UploadCloud class="h-4 w-4 text-cyan-400" />
+                                <UploadCloud class="text-primary size-4" />
                                 <span>{{
                                     isRTL
                                         ? 'استعادة قاعدة البيانات من ملف خارجي'
                                         : 'Restore Database from File'
                                 }}</span>
                             </div>
-                            <p class="text-xs leading-relaxed text-slate-400">
+                            <p
+                                class="text-muted-foreground text-xs leading-relaxed"
+                            >
                                 {{
                                     isRTL
                                         ? 'قم برفع ملف نسخة احتياطية بصيغة (.json) أو (.sqlite / .db). سيتم أخذ نسخة أمان احتياطية تلقائياً قبل البدء بالاستعادة.'
@@ -1694,7 +1700,7 @@ const promptDeleteBackup = (backup: any) => {
 
                             <!-- File Selector Dropzone -->
                             <div
-                                class="rounded-2xl border-2 border-dashed border-white/10 p-4 text-center transition-colors hover:border-cyan-500/40"
+                                class="border-border/80 hover:border-primary/45 rounded-2xl border-2 border-dashed p-4 text-center transition-colors"
                             >
                                 <input
                                     ref="fileInputRef"
@@ -1709,10 +1715,10 @@ const promptDeleteBackup = (backup: any) => {
                                     class="flex cursor-pointer flex-col items-center gap-2"
                                 >
                                     <FolderArchive
-                                        class="h-7 w-7 text-cyan-400"
+                                        class="text-primary size-7"
                                     />
                                     <div
-                                        class="text-xs font-bold text-slate-200"
+                                        class="text-foreground text-xs font-bold"
                                     >
                                         {{
                                             selectedFile
@@ -1722,7 +1728,9 @@ const promptDeleteBackup = (backup: any) => {
                                                   : 'Choose backup file (.json, .sqlite, .db)'
                                         }}
                                     </div>
-                                    <span class="text-[10px] text-slate-500">
+                                    <span
+                                        class="text-muted-foreground text-[10px] tabular-nums"
+                                    >
                                         {{
                                             selectedFile
                                                 ? formatBytes(selectedFile.size)
@@ -1737,7 +1745,7 @@ const promptDeleteBackup = (backup: any) => {
                             <!-- Mode Selector -->
                             <div class="space-y-1.5 pt-1">
                                 <label
-                                    class="block text-xs font-bold text-slate-300"
+                                    class="text-foreground/85 block text-xs font-bold"
                                 >
                                     {{
                                         isRTL
@@ -1749,11 +1757,11 @@ const promptDeleteBackup = (backup: any) => {
                                     <button
                                         type="button"
                                         @click="restoreMode = 'overwrite'"
-                                        class="cursor-pointer rounded-xl border p-2.5 text-left text-xs font-bold transition-all"
+                                        class="cursor-pointer rounded-xl border p-2.5 text-start text-xs font-bold transition-all"
                                         :class="
                                             restoreMode === 'overwrite'
-                                                ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/30'
-                                                : 'border-white/10 bg-white/5 text-slate-400 hover:text-white'
+                                                ? 'border-primary/45 bg-primary/15 text-primary ring-primary/30 ring-1'
+                                                : 'border-border/80 bg-card/50 text-muted-foreground hover:text-foreground'
                                         "
                                     >
                                         <div class="font-black">
@@ -1776,11 +1784,11 @@ const promptDeleteBackup = (backup: any) => {
                                     <button
                                         type="button"
                                         @click="restoreMode = 'merge'"
-                                        class="cursor-pointer rounded-xl border p-2.5 text-left text-xs font-bold transition-all"
+                                        class="cursor-pointer rounded-xl border p-2.5 text-start text-xs font-bold transition-all"
                                         :class="
                                             restoreMode === 'merge'
-                                                ? 'border-purple-500/40 bg-purple-500/15 text-purple-300 ring-1 ring-purple-500/30'
-                                                : 'border-white/10 bg-white/5 text-slate-400 hover:text-white'
+                                                ? 'border-primary/45 bg-primary/15 text-primary ring-primary/30 ring-1'
+                                                : 'border-border/80 bg-card/50 text-muted-foreground hover:text-foreground'
                                         "
                                     >
                                         <div class="font-black">
@@ -1811,13 +1819,13 @@ const promptDeleteBackup = (backup: any) => {
                                 isRestoring ||
                                 selectedSections.length === 0
                             "
-                            class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:from-cyan-400 hover:to-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+                            class="bg-primary text-primary-foreground shadow-primary/20 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black shadow-lg transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                             <RefreshCw
                                 v-if="isRestoring"
-                                class="h-4 w-4 animate-spin"
+                                class="size-4 animate-spin"
                             />
-                            <RotateCcw v-else class="h-4 w-4" />
+                            <RotateCcw v-else class="size-4" />
                             <span>{{
                                 isRestoring
                                     ? isRTL
@@ -1836,14 +1844,14 @@ const promptDeleteBackup = (backup: any) => {
 
                     <!-- Card 2: Local Server Snapshots List -->
                     <div
-                        class="flex flex-col justify-between space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-5"
+                        class="border-border/80 bg-card/40 flex flex-col justify-between space-y-3 rounded-2xl border p-5"
                     >
                         <div class="space-y-2.5">
                             <div class="flex items-center justify-between">
                                 <div
-                                    class="flex items-center gap-2 text-sm font-bold text-white"
+                                    class="text-foreground flex items-center gap-2 text-sm font-bold"
                                 >
-                                    <Clock class="h-4 w-4 text-emerald-400" />
+                                    <Clock class="size-4 text-emerald-400" />
                                     <span>{{
                                         isRTL
                                             ? 'اللقطات المحفوظة محلياً على الخادم'
@@ -1853,16 +1861,18 @@ const promptDeleteBackup = (backup: any) => {
                                 <button
                                     type="button"
                                     @click="fetchBackupsList"
-                                    class="flex cursor-pointer items-center gap-1 text-[11px] font-bold text-cyan-400 hover:underline"
+                                    class="text-primary flex cursor-pointer items-center gap-1 text-[11px] font-bold hover:underline"
                                 >
-                                    <RefreshCw class="h-3 w-3" />
+                                    <RefreshCw class="size-3" />
                                     <span>{{
                                         isRTL ? 'تحديث القائمة' : 'Refresh'
                                     }}</span>
                                 </button>
                             </div>
 
-                            <p class="text-xs leading-relaxed text-slate-400">
+                            <p
+                                class="text-muted-foreground text-xs leading-relaxed"
+                            >
                                 {{
                                     isRTL
                                         ? 'نسخ احتياطية مخزنة على القرص المحلي للاسترجاع السريع في أي وقت بنقرة واحدة.'
@@ -1872,12 +1882,12 @@ const promptDeleteBackup = (backup: any) => {
 
                             <!-- Backups Table / Scrollable List -->
                             <div
-                                class="custom-scrollbar max-h-56 space-y-2 overflow-y-auto pr-1"
+                                class="custom-scrollbar max-h-56 space-y-2 overflow-y-auto pe-1"
                             >
                                 <div
                                     v-for="backup in localBackups"
                                     :key="backup.filename"
-                                    class="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3 transition-all hover:border-white/15"
+                                    class="border-border/70 bg-card/60 hover:border-primary/40 flex items-center justify-between gap-3 rounded-xl border p-3 transition-all"
                                 >
                                     <div class="min-w-0 flex-1">
                                         <div class="flex items-center gap-2">
@@ -1885,21 +1895,21 @@ const promptDeleteBackup = (backup: any) => {
                                                 class="py-0.2 rounded px-1.5 text-[9px] font-black uppercase"
                                                 :class="
                                                     backup.extension === 'json'
-                                                        ? 'border border-cyan-500/30 bg-cyan-500/20 text-cyan-300'
+                                                        ? 'border-primary/30 bg-primary/15 text-primary border'
                                                         : 'border border-purple-500/30 bg-purple-500/20 text-purple-300'
                                                 "
                                             >
                                                 {{ backup.extension }}
                                             </span>
                                             <span
-                                                class="block truncate font-mono text-xs font-bold text-slate-200"
+                                                class="text-foreground block truncate font-mono text-xs font-bold"
                                                 :title="backup.filename"
                                             >
                                                 {{ backup.filename }}
                                             </span>
                                         </div>
                                         <div
-                                            class="mt-1 flex items-center gap-2 font-mono text-[10px] text-slate-400"
+                                            class="text-muted-foreground mt-1 flex items-center gap-2 font-mono text-[10px] tabular-nums"
                                         >
                                             <span>{{
                                                 backup.size_formatted
@@ -1910,7 +1920,7 @@ const promptDeleteBackup = (backup: any) => {
                                                 v-if="
                                                     backup.summary?.media_items
                                                 "
-                                                class="hidden font-bold text-cyan-400 sm:inline"
+                                                class="text-primary hidden font-bold sm:inline"
                                             >
                                                 ({{
                                                     backup.summary.media_items
@@ -1931,20 +1941,20 @@ const promptDeleteBackup = (backup: any) => {
                                                 isRestoring ||
                                                 selectedSections.length === 0
                                             "
-                                            class="cursor-pointer rounded-lg bg-cyan-500/20 p-1.5 text-cyan-300 transition-colors hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-40"
+                                            class="bg-primary/15 text-primary hover:bg-primary/25 cursor-pointer rounded-lg p-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
                                             :title="
                                                 isRTL
                                                     ? `استعادة الأقسام المحددة (${selectedSections.length}) من هذه اللقطة`
                                                     : `Restore ${selectedSections.length} selected sections from this snapshot`
                                             "
                                         >
-                                            <RotateCcw class="h-3.5 w-3.5" />
+                                            <RotateCcw class="size-3.5" />
                                         </button>
 
                                         <!-- Download Button -->
                                         <a
                                             :href="`/api/database/backups/download/${encodeURIComponent(backup.filename)}`"
-                                            class="cursor-pointer rounded-lg bg-white/5 p-1.5 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+                                            class="bg-card text-foreground/85 hover:bg-muted hover:text-foreground cursor-pointer rounded-lg p-1.5 transition-colors"
                                             :title="
                                                 isRTL
                                                     ? 'تنزيل إلى جهازك'
@@ -1952,30 +1962,28 @@ const promptDeleteBackup = (backup: any) => {
                                             "
                                             download
                                         >
-                                            <DownloadCloud
-                                                class="h-3.5 w-3.5"
-                                            />
+                                            <DownloadCloud class="size-3.5" />
                                         </a>
 
                                         <!-- Delete Button -->
                                         <button
                                             type="button"
                                             @click="promptDeleteBackup(backup)"
-                                            class="cursor-pointer rounded-lg bg-rose-500/15 p-1.5 text-rose-400 transition-colors hover:bg-rose-500/25"
+                                            class="bg-destructive/15 text-destructive hover:bg-destructive/25 cursor-pointer rounded-lg p-1.5 transition-colors"
                                             :title="
                                                 isRTL
                                                     ? 'حذف اللقطة'
                                                     : 'Delete snapshot'
                                             "
                                         >
-                                            <Trash2 class="h-3.5 w-3.5" />
+                                            <Trash2 class="size-3.5" />
                                         </button>
                                     </div>
                                 </div>
 
                                 <div
                                     v-if="localBackups.length === 0"
-                                    class="py-8 text-center text-xs text-slate-500 italic"
+                                    class="text-muted-foreground py-8 text-center text-xs italic"
                                 >
                                     {{
                                         isRTL
@@ -1988,11 +1996,9 @@ const promptDeleteBackup = (backup: any) => {
 
                         <!-- Footer Tip -->
                         <div
-                            class="flex items-center gap-2 rounded-xl border border-cyan-500/15 bg-cyan-500/5 p-2.5 text-[11px] text-cyan-300/80"
+                            class="border-primary/20 bg-primary/5 text-primary/90 flex items-center gap-2 rounded-xl border p-2.5 text-[11px]"
                         >
-                            <Shield
-                                class="h-3.5 w-3.5 shrink-0 text-cyan-400"
-                            />
+                            <Shield class="text-primary size-3.5 shrink-0" />
                             <span>{{
                                 isRTL
                                     ? 'يتم حفظ اللقطات بأمان في مسار storage/app/backups على خادمك.'

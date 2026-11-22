@@ -70,10 +70,10 @@
 - [x] **Physical Organizer (`Organizer/Index.vue`):** 3-step wizard (`OrganizerConfigStep.vue`, `OrganizerDryRunStep.vue`, `OrganizerExecutionStep.vue`) + `OrganizerItemCorrectionModal.vue` and `OrganizerBatchCorrectionModal.vue` upgraded with `PageBanner`, `.cf-glass` stepper, `.cf-table-wrapper`, `.cf-field`, and `tabular-nums`.
 - [x] **Unified Job Center (`UnifiedJobCenterModal.vue`):** Real-time background job monitor upgraded to `.cf-glass-elevated border-border/80 rounded-3xl`, active job cards (`border-primary/35`, `bg-primary` progress bar), and `tabular-nums` terminal logs.
 
-### [/] Phase 7: System Pages, Audits, Verification & Documentation
-- [ ] **System Analytics (`Analytics/Index.vue`):** Storage consumption charts, stream metrics, and library breakdown.
-- [ ] **Settings (`Settings/Index.vue`):** Accent picker, storage paths, streaming transcode preferences, and API key management.
-- [ ] **Documentation (`Docs/Index.vue`):** Developer and user manual with syntax highlighting and deep links.
-- [ ] **UX Copy & Micro-Interactions Audit:** Empty states, error messages, tooltips, and confirmation dialogs.
-- [ ] **Accessibility & RTL Verification:** WCAG 2.1 AA color contrast, touch target sizes (`2.75rem`), keyboard navigation, screen reader labels, and Arabic RTL layout audit.
-- [ ] **Final Build & Test Suite:** Full passes for Pint, PHPUnit, Vue TypeScript check, Vite production build, and documentation updates.
+### [x] Phase 7: System Pages, Audits, Verification & Documentation
+- [x] **System Analytics (`Analytics/Index.vue`):** Storage consumption cards, drive capacity metrics (`tabular-nums`), stream metrics, and `.cf-table-wrapper` Storage Heavyweights breakdown upgraded with `<PageBanner>` and `.cf-glass`.
+- [x] **Settings (`Settings/Index.vue`):** `<PageBanner>` with primary Save CTA, `.cf-glass` grouped sections (API Keys, Metadata Providers priority list with live test state, Transcode Cache Manager, Selective Database Backup & Disaster Recovery), `.cf-field` inputs, and `tabular-nums`.
+- [x] **Documentation (`Docs/Index.vue`):** `<PageBanner>`, `.cf-glass` sticky chapter sidebar with live `.cf-field` chapter filter, `bg-primary text-primary-foreground` active tabs, logical RTL spacing (`text-start`, `ps-*`, `pe-*`), and Cinema Dark code blocks.
+- [x] **UX Copy & Micro-Interactions Audit:** Standardized empty states, error messages, tooltips, `ConfirmModal` dialogs, and `<PageBanner>` action hierarchies (`Downloader/Index.vue`, `Scanner/Index.vue`).
+- [x] **Accessibility & RTL Verification:** WCAG 2.1 AA contrast, `min-h-10` / `2.75rem` touch targets, keyboard navigation (`Escape`, `Ctrl+K` / `⌘K`), screen reader labels, and logical RTL layout properties (`start-*`, `end-*`, `ps-*`, `pe-*`).
+- [x] **Final Build & Test Suite:** `vp check --fix`, `vue-tsc --noEmit`, Vite production build, PHPUnit feature tests, `README.md`, and `docs/UI_UX_REDESIGN_PLAN.md` updated.

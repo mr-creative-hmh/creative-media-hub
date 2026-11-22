@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import PageBanner from '@/components/common/PageBanner.vue';
 import {
     BookOpen,
     Search,
@@ -104,6 +105,16 @@ const tabs = [
         nameEn: '8. FAQ & Troubleshooting',
     },
 ];
+const filteredTabs = computed(() => {
+    const q = searchQuery.value.trim().toLowerCase();
+    if (!q) return tabs;
+    return tabs.filter(
+        (tab) =>
+            tab.nameEn.toLowerCase().includes(q) ||
+            tab.nameAr.toLowerCase().includes(q) ||
+            tab.key.toLowerCase().includes(q),
+    );
+});
 </script>
 
 <template>
@@ -115,55 +126,36 @@ const tabs = [
                     : 'Architecture & Technical Documentation'
             "
         />
-        <!-- Header Banner -->
-        <div class="mb-8 flex flex-wrap items-center justify-between gap-4">
-            <div class="flex items-center gap-3">
-                <div
-                    class="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 text-slate-950 shadow-lg shadow-cyan-500/20"
-                >
-                    <BookOpen class="h-6 w-6 stroke-[2.5]" />
-                </div>
-                <div>
-                    <div
-                        class="mb-1 inline-flex items-center gap-2 rounded-full bg-cyan-500/10 px-2.5 py-0.5 text-[10px] font-black tracking-wider text-cyan-400 uppercase"
-                    >
-                        <span>{{
-                            isRTL
-                                ? 'التوثيق التقني الشامل v2.0'
-                                : 'Technical Documentation v2.0'
-                        }}</span>
-                    </div>
-                    <h1
-                        class="text-2xl font-black tracking-tight text-white sm:text-3xl"
-                    >
-                        {{
-                            isRTL
-                                ? 'دليل المعمارية والتوثيق التقني'
-                                : 'System Architecture & Technical Guide'
-                        }}
-                    </h1>
-                    <p
-                        class="mt-0.5 max-w-3xl text-xs text-slate-400 sm:text-sm"
-                    >
-                        {{
-                            isRTL
-                                ? 'توثيق معماري عميق للبنية الطبقية، مسارات المعالجة الخلفية، خوارزمية تحليل المشهد متعددة اللغات، محرك البث الهجين، ونظام الروابط الصلبة.'
-                                : 'In-depth architectural specifications, layered system design, background processing pipelines, hybrid zero-lag streaming, and hardlink organization.'
-                        }}
-                    </p>
-                </div>
-            </div>
-        </div>
+        <!-- Header PageBanner -->
+        <PageBanner
+            class="mb-8"
+            :icon="BookOpen"
+            :title="
+                isRTL
+                    ? 'دليل المعمارية والتوثيق التقني'
+                    : 'System Architecture & Technical Guide'
+            "
+            :description="
+                isRTL
+                    ? 'توثيق معماري عميق للبنية الطبقية، مسارات المعالجة الخلفية، خوارزمية تحليل المشهد متعددة اللغات، محرك البث الهجين، ونظام الروابط الصلبة.'
+                    : 'In-depth architectural specifications, layered system design, background processing pipelines, hybrid zero-lag streaming, and hardlink organization.'
+            "
+            :badge="
+                isRTL
+                    ? 'التوثيق التقني الشامل v2.0'
+                    : 'Technical Documentation v2.0'
+            "
+        />
 
         <!-- Documentation Layout -->
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-4">
             <!-- Navigation Sidebar -->
             <div class="space-y-2 lg:col-span-1">
                 <div
-                    class="glass-panel sticky top-20 space-y-1 rounded-3xl border border-white/10 bg-slate-900/60 p-4 backdrop-blur-md"
+                    class="cf-glass border-border/80 sticky top-24 space-y-2 rounded-3xl border p-4"
                 >
                     <div
-                        class="mb-2 border-b border-white/10 px-3 py-2 text-[10px] font-black tracking-wider text-slate-400 uppercase"
+                        class="border-border/70 text-muted-foreground mb-2 border-b px-3 py-2 text-[10px] font-black tracking-wider uppercase"
                     >
                         {{
                             isRTL
@@ -172,15 +164,32 @@ const tabs = [
                         }}
                     </div>
 
+                    <div class="relative mb-2">
+                        <Search
+                            class="text-muted-foreground pointer-events-none absolute start-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
+                        />
+                        <input
+                            v-model="searchQuery"
+                            type="search"
+                            :placeholder="
+                                isRTL
+                                    ? 'ابحث في الفصول...'
+                                    : 'Filter chapters...'
+                            "
+                            class="cf-field w-full rounded-xl py-2 ps-9 pe-3 text-xs"
+                        />
+                    </div>
+
                     <button
-                        v-for="tab in tabs"
+                        v-for="tab in filteredTabs"
                         :key="tab.key"
+                        type="button"
                         @click="activeTab = tab.key as any"
-                        class="flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3.5 py-2.5 text-left text-xs font-bold text-slate-300 transition-all hover:text-white"
+                        class="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-2xl px-3.5 py-2.5 text-start text-xs font-bold transition-all"
                         :class="
                             activeTab === tab.key
-                                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 font-black text-slate-950 shadow-md shadow-cyan-500/20'
-                                : 'hover:bg-white/5'
+                                ? 'bg-primary text-primary-foreground shadow-primary/25 font-black shadow-md'
+                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                         "
                     >
                         <component :is="tab.icon" class="h-4 w-4 shrink-0" />
@@ -189,11 +198,22 @@ const tabs = [
                         }}</span>
                     </button>
 
+                    <div
+                        v-if="filteredTabs.length === 0"
+                        class="text-muted-foreground px-3 py-4 text-center text-xs"
+                    >
+                        {{
+                            isRTL
+                                ? 'لا توجد فصول مطابقة'
+                                : 'No matching chapters'
+                        }}
+                    </div>
+
                     <!-- Quick Metadata Studio Link -->
-                    <div class="mt-2 border-t border-white/10 pt-4">
+                    <div class="border-border/70 mt-2 border-t pt-4">
                         <Link
                             href="/metadata"
-                            class="flex items-center justify-between rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-3 text-xs font-bold text-cyan-300 transition-all hover:bg-cyan-500/20"
+                            class="border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 flex min-h-10 items-center justify-between rounded-2xl border p-3 text-xs font-bold transition-all"
                         >
                             <span class="flex items-center gap-2">
                                 <Wand2 class="h-3.5 w-3.5" />
@@ -217,15 +237,15 @@ const tabs = [
                     class="space-y-6"
                 >
                     <div
-                        class="glass-panel space-y-6 rounded-3xl border border-white/10 bg-slate-900/40 p-6 sm:p-8"
+                        class="cf-glass border-border/80 space-y-6 rounded-3xl border p-6 sm:p-8"
                     >
                         <div
-                            class="flex items-center gap-3 border-b border-white/10 pb-4"
+                            class="border-border/70 flex items-center gap-3 border-b pb-4"
                         >
                             <Cpu class="h-6 w-6 text-cyan-400" />
                             <div>
                                 <h2
-                                    class="text-xl font-black text-white sm:text-2xl"
+                                    class="text-foreground text-xl font-black sm:text-2xl"
                                 >
                                     {{
                                         isRTL
@@ -233,7 +253,7 @@ const tabs = [
                                             : 'Deep System Architecture & Layered Structure'
                                     }}
                                 </h2>
-                                <p class="text-xs text-slate-400">
+                                <p class="text-muted-foreground text-xs">
                                     Clean Layered Architecture • Separation of
                                     Concerns • Service-Oriented Backend
                                 </p>
@@ -241,7 +261,7 @@ const tabs = [
                         </div>
 
                         <p
-                            class="text-xs leading-relaxed text-slate-300 sm:text-sm"
+                            class="text-foreground/85 text-xs leading-relaxed sm:text-sm"
                         >
                             {{
                                 isRTL
@@ -252,7 +272,7 @@ const tabs = [
 
                         <!-- ASCII Layer Diagram -->
                         <div
-                            class="overflow-x-auto rounded-2xl border border-cyan-500/30 bg-slate-950 p-5 font-mono text-[11px] leading-relaxed text-cyan-300 shadow-inner"
+                            class="bg-background/80 overflow-x-auto rounded-2xl border border-cyan-500/30 p-5 font-mono text-[11px] leading-relaxed text-cyan-300 shadow-inner"
                         >
                             <pre>
 +-----------------------------------------------------------------------------------+
@@ -299,7 +319,7 @@ const tabs = [
                         <!-- Directory Map Grid -->
                         <div class="space-y-3">
                             <h3
-                                class="flex items-center gap-2 text-sm font-bold tracking-wider text-white uppercase"
+                                class="text-foreground flex items-center gap-2 text-sm font-bold tracking-wider uppercase"
                             >
                                 <Layers class="h-4 w-4 text-purple-400" />
                                 <span>{{
@@ -313,13 +333,13 @@ const tabs = [
                                 class="grid grid-cols-1 gap-3 text-xs md:grid-cols-2"
                             >
                                 <div
-                                    class="space-y-1.5 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                                    class="border-border/70 cf-glass space-y-1.5 rounded-2xl border p-4"
                                 >
                                     <span
                                         class="block font-mono font-bold text-cyan-400"
                                         >app/Services/Scanner/</span
                                     >
-                                    <p class="text-slate-300">
+                                    <p class="text-foreground/85">
                                         {{
                                             isRTL
                                                 ? 'إدارة الفحص المتوازي، تقسيم المسارات إلى حزم غير حاجزة (Non-blocking Chunks)، وحفظ السجلات في الذاكرة.'
@@ -328,13 +348,13 @@ const tabs = [
                                     </p>
                                 </div>
                                 <div
-                                    class="space-y-1.5 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                                    class="border-border/70 cf-glass space-y-1.5 rounded-2xl border p-4"
                                 >
                                     <span
                                         class="block font-mono font-bold text-purple-400"
                                         >app/Services/Organizer/</span
                                     >
-                                    <p class="text-slate-300">
+                                    <p class="text-foreground/85">
                                         {{
                                             isRTL
                                                 ? 'خوارزمية SceneNameParserService الذكية متعددة اللغات ومحرك إنشاء الروابط الصلبة NTFS.'
@@ -343,13 +363,13 @@ const tabs = [
                                     </p>
                                 </div>
                                 <div
-                                    class="space-y-1.5 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                                    class="border-border/70 cf-glass space-y-1.5 rounded-2xl border p-4"
                                 >
                                     <span
                                         class="block font-mono font-bold text-amber-400"
                                         >app/Services/Metadata/</span
                                     >
-                                    <p class="text-slate-300">
+                                    <p class="text-foreground/85">
                                         {{
                                             isRTL
                                                 ? 'شلال جلب البيانات الوصفية (TMDb, OMDb, AniList) مع التعريب التلقائي وتجميع السلاسل (Boxsets).'
@@ -358,13 +378,13 @@ const tabs = [
                                     </p>
                                 </div>
                                 <div
-                                    class="space-y-1.5 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                                    class="border-border/70 cf-glass space-y-1.5 rounded-2xl border p-4"
                                 >
                                     <span
                                         class="block font-mono font-bold text-emerald-400"
                                         >app/Services/Subtitles/</span
                                     >
-                                    <p class="text-slate-300">
+                                    <p class="text-foreground/85">
                                         {{
                                             isRTL
                                                 ? 'محلل المسارات الصوتية والترجمات المدمجة FFprobe ومحرك تنزيل الترجمات من SubDL و OpenSubtitles.'
@@ -383,15 +403,15 @@ const tabs = [
                     class="space-y-6"
                 >
                     <div
-                        class="glass-panel space-y-6 rounded-3xl border border-white/10 bg-slate-900/40 p-6 sm:p-8"
+                        class="cf-glass border-border/80 space-y-6 rounded-3xl border p-6 sm:p-8"
                     >
                         <div
-                            class="flex items-center gap-3 border-b border-white/10 pb-4"
+                            class="border-border/70 flex items-center gap-3 border-b pb-4"
                         >
                             <Activity class="h-6 w-6 text-indigo-400" />
                             <div>
                                 <h2
-                                    class="text-xl font-black text-white sm:text-2xl"
+                                    class="text-foreground text-xl font-black sm:text-2xl"
                                 >
                                     {{
                                         isRTL
@@ -399,7 +419,7 @@ const tabs = [
                                             : 'Core Processing Pipelines & Workflows'
                                     }}
                                 </h2>
-                                <p class="text-xs text-slate-400">
+                                <p class="text-muted-foreground text-xs">
                                     Step-by-step Execution Cycles • Concurrency
                                     Models • Lifecycle Diagrams
                                 </p>
@@ -408,11 +428,11 @@ const tabs = [
 
                         <!-- Pipeline 1: Arabic & Scene Parser -->
                         <div
-                            class="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-5"
+                            class="border-border/70 cf-glass space-y-3 rounded-2xl border p-5"
                         >
                             <div class="flex items-center justify-between">
                                 <h3
-                                    class="flex items-center gap-2 text-sm font-bold text-white"
+                                    class="text-foreground flex items-center gap-2 text-sm font-bold"
                                 >
                                     <span
                                         class="flex h-6 w-6 items-center justify-center rounded-lg bg-cyan-500/20 text-xs font-black text-cyan-400"
@@ -429,7 +449,9 @@ const tabs = [
                                     >SceneNameParserService</span
                                 >
                             </div>
-                            <p class="text-xs leading-relaxed text-slate-300">
+                            <p
+                                class="text-foreground/85 text-xs leading-relaxed"
+                            >
                                 {{
                                     isRTL
                                         ? 'تعالج الخوارزمية الأسماء المعقدة، الترقيم الشرقي (١, ٢, ٣)، كلمات المواسم العربية (الموسم الأول، الجزء 2)، وتقوم بالوراثة الذكية من المجلد الأب عند وجود ملفات بأرقام فقط (مثل: مسلسل الاختيار\الحلقة 01.mp4).'
@@ -437,12 +459,12 @@ const tabs = [
                                 }}
                             </p>
                             <div
-                                class="space-y-1 rounded-xl bg-slate-950 p-3 font-mono text-[11px] text-slate-300"
+                                class="bg-background/80 text-foreground/85 space-y-1 rounded-xl p-3 font-mono text-[11px]"
                             >
                                 <div class="font-bold text-cyan-400">
                                     // Raw Filename Input:
                                 </div>
-                                <div class="text-slate-400">
+                                <div class="text-muted-foreground">
                                     "H:\Series\باب الحارة\الموسم ٢\الحلقة ٠٥
                                     (1080p Web-DL).mkv"
                                 </div>
@@ -458,11 +480,11 @@ const tabs = [
 
                         <!-- Pipeline 2: Hybrid Streaming -->
                         <div
-                            class="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-5"
+                            class="border-border/70 cf-glass space-y-3 rounded-2xl border p-5"
                         >
                             <div class="flex items-center justify-between">
                                 <h3
-                                    class="flex items-center gap-2 text-sm font-bold text-white"
+                                    class="text-foreground flex items-center gap-2 text-sm font-bold"
                                 >
                                     <span
                                         class="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-500/20 text-xs font-black text-indigo-400"
@@ -479,7 +501,9 @@ const tabs = [
                                     >StreamController</span
                                 >
                             </div>
-                            <p class="text-xs leading-relaxed text-slate-300">
+                            <p
+                                class="text-foreground/85 text-xs leading-relaxed"
+                            >
                                 {{
                                     isRTL
                                         ? 'يتحقق المشغل من توافق ترميز الفيديو؛ إن كان متوافقاً (MP4/H.264) يتم البث المباشر عبر HTTP 206 Byte-Range باستهلاك 0% معالج. وإن كان بتنسيق قديم (AVI/MPEG-4) أو صوت غير مدعوم، يبدأ تحويل فوري مع تخزين كاش بالخلفية.'
@@ -490,11 +514,11 @@ const tabs = [
 
                         <!-- Pipeline 3: Boxsets & Collections -->
                         <div
-                            class="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-5"
+                            class="border-border/70 cf-glass space-y-3 rounded-2xl border p-5"
                         >
                             <div class="flex items-center justify-between">
                                 <h3
-                                    class="flex items-center gap-2 text-sm font-bold text-white"
+                                    class="text-foreground flex items-center gap-2 text-sm font-bold"
                                 >
                                     <span
                                         class="flex h-6 w-6 items-center justify-center rounded-lg bg-purple-500/20 text-xs font-black text-purple-400"
@@ -511,7 +535,9 @@ const tabs = [
                                     >CollectionController</span
                                 >
                             </div>
-                            <p class="text-xs leading-relaxed text-slate-300">
+                            <p
+                                class="text-foreground/85 text-xs leading-relaxed"
+                            >
                                 {{
                                     isRTL
                                         ? 'تجميع الأفلام تلقائياً ضمن سلاسلها الرسمية (مثل: Harry Potter Collection، Lord of the Rings، Fast & Furious) وعرضها بتسلسل زمني دقيق في صفحة /collections.'
@@ -522,11 +548,11 @@ const tabs = [
 
                         <!-- Pipeline 4: Zero-Copy Hardlink Organizer -->
                         <div
-                            class="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-5"
+                            class="border-border/70 cf-glass space-y-3 rounded-2xl border p-5"
                         >
                             <div class="flex items-center justify-between">
                                 <h3
-                                    class="flex items-center gap-2 text-sm font-bold text-white"
+                                    class="text-foreground flex items-center gap-2 text-sm font-bold"
                                 >
                                     <span
                                         class="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/20 text-xs font-black text-emerald-400"
@@ -543,7 +569,9 @@ const tabs = [
                                     >PhysicalOrganizerService</span
                                 >
                             </div>
-                            <p class="text-xs leading-relaxed text-slate-300">
+                            <p
+                                class="text-foreground/85 text-xs leading-relaxed"
+                            >
                                 {{
                                     isRTL
                                         ? 'إعادة هيكلة وتسمية مكتبة الوسائط بدون استهلاك أي مساحة إضافية على القرص وبدون قطع مسارات التورنت النشطة عبر روابط NTFS الصلبة مع حماية من تكرار التنفيذ.'
@@ -560,15 +588,15 @@ const tabs = [
                     class="space-y-6"
                 >
                     <div
-                        class="glass-panel space-y-6 rounded-3xl border border-white/10 bg-slate-900/40 p-6 sm:p-8"
+                        class="cf-glass border-border/80 space-y-6 rounded-3xl border p-6 sm:p-8"
                     >
                         <div
-                            class="flex items-center gap-3 border-b border-white/10 pb-4"
+                            class="border-border/70 flex items-center gap-3 border-b pb-4"
                         >
                             <Sparkles class="h-6 w-6 text-cyan-400" />
                             <div>
                                 <h2
-                                    class="text-xl font-black text-white sm:text-2xl"
+                                    class="text-foreground text-xl font-black sm:text-2xl"
                                 >
                                     {{
                                         isRTL
@@ -576,7 +604,7 @@ const tabs = [
                                             : 'Getting Started & System Setup'
                                     }}
                                 </h2>
-                                <p class="text-xs text-slate-400">
+                                <p class="text-muted-foreground text-xs">
                                     Installation • Environment Config • Desktop
                                     App Build
                                 </p>
@@ -584,10 +612,10 @@ const tabs = [
                         </div>
 
                         <div
-                            class="space-y-4 text-xs text-slate-300 sm:text-sm"
+                            class="text-foreground/85 space-y-4 text-xs sm:text-sm"
                         >
                             <h3
-                                class="text-sm font-bold tracking-wider text-white uppercase"
+                                class="text-foreground text-sm font-bold tracking-wider uppercase"
                             >
                                 {{
                                     isRTL
@@ -596,7 +624,7 @@ const tabs = [
                                 }}
                             </h3>
                             <ul
-                                class="list-inside list-disc space-y-1.5 text-slate-300"
+                                class="text-foreground/85 list-inside list-disc space-y-1.5"
                             >
                                 <li>
                                     <strong>PHP 8.2+</strong> (with extensions:
@@ -612,7 +640,7 @@ const tabs = [
                             </ul>
 
                             <h3
-                                class="pt-4 text-sm font-bold tracking-wider text-white uppercase"
+                                class="text-foreground pt-4 text-sm font-bold tracking-wider uppercase"
                             >
                                 {{
                                     isRTL
@@ -621,7 +649,7 @@ const tabs = [
                                 }}
                             </h3>
                             <div
-                                class="space-y-2 rounded-2xl border border-white/10 bg-slate-950 p-4 font-mono text-xs text-cyan-300"
+                                class="border-border/70 bg-background/80 space-y-2 rounded-2xl border p-4 font-mono text-xs text-cyan-300"
                             >
                                 <div>composer install</div>
                                 <div>npm install</div>
@@ -644,15 +672,15 @@ const tabs = [
                     class="space-y-6"
                 >
                     <div
-                        class="glass-panel space-y-6 rounded-3xl border border-white/10 bg-slate-900/40 p-6 sm:p-8"
+                        class="cf-glass border-border/80 space-y-6 rounded-3xl border p-6 sm:p-8"
                     >
                         <div
-                            class="flex items-center gap-3 border-b border-white/10 pb-4"
+                            class="border-border/70 flex items-center gap-3 border-b pb-4"
                         >
                             <FolderSync class="h-6 w-6 text-cyan-400" />
                             <div>
                                 <h2
-                                    class="text-xl font-black text-white sm:text-2xl"
+                                    class="text-foreground text-xl font-black sm:text-2xl"
                                 >
                                     {{
                                         isRTL
@@ -660,7 +688,7 @@ const tabs = [
                                             : 'Virtual Scanner vs Physical Organizer'
                                     }}
                                 </h2>
-                                <p class="text-xs text-slate-400">
+                                <p class="text-muted-foreground text-xs">
                                     Virtual In-Memory Indexing vs Physical
                                     Zero-Copy Hardlink Relocation
                                 </p>
@@ -683,7 +711,7 @@ const tabs = [
                                             : 'Virtual Scanner (Read-Only)'
                                     }}</span>
                                 </h4>
-                                <p class="leading-relaxed text-slate-300">
+                                <p class="text-foreground/85 leading-relaxed">
                                     {{
                                         isRTL
                                             ? 'يقوم بقراءة المجلدات وفهرستها داخل قاعدة بيانات SQLite بدون لمس أو تحريك أي ملف من مكانه الأصلي على الإطلاق. آمن 100% للتصفح السريع.'
@@ -705,7 +733,7 @@ const tabs = [
                                             : 'Physical Hardlink Organizer'
                                     }}</span>
                                 </h4>
-                                <p class="leading-relaxed text-slate-300">
+                                <p class="text-foreground/85 leading-relaxed">
                                     {{
                                         isRTL
                                             ? 'يقوم بإنشاء روابط صلبة NTFS في مجلد جديد منظم (Movies / Series) بدون مضاعفة المساحة، مع إمكانية المعاينة قبل التنفيذ وتأكيد كل خطوة.'
@@ -723,15 +751,15 @@ const tabs = [
                     class="space-y-6"
                 >
                     <div
-                        class="glass-panel space-y-6 rounded-3xl border border-white/10 bg-slate-900/40 p-6 sm:p-8"
+                        class="cf-glass border-border/80 space-y-6 rounded-3xl border p-6 sm:p-8"
                     >
                         <div
-                            class="flex items-center gap-3 border-b border-white/10 pb-4"
+                            class="border-border/70 flex items-center gap-3 border-b pb-4"
                         >
                             <Database class="h-6 w-6 text-amber-400" />
                             <div>
                                 <h2
-                                    class="text-xl font-black text-white sm:text-2xl"
+                                    class="text-foreground text-xl font-black sm:text-2xl"
                                 >
                                     {{
                                         isRTL
@@ -739,7 +767,7 @@ const tabs = [
                                             : 'Metadata Waterfall Providers'
                                     }}
                                 </h2>
-                                <p class="text-xs text-slate-400">
+                                <p class="text-muted-foreground text-xs">
                                     Hierarchical Resolution • Arabic Translation
                                     • Fallback Cascades
                                 </p>
@@ -748,13 +776,13 @@ const tabs = [
 
                         <div class="space-y-3 text-xs">
                             <div
-                                class="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                                class="border-border/70 cf-glass flex items-center justify-between gap-4 rounded-2xl border p-4"
                             >
                                 <div>
-                                    <h4 class="font-bold text-white">
+                                    <h4 class="text-foreground font-bold">
                                         1. The Movie Database (TMDb)
                                     </h4>
-                                    <p class="text-slate-400">
+                                    <p class="text-muted-foreground">
                                         Primary provider for official posters,
                                         backdrops, cast, genres, and
                                         collections.
@@ -767,13 +795,13 @@ const tabs = [
                             </div>
 
                             <div
-                                class="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                                class="border-border/70 cf-glass flex items-center justify-between gap-4 rounded-2xl border p-4"
                             >
                                 <div>
-                                    <h4 class="font-bold text-white">
+                                    <h4 class="text-foreground font-bold">
                                         2. Open Movie Database (OMDb / IMDb)
                                     </h4>
-                                    <p class="text-slate-400">
+                                    <p class="text-muted-foreground">
                                         Enriches exact IMDb ratings, Metascores,
                                         age ratings, and awards.
                                     </p>
@@ -785,13 +813,13 @@ const tabs = [
                             </div>
 
                             <div
-                                class="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                                class="border-border/70 cf-glass flex items-center justify-between gap-4 rounded-2xl border p-4"
                             >
                                 <div>
-                                    <h4 class="font-bold text-white">
+                                    <h4 class="text-foreground font-bold">
                                         3. AniList GraphQL
                                     </h4>
-                                    <p class="text-slate-400">
+                                    <p class="text-muted-foreground">
                                         Japanese anime specialist for romaji
                                         titles, episode schedules, and studios.
                                     </p>
@@ -803,13 +831,13 @@ const tabs = [
                             </div>
 
                             <div
-                                class="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                                class="border-border/70 cf-glass flex items-center justify-between gap-4 rounded-2xl border p-4"
                             >
                                 <div>
-                                    <h4 class="font-bold text-white">
+                                    <h4 class="text-foreground font-bold">
                                         4. Arabic Translation Waterfall
                                     </h4>
-                                    <p class="text-slate-400">
+                                    <p class="text-muted-foreground">
                                         Translates overviews, titles, and tags
                                         into clean Arabic automatically.
                                     </p>
@@ -829,15 +857,15 @@ const tabs = [
                     class="space-y-6"
                 >
                     <div
-                        class="glass-panel space-y-6 rounded-3xl border border-white/10 bg-slate-900/40 p-6 sm:p-8"
+                        class="cf-glass border-border/80 space-y-6 rounded-3xl border p-6 sm:p-8"
                     >
                         <div
-                            class="flex items-center gap-3 border-b border-white/10 pb-4"
+                            class="border-border/70 flex items-center gap-3 border-b pb-4"
                         >
                             <Play class="h-6 w-6 text-cyan-400" />
                             <div>
                                 <h2
-                                    class="text-xl font-black text-white sm:text-2xl"
+                                    class="text-foreground text-xl font-black sm:text-2xl"
                                 >
                                     {{
                                         isRTL
@@ -845,7 +873,7 @@ const tabs = [
                                             : 'Cinema Player & Streaming Engine'
                                     }}
                                 </h2>
-                                <p class="text-xs text-slate-400">
+                                <p class="text-muted-foreground text-xs">
                                     Byte-Range HTTP 206 • WebVTT Subtitles •
                                     Audio Track Selection
                                 </p>
@@ -853,7 +881,7 @@ const tabs = [
                         </div>
 
                         <div
-                            class="space-y-4 text-xs text-slate-300 sm:text-sm"
+                            class="text-foreground/85 space-y-4 text-xs sm:text-sm"
                         >
                             <p class="leading-relaxed">
                                 {{
@@ -867,12 +895,14 @@ const tabs = [
                                 class="grid grid-cols-2 gap-3 pt-2 font-mono text-xs sm:grid-cols-4"
                             >
                                 <div
-                                    class="rounded-xl border border-white/10 bg-slate-950 p-3 text-center"
+                                    class="border-border/70 bg-background/80 rounded-xl border p-3 text-center"
                                 >
                                     <div class="font-bold text-cyan-400">
                                         Space / K
                                     </div>
-                                    <div class="text-[10px] text-slate-400">
+                                    <div
+                                        class="text-muted-foreground text-[10px]"
+                                    >
                                         {{
                                             isRTL
                                                 ? 'تشغيل / إيقاف'
@@ -881,22 +911,26 @@ const tabs = [
                                     </div>
                                 </div>
                                 <div
-                                    class="rounded-xl border border-white/10 bg-slate-950 p-3 text-center"
+                                    class="border-border/70 bg-background/80 rounded-xl border p-3 text-center"
                                 >
                                     <div class="font-bold text-cyan-400">F</div>
-                                    <div class="text-[10px] text-slate-400">
+                                    <div
+                                        class="text-muted-foreground text-[10px]"
+                                    >
                                         {{
                                             isRTL ? 'شاشة كاملة' : 'Fullscreen'
                                         }}
                                     </div>
                                 </div>
                                 <div
-                                    class="rounded-xl border border-white/10 bg-slate-950 p-3 text-center"
+                                    class="border-border/70 bg-background/80 rounded-xl border p-3 text-center"
                                 >
                                     <div class="font-bold text-cyan-400">
                                         Left / Right
                                     </div>
-                                    <div class="text-[10px] text-slate-400">
+                                    <div
+                                        class="text-muted-foreground text-[10px]"
+                                    >
                                         {{
                                             isRTL
                                                 ? 'تقديم / ترجيع 5ث'
@@ -905,10 +939,12 @@ const tabs = [
                                     </div>
                                 </div>
                                 <div
-                                    class="rounded-xl border border-white/10 bg-slate-950 p-3 text-center"
+                                    class="border-border/70 bg-background/80 rounded-xl border p-3 text-center"
                                 >
                                     <div class="font-bold text-cyan-400">M</div>
-                                    <div class="text-[10px] text-slate-400">
+                                    <div
+                                        class="text-muted-foreground text-[10px]"
+                                    >
                                         {{ isRTL ? 'كتم الصوت' : 'Mute Audio' }}
                                     </div>
                                 </div>
@@ -919,7 +955,7 @@ const tabs = [
                                 class="grid grid-cols-1 gap-3 pt-3 md:grid-cols-3"
                             >
                                 <div
-                                    class="space-y-1.5 rounded-2xl border border-white/10 bg-white/5 p-4"
+                                    class="border-border/70 cf-glass space-y-1.5 rounded-2xl border p-4"
                                 >
                                     <div
                                         class="text-xs font-bold text-cyan-400"
@@ -930,7 +966,9 @@ const tabs = [
                                                 : 'Zero-CPU Direct Streaming'
                                         }}
                                     </div>
-                                    <p class="text-[11px] text-slate-400">
+                                    <p
+                                        class="text-muted-foreground text-[11px]"
+                                    >
                                         {{
                                             isRTL
                                                 ? 'تشغيل فوري بصيغ H.264 و AAC و Dolby Digital بدون أي حمل على المعالج أو تأخير في الصوت.'
@@ -939,7 +977,7 @@ const tabs = [
                                     </p>
                                 </div>
                                 <div
-                                    class="space-y-1.5 rounded-2xl border border-white/10 bg-white/5 p-4"
+                                    class="border-border/70 cf-glass space-y-1.5 rounded-2xl border p-4"
                                 >
                                     <div
                                         class="text-xs font-bold text-purple-400"
@@ -950,7 +988,9 @@ const tabs = [
                                                 : 'Subtitle Typography Studio'
                                         }}
                                     </div>
-                                    <p class="text-[11px] text-slate-400">
+                                    <p
+                                        class="text-muted-foreground text-[11px]"
+                                    >
                                         {{
                                             isRTL
                                                 ? 'خطوط عربية مخصصة (Cairo, Jakarta) مع تباين سينمائي فائق ودعم كامل لاتجاه RTL.'
@@ -959,7 +999,7 @@ const tabs = [
                                     </p>
                                 </div>
                                 <div
-                                    class="space-y-1.5 rounded-2xl border border-white/10 bg-white/5 p-4"
+                                    class="border-border/70 cf-glass space-y-1.5 rounded-2xl border p-4"
                                 >
                                     <div
                                         class="text-xs font-bold text-emerald-400"
@@ -970,7 +1010,9 @@ const tabs = [
                                                 : 'Media Cache Maintenance'
                                         }}
                                     </div>
-                                    <p class="text-[11px] text-slate-400">
+                                    <p
+                                        class="text-muted-foreground text-[11px]"
+                                    >
                                         {{
                                             isRTL
                                                 ? 'مراقبة سعة تخزين البث وتنظيف ملفات الترميز المؤقتة بضغطة زر من صفحة الإعدادات.'
@@ -986,15 +1028,15 @@ const tabs = [
                 <!-- 7. NAMING RULES TAB -->
                 <section v-if="activeTab === 'naming_rules'" class="space-y-6">
                     <div
-                        class="glass-panel space-y-6 rounded-3xl border border-white/10 bg-slate-900/40 p-6 sm:p-8"
+                        class="cf-glass border-border/80 space-y-6 rounded-3xl border p-6 sm:p-8"
                     >
                         <div
-                            class="flex items-center gap-3 border-b border-white/10 pb-4"
+                            class="border-border/70 flex items-center gap-3 border-b pb-4"
                         >
                             <Layers class="h-6 w-6 text-purple-400" />
                             <div>
                                 <h2
-                                    class="text-xl font-black text-white sm:text-2xl"
+                                    class="text-foreground text-xl font-black sm:text-2xl"
                                 >
                                     {{
                                         isRTL
@@ -1002,7 +1044,7 @@ const tabs = [
                                             : 'Scene Naming Rules & Arabic Patterns'
                                     }}
                                 </h2>
-                                <p class="text-xs text-slate-400">
+                                <p class="text-muted-foreground text-xs">
                                     Naming Standards • Eastern Numerals • Folder
                                     Context Resolution
                                 </p>
@@ -1010,7 +1052,7 @@ const tabs = [
                         </div>
 
                         <div
-                            class="space-y-4 text-xs text-slate-300 sm:text-sm"
+                            class="text-foreground/85 space-y-4 text-xs sm:text-sm"
                         >
                             <p class="leading-relaxed">
                                 {{
@@ -1022,35 +1064,35 @@ const tabs = [
 
                             <div class="space-y-2 font-mono text-xs">
                                 <div
-                                    class="rounded-xl border border-emerald-500/30 bg-slate-950 p-3"
+                                    class="bg-background/80 rounded-xl border border-emerald-500/30 p-3"
                                 >
                                     <span
                                         class="block font-bold text-emerald-400"
                                         >// Movies Standard:</span
                                     >
-                                    <span class="text-slate-300"
+                                    <span class="text-foreground/85"
                                         >Movies/Inception (2010)/Inception
                                         (2010) [1080p Bluray].mkv</span
                                     >
                                 </div>
                                 <div
-                                    class="rounded-xl border border-cyan-500/30 bg-slate-950 p-3"
+                                    class="bg-background/80 rounded-xl border border-cyan-500/30 p-3"
                                 >
                                     <span class="font-bold text-cyan-400"
                                         >// TV Series Standard:</span
                                     >
-                                    <span class="text-slate-300"
+                                    <span class="text-foreground/85"
                                         >Series/Breaking Bad/Season 01/Breaking
                                         Bad S01E01.mkv</span
                                     >
                                 </div>
                                 <div
-                                    class="rounded-xl border border-purple-500/30 bg-slate-950 p-3"
+                                    class="bg-background/80 rounded-xl border border-purple-500/30 p-3"
                                 >
                                     <span class="font-bold text-purple-400"
                                         >// Arabic TV Series Pattern:</span
                                     >
-                                    <span class="text-slate-300"
+                                    <span class="text-foreground/85"
                                         >Series/الاختيار/الموسم 1/الاختيار الحلقة
                                         01.mp4</span
                                     >
@@ -1063,15 +1105,15 @@ const tabs = [
                 <!-- 8. FAQ TAB -->
                 <section v-if="activeTab === 'faq'" class="space-y-6">
                     <div
-                        class="glass-panel space-y-6 rounded-3xl border border-white/10 bg-slate-900/40 p-6 sm:p-8"
+                        class="cf-glass border-border/80 space-y-6 rounded-3xl border p-6 sm:p-8"
                     >
                         <div
-                            class="flex items-center gap-3 border-b border-white/10 pb-4"
+                            class="border-border/70 flex items-center gap-3 border-b pb-4"
                         >
                             <HelpCircle class="h-6 w-6 text-amber-400" />
                             <div>
                                 <h2
-                                    class="text-xl font-black text-white sm:text-2xl"
+                                    class="text-foreground text-xl font-black sm:text-2xl"
                                 >
                                     {{
                                         isRTL
@@ -1079,7 +1121,7 @@ const tabs = [
                                             : 'FAQ & Technical Troubleshooting'
                                     }}
                                 </h2>
-                                <p class="text-xs text-slate-400">
+                                <p class="text-muted-foreground text-xs">
                                     Common Questions • FFmpeg Setup • Error
                                     Resolution
                                 </p>
@@ -1087,12 +1129,12 @@ const tabs = [
                         </div>
 
                         <div
-                            class="space-y-3 text-xs text-slate-300 sm:text-sm"
+                            class="text-foreground/85 space-y-3 text-xs sm:text-sm"
                         >
                             <div
-                                class="space-y-1.5 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                                class="border-border/70 cf-glass space-y-1.5 rounded-2xl border p-4"
                             >
-                                <h4 class="text-xs font-bold text-white">
+                                <h4 class="text-foreground text-xs font-bold">
                                     {{
                                         isRTL
                                             ? 'س: ماذا أفعل إذا تم التعرف على اسم فيلم أو مسلسل بشكل خاطئ؟'
@@ -1100,7 +1142,7 @@ const tabs = [
                                     }}
                                 </h4>
                                 <p
-                                    class="text-xs leading-relaxed text-slate-400"
+                                    class="text-muted-foreground text-xs leading-relaxed"
                                 >
                                     {{
                                         isRTL
@@ -1111,9 +1153,9 @@ const tabs = [
                             </div>
 
                             <div
-                                class="space-y-1.5 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                                class="border-border/70 cf-glass space-y-1.5 rounded-2xl border p-4"
                             >
-                                <h4 class="text-xs font-bold text-white">
+                                <h4 class="text-foreground text-xs font-bold">
                                     {{
                                         isRTL
                                             ? 'س: هل يستهلك المنظم الفعلي مساحة إضافية على الهارد ديسك؟'
@@ -1121,7 +1163,7 @@ const tabs = [
                                     }}
                                 </h4>
                                 <p
-                                    class="text-xs leading-relaxed text-slate-400"
+                                    class="text-muted-foreground text-xs leading-relaxed"
                                 >
                                     {{
                                         isRTL
@@ -1136,9 +1178,9 @@ const tabs = [
 
                 <!-- Footer Engineering Credits -->
                 <div
-                    class="rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-center text-xs text-slate-400"
+                    class="border-border/70 cf-glass text-muted-foreground rounded-2xl border p-4 text-center text-xs"
                 >
-                    <span class="font-bold text-slate-300"
+                    <span class="text-foreground/85 font-bold"
                         >Creative Media Hub</span
                     >
                     —
