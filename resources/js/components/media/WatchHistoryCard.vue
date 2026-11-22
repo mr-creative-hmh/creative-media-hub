@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
@@ -90,7 +90,6 @@ const seriesName = computed(() => {
     if (props.item.series_title) {
         return props.item.series_title;
     }
-    // Fallback: strip season/episode patterns from main title
     const raw =
         isRTL.value && props.item.title_ar
             ? props.item.title_ar
@@ -99,11 +98,9 @@ const seriesName = computed(() => {
     return parts[0]?.trim() || raw;
 });
 
-// Season & Episode numbers
 const seasonNum = computed(() => props.item.season_number ?? 1);
 const episodeNum = computed(() => props.item.episode_number ?? 1);
 
-// Episode code badge string: e.g. "S1 · E22" or "م1 · ح22"
 const episodeCode = computed(() => {
     if (isRTL.value) {
         return `م${seasonNum.value} · ح${episodeNum.value}`;
@@ -111,7 +108,6 @@ const episodeCode = computed(() => {
     return `S${seasonNum.value} · E${episodeNum.value}`;
 });
 
-// Clean Episode title
 const episodeTitle = computed(() => {
     if (!isEpisode.value) return '';
     if (isRTL.value && props.item.episode_title_ar) {
@@ -127,7 +123,6 @@ const episodeTitle = computed(() => {
         : `Episode ${episodeNum.value}`;
 });
 
-// Main title (Heading Line)
 const mainTitle = computed(() => {
     if (isEpisode.value) {
         return seriesName.value || props.item.title;
@@ -137,7 +132,6 @@ const mainTitle = computed(() => {
         : props.item.title;
 });
 
-// Remaining time string
 const remainingText = computed(() => {
     if (props.item.remaining_formatted) {
         const parts = props.item.remaining_formatted.split(':');
@@ -173,18 +167,6 @@ const remainingText = computed(() => {
     return null;
 });
 
-// Color gradient for the progress bar based on media type
-const progressGradient = computed(() => {
-    if (isEpisode.value) {
-        return 'from-indigo-500 to-cyan-400';
-    }
-    if (isCollection.value) {
-        return 'from-amber-400 to-orange-500';
-    }
-    return 'from-cyan-400 to-blue-500';
-});
-
-// Subtitle count badge
 const subtitlesCount = computed(() => {
     return Array.isArray(props.item.subtitles)
         ? props.item.subtitles.length
@@ -195,10 +177,10 @@ const subtitlesCount = computed(() => {
 <template>
     <div
         @click="emit('play', item, item.playlist)"
-        class="glass-panel group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white transition-all duration-300 hover:border-cyan-500/40 hover:shadow-xl hover:shadow-cyan-500/10 dark:border-white/10 dark:bg-[#07090E]"
+        class="cf-glass border-border/80 hover:border-primary/45 group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl"
     >
         <!-- Thumbnail Media Frame (16:9 Aspect Ratio) -->
-        <div class="relative aspect-video w-full overflow-hidden bg-slate-950">
+        <div class="bg-background relative aspect-video w-full overflow-hidden">
             <img
                 :src="item.backdrop_path || item.poster_path"
                 :alt="mainTitle"
@@ -221,13 +203,15 @@ const subtitlesCount = computed(() => {
                 class="absolute inset-0 z-20 flex items-center justify-center gap-2 bg-black/40 opacity-0 backdrop-blur-xs transition-opacity group-hover:opacity-100"
             >
                 <button
+                    type="button"
                     @click.stop="emit('play', item, item.playlist)"
-                    class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-cyan-500 text-slate-950 shadow-xl shadow-cyan-500/50 transition-transform hover:scale-110 hover:bg-cyan-400 active:scale-95"
+                    class="bg-primary text-primary-foreground shadow-primary/50 flex size-10 cursor-pointer items-center justify-center rounded-full shadow-xl transition-transform hover:scale-110 active:scale-95"
                     :title="isRTL ? 'مشاهدة عادية' : 'Normal Playback'"
                 >
-                    <Play class="ml-0.5 h-4 w-4 fill-current" />
+                    <Play class="ms-0.5 size-4 fill-current" />
                 </button>
                 <button
+                    type="button"
                     @click.stop="(e) => emit('play-interactive', item, e)"
                     class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-500 px-2.5 py-1.5 text-xs font-bold text-white shadow-xl shadow-rose-600/50 transition-transform hover:scale-105 hover:from-rose-500 hover:to-red-400 active:scale-95"
                     :title="
@@ -236,7 +220,7 @@ const subtitlesCount = computed(() => {
                             : 'Launch Interactive Experience'
                     "
                 >
-                    <Gamepad2 class="h-3.5 w-3.5" />
+                    <Gamepad2 class="size-3.5" />
                     <span>{{ isRTL ? 'تفاعلي' : 'Interactive' }}</span>
                 </button>
             </div>
@@ -245,9 +229,9 @@ const subtitlesCount = computed(() => {
                 class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/40 opacity-0 backdrop-blur-xs transition-opacity group-hover:opacity-100"
             >
                 <div
-                    class="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-cyan-500 text-slate-950 shadow-xl shadow-cyan-500/50 transition-transform group-hover:scale-110 active:scale-95"
+                    class="bg-primary text-primary-foreground shadow-primary/50 pointer-events-auto flex size-11 items-center justify-center rounded-full shadow-xl transition-transform group-hover:scale-110 active:scale-95"
                 >
-                    <Play class="ml-0.5 h-4.5 w-4.5 fill-current" />
+                    <Play class="ms-0.5 size-4.5 fill-current" />
                 </div>
             </div>
 
@@ -263,15 +247,15 @@ const subtitlesCount = computed(() => {
                         v-if="isInteractive"
                         class="pointer-events-auto flex animate-pulse items-center gap-1 rounded-md bg-gradient-to-r from-red-600 to-rose-500 px-2 py-0.5 text-[10px] font-black tracking-wider text-white uppercase shadow-lg shadow-rose-600/30 backdrop-blur-md"
                     >
-                        <Gamepad2 class="h-3 w-3" />
+                        <Gamepad2 class="size-3" />
                         <span>{{ isRTL ? 'تفاعلي' : 'Interactive' }}</span>
                     </span>
 
                     <span
                         v-else-if="isEpisode"
-                        class="pointer-events-auto flex items-center gap-1 rounded-md border border-indigo-400/30 bg-indigo-600/90 px-2 py-0.5 font-mono text-[10px] font-black tracking-wider text-white shadow-md backdrop-blur-md"
+                        class="border-primary/35 bg-primary/90 text-primary-foreground pointer-events-auto flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-[10px] font-black tracking-wider tabular-nums shadow-md backdrop-blur-md"
                     >
-                        <Tv class="h-3 w-3" />
+                        <Tv class="size-3" />
                         <span>{{ episodeCode }}</span>
                     </span>
 
@@ -279,7 +263,7 @@ const subtitlesCount = computed(() => {
                         v-else-if="isCollection"
                         class="pointer-events-auto flex items-center gap-1 rounded-md bg-amber-500/90 px-2 py-0.5 text-[10px] font-black tracking-wider text-slate-950 uppercase shadow-md backdrop-blur-md"
                     >
-                        <Layers class="h-3 w-3" />
+                        <Layers class="size-3" />
                         <span class="max-w-[120px] truncate">{{
                             item.collection_name ||
                             t('watch_history.collections')
@@ -288,21 +272,22 @@ const subtitlesCount = computed(() => {
 
                     <span
                         v-else
-                        class="pointer-events-auto flex items-center gap-1 rounded-md border border-cyan-500/30 bg-black/60 px-2 py-0.5 text-[10px] font-bold tracking-wider text-cyan-300 backdrop-blur-md"
+                        class="border-primary/35 text-primary pointer-events-auto flex items-center gap-1 rounded-md border bg-black/70 px-2 py-0.5 text-[10px] font-bold tracking-wider backdrop-blur-md"
                     >
-                        <Film class="h-3 w-3" />
+                        <Film class="size-3" />
                         <span>{{ isRTL ? 'فيلم' : 'Movie' }}</span>
                     </span>
                 </div>
 
-                <!-- Right: Remove / Delete Button (z-40, above blur overlay, crisp and clickable) -->
+                <!-- Right: Remove / Delete Button (z-40) -->
                 <button
+                    type="button"
                     @click.stop="(e) => emit('remove', item, e)"
                     :title="t('watch_history.remove_tooltip')"
                     aria-label="Remove from history"
-                    class="pointer-events-auto z-40 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-black/80 text-slate-200 opacity-80 shadow-xl backdrop-blur-md transition-all group-hover:opacity-100 hover:border-rose-500 hover:bg-rose-600 hover:text-white active:scale-90 sm:opacity-0"
+                    class="pointer-events-auto z-40 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-black/80 text-slate-200 opacity-80 shadow-xl backdrop-blur-md transition-all group-hover:opacity-100 hover:border-rose-500 hover:bg-rose-600 hover:text-white active:scale-90 sm:opacity-0"
                 >
-                    <X class="h-3.5 w-3.5" />
+                    <X class="size-3.5" />
                 </button>
             </div>
 
@@ -312,9 +297,9 @@ const subtitlesCount = computed(() => {
                 class="pointer-events-none absolute end-2.5 bottom-2.5 z-30"
             >
                 <span
-                    class="flex items-center gap-1 rounded-md border border-white/10 bg-black/80 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-200 shadow-sm backdrop-blur-md"
+                    class="flex items-center gap-1 rounded-md border border-white/10 bg-black/80 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-200 tabular-nums shadow-sm backdrop-blur-md"
                 >
-                    <Clock class="h-2.5 w-2.5 text-cyan-400" />
+                    <Clock class="text-primary size-2.5" />
                     <span>{{ remainingText }}</span>
                 </span>
             </div>
@@ -324,8 +309,7 @@ const subtitlesCount = computed(() => {
                 class="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-1.5 bg-black/70"
             >
                 <div
-                    class="h-full rounded-r-full bg-gradient-to-r shadow-sm transition-all duration-300"
-                    :class="progressGradient"
+                    class="bg-primary h-full rounded-e-full shadow-sm transition-all duration-300"
                     :style="{ width: `${item.percent}%` }"
                 ></div>
             </div>
@@ -336,7 +320,7 @@ const subtitlesCount = computed(() => {
             <!-- Line 1: Main Title (Series Name or Movie Name) -->
             <div class="flex min-w-0 items-center justify-between gap-2">
                 <h4
-                    class="flex-1 truncate text-sm font-black tracking-tight text-slate-900 transition-colors group-hover:text-cyan-400 dark:text-white"
+                    class="text-foreground group-hover:text-primary flex-1 truncate text-sm font-black tracking-tight transition-colors"
                     :title="mainTitle"
                 >
                     {{ mainTitle }}
@@ -344,19 +328,19 @@ const subtitlesCount = computed(() => {
                 <div class="flex shrink-0 items-center gap-1">
                     <span
                         v-if="subtitlesCount > 0"
-                        class="flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[9px] font-bold text-emerald-400"
+                        class="flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[9px] font-bold text-emerald-400 tabular-nums"
                         :title="
                             isRTL
                                 ? `يتوفر ${subtitlesCount} ملفات ترجمة`
                                 : `${subtitlesCount} subtitle tracks available`
                         "
                     >
-                        <Subtitles class="h-2.5 w-2.5" />
+                        <Subtitles class="size-2.5" />
                         <span>{{ subtitlesCount }} CC</span>
                     </span>
                     <span
                         v-if="item.resolution"
-                        class="shrink-0 rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[9px] text-cyan-600 dark:border-white/10 dark:bg-white/5 dark:text-cyan-300"
+                        class="border-border/80 bg-muted/40 text-primary shrink-0 rounded border px-1.5 py-0.5 font-mono text-[9px] tabular-nums"
                     >
                         {{ item.resolution }}
                     </span>
@@ -364,72 +348,63 @@ const subtitlesCount = computed(() => {
             </div>
 
             <!-- Line 2: Dedicated Subtitle (Episode info or Collection info) -->
-            <!-- Case A: Episode with separate badge and episode name -->
             <div
                 v-if="isEpisode"
                 class="flex min-w-0 items-center gap-1.5 text-xs"
             >
                 <span
-                    class="inline-flex shrink-0 items-center rounded border border-indigo-500/25 bg-indigo-500/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400"
+                    class="border-primary/25 bg-primary/15 text-primary inline-flex shrink-0 items-center rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums"
                 >
                     {{ episodeCode }}
                 </span>
                 <span
-                    class="flex-1 truncate text-xs font-medium text-slate-600 dark:text-slate-300"
+                    class="text-muted-foreground flex-1 truncate text-xs font-medium"
                     :title="episodeTitle"
                 >
                     {{ episodeTitle }}
                 </span>
             </div>
 
-            <!-- Case B: Movie in Collection -->
             <div
                 v-else-if="isCollection"
-                class="flex min-w-0 items-center gap-1.5 text-xs font-medium text-amber-500 dark:text-amber-400"
+                class="flex min-w-0 items-center gap-1.5 text-xs font-medium text-amber-400"
             >
-                <Layers class="h-3.5 w-3.5 shrink-0" />
+                <Layers class="size-3.5 shrink-0" />
                 <span class="truncate" :title="item.collection_name">
                     {{ item.collection_name }}
                 </span>
             </div>
 
-            <!-- Case C: Standalone Movie -->
             <div
                 v-else
-                class="flex min-w-0 items-center gap-2 text-xs text-slate-500 dark:text-slate-400"
+                class="text-muted-foreground flex min-w-0 items-center gap-2 text-xs tabular-nums"
             >
                 <span class="flex items-center gap-1">
-                    <Film class="h-3 w-3 text-cyan-500" />
+                    <Film class="text-primary size-3" />
                     <span>{{ isRTL ? 'فيلم سينمائي' : 'Feature Film' }}</span>
                 </span>
-                <span
-                    v-if="item.release_year"
-                    class="text-slate-400 dark:text-slate-500"
-                >
+                <span v-if="item.release_year" class="text-muted-foreground/80">
                     • {{ item.release_year }}
                 </span>
             </div>
 
             <!-- Line 3: Structured Footer with Timestamp & Percentage -->
             <div
-                class="mt-1.5 flex items-center justify-between border-t border-slate-100 pt-2 text-[11px] dark:border-white/5"
+                class="border-border/60 mt-1.5 flex items-center justify-between border-t pt-2 text-[11px] tabular-nums"
             >
                 <div
-                    class="flex items-center gap-1.5 font-mono text-[11px] text-slate-500 dark:text-slate-400"
+                    class="text-muted-foreground flex items-center gap-1.5 font-mono text-[11px]"
                 >
-                    <span
-                        class="font-semibold text-cyan-600 dark:text-cyan-400"
-                        >{{ item.current_time_formatted }}</span
-                    >
-                    <span class="text-slate-400 dark:text-slate-600">/</span>
-                    <span class="text-slate-500 dark:text-slate-400">{{
-                        item.duration_formatted
+                    <span class="text-primary font-semibold">{{
+                        item.current_time_formatted
                     }}</span>
+                    <span class="opacity-50">/</span>
+                    <span>{{ item.duration_formatted }}</span>
                 </div>
 
                 <div class="flex items-center gap-1.5">
                     <span
-                        class="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700 dark:border-white/5 dark:bg-white/5 dark:text-slate-300"
+                        class="border-border/80 bg-muted/40 text-foreground rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums"
                     >
                         {{ item.percent }}%
                     </span>

@@ -9,6 +9,7 @@ import FilterBar from '@/components/media/FilterBar.vue';
 import MediaCard from '@/components/media/MediaCard.vue';
 import MediaCardSkeleton from '@/components/common/skeletons/MediaCardSkeleton.vue';
 import Pagination from '@/components/common/Pagination.vue';
+import MotionList from '@/components/motion/MotionList.vue';
 import { Film, ScanLine, Plus } from '@lucide/vue';
 
 const MediaDetailModal = defineAsyncComponent(
@@ -200,20 +201,24 @@ const handleMediaUpdated = (updatedItem: any) => {
         <!-- In-Progress Continue Watching Bar (Movies Only) -->
         <WatchHistoryBar type="movie" @play="play" />
 
-        <!-- Filter & Search Studio (Zero Dropdowns) -->
+        <!-- Filter & Search Studio -->
         <FilterBar :genres="genres" :filters="filters" :show-vibes="true" />
 
         <!-- Media Grid Header -->
         <div class="mb-4 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <Film class="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+            <div class="flex items-center gap-2.5">
+                <div
+                    class="bg-primary/10 text-primary ring-primary/20 flex size-8 items-center justify-center rounded-xl ring-1"
+                >
+                    <Film class="size-4" />
+                </div>
                 <h2
-                    class="font-sans text-xl font-extrabold tracking-tight text-slate-900 dark:text-white"
+                    class="text-foreground font-sans text-xl font-extrabold tracking-tight"
                 >
                     {{ t('nav.movies') }}
                 </h2>
                 <span
-                    class="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-400"
+                    class="border-primary/25 bg-primary/10 text-primary rounded-full border px-2.5 py-0.5 text-xs font-semibold tabular-nums"
                 >
                     {{ movies.total }}
                 </span>
@@ -230,7 +235,7 @@ const handleMediaUpdated = (updatedItem: any) => {
         </div>
 
         <div v-else-if="movieList.length > 0" class="space-y-8">
-            <div
+            <MotionList
                 class="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-6 md:grid-cols-4 lg:grid-cols-6"
             >
                 <MediaCard
@@ -242,7 +247,7 @@ const handleMediaUpdated = (updatedItem: any) => {
                     @details="handleDetails"
                     @toggleFavorite="handleToggleFavorite"
                 />
-            </div>
+            </MotionList>
 
             <!-- Pagination Bar -->
             <Pagination
@@ -258,18 +263,18 @@ const handleMediaUpdated = (updatedItem: any) => {
         <!-- Empty State -->
         <div
             v-else
-            class="glass-panel space-y-4 rounded-3xl border border-slate-200 p-12 text-center dark:border-white/10"
+            class="cf-glass border-border/80 space-y-4 rounded-3xl border p-12 text-center"
         >
             <div
-                class="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400"
+                class="bg-primary/10 text-primary ring-primary/20 mx-auto flex size-16 items-center justify-center rounded-3xl ring-1"
             >
-                <ScanLine class="h-8 w-8" />
+                <ScanLine class="size-8" />
             </div>
-            <h3 class="text-lg font-extrabold text-slate-900 dark:text-white">
+            <h3 class="text-foreground text-lg font-extrabold">
                 {{ isRTL ? 'لم يتم العثور على أفلام' : 'No Movies Found' }}
             </h3>
             <p
-                class="mx-auto max-w-md text-xs leading-relaxed text-slate-600 dark:text-slate-400"
+                class="text-muted-foreground mx-auto max-w-md text-xs leading-relaxed"
             >
                 {{
                     isRTL
@@ -279,9 +284,9 @@ const handleMediaUpdated = (updatedItem: any) => {
             </p>
             <Link
                 href="/scanner"
-                class="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-cyan-500 px-6 py-2.5 text-xs font-extrabold text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:bg-cyan-400"
+                class="bg-primary text-primary-foreground shadow-primary/20 inline-flex cursor-pointer items-center gap-2 rounded-xl px-6 py-2.5 text-xs font-extrabold shadow-lg transition-all hover:brightness-105 active:scale-95"
             >
-                <Plus class="h-4 w-4" />
+                <Plus class="size-4" />
                 <span>{{
                     isRTL ? 'إضافة مجلد وفحص الأفلام' : 'Scan Movies Folder'
                 }}</span>

@@ -3,24 +3,22 @@ import { ref, computed, watch, defineAsyncComponent } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import WatchHistoryBar from '@/components/layout/WatchHistoryBar.vue';
+import PageBanner from '@/components/common/PageBanner.vue';
+import FilterPills, {
+    type FilterPillOption,
+} from '@/components/common/FilterPills.vue';
+import MotionList from '@/components/motion/MotionList.vue';
 import { useI18n } from '@/i18n/useI18n';
-
-const CollectionManagementModal = defineAsyncComponent(
-    () => import('@/components/collections/CollectionManagementModal.vue'),
-);
 import {
     Layers,
     Search,
     Film,
     Star,
     Calendar,
-    Play,
     Sparkles,
     ArrowRight,
-    Video,
     SlidersHorizontal,
     CheckCircle2,
-    Clock,
     RotateCcw,
     RefreshCw,
     X,
@@ -31,6 +29,10 @@ import {
     ArrowUpNarrowWide,
     Filter,
 } from '@lucide/vue';
+
+const CollectionManagementModal = defineAsyncComponent(
+    () => import('@/components/collections/CollectionManagementModal.vue'),
+);
 
 interface MovieItem {
     id: number;
@@ -85,7 +87,7 @@ const props = defineProps<{
     total_franchise_movies: number;
 }>();
 
-const { t, isRTL } = useI18n();
+const { isRTL } = useI18n();
 
 // Filter & Sort State
 const searchQuery = ref(props.filters.search || '');
@@ -113,7 +115,6 @@ const toggleSortDirection = () => {
 };
 
 watch(selectedSort, (newSort) => {
-    // Sensible default directions when switching sort types
     if (newSort === 'name') {
         sortDirection.value = 'asc';
     } else {
@@ -172,6 +173,34 @@ const topRatedCount = computed(
 const largeSagasCount = computed(
     () => props.collections.filter((c) => (c.movies_count || 0) >= 4).length,
 );
+
+const statusFilterOptions = computed<FilterPillOption[]>(() => [
+    {
+        value: 'all',
+        label: isRTL.value ? 'جميع السلاسل' : 'All Sagas',
+        count: props.collections.length,
+    },
+    {
+        value: 'complete',
+        label: isRTL.value ? 'مكتملة 100%' : 'Complete',
+        count: completeCount.value,
+    },
+    {
+        value: 'in_progress',
+        label: isRTL.value ? 'ينقصها أجزاء' : 'Missing Parts',
+        count: inProgressCount.value,
+    },
+    {
+        value: 'top_rated',
+        label: isRTL.value ? 'الأعلى تقييماً (8.0+)' : 'Top Rated (8.0+)',
+        count: topRatedCount.value,
+    },
+    {
+        value: 'large',
+        label: isRTL.value ? 'سلاسل كبرى (4+ أفلام)' : 'Epic Sagas (4+)',
+        count: largeSagasCount.value,
+    },
+]);
 
 // Available genres for dropdown
 const availableGenres = computed(() => {
@@ -283,87 +312,61 @@ const filteredAndSortedCollections = computed(() => {
         />
 
         <div class="space-y-8 pb-12">
-            <!-- Hero Banner -->
-            <section
-                class="glass-panel relative overflow-hidden rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 via-slate-900/60 to-purple-950/30 p-6 lg:p-10"
+            <!-- Hero PageBanner -->
+            <PageBanner
+                :icon="Layers"
+                :title="
+                    isRTL
+                        ? 'سلاسل ومجموعات الأفلام العالمية'
+                        : 'Movie Collections & Sagas'
+                "
+                :description="
+                    isRTL
+                        ? 'استكشف سلاسل الأفلام الكاملة مرتبة بالتسلسل الزمني للإنتاج مع تتبع الأجزاء المملوكة والمفقودة وترتيب السلاسل حسب رغبتك.'
+                        : 'Browse entire movie franchises chronologically organized with full control over sorting, filters, and missing saga parts.'
+                "
+                :badge="isRTL ? 'سلاسل الأفلام الكاملة' : 'Franchise Boxsets'"
             >
-                <div
-                    class="ambient-glow pointer-events-none -top-20 -left-20 h-96 w-96 bg-cyan-500/10"
-                ></div>
-                <div
-                    class="ambient-glow pointer-events-none -right-20 -bottom-20 h-96 w-96 bg-purple-500/10"
-                ></div>
-
-                <div
-                    class="relative z-10 flex flex-col items-start justify-between gap-6 md:flex-row md:items-center"
-                >
-                    <div class="max-w-2xl space-y-3">
+                <template #actions>
+                    <div class="flex flex-wrap items-center gap-3">
                         <div
-                            class="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/20 px-3 py-1 text-xs font-bold tracking-wider text-cyan-300 uppercase"
+                            class="cf-glass border-border/80 min-w-[96px] rounded-2xl border px-4 py-2.5 text-center"
                         >
-                            <Layers class="h-3.5 w-3.5" />
-                            <span>{{
-                                isRTL
-                                    ? 'سلاسل الأفلام الكاملة'
-                                    : 'Franchise Boxsets'
-                            }}</span>
-                        </div>
-                        <h1
-                            class="text-3xl font-black tracking-tight text-white lg:text-4xl"
-                        >
-                            {{
-                                isRTL
-                                    ? 'سلاسل ومجموعات الأفلام العالمية'
-                                    : 'Movie Collections & Sagas'
-                            }}
-                        </h1>
-                        <p
-                            class="text-sm leading-relaxed text-slate-300 lg:text-base"
-                        >
-                            {{
-                                isRTL
-                                    ? 'استكشف سلاسل الأفلام الكاملة مرتبة بالتسلسل الزمني للإنتاج مع تتبع الأجزاء المملوكة والمفقودة وترتيب السلاسل حسب رغبتك.'
-                                    : 'Browse entire movie franchises chronologically organized with full control over sorting, filters, and missing saga parts.'
-                            }}
-                        </p>
-                    </div>
-
-                    <!-- Stats Badges -->
-                    <div class="flex shrink-0 items-center gap-4">
-                        <div
-                            class="min-w-[110px] rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-center"
-                        >
-                            <div class="text-2xl font-black text-cyan-400">
+                            <div
+                                class="text-primary text-xl font-black tabular-nums"
+                            >
                                 {{ total_collections }}
                             </div>
                             <div
-                                class="mt-0.5 text-[11px] font-semibold text-slate-400 uppercase"
+                                class="text-muted-foreground mt-0.5 text-[10px] font-semibold tracking-wider uppercase"
                             >
                                 {{ isRTL ? 'سلسلة أفلام' : 'Collections' }}
                             </div>
                         </div>
                         <div
-                            class="min-w-[110px] rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-center"
+                            class="cf-glass border-border/80 min-w-[96px] rounded-2xl border px-4 py-2.5 text-center"
                         >
-                            <div class="text-2xl font-black text-purple-400">
+                            <div
+                                class="text-foreground text-xl font-black tabular-nums"
+                            >
                                 {{ total_franchise_movies }}
                             </div>
                             <div
-                                class="mt-0.5 text-[11px] font-semibold text-slate-400 uppercase"
+                                class="text-muted-foreground mt-0.5 text-[10px] font-semibold tracking-wider uppercase"
                             >
                                 {{ isRTL ? 'فيلماً مجمعاً' : 'Total Films' }}
                             </div>
                         </div>
                     </div>
-                </div>
-            </section>
+                </template>
+            </PageBanner>
 
             <!-- In-Progress Continue Watching Bar (Collections Only) -->
             <WatchHistoryBar type="collection" @play="play" />
 
             <!-- Collections Filter & Sort Control Bar -->
             <div
-                class="glass-panel space-y-4 rounded-3xl border border-white/10 bg-slate-900/60 p-4 shadow-xl backdrop-blur-xl sm:p-5"
+                class="cf-glass border-border/80 space-y-4 rounded-3xl border p-4 shadow-xl sm:p-5"
             >
                 <!-- Top Row: Instant Search & Sort Options & Studio Actions -->
                 <div
@@ -372,7 +375,7 @@ const filteredAndSortedCollections = computed(() => {
                     <!-- Live Instant Search -->
                     <div class="relative max-w-md flex-1">
                         <Search
-                            class="absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                            class="text-muted-foreground pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2"
                             :class="isRTL ? 'right-3.5' : 'left-3.5'"
                         />
                         <input
@@ -383,13 +386,14 @@ const filteredAndSortedCollections = computed(() => {
                                     ? 'ابحث في السلاسل أو أسماء الأفلام (مثال: Batman, هاري بوتر)...'
                                     : 'Filter collections or movie titles (e.g. Batman, Matrix)...'
                             "
-                            class="w-full rounded-2xl border border-white/10 bg-black/40 py-2.5 text-xs text-white placeholder-slate-400 shadow-inner transition-all focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 focus:outline-none sm:text-sm"
+                            class="cf-field border-border/80 bg-background/60 text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-primary/20 h-10 w-full rounded-2xl border py-2 text-xs focus:ring-2 focus:outline-none sm:text-sm"
                             :class="isRTL ? 'pr-10 pl-9' : 'pr-9 pl-10'"
                         />
                         <button
                             v-if="searchQuery"
+                            type="button"
                             @click="clearSearch"
-                            class="absolute top-1/2 -translate-y-1/2 cursor-pointer p-1 text-slate-400 transition-colors hover:text-white"
+                            class="text-muted-foreground hover:text-foreground absolute top-1/2 -translate-y-1/2 cursor-pointer p-1 transition-colors"
                             :class="isRTL ? 'left-2.5' : 'right-2.5'"
                             title="Clear search"
                         >
@@ -403,12 +407,12 @@ const filteredAndSortedCollections = computed(() => {
                         <div class="relative min-w-[130px] sm:min-w-[145px]">
                             <select
                                 v-model="selectedGenre"
-                                class="w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-white/5 px-3.5 py-2.5 pr-8 text-xs font-bold text-white transition-all hover:bg-white/10 focus:border-cyan-400 focus:outline-none"
+                                class="cf-glass border-border/80 text-foreground hover:border-primary/40 focus:border-primary h-10 w-full cursor-pointer appearance-none rounded-2xl border px-3.5 text-xs font-bold transition-all focus:outline-none"
                                 :class="isRTL ? 'pr-3.5 pl-8' : 'pr-8 pl-3.5'"
                             >
                                 <option
                                     value=""
-                                    class="bg-slate-900 text-white"
+                                    class="bg-card text-foreground"
                                 >
                                     {{
                                         isRTL ? 'جميع التصنيفات' : 'All Genres'
@@ -418,7 +422,7 @@ const filteredAndSortedCollections = computed(() => {
                                     v-for="g in availableGenres"
                                     :key="g.id"
                                     :value="g.id"
-                                    class="bg-slate-900 text-white"
+                                    class="bg-card text-foreground"
                                 >
                                     {{
                                         isRTL && g.name_ar
@@ -428,7 +432,7 @@ const filteredAndSortedCollections = computed(() => {
                                 </option>
                             </select>
                             <ChevronDown
-                                class="pointer-events-none absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
+                                class="text-muted-foreground pointer-events-none absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2"
                                 :class="isRTL ? 'left-3' : 'right-3'"
                             />
                         </div>
@@ -437,12 +441,12 @@ const filteredAndSortedCollections = computed(() => {
                         <div class="relative min-w-[160px] sm:min-w-[185px]">
                             <select
                                 v-model="selectedSort"
-                                class="w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-xs font-bold text-white transition-all hover:bg-white/10 focus:border-cyan-400 focus:outline-none"
+                                class="cf-glass border-border/80 text-foreground hover:border-primary/40 focus:border-primary h-10 w-full cursor-pointer appearance-none rounded-2xl border px-3.5 text-xs font-bold transition-all focus:outline-none"
                                 :class="isRTL ? 'pr-3.5 pl-8' : 'pr-8 pl-3.5'"
                             >
                                 <option
                                     value="name"
-                                    class="bg-slate-900 text-white"
+                                    class="bg-card text-foreground"
                                 >
                                     {{
                                         isRTL
@@ -452,7 +456,7 @@ const filteredAndSortedCollections = computed(() => {
                                 </option>
                                 <option
                                     value="rating"
-                                    class="bg-slate-900 text-white"
+                                    class="bg-card text-foreground"
                                 >
                                     {{
                                         isRTL
@@ -462,7 +466,7 @@ const filteredAndSortedCollections = computed(() => {
                                 </option>
                                 <option
                                     value="movies_count"
-                                    class="bg-slate-900 text-white"
+                                    class="bg-card text-foreground"
                                 >
                                     {{
                                         isRTL
@@ -472,7 +476,7 @@ const filteredAndSortedCollections = computed(() => {
                                 </option>
                                 <option
                                     value="year"
-                                    class="bg-slate-900 text-white"
+                                    class="bg-card text-foreground"
                                 >
                                     {{
                                         isRTL
@@ -482,7 +486,7 @@ const filteredAndSortedCollections = computed(() => {
                                 </option>
                                 <option
                                     value="completion"
-                                    class="bg-slate-900 text-white"
+                                    class="bg-card text-foreground"
                                 >
                                     {{
                                         isRTL
@@ -492,15 +496,16 @@ const filteredAndSortedCollections = computed(() => {
                                 </option>
                             </select>
                             <ChevronDown
-                                class="pointer-events-none absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
+                                class="text-muted-foreground pointer-events-none absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2"
                                 :class="isRTL ? 'left-3' : 'right-3'"
                             />
                         </div>
 
                         <!-- Sort Direction Toggle Button -->
                         <button
+                            type="button"
                             @click="toggleSortDirection"
-                            class="flex cursor-pointer items-center justify-center rounded-2xl border border-white/10 bg-white/5 p-2.5 text-slate-300 transition-all hover:border-cyan-500/30 hover:bg-white/10 hover:text-white"
+                            class="cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground flex size-10 cursor-pointer items-center justify-center rounded-2xl border transition-all active:scale-95"
                             :title="
                                 isRTL
                                     ? sortDirection === 'asc'
@@ -516,38 +521,37 @@ const filteredAndSortedCollections = computed(() => {
                                     selectedSort === 'name' &&
                                     sortDirection === 'asc'
                                 "
-                                class="h-4 w-4 text-cyan-400"
+                                class="text-primary h-4 w-4"
                             />
                             <ArrowUpZA
                                 v-else-if="
                                     selectedSort === 'name' &&
                                     sortDirection === 'desc'
                                 "
-                                class="h-4 w-4 text-cyan-400"
+                                class="text-primary h-4 w-4"
                             />
                             <ArrowDownWideNarrow
                                 v-else-if="sortDirection === 'desc'"
-                                class="h-4 w-4 text-cyan-400"
+                                class="text-primary h-4 w-4"
                             />
                             <ArrowUpNarrowWide
                                 v-else
-                                class="h-4 w-4 text-cyan-400"
+                                class="text-primary h-4 w-4"
                             />
                         </button>
 
                         <!-- Studio Management Button -->
                         <button
+                            type="button"
                             @click="showManagementModal = true"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-2xl border border-cyan-500/30 bg-cyan-500/20 px-3.5 py-2.5 text-xs font-bold text-cyan-300 transition-all hover:border-cyan-500/50 hover:bg-cyan-500/30"
+                            class="border-primary/35 bg-primary/15 text-primary hover:border-primary/50 hover:bg-primary/25 flex h-10 cursor-pointer items-center gap-1.5 rounded-2xl border px-3.5 text-xs font-bold transition-all active:scale-95"
                             :title="
                                 isRTL
                                     ? 'إدارة وتدقيق وتعديل السلاسل'
                                     : 'Manage & Curate Collections'
                             "
                         >
-                            <SlidersHorizontal
-                                class="h-3.5 w-3.5 text-cyan-400"
-                            />
+                            <SlidersHorizontal class="h-3.5 w-3.5" />
                             <span class="hidden sm:inline">{{
                                 isRTL ? 'إدارة السلاسل' : 'Manage Franchises'
                             }}</span>
@@ -555,9 +559,10 @@ const filteredAndSortedCollections = computed(() => {
 
                         <!-- Resync Cache Button -->
                         <button
+                            type="button"
                             @click="refreshCollections"
                             :disabled="isRefreshing"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-2xl border border-white/10 bg-white/5 p-2.5 text-xs font-semibold text-slate-400 transition-all hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-cyan-400 disabled:opacity-50 sm:px-3 sm:py-2.5"
+                            class="cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-primary flex h-10 cursor-pointer items-center gap-1.5 rounded-2xl border px-3 text-xs font-semibold transition-all active:scale-95 disabled:opacity-50"
                             :title="
                                 isRTL
                                     ? 'مزامنة وتحديث بيانات السلاسل'
@@ -567,7 +572,7 @@ const filteredAndSortedCollections = computed(() => {
                             <RefreshCw
                                 class="h-3.5 w-3.5"
                                 :class="{
-                                    'animate-spin text-cyan-400': isRefreshing,
+                                    'text-primary animate-spin': isRefreshing,
                                 }"
                             />
                             <span class="hidden md:inline">{{
@@ -583,143 +588,20 @@ const filteredAndSortedCollections = computed(() => {
                     </div>
                 </div>
 
-                <!-- Bottom Row: Status Filter Chips & Results Count / Reset -->
+                <!-- Bottom Row: FilterPills & Results Count / Reset -->
                 <div
-                    class="flex flex-wrap items-center justify-between gap-3 border-t border-white/5 pt-3"
+                    class="border-border/60 flex flex-wrap items-center justify-between gap-3 border-t pt-3"
                 >
-                    <div class="flex flex-wrap items-center gap-2">
-                        <button
-                            @click="activeStatus = 'all'"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all"
-                            :class="
-                                activeStatus === 'all'
-                                    ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
-                                    : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
-                            "
-                        >
-                            <Layers class="h-3.5 w-3.5" />
-                            <span>{{
-                                isRTL ? 'جميع السلاسل' : 'All Sagas'
-                            }}</span>
-                            <span
-                                class="py-0.2 rounded-md px-1.5 text-[10px]"
-                                :class="
-                                    activeStatus === 'all'
-                                        ? 'bg-slate-950/30 text-slate-950'
-                                        : 'bg-white/10 text-slate-300'
-                                "
-                            >
-                                {{ collections.length }}
-                            </span>
-                        </button>
-
-                        <button
-                            @click="activeStatus = 'complete'"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all"
-                            :class="
-                                activeStatus === 'complete'
-                                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                                    : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
-                            "
-                        >
-                            <CheckCircle2 class="h-3.5 w-3.5" />
-                            <span>{{
-                                isRTL ? 'مكتملة 100%' : 'Complete'
-                            }}</span>
-                            <span
-                                class="py-0.2 rounded-md px-1.5 text-[10px]"
-                                :class="
-                                    activeStatus === 'complete'
-                                        ? 'bg-slate-950/30 text-slate-950'
-                                        : 'bg-white/10 text-slate-300'
-                                "
-                            >
-                                {{ completeCount }}
-                            </span>
-                        </button>
-
-                        <button
-                            @click="activeStatus = 'in_progress'"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all"
-                            :class="
-                                activeStatus === 'in_progress'
-                                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                                    : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
-                            "
-                        >
-                            <Clock class="h-3.5 w-3.5" />
-                            <span>{{
-                                isRTL ? 'ينقصها أجزاء' : 'Missing Parts'
-                            }}</span>
-                            <span
-                                class="py-0.2 rounded-md px-1.5 text-[10px]"
-                                :class="
-                                    activeStatus === 'in_progress'
-                                        ? 'bg-slate-950/30 text-slate-950'
-                                        : 'bg-white/10 text-slate-300'
-                                "
-                            >
-                                {{ inProgressCount }}
-                            </span>
-                        </button>
-
-                        <button
-                            @click="activeStatus = 'top_rated'"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all"
-                            :class="
-                                activeStatus === 'top_rated'
-                                    ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
-                                    : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
-                            "
-                        >
-                            <Star class="h-3.5 w-3.5 fill-current" />
-                            <span>{{
-                                isRTL
-                                    ? 'الأعلى تقييماً (8.0+)'
-                                    : 'Top Rated (8.0+)'
-                            }}</span>
-                            <span
-                                class="py-0.2 rounded-md px-1.5 text-[10px]"
-                                :class="
-                                    activeStatus === 'top_rated'
-                                        ? 'bg-slate-950/30 text-slate-950'
-                                        : 'bg-white/10 text-slate-300'
-                                "
-                            >
-                                {{ topRatedCount }}
-                            </span>
-                        </button>
-
-                        <button
-                            @click="activeStatus = 'large'"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all"
-                            :class="
-                                activeStatus === 'large'
-                                    ? 'bg-purple-500 text-slate-950 shadow-md shadow-purple-500/20'
-                                    : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
-                            "
-                        >
-                            <Film class="h-3.5 w-3.5" />
-                            <span>{{
-                                isRTL
-                                    ? 'سلاسل كبرى (4+ أفلام)'
-                                    : 'Epic Sagas (4+)'
-                            }}</span>
-                            <span
-                                class="py-0.2 rounded-md px-1.5 text-[10px]"
-                                :class="
-                                    activeStatus === 'large'
-                                        ? 'bg-slate-950/30 text-slate-950'
-                                        : 'bg-white/10 text-slate-300'
-                                "
-                            >
-                                {{ largeSagasCount }}
-                            </span>
-                        </button>
-                    </div>
+                    <FilterPills
+                        :model-value="activeStatus"
+                        :options="statusFilterOptions"
+                        @update:model-value="(v) => (activeStatus = v as any)"
+                    />
 
                     <!-- Active Filter Indicator & Reset -->
-                    <div class="flex items-center gap-3 text-xs text-slate-400">
+                    <div
+                        class="text-muted-foreground flex items-center gap-3 text-xs tabular-nums"
+                    >
                         <span>
                             {{
                                 isRTL
@@ -729,8 +611,9 @@ const filteredAndSortedCollections = computed(() => {
                         </span>
                         <button
                             v-if="hasActiveFilters"
+                            type="button"
                             @click="resetFilters"
-                            class="flex cursor-pointer items-center gap-1 text-xs font-bold text-cyan-400 transition-colors hover:text-cyan-300"
+                            class="text-primary flex cursor-pointer items-center gap-1 text-xs font-bold transition-colors hover:brightness-110"
                         >
                             <RotateCcw class="h-3 w-3" />
                             <span>{{ isRTL ? 'إعادة ضبط' : 'Reset' }}</span>
@@ -740,7 +623,7 @@ const filteredAndSortedCollections = computed(() => {
             </div>
 
             <!-- Collections Grid -->
-            <div
+            <MotionList
                 v-if="filteredAndSortedCollections.length > 0"
                 class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
             >
@@ -748,7 +631,7 @@ const filteredAndSortedCollections = computed(() => {
                     v-for="col in filteredAndSortedCollections"
                     :key="col.slug"
                     :href="`/collections/${col.slug}`"
-                    class="group glass-panel relative flex cursor-pointer flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-900/40 transition-all duration-300 hover:border-cyan-500/40 hover:shadow-2xl hover:shadow-cyan-500/10"
+                    class="cf-glass group border-border/80 hover:border-primary/50 relative flex cursor-pointer flex-col overflow-hidden rounded-3xl border transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl"
                 >
                     <!-- Collection Backdrop / Cover -->
                     <div
@@ -773,18 +656,18 @@ const filteredAndSortedCollections = computed(() => {
 
                         <!-- Pill Badge for movie count & completion status -->
                         <div
-                            class="absolute top-3 right-3 flex items-center gap-1.5"
+                            class="absolute end-3 top-3 flex items-center gap-1.5"
                         >
                             <div
                                 v-if="col.is_complete"
-                                class="flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-950/80 px-3 py-1 text-xs font-black text-emerald-400 shadow-lg backdrop-blur-md"
+                                class="flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-950/85 px-3 py-1 text-xs font-black text-emerald-400 shadow-lg backdrop-blur-md"
                             >
                                 <CheckCircle2 class="h-3.5 w-3.5" />
                                 <span>{{ isRTL ? 'مكتملة' : 'Complete' }}</span>
                             </div>
                             <div
                                 v-else
-                                class="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-black/70 px-3 py-1 text-xs font-black text-amber-300 shadow-lg backdrop-blur-md"
+                                class="flex items-center gap-1.5 rounded-full border border-amber-500/35 bg-black/75 px-3 py-1 text-xs font-black text-amber-300 tabular-nums shadow-lg backdrop-blur-md"
                             >
                                 <Film class="h-3.5 w-3.5 text-amber-400" />
                                 <span
@@ -804,9 +687,9 @@ const filteredAndSortedCollections = computed(() => {
                         <!-- Year Span -->
                         <div
                             v-if="col.year_span"
-                            class="absolute bottom-3 left-3 flex items-center gap-1 rounded-lg border border-white/10 bg-black/60 px-2.5 py-0.5 text-xs font-semibold text-slate-300 backdrop-blur-md"
+                            class="absolute start-3 bottom-3 flex items-center gap-1 rounded-lg border border-white/15 bg-black/70 px-2.5 py-0.5 text-xs font-semibold text-slate-200 tabular-nums backdrop-blur-md"
                         >
-                            <Calendar class="h-3 w-3 text-cyan-400" />
+                            <Calendar class="text-primary h-3 w-3" />
                             <span>{{ col.year_span }}</span>
                         </div>
 
@@ -816,10 +699,10 @@ const filteredAndSortedCollections = computed(() => {
                                 col.total_parts &&
                                 col.total_parts > col.movies_count
                             "
-                            class="absolute inset-x-0 bottom-0 h-1 overflow-hidden bg-black/50"
+                            class="absolute inset-x-0 bottom-0 h-1 overflow-hidden bg-black/60"
                         >
                             <div
-                                class="h-full bg-gradient-to-r from-amber-500 to-cyan-400 transition-all duration-500"
+                                class="bg-primary h-full transition-all duration-500"
                                 :style="{
                                     width: `${col.completion_percentage}%`,
                                 }"
@@ -834,7 +717,7 @@ const filteredAndSortedCollections = computed(() => {
                         <div class="space-y-2">
                             <div class="flex items-start justify-between gap-2">
                                 <h3
-                                    class="line-clamp-1 text-base font-bold text-white transition-colors group-hover:text-cyan-400"
+                                    class="text-foreground group-hover:text-primary line-clamp-1 text-base font-bold transition-colors"
                                 >
                                     {{ col.name }}
                                 </h3>
@@ -843,7 +726,7 @@ const filteredAndSortedCollections = computed(() => {
                                         col.missing_parts &&
                                         col.missing_parts.length > 0
                                     "
-                                    class="shrink-0 rounded-md border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-300"
+                                    class="shrink-0 rounded-md border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-300 tabular-nums"
                                 >
                                     {{
                                         isRTL
@@ -856,7 +739,7 @@ const filteredAndSortedCollections = computed(() => {
                             <!-- Movie titles preview chips -->
                             <div class="flex flex-wrap gap-1.5 pt-1">
                                 <span
-                                    v-for="(m, idx) in (
+                                    v-for="m in (
                                         (Array.isArray(col.movies)
                                             ? col.movies
                                             : Object.values(
@@ -864,7 +747,7 @@ const filteredAndSortedCollections = computed(() => {
                                               )) as any[]
                                     ).slice(0, 3)"
                                     :key="(m as any).id"
-                                    class="max-w-[140px] truncate rounded-md border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] font-medium text-slate-300"
+                                    class="border-border/70 bg-muted/40 text-muted-foreground max-w-[140px] truncate rounded-md border px-2 py-0.5 text-[10px] font-medium"
                                 >
                                     {{ (m as any).title }}
                                 </span>
@@ -875,7 +758,7 @@ const filteredAndSortedCollections = computed(() => {
                                             : Object.keys(col.movies || {})
                                                   .length) > 3
                                     "
-                                    class="rounded-md border border-cyan-500/30 bg-cyan-500/20 px-1.5 py-0.5 text-[10px] font-bold text-cyan-300"
+                                    class="border-primary/30 bg-primary/15 text-primary rounded-md border px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
                                 >
                                     +{{
                                         (Array.isArray(col.movies)
@@ -889,49 +772,48 @@ const filteredAndSortedCollections = computed(() => {
 
                         <!-- Card Footer -->
                         <div
-                            class="flex items-center justify-between border-t border-white/5 pt-2 text-xs text-slate-400"
+                            class="border-border/60 text-muted-foreground flex items-center justify-between border-t pt-2.5 text-xs"
                         >
                             <div
-                                class="flex items-center gap-1 font-bold text-amber-400"
+                                class="flex items-center gap-1 font-bold text-amber-400 tabular-nums"
                             >
                                 <Star class="h-3.5 w-3.5 fill-amber-400" />
                                 <span>{{ col.avg_rating || '7.5' }}</span>
                             </div>
 
                             <span
-                                class="inline-flex items-center gap-1 font-bold text-cyan-400 transition-transform group-hover:translate-x-1"
+                                class="text-primary inline-flex items-center gap-1 font-bold transition-transform group-hover:translate-x-1 rtl:group-hover:-translate-x-1"
                             >
                                 <span>{{
                                     isRTL ? 'عرض السلسلة' : 'Explore Saga'
                                 }}</span>
                                 <ArrowRight
-                                    class="h-3.5 w-3.5"
-                                    :class="isRTL ? 'rotate-180' : ''"
+                                    class="h-3.5 w-3.5 rtl:rotate-180"
                                 />
                             </span>
                         </div>
                     </div>
                 </Link>
-            </div>
+            </MotionList>
 
             <!-- Empty Filter State -->
             <div
                 v-else-if="collections.length > 0"
-                class="glass-panel mx-auto max-w-lg space-y-4 rounded-3xl border border-white/10 px-4 py-16 text-center"
+                class="cf-glass border-border/80 mx-auto max-w-lg space-y-4 rounded-3xl border px-4 py-16 text-center"
             >
                 <div
-                    class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-400"
+                    class="border-primary/25 bg-primary/10 text-primary mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border"
                 >
                     <Filter class="h-8 w-8" />
                 </div>
-                <h3 class="text-lg font-bold text-white">
+                <h3 class="text-foreground text-lg font-bold">
                     {{
                         isRTL
                             ? 'لا توجد سلاسل مطابقة للتصفية'
                             : 'No Matching Collections Found'
                     }}
                 </h3>
-                <p class="text-xs leading-relaxed text-slate-400">
+                <p class="text-muted-foreground text-xs leading-relaxed">
                     {{
                         isRTL
                             ? 'لم يتم العثور على أي سلسلة تطابق معايير البحث أو التصفية الحالية. يمكنك إعادة تعيين التصفية لعرض جميع السلاسل.'
@@ -939,8 +821,9 @@ const filteredAndSortedCollections = computed(() => {
                     }}
                 </p>
                 <button
+                    type="button"
                     @click="resetFilters"
-                    class="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-cyan-500 px-5 py-2.5 text-xs font-bold text-slate-950 transition-all hover:bg-cyan-400"
+                    class="bg-primary text-primary-foreground shadow-primary/25 inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold shadow-sm transition-all hover:brightness-105 active:scale-95"
                 >
                     <RotateCcw class="h-4 w-4" />
                     <span>{{
@@ -952,21 +835,21 @@ const filteredAndSortedCollections = computed(() => {
             <!-- Completely Empty Library State -->
             <div
                 v-else
-                class="glass-panel mx-auto max-w-lg space-y-4 rounded-3xl border border-white/10 px-4 py-16 text-center"
+                class="cf-glass border-border/80 mx-auto max-w-lg space-y-4 rounded-3xl border px-4 py-16 text-center"
             >
                 <div
-                    class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-400"
+                    class="border-primary/25 bg-primary/10 text-primary mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border"
                 >
                     <Layers class="h-8 w-8" />
                 </div>
-                <h3 class="text-lg font-bold text-white">
+                <h3 class="text-foreground text-lg font-bold">
                     {{
                         isRTL
                             ? 'لم يتم العثور على سلاسل أفلام'
                             : 'No Movie Collections Found'
                     }}
                 </h3>
-                <p class="text-xs leading-relaxed text-slate-400">
+                <p class="text-muted-foreground text-xs leading-relaxed">
                     {{
                         isRTL
                             ? 'عند قيامك بفهرسة مكتبة أفلامك التي تحتوي على أفلام ذات أجزاء متعددة (مثل هاري بوتر، حرب النجوم، فاست آند فيوريوس)، سيتم تجميعها تلقائياً هنا.'
@@ -975,7 +858,7 @@ const filteredAndSortedCollections = computed(() => {
                 </p>
                 <Link
                     href="/scanner"
-                    class="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-cyan-500 px-5 py-2.5 text-xs font-bold text-slate-950 transition-all hover:bg-cyan-400"
+                    class="bg-primary text-primary-foreground shadow-primary/25 inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold shadow-sm transition-all hover:brightness-105 active:scale-95"
                 >
                     <Sparkles class="h-4 w-4" />
                     <span>{{

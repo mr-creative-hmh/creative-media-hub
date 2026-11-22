@@ -1,6 +1,6 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { useI18n } from '@/i18n/useI18n';
-import { Play, Star, Heart, Subtitles, Film } from '@lucide/vue';
+import { Play, Star, Heart } from '@lucide/vue';
 
 const props = defineProps<{
     item: any;
@@ -17,12 +17,10 @@ const hasEnSub = props.item.subtitles?.some((s: any) => s.language === 'en');
 <template>
     <div
         @click="emit('details', item)"
-        class="glass-card group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-slate-200 shadow-sm transition-all duration-300 hover:border-cyan-500/50 hover:shadow-lg dark:border-white/10"
+        class="cf-glass border-border/80 hover:border-primary/50 group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-xl"
     >
         <!-- Poster Container -->
-        <div
-            class="relative aspect-[2/3] w-full overflow-hidden bg-slate-200 dark:bg-slate-900"
-        >
+        <div class="bg-muted/40 relative aspect-[2/3] w-full overflow-hidden">
             <img
                 :src="item.poster_path || '/placeholder.jpg'"
                 :alt="item.title"
@@ -32,7 +30,7 @@ const hasEnSub = props.item.subtitles?.some((s: any) => s.language === 'en');
 
             <!-- Dark Overlay on Hover -->
             <div
-                class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent opacity-60 transition-opacity group-hover:opacity-80"
+                class="from-background via-background/30 absolute inset-0 bg-gradient-to-t to-transparent opacity-60 transition-opacity group-hover:opacity-80"
             ></div>
 
             <!-- Top Quality & Favorite Badges (z-30, strictly above hover overlay and blur) -->
@@ -40,13 +38,14 @@ const hasEnSub = props.item.subtitles?.some((s: any) => s.language === 'en');
                 class="pointer-events-none absolute inset-x-2.5 top-2.5 z-30 flex items-center justify-between"
             >
                 <span
-                    class="cinema-badge pointer-events-auto border border-cyan-500/30 bg-black/70 text-[10px] text-cyan-400"
+                    class="cinema-badge border-primary/35 text-primary pointer-events-auto border bg-black/75 font-mono text-[10px] tabular-nums"
                 >
                     {{ item.resolution || '1080p' }}
                 </span>
                 <button
+                    type="button"
                     @click.stop="emit('toggleFavorite', item)"
-                    class="pointer-events-auto z-40 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-black/70 shadow-md backdrop-blur-xs transition-all hover:scale-125 hover:bg-black/90 active:scale-90"
+                    class="pointer-events-auto z-40 flex size-7 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-black/75 shadow-md backdrop-blur-xs transition-all hover:scale-115 hover:bg-black/90 active:scale-90"
                     :title="
                         item.is_favorite
                             ? 'Remove from favorites'
@@ -54,7 +53,7 @@ const hasEnSub = props.item.subtitles?.some((s: any) => s.language === 'en');
                     "
                 >
                     <Heart
-                        class="h-3.5 w-3.5 transition-colors"
+                        class="size-3.5 transition-colors"
                         :class="
                             item.is_favorite
                                 ? 'fill-red-500 text-red-500'
@@ -88,9 +87,9 @@ const hasEnSub = props.item.subtitles?.some((s: any) => s.language === 'en');
                 <!-- Rating -->
                 <div
                     v-if="item.rating"
-                    class="pointer-events-auto flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-amber-300"
+                    class="pointer-events-auto flex items-center gap-1 rounded-md border border-white/10 bg-black/75 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 tabular-nums backdrop-blur-xs"
                 >
-                    <Star class="h-3 w-3 fill-current" />
+                    <Star class="size-3 fill-current" />
                     <span>{{ item.rating }}</span>
                 </div>
             </div>
@@ -98,27 +97,27 @@ const hasEnSub = props.item.subtitles?.some((s: any) => s.language === 'en');
             <!-- Quick Play Button Hover Overlay -->
             <div
                 @click.stop="emit('play', item)"
-                class="absolute inset-0 z-20 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100"
+                class="absolute inset-0 z-20 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover:opacity-100"
             >
                 <div
-                    class="flex h-12 w-12 items-center justify-center rounded-full bg-cyan-500 text-slate-950 shadow-xl shadow-cyan-500/50 transition-transform group-hover:scale-110 active:scale-95"
+                    class="bg-primary text-primary-foreground shadow-primary/40 flex size-12 items-center justify-center rounded-full shadow-xl transition-transform group-hover:scale-110 active:scale-95"
                 >
-                    <Play class="ml-0.5 h-6 w-6 fill-current" />
+                    <Play class="ms-0.5 size-6 fill-current" />
                 </div>
             </div>
         </div>
 
         <!-- Bottom Info -->
         <div
-            class="flex flex-1 flex-col justify-between bg-white p-3 dark:bg-slate-950/40"
+            class="bg-card/85 flex flex-1 flex-col justify-between p-3 backdrop-blur-sm"
         >
             <h3
-                class="truncate text-sm font-bold text-slate-900 transition-colors group-hover:text-cyan-600 dark:text-slate-100 dark:group-hover:text-cyan-400"
+                class="text-foreground group-hover:text-primary truncate text-sm font-bold transition-colors"
             >
                 {{ isRTL && item.title_ar ? item.title_ar : item.title }}
             </h3>
             <div
-                class="mt-1 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400"
+                class="text-muted-foreground mt-1 flex items-center justify-between text-[11px] tabular-nums"
             >
                 <span>{{ item.release_year }}</span>
                 <span v-if="item.runtime_minutes"

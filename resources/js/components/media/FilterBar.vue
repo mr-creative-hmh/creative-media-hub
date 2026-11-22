@@ -1,9 +1,8 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import { router } from '@inertiajs/vue3';
 import {
-    Filter,
     Sparkles,
     Star,
     Calendar,
@@ -12,12 +11,8 @@ import {
     Check,
     RotateCcw,
     Heart,
-    Film,
     ArrowUpDown,
-    Tv,
     Globe,
-    Search,
-    X,
 } from '@lucide/vue';
 import SvgFlag from '@/components/common/SvgFlag.vue';
 import LiveSearchDropdown from '@/components/common/LiveSearchDropdown.vue';
@@ -92,8 +87,6 @@ const handleFilterBarSearch = (q?: string) => {
     const term = (typeof q === 'string' ? q : searchQuery.value).trim();
     searchQuery.value = term;
 
-    // Submitting a new text search resets restrictive regional, genre, and vibe filters
-    // so the entire catalog is queried and the user immediately gets their matching titles.
     selectedOrigin.value = '';
     selectedGenre.value = '';
     selectedVibe.value = '';
@@ -108,15 +101,6 @@ const handleFilterBarSearch = (q?: string) => {
         },
         { preserveState: false, preserveScroll: true },
     );
-};
-
-const handleSearch = () => {
-    handleFilterBarSearch();
-};
-
-const clearSearch = () => {
-    searchQuery.value = '';
-    applyFilters();
 };
 
 const selectOrigin = (orig: string) => {
@@ -231,9 +215,9 @@ const curatedVibes = [
 
 <template>
     <div
-        class="glass-panel relative mb-8 space-y-5 overflow-hidden rounded-3xl border border-slate-200 p-5 shadow-sm dark:border-white/10"
+        class="cf-glass border-border/80 relative mb-8 space-y-5 overflow-hidden rounded-3xl border p-4 shadow-sm sm:p-5"
     >
-        <!-- Collections-Style Prominent Search Input Bar with Live Flyout -->
+        <!-- Prominent Search Input Bar with Live Flyout -->
         <div class="relative w-full max-w-xl">
             <LiveSearchDropdown
                 v-model="searchQuery"
@@ -248,15 +232,13 @@ const curatedVibes = [
             />
         </div>
 
-        <!-- 0. Regional Origin Carousel (Arabic, Indian/Bollywood, Anime/Asian, Turkish, Hollywood, European) -->
+        <!-- 0. Regional Origin Carousel -->
         <div class="space-y-2">
             <div class="flex items-center justify-between">
                 <div
-                    class="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400"
+                    class="text-muted-foreground flex items-center gap-2 text-xs font-bold"
                 >
-                    <Globe
-                        class="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400"
-                    />
+                    <Globe class="text-primary size-3.5" />
                     <span>{{
                         isRTL
                             ? 'التصنيف حسب الدولة والإنتاج (سينما عالمية)'
@@ -266,10 +248,11 @@ const curatedVibes = [
 
                 <button
                     v-if="hasActiveFilters"
+                    type="button"
                     @click="resetAllFilters"
-                    class="flex cursor-pointer items-center gap-1.5 text-xs font-bold text-rose-500 transition-colors hover:text-rose-400"
+                    class="text-destructive hover:text-destructive/80 flex cursor-pointer items-center gap-1.5 text-xs font-bold transition-colors"
                 >
-                    <RotateCcw class="h-3.5 w-3.5" />
+                    <RotateCcw class="size-3.5" />
                     <span>{{ t('common.clear_filters') }}</span>
                 </button>
             </div>
@@ -280,32 +263,31 @@ const curatedVibes = [
                 <button
                     v-for="orig in regionalOrigins"
                     :key="orig.id"
+                    type="button"
                     @click="selectOrigin(orig.id)"
-                    class="flex cursor-pointer items-center gap-2 rounded-2xl px-3.5 py-1.5 text-xs font-bold whitespace-nowrap shadow-sm transition-all active:scale-95"
+                    class="flex min-h-9 cursor-pointer items-center gap-2 rounded-2xl border px-3.5 py-1.5 text-xs font-bold whitespace-nowrap transition-all active:scale-95"
                     :class="
                         selectedOrigin === orig.id
-                            ? 'bg-gradient-to-r from-cyan-500 to-blue-500 font-black text-slate-950 shadow-cyan-500/20'
-                            : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10'
+                            ? 'border-primary bg-primary text-primary-foreground font-black shadow-xs'
+                            : 'border-border/80 bg-card/70 text-muted-foreground hover:border-primary/40 hover:text-foreground'
                     "
                 >
                     <SvgFlag :origin="orig.id" size="sm" />
                     <span>{{ isRTL ? orig.label_ar : orig.label_en }}</span>
                     <Check
                         v-if="selectedOrigin === orig.id"
-                        class="h-3.5 w-3.5 stroke-[3]"
+                        class="size-3.5 stroke-[3]"
                     />
                 </button>
             </div>
         </div>
 
         <!-- 1. Genres Pill Carousel -->
-        <div
-            class="space-y-2 border-t border-slate-200 pt-2 dark:border-white/5"
-        >
+        <div class="border-border/60 space-y-2 border-t pt-2.5">
             <div
-                class="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400"
+                class="text-muted-foreground flex items-center gap-2 text-xs font-bold"
             >
-                <Layers class="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+                <Layers class="text-primary size-3.5" />
                 <span>{{ t('common.genres') }}</span>
             </div>
 
@@ -313,12 +295,13 @@ const curatedVibes = [
                 class="custom-scrollbar flex items-center gap-2 overflow-x-auto pb-1"
             >
                 <button
+                    type="button"
                     @click="selectGenre('')"
-                    class="cursor-pointer rounded-2xl px-4 py-2 text-xs font-bold whitespace-nowrap shadow-sm transition-all active:scale-95"
+                    class="min-h-9 cursor-pointer rounded-2xl border px-4 py-1.5 text-xs font-bold whitespace-nowrap transition-all active:scale-95"
                     :class="
                         !selectedGenre
-                            ? 'bg-cyan-500 font-black text-slate-950 shadow-cyan-500/20'
-                            : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10'
+                            ? 'border-primary bg-primary text-primary-foreground font-black shadow-xs'
+                            : 'border-border/80 bg-card/70 text-muted-foreground hover:border-primary/40 hover:text-foreground'
                     "
                 >
                     {{ t('common.all_genres') }}
@@ -327,12 +310,13 @@ const curatedVibes = [
                 <button
                     v-for="g in genres"
                     :key="g.id"
+                    type="button"
                     @click="selectGenre(g.slug)"
-                    class="flex cursor-pointer items-center gap-1.5 rounded-2xl px-4 py-2 text-xs font-bold whitespace-nowrap shadow-sm transition-all active:scale-95"
+                    class="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-2xl border px-4 py-1.5 text-xs font-bold whitespace-nowrap transition-all active:scale-95"
                     :class="
                         selectedGenre === g.slug
-                            ? 'bg-cyan-500 font-black text-slate-950 shadow-cyan-500/20'
-                            : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10'
+                            ? 'border-primary bg-primary text-primary-foreground font-black shadow-xs'
+                            : 'border-border/80 bg-card/70 text-muted-foreground hover:border-primary/40 hover:text-foreground'
                     "
                 >
                     <span>{{
@@ -340,7 +324,7 @@ const curatedVibes = [
                     }}</span>
                     <Check
                         v-if="selectedGenre === g.slug"
-                        class="h-3.5 w-3.5 stroke-[3]"
+                        class="size-3.5 stroke-[3]"
                     />
                 </button>
             </div>
@@ -349,14 +333,12 @@ const curatedVibes = [
         <!-- 2. AI Mood & Vibe Segmented Chips -->
         <div
             v-if="showVibes"
-            class="space-y-2 border-t border-slate-200 pt-2 dark:border-white/5"
+            class="border-border/60 space-y-2 border-t pt-2.5"
         >
             <div
-                class="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400"
+                class="text-muted-foreground flex items-center gap-2 text-xs font-bold"
             >
-                <Sparkles
-                    class="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400"
-                />
+                <Sparkles class="text-primary size-3.5" />
                 <span>{{ t('common.vibe') }}</span>
             </div>
 
@@ -366,19 +348,28 @@ const curatedVibes = [
                 <button
                     v-for="v in curatedVibes"
                     :key="v.id"
+                    type="button"
                     @click="selectVibe(v.id)"
-                    class="flex cursor-pointer items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold whitespace-nowrap shadow-sm transition-all active:scale-95"
+                    class="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-xl border px-3.5 py-1.5 text-xs font-bold whitespace-nowrap transition-all active:scale-95"
                     :class="
                         selectedVibe === v.id
-                            ? 'bg-indigo-600 font-black text-white shadow-md shadow-indigo-600/30'
-                            : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10'
+                            ? 'border-primary bg-primary text-primary-foreground font-black shadow-xs'
+                            : 'border-border/80 bg-card/70 text-muted-foreground hover:border-primary/40 hover:text-foreground'
                     "
                 >
-                    <span class="text-xs text-indigo-400">✦</span>
+                    <span
+                        class="text-xs"
+                        :class="
+                            selectedVibe === v.id
+                                ? 'text-primary-foreground'
+                                : 'text-primary'
+                        "
+                        >✦</span
+                    >
                     <span>{{ isRTL ? v.label_ar : v.label_en }}</span>
                     <Check
                         v-if="selectedVibe === v.id"
-                        class="h-3 w-3 stroke-[3]"
+                        class="size-3 stroke-[3]"
                     />
                 </button>
             </div>
@@ -386,16 +377,15 @@ const curatedVibes = [
 
         <!-- 3. Quality & Sorting Interactive Segmented Controls -->
         <div
-            class="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-3 dark:border-white/5"
+            class="border-border/60 flex flex-wrap items-center justify-between gap-4 border-t pt-3"
         >
             <!-- Quality Segmented Control -->
             <div class="flex flex-wrap items-center gap-2">
-                <span
-                    class="text-xs font-bold text-slate-500 dark:text-slate-400"
+                <span class="text-muted-foreground text-xs font-bold"
                     >{{ t('common.quality') }}:</span
                 >
                 <div
-                    class="flex items-center rounded-2xl border border-slate-200 bg-slate-100 p-1 dark:border-white/10 dark:bg-black/40"
+                    class="border-border/80 bg-card/70 flex items-center rounded-2xl border p-1"
                 >
                     <button
                         v-for="res in [
@@ -405,12 +395,13 @@ const curatedVibes = [
                             { key: '720p', label: '720p HD' },
                         ]"
                         :key="res.key"
+                        type="button"
                         @click="selectResolution(res.key)"
                         class="cursor-pointer rounded-xl px-3 py-1.5 text-xs font-bold whitespace-nowrap transition-all"
                         :class="
                             selectedResolution === res.key
-                                ? 'bg-cyan-500 font-black text-slate-950 shadow-sm'
-                                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                                ? 'bg-primary text-primary-foreground font-black shadow-xs'
+                                : 'text-muted-foreground hover:text-foreground'
                         "
                     >
                         {{ res.label }}
@@ -420,12 +411,11 @@ const curatedVibes = [
 
             <!-- Sorting Segmented Control -->
             <div class="flex flex-wrap items-center gap-2">
-                <span
-                    class="text-xs font-bold text-slate-500 dark:text-slate-400"
+                <span class="text-muted-foreground text-xs font-bold"
                     >{{ t('common.sort_by') }}:</span
                 >
                 <div
-                    class="flex items-center rounded-2xl border border-slate-200 bg-slate-100 p-1 dark:border-white/10 dark:bg-black/40"
+                    class="border-border/80 bg-card/70 flex items-center rounded-2xl border p-1"
                 >
                     <button
                         v-for="s in [
@@ -451,15 +441,16 @@ const curatedVibes = [
                             },
                         ]"
                         :key="s.key"
+                        type="button"
                         @click="selectSort(s.key)"
                         class="flex cursor-pointer items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold whitespace-nowrap transition-all"
                         :class="
                             selectedSort === s.key
-                                ? 'bg-indigo-600 font-black text-white shadow-sm'
-                                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                                ? 'bg-primary text-primary-foreground font-black shadow-xs'
+                                : 'text-muted-foreground hover:text-foreground'
                         "
                     >
-                        <component :is="s.icon" class="h-3.5 w-3.5" />
+                        <component :is="s.icon" class="size-3.5" />
                         <span>{{ s.label }}</span>
                     </button>
                 </div>
@@ -467,16 +458,17 @@ const curatedVibes = [
 
             <!-- Favorites Toggle Button -->
             <button
+                type="button"
                 @click="toggleFavorite"
-                class="flex cursor-pointer items-center gap-1.5 rounded-2xl border px-3.5 py-1.5 text-xs font-bold transition-all"
+                class="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-2xl border px-3.5 py-1.5 text-xs font-bold transition-all active:scale-95"
                 :class="
                     favoriteOnly
-                        ? 'border-rose-500/40 bg-rose-500/20 text-rose-400 shadow-sm'
-                        : 'border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-slate-400 dark:hover:bg-white/10'
+                        ? 'border-rose-500/40 bg-rose-500/20 text-rose-400 shadow-xs'
+                        : 'border-border/80 bg-card/70 text-muted-foreground hover:border-primary/40 hover:text-foreground'
                 "
             >
                 <Heart
-                    class="h-3.5 w-3.5"
+                    class="size-3.5"
                     :class="{ 'fill-rose-500 text-rose-500': favoriteOnly }"
                 />
                 <span>{{ t('common.favorite') }}</span>

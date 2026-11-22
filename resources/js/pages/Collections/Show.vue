@@ -2,14 +2,9 @@
 import { ref, defineAsyncComponent } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import ConfirmModal from '@/components/common/ConfirmModal.vue';
+import MotionList from '@/components/motion/MotionList.vue';
 import { useI18n } from '@/i18n/useI18n';
-
-const MediaDetailModal = defineAsyncComponent(
-    () => import('@/components/media/MediaDetailModal.vue'),
-);
-const CollectionManagementModal = defineAsyncComponent(
-    () => import('@/components/collections/CollectionManagementModal.vue'),
-);
 import {
     Layers,
     Film,
@@ -19,17 +14,21 @@ import {
     Play,
     ArrowLeft,
     ArrowRight,
-    ShieldCheck,
     Sparkles,
-    Tv,
     CheckCircle2,
     Info,
-    Check,
     Search,
     Unlink,
     SlidersHorizontal,
     Plus,
 } from '@lucide/vue';
+
+const MediaDetailModal = defineAsyncComponent(
+    () => import('@/components/media/MediaDetailModal.vue'),
+);
+const CollectionManagementModal = defineAsyncComponent(
+    () => import('@/components/collections/CollectionManagementModal.vue'),
+);
 
 interface MovieDetail {
     id: number;
@@ -83,11 +82,15 @@ const props = defineProps<{
     collection: CollectionDetail;
 }>();
 
-const { t, isRTL } = useI18n();
+const { isRTL } = useI18n();
 
 // Detail Modal state
 const selectedDetailMovie = ref<any | null>(null);
 const showManagementModal = ref(false);
+
+// Detach Confirmation Modal state
+const movieToDetach = ref<MovieDetail | null>(null);
+const isDetaching = ref(false);
 
 const handleCollectionChanged = () => {
     router.reload();
@@ -97,16 +100,14 @@ const openMovieDetails = (movie: MovieDetail) => {
     selectedDetailMovie.value = movie;
 };
 
-const quickDetachMovie = async (movie: any) => {
-    if (
-        !confirm(
-            isRTL.value
-                ? `هل أنت متأكد من إزالة فيلم "${movie.title}" من هذه السلسلة؟`
-                : `Remove "${movie.title}" from this collection?`,
-        )
-    ) {
-        return;
-    }
+const quickDetachMovie = (movie: MovieDetail) => {
+    movieToDetach.value = movie;
+};
+
+const confirmDetachMovie = async () => {
+    if (!movieToDetach.value || isDetaching.value) return;
+    const movie = movieToDetach.value;
+    isDetaching.value = true;
 
     try {
         const res = await fetch('/api/collections/management/detach-movie', {
@@ -128,6 +129,9 @@ const quickDetachMovie = async (movie: any) => {
         }
     } catch (e) {
         console.error('Failed to detach movie', e);
+    } finally {
+        isDetaching.value = false;
+        movieToDetach.value = null;
     }
 };
 
@@ -177,15 +181,15 @@ const handleToggleFavorite = async (item: any) => {
             <div>
                 <Link
                     href="/collections"
-                    class="group inline-flex cursor-pointer items-center gap-2 text-xs font-bold text-slate-400 transition-colors hover:text-cyan-400"
+                    class="cf-glass group border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border px-4 py-2 text-xs font-bold transition-all active:scale-95"
                 >
                     <ArrowLeft
                         v-if="!isRTL"
-                        class="h-4 w-4 transition-transform group-hover:-translate-x-1"
+                        class="h-4 w-4 transition-transform group-hover:-translate-x-0.5"
                     />
                     <ArrowRight
                         v-else
-                        class="h-4 w-4 transition-transform group-hover:translate-x-1"
+                        class="h-4 w-4 transition-transform group-hover:translate-x-0.5"
                     />
                     <span>{{
                         isRTL
@@ -197,7 +201,7 @@ const handleToggleFavorite = async (item: any) => {
 
             <!-- Hero Banner for the Collection -->
             <div
-                class="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 via-[#0a0f1d] to-slate-950 p-8 shadow-2xl lg:p-12"
+                class="cf-glass-elevated border-border/80 bg-card relative overflow-hidden rounded-3xl border p-8 shadow-2xl lg:p-12"
             >
                 <!-- Ambient Backdrop Glow -->
                 <div
@@ -206,7 +210,7 @@ const handleToggleFavorite = async (item: any) => {
                     :style="`background-image: url('${collection.backdrop_path}')`"
                 ></div>
                 <div
-                    class="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent"
+                    class="from-background via-background/80 pointer-events-none absolute inset-0 bg-gradient-to-t to-transparent"
                 ></div>
 
                 <div
@@ -214,10 +218,10 @@ const handleToggleFavorite = async (item: any) => {
                 >
                     <!-- Poster + Meta -->
                     <div
-                        class="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-end sm:text-left"
+                        class="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-end sm:text-start"
                     >
                         <div
-                            class="aspect-[2/3] w-32 shrink-0 -rotate-1 transform overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl transition-transform hover:rotate-0 lg:w-40"
+                            class="aspect-[2/3] w-32 shrink-0 -rotate-1 transform overflow-hidden rounded-2xl border border-white/15 bg-slate-900 shadow-2xl transition-transform hover:rotate-0 lg:w-40"
                         >
                             <img
                                 v-if="collection.poster_path"
@@ -238,7 +242,7 @@ const handleToggleFavorite = async (item: any) => {
                                 class="flex flex-wrap items-center justify-center gap-2 sm:justify-start"
                             >
                                 <div
-                                    class="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/30 bg-cyan-500/20 px-3 py-1 text-xs font-bold text-cyan-300"
+                                    class="border-primary/35 bg-primary/15 text-primary inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold"
                                 >
                                     <Layers class="h-3.5 w-3.5" />
                                     <span>{{
@@ -260,7 +264,7 @@ const handleToggleFavorite = async (item: any) => {
                                 </div>
                                 <div
                                     v-else
-                                    class="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-300"
+                                    class="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-300 tabular-nums"
                                 >
                                     <Clock class="h-3.5 w-3.5" />
                                     <span>{{
@@ -272,16 +276,16 @@ const handleToggleFavorite = async (item: any) => {
                             </div>
 
                             <h1
-                                class="text-2xl font-black tracking-tight text-white sm:text-4xl"
+                                class="text-foreground text-2xl font-black tracking-tight sm:text-4xl"
                             >
                                 {{ collection.name }}
                             </h1>
 
                             <div
-                                class="flex flex-wrap items-center justify-center gap-4 text-xs font-semibold text-slate-300 sm:justify-start"
+                                class="text-muted-foreground flex flex-wrap items-center justify-center gap-4 text-xs font-semibold tabular-nums sm:justify-start"
                             >
                                 <div class="flex items-center gap-1.5">
-                                    <Film class="h-3.5 w-3.5 text-cyan-400" />
+                                    <Film class="text-primary h-3.5 w-3.5" />
                                     <span
                                         >{{ collection.movies_count }}
                                         {{
@@ -298,7 +302,7 @@ const handleToggleFavorite = async (item: any) => {
                                             collection.total_parts >
                                                 collection.movies_count
                                         "
-                                        class="text-slate-400"
+                                        class="text-muted-foreground/75"
                                     >
                                         ({{
                                             isRTL
@@ -313,7 +317,7 @@ const handleToggleFavorite = async (item: any) => {
                                     class="flex items-center gap-1.5"
                                 >
                                     <Calendar
-                                        class="h-3.5 w-3.5 text-cyan-400"
+                                        class="text-primary h-3.5 w-3.5"
                                     />
                                     <span>{{ collection.year_span }}</span>
                                 </div>
@@ -332,15 +336,16 @@ const handleToggleFavorite = async (item: any) => {
                     </div>
 
                     <!-- Quick Play First Movie CTA & Manage Button -->
-                    <div class="flex shrink-0 items-center gap-3">
+                    <div class="flex shrink-0 flex-wrap items-center gap-3">
                         <button
                             v-if="collection.movies.length > 0"
+                            type="button"
                             @click="
                                 playCollectionMovie(collection.movies[0], play)
                             "
-                            class="flex transform cursor-pointer items-center gap-2.5 rounded-2xl bg-cyan-500 px-6 py-3.5 text-xs font-black text-slate-950 shadow-xl shadow-cyan-500/25 transition-all hover:scale-105 hover:bg-cyan-400 sm:text-sm"
+                            class="bg-primary text-primary-foreground shadow-primary/25 flex min-h-11 cursor-pointer items-center gap-2.5 rounded-2xl px-6 py-3 text-xs font-black shadow-xl transition-all hover:brightness-105 active:scale-95 sm:text-sm"
                         >
-                            <Play class="h-4 w-4 fill-slate-950" />
+                            <Play class="h-4 w-4 fill-current" />
                             <span>{{
                                 isRTL
                                     ? 'بدء تشغيل السلسلة من الجزء الأول'
@@ -348,15 +353,16 @@ const handleToggleFavorite = async (item: any) => {
                             }}</span>
                         </button>
                         <button
+                            type="button"
                             @click="showManagementModal = true"
-                            class="flex cursor-pointer items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-3.5 text-xs font-bold text-white transition-all hover:bg-white/20 sm:text-sm"
+                            class="cf-glass border-border/80 text-foreground hover:border-primary/40 flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl border px-4 py-3 text-xs font-bold transition-all active:scale-95 sm:text-sm"
                             :title="
                                 isRTL
                                     ? 'إدارة السلسلة وإضافة/إزالة أفلام'
                                     : 'Manage Franchise & Movies'
                             "
                         >
-                            <SlidersHorizontal class="h-4 w-4 text-cyan-400" />
+                            <SlidersHorizontal class="text-primary h-4 w-4" />
                             <span>{{
                                 isRTL ? 'إدارة السلسلة' : 'Manage Saga'
                             }}</span>
@@ -367,10 +373,10 @@ const handleToggleFavorite = async (item: any) => {
 
             <!-- Movies in this Collection (Chronological) -->
             <section class="space-y-4">
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between gap-3">
                     <div class="space-y-1">
                         <h2
-                            class="text-xl font-black tracking-tight text-white lg:text-2xl"
+                            class="text-foreground text-xl font-black tracking-tight lg:text-2xl"
                         >
                             {{
                                 isRTL
@@ -378,7 +384,7 @@ const handleToggleFavorite = async (item: any) => {
                                     : 'Owned Movies in this Saga'
                             }}
                         </h2>
-                        <p class="text-xs text-slate-400">
+                        <p class="text-muted-foreground text-xs">
                             {{
                                 isRTL
                                     ? 'مرتبة بالتسلسل الزمني للإنتاج'
@@ -387,8 +393,9 @@ const handleToggleFavorite = async (item: any) => {
                         </p>
                     </div>
                     <button
+                        type="button"
                         @click="showManagementModal = true"
-                        class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/20 px-3.5 py-2 text-xs font-bold text-cyan-300 transition-all hover:bg-cyan-500/30"
+                        class="border-primary/35 bg-primary/15 text-primary hover:bg-primary/25 flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-bold transition-all active:scale-95"
                     >
                         <Plus class="h-3.5 w-3.5" />
                         <span>{{
@@ -397,13 +404,13 @@ const handleToggleFavorite = async (item: any) => {
                     </button>
                 </div>
 
-                <div
+                <MotionList
                     class="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
                 >
                     <div
                         v-for="(movie, idx) in collection.movies"
                         :key="movie.id"
-                        class="group glass-panel relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60 transition-all duration-300 hover:border-cyan-500/50 hover:shadow-2xl hover:shadow-cyan-500/10"
+                        class="cf-glass group border-border/80 hover:border-primary/50 relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl"
                         @click="openMovieDetails(movie)"
                     >
                         <!-- Poster Thumbnail -->
@@ -426,7 +433,7 @@ const handleToggleFavorite = async (item: any) => {
 
                             <!-- Chronological Index Badge -->
                             <div
-                                class="absolute top-2 left-2 flex h-7 w-7 items-center justify-center rounded-xl bg-cyan-500/90 text-xs font-black text-slate-950 shadow-lg"
+                                class="bg-primary text-primary-foreground absolute start-2.5 top-2.5 flex h-7 min-w-7 items-center justify-center rounded-xl px-1.5 text-xs font-black tabular-nums shadow-lg"
                             >
                                 #{{ idx + 1 }}
                             </div>
@@ -434,7 +441,7 @@ const handleToggleFavorite = async (item: any) => {
                             <!-- Resolution Badge -->
                             <div
                                 v-if="movie.resolution"
-                                class="absolute top-2 right-2 rounded-md border border-white/20 bg-black/70 px-2 py-0.5 text-[10px] font-black text-cyan-300 backdrop-blur-md"
+                                class="border-primary/35 text-primary absolute end-2.5 top-2.5 rounded-md border bg-black/75 px-2 py-0.5 text-[10px] font-black tabular-nums backdrop-blur-md"
                             >
                                 {{ movie.resolution }}
                             </div>
@@ -444,26 +451,27 @@ const handleToggleFavorite = async (item: any) => {
                                 class="absolute inset-0 flex items-center justify-center gap-2.5 bg-black/60 opacity-0 backdrop-blur-[2px] transition-opacity group-hover:opacity-100"
                             >
                                 <button
+                                    type="button"
                                     @click.stop="
                                         playCollectionMovie(movie, play)
                                     "
-                                    class="flex h-11 w-11 transform cursor-pointer items-center justify-center rounded-2xl bg-cyan-500 text-slate-950 shadow-xl shadow-cyan-500/30 transition-all hover:scale-110 hover:bg-cyan-400"
+                                    class="bg-primary text-primary-foreground shadow-primary/35 flex h-11 w-11 cursor-pointer items-center justify-center rounded-2xl shadow-xl transition-all hover:scale-110"
                                     :title="isRTL ? 'تشغيل' : 'Play Now'"
                                 >
-                                    <Play
-                                        class="ml-0.5 h-5 w-5 fill-slate-950"
-                                    />
+                                    <Play class="ms-0.5 h-5 w-5 fill-current" />
                                 </button>
                                 <button
+                                    type="button"
                                     @click.stop="openMovieDetails(movie)"
-                                    class="flex h-9 w-9 transform cursor-pointer items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white transition-all hover:scale-110 hover:bg-white/20"
+                                    class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white transition-all hover:scale-110 hover:bg-white/20"
                                     :title="isRTL ? 'تفاصيل' : 'Details'"
                                 >
                                     <Info class="h-4 w-4" />
                                 </button>
                                 <button
+                                    type="button"
                                     @click.stop="quickDetachMovie(movie)"
-                                    class="flex h-9 w-9 transform cursor-pointer items-center justify-center rounded-2xl border border-red-500/30 bg-red-500/20 text-red-300 transition-all hover:scale-110 hover:bg-red-500/40"
+                                    class="border-destructive/40 bg-destructive/20 text-destructive hover:bg-destructive/35 flex h-9 w-9 cursor-pointer items-center justify-center rounded-2xl border transition-all hover:scale-110"
                                     :title="
                                         isRTL
                                             ? 'إزالة الفيلم من هذه السلسلة'
@@ -481,7 +489,7 @@ const handleToggleFavorite = async (item: any) => {
                         >
                             <div>
                                 <h3
-                                    class="line-clamp-1 text-sm font-bold text-white transition-colors group-hover:text-cyan-400"
+                                    class="text-foreground group-hover:text-primary line-clamp-1 text-sm font-bold transition-colors"
                                     :title="movie.title"
                                 >
                                     {{
@@ -492,14 +500,14 @@ const handleToggleFavorite = async (item: any) => {
                                 </h3>
                                 <p
                                     v-if="isRTL && movie.title_ar"
-                                    class="line-clamp-1 text-[11px] text-slate-400"
+                                    class="text-muted-foreground line-clamp-1 text-[11px]"
                                 >
                                     {{ movie.title }}
                                 </p>
                             </div>
 
                             <div
-                                class="flex items-center justify-between border-t border-white/5 pt-2 text-xs text-slate-400"
+                                class="border-border/60 text-muted-foreground flex items-center justify-between border-t pt-2 text-xs tabular-nums"
                             >
                                 <span class="font-semibold">{{
                                     movie.release_year
@@ -514,7 +522,7 @@ const handleToggleFavorite = async (item: any) => {
                             </div>
                         </div>
                     </div>
-                </div>
+                </MotionList>
             </section>
 
             <!-- Missing Franchise Titles (Media Scout Integration) -->
@@ -523,7 +531,7 @@ const handleToggleFavorite = async (item: any) => {
                     collection.missing_parts &&
                     collection.missing_parts.length > 0
                 "
-                class="space-y-4 border-t border-white/10 pt-6"
+                class="border-border/70 space-y-4 border-t pt-6"
             >
                 <div
                     class="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center"
@@ -540,7 +548,7 @@ const handleToggleFavorite = async (item: any) => {
                             }}</span>
                         </div>
                         <h2
-                            class="text-xl font-black tracking-tight text-white lg:text-2xl"
+                            class="text-foreground text-xl font-black tracking-tight lg:text-2xl"
                         >
                             {{
                                 isRTL
@@ -551,7 +559,7 @@ const handleToggleFavorite = async (item: any) => {
                     </div>
                     <Link
                         :href="`/scout?query=${encodeURIComponent(collection.name.replace(' Collection', ''))}`"
-                        class="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/20 px-4 py-2 text-xs font-bold text-amber-300 transition-all hover:bg-amber-500/30"
+                        class="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-amber-500/35 bg-amber-500/15 px-4 py-2 text-xs font-bold text-amber-300 transition-all hover:bg-amber-500/25 active:scale-95"
                     >
                         <Search class="h-3.5 w-3.5" />
                         <span>{{
@@ -568,10 +576,10 @@ const handleToggleFavorite = async (item: any) => {
                     <div
                         v-for="part in collection.missing_parts"
                         :key="part.tmdb_id || part.title"
-                        class="glass-panel group relative flex flex-col space-y-3 overflow-hidden rounded-2xl border border-amber-500/20 bg-slate-900/60 p-2.5"
+                        class="cf-glass group relative flex flex-col space-y-3 overflow-hidden rounded-2xl border border-amber-500/25 p-2.5"
                     >
                         <div
-                            class="relative aspect-[2/3] w-full overflow-hidden rounded-xl border border-white/5 bg-slate-950"
+                            class="border-border/60 relative aspect-[2/3] w-full overflow-hidden rounded-xl border bg-slate-950"
                         >
                             <img
                                 v-if="part.poster_path"
@@ -587,7 +595,7 @@ const handleToggleFavorite = async (item: any) => {
                                 <Film class="h-8 w-8" />
                             </div>
                             <div
-                                class="absolute top-2 right-2 rounded-md border border-amber-500/30 bg-black/80 px-2 py-0.5 text-[10px] font-black text-amber-300"
+                                class="absolute end-2 top-2 rounded-md border border-amber-500/30 bg-black/80 px-2 py-0.5 text-[10px] font-black text-amber-300 tabular-nums"
                             >
                                 {{ part.release_year || 'TBA' }}
                             </div>
@@ -598,7 +606,7 @@ const handleToggleFavorite = async (item: any) => {
                         >
                             <div>
                                 <h4
-                                    class="line-clamp-1 text-xs font-bold text-white transition-colors group-hover:text-amber-400"
+                                    class="text-foreground line-clamp-1 text-xs font-bold transition-colors group-hover:text-amber-400"
                                     :title="part.title"
                                 >
                                     {{
@@ -609,7 +617,7 @@ const handleToggleFavorite = async (item: any) => {
                                 </h4>
                                 <p
                                     v-if="isRTL && part.title_ar"
-                                    class="line-clamp-1 text-[10px] text-slate-400"
+                                    class="text-muted-foreground line-clamp-1 text-[10px]"
                                 >
                                     {{ part.title }}
                                 </p>
@@ -617,7 +625,7 @@ const handleToggleFavorite = async (item: any) => {
 
                             <Link
                                 :href="`/scout?query=${encodeURIComponent(part.title)}`"
-                                class="mt-2 flex w-full cursor-pointer items-center justify-center gap-1 rounded-lg bg-amber-500 px-2 py-1.5 text-[11px] font-black text-slate-950 transition-all hover:bg-amber-400"
+                                class="mt-2 flex w-full cursor-pointer items-center justify-center gap-1 rounded-lg bg-amber-500 px-2 py-1.5 text-[11px] font-black text-slate-950 transition-all hover:bg-amber-400 active:scale-95"
                             >
                                 <Search class="h-3 w-3" />
                                 <span>{{
@@ -645,6 +653,28 @@ const handleToggleFavorite = async (item: any) => {
                 :initial-collection-slug="collection.slug"
                 @close="showManagementModal = false"
                 @changed="handleCollectionChanged"
+            />
+
+            <!-- Accessible ConfirmModal for Movie Detach -->
+            <ConfirmModal
+                :show="!!movieToDetach"
+                type="danger"
+                :loading="isDetaching"
+                :title="
+                    isRTL
+                        ? 'إزالة الفيلم من السلسلة'
+                        : 'Remove Movie from Collection'
+                "
+                :message="
+                    movieToDetach
+                        ? isRTL
+                            ? `هل أنت متأكد من إزالة فيلم &quot;${movieToDetach.title}&quot; من هذه السلسلة؟`
+                            : `Are you sure you want to remove &quot;${movieToDetach.title}&quot; from this collection?`
+                        : ''
+                "
+                :confirm-text="isRTL ? 'إزالة من السلسلة' : 'Remove'"
+                @confirm="confirmDetachMovie"
+                @close="movieToDetach = null"
             />
         </div>
     </AppLayout>

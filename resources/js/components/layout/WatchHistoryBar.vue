@@ -67,7 +67,7 @@ const removeItem = async (item: any, e: MouseEvent) => {
 
     removingIds.value.add(itemId);
 
-    // Optimistic UI removal - if it's a series, remove any cards with this seriesId or itemId
+    // Optimistic UI removal
     items.value = items.value.filter((i) => {
         const idMatches = (i.history_id || i.watchable_id || i.id) === itemId;
         const seriesMatches =
@@ -112,7 +112,6 @@ const removeItem = async (item: any, e: MouseEvent) => {
         );
     } catch (err) {
         console.error('Failed to delete watch history item', err);
-        // Rollback optimistic removal
         items.value = previousItems;
 
         toast.error(
@@ -122,14 +121,6 @@ const removeItem = async (item: any, e: MouseEvent) => {
     } finally {
         removingIds.value.delete(itemId);
     }
-};
-
-const isBandersnatchItem = (item: any) => {
-    return (
-        item?.id === 5764 ||
-        item?.watchable_id === 5764 ||
-        (item?.title && /bandersnatch/i.test(item.title))
-    );
 };
 
 const playBandersnatch = (item: any, e: MouseEvent) => {
@@ -148,14 +139,14 @@ onMounted(() => {
     <div v-if="uniqueItems.length > 0" class="mb-10">
         <div class="mb-4 flex items-center justify-between">
             <div class="flex items-center gap-2">
-                <Clock class="h-5 w-5 text-cyan-400" />
+                <Clock class="text-primary size-5" />
                 <h3
-                    class="font-sans text-base font-black tracking-wider text-slate-900 uppercase dark:text-white"
+                    class="text-foreground font-sans text-base font-black tracking-wider uppercase"
                 >
                     {{ title || t('watch_history.continue_watching') }}
                 </h3>
                 <span
-                    class="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 font-mono text-xs font-bold text-cyan-400"
+                    class="border-primary/25 bg-primary/15 text-primary rounded-full border px-2 py-0.5 font-mono text-xs font-bold tabular-nums"
                 >
                     {{ uniqueItems.length }}
                 </span>
@@ -164,12 +155,13 @@ onMounted(() => {
             <!-- View All Link to Dedicated Watch History Hub -->
             <Link
                 href="/watch-history"
-                class="group flex cursor-pointer items-center gap-1.5 text-xs font-bold text-cyan-500 transition-colors hover:text-cyan-400"
+                prefetch
+                class="text-primary hover:text-primary/80 group flex cursor-pointer items-center gap-1.5 text-xs font-bold transition-colors"
             >
                 <span>{{ t('watch_history.view_all') }}</span>
                 <component
                     :is="isRTL ? ChevronLeft : ChevronRight"
-                    class="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"
+                    class="size-3.5 transition-transform group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5"
                 />
             </Link>
         </div>

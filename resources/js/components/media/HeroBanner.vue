@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
@@ -7,9 +7,6 @@ import {
     Star,
     ChevronLeft,
     ChevronRight,
-    Sparkles,
-    Film,
-    Video,
     Clock,
 } from '@lucide/vue';
 
@@ -135,11 +132,11 @@ onUnmounted(() => {
         @mouseleave="isPaused = false"
         @touchstart="handleTouchStart"
         @touchend="handleTouchEnd"
-        class="group relative mb-8 overflow-hidden rounded-3xl border border-white/10 bg-slate-950 shadow-2xl select-none"
+        class="border-border/80 bg-background group relative mb-8 overflow-hidden rounded-3xl border shadow-2xl select-none"
     >
         <!-- Ambient Backdrop Images with Cross-Fade Transition -->
         <div
-            class="relative aspect-[21/9] min-h-[380px] w-full overflow-hidden bg-slate-950 sm:aspect-[24/9] sm:min-h-[440px]"
+            class="bg-background relative aspect-[21/9] min-h-[380px] w-full overflow-hidden sm:aspect-[24/9] sm:min-h-[440px]"
         >
             <transition name="hero-fade">
                 <img
@@ -154,13 +151,13 @@ onUnmounted(() => {
 
             <!-- Multi-layer Cinematic Gradients -->
             <div
-                class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/65 to-transparent"
+                class="from-background via-background/65 absolute inset-0 bg-gradient-to-t to-transparent"
             ></div>
             <div
-                class="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/40 to-transparent"
+                class="from-background/95 via-background/40 absolute inset-0 bg-gradient-to-r to-transparent"
                 :class="
                     isRTL
-                        ? 'bg-gradient-to-l from-slate-950/95 via-slate-950/40 to-transparent'
+                        ? 'from-background/95 via-background/40 bg-gradient-to-l to-transparent'
                         : ''
                 "
             ></div>
@@ -176,32 +173,32 @@ onUnmounted(() => {
                     v-if="
                         currentSlide.type === 'series' || currentSlide.seasons
                     "
-                    class="cinema-badge border border-indigo-500/50 bg-indigo-500/30 text-[11px] font-bold tracking-wider text-indigo-300 uppercase backdrop-blur-md"
+                    class="cinema-badge border-primary/50 bg-primary/25 text-primary border text-[11px] font-bold tracking-wider uppercase backdrop-blur-md"
                 >
                     TV Series
                 </span>
                 <span
-                    class="cinema-badge border border-cyan-500/40 bg-cyan-500/20 text-[11px] font-bold text-cyan-300 backdrop-blur-md"
+                    class="cinema-badge border-primary/40 bg-primary/20 text-primary border font-mono text-[11px] font-bold tabular-nums backdrop-blur-md"
                 >
                     {{ currentSlide.resolution || '4K UHD' }}
                 </span>
                 <span
-                    class="cinema-badge flex items-center gap-1 border border-amber-500/40 bg-amber-500/20 text-[11px] font-bold text-amber-300 backdrop-blur-md"
+                    class="cinema-badge flex items-center gap-1 border border-amber-500/40 bg-amber-500/20 text-[11px] font-bold text-amber-300 tabular-nums backdrop-blur-md"
                 >
-                    <Star class="h-3 w-3 fill-current" />
+                    <Star class="size-3 fill-current" />
                     {{ currentSlide.rating || '8.5' }}
                 </span>
                 <span
                     v-if="currentSlide.release_year"
-                    class="cinema-badge border border-white/15 bg-black/60 text-[11px] text-slate-200"
+                    class="cinema-badge border border-white/15 bg-black/60 text-[11px] text-slate-200 tabular-nums"
                 >
                     {{ currentSlide.release_year }}
                 </span>
                 <span
                     v-if="currentSlide.runtime_minutes"
-                    class="cinema-badge flex items-center gap-1 border border-white/10 bg-black/60 text-[11px] text-slate-300"
+                    class="cinema-badge flex items-center gap-1 border border-white/10 bg-black/60 text-[11px] text-slate-300 tabular-nums"
                 >
-                    <Clock class="h-3 w-3 text-cyan-400" />
+                    <Clock class="text-primary size-3" />
                     {{ currentSlide.runtime_minutes }} {{ t('common.minutes') }}
                 </span>
                 <span
@@ -215,7 +212,7 @@ onUnmounted(() => {
 
             <!-- Title -->
             <h1
-                class="mb-2.5 text-3xl leading-tight font-black tracking-tight text-white drop-shadow-lg sm:text-5xl"
+                class="text-foreground mb-2.5 text-3xl leading-tight font-black tracking-tight drop-shadow-lg sm:text-5xl"
             >
                 {{
                     isRTL && currentSlide.title_ar
@@ -238,31 +235,33 @@ onUnmounted(() => {
             <!-- CTA Action Buttons -->
             <div class="flex items-center gap-3.5">
                 <button
+                    type="button"
                     @click.stop="handlePlay"
-                    class="flex cursor-pointer items-center gap-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-3 text-sm font-black text-slate-950 shadow-xl shadow-cyan-500/30 transition-all hover:scale-105 hover:from-cyan-400 hover:to-blue-500 active:scale-95"
+                    class="bg-primary text-primary-foreground shadow-primary/25 flex cursor-pointer items-center gap-2.5 rounded-xl px-6 py-3 text-sm font-black shadow-lg transition-all hover:brightness-105 active:scale-[0.98]"
                 >
-                    <Play class="h-4 w-4 fill-current" />
+                    <Play class="size-4 fill-current" />
                     <span>{{ t('common.play_now') }}</span>
                 </button>
                 <button
+                    type="button"
                     @click.stop="handleDetails"
-                    class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/20 bg-white/15 px-5 py-3 text-sm font-bold text-white backdrop-blur-md transition-all hover:scale-105 hover:bg-white/25 active:scale-95"
+                    class="cf-glass hover:border-primary/40 flex cursor-pointer items-center gap-2 rounded-xl border border-white/15 px-5 py-3 text-sm font-bold text-white backdrop-blur-md transition-all hover:bg-white/15 active:scale-[0.98]"
                 >
-                    <Info class="h-4 w-4 text-cyan-300" />
+                    <Info class="text-primary size-4" />
                     <span>{{ t('common.details') }}</span>
                 </button>
             </div>
         </div>
 
-        <!-- Top Right Slide Counter / Badges -->
+        <!-- Top End Slide Counter / Badges -->
         <div
             v-if="slides.length > 1"
-            class="absolute top-5 right-5 z-20 flex items-center gap-2 sm:top-7 sm:right-7"
+            class="absolute end-5 top-5 z-20 flex items-center gap-2 sm:end-7 sm:top-7"
         >
             <div
-                class="rounded-full border border-white/15 bg-black/60 px-3 py-1 font-mono text-[11px] font-bold text-slate-300 backdrop-blur-md"
+                class="rounded-full border border-white/15 bg-black/60 px-3 py-1 font-mono text-[11px] font-bold text-slate-300 tabular-nums backdrop-blur-md"
             >
-                <span class="font-extrabold text-cyan-400">{{
+                <span class="text-primary font-extrabold">{{
                     String(currentIndex + 1).padStart(2, '0')
                 }}</span>
                 <span class="mx-1 opacity-40">/</span>
@@ -270,42 +269,49 @@ onUnmounted(() => {
             </div>
         </div>
 
-        <!-- Floating Left/Right Navigation Arrows -->
+        <!-- Floating Navigation Arrows -->
         <div
             v-if="slides.length > 1"
-            dir="ltr"
             class="pointer-events-none absolute inset-x-3 inset-y-0 z-20 flex items-center justify-between"
         >
             <button
+                type="button"
                 @click.stop="prevSlide"
-                class="pointer-events-auto flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/60 text-white opacity-0 shadow-lg backdrop-blur-md transition-all group-hover:opacity-100 hover:scale-110 hover:bg-cyan-500 hover:text-slate-950"
+                class="hover:bg-primary hover:text-primary-foreground pointer-events-auto flex size-10 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/60 text-white opacity-0 shadow-lg backdrop-blur-md transition-all group-hover:opacity-100 hover:scale-110"
                 :title="t('common.previous')"
             >
-                <ChevronLeft class="h-5 w-5" />
+                <component
+                    :is="isRTL ? ChevronRight : ChevronLeft"
+                    class="size-5"
+                />
             </button>
             <button
+                type="button"
                 @click.stop="nextSlide"
-                class="pointer-events-auto flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/60 text-white opacity-0 shadow-lg backdrop-blur-md transition-all group-hover:opacity-100 hover:scale-110 hover:bg-cyan-500 hover:text-slate-950"
+                class="hover:bg-primary hover:text-primary-foreground pointer-events-auto flex size-10 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/60 text-white opacity-0 shadow-lg backdrop-blur-md transition-all group-hover:opacity-100 hover:scale-110"
                 :title="t('common.next')"
             >
-                <ChevronRight class="h-5 w-5" />
+                <component
+                    :is="isRTL ? ChevronLeft : ChevronRight"
+                    class="size-5"
+                />
             </button>
         </div>
 
         <!-- Bottom Animated Slide Indicators -->
         <div
             v-if="slides.length > 1"
-            dir="ltr"
-            class="absolute right-6 bottom-4 z-20 flex items-center gap-2 sm:right-10 sm:bottom-6"
+            class="absolute end-6 bottom-4 z-20 flex items-center gap-2 sm:end-10 sm:bottom-6"
         >
             <button
                 v-for="(_, idx) in slides"
                 :key="idx"
+                type="button"
                 @click.stop="goToSlide(idx)"
                 class="h-1.5 cursor-pointer overflow-hidden rounded-full transition-all duration-500"
                 :class="
                     idx === currentIndex
-                        ? 'w-8 bg-cyan-400 shadow-md shadow-cyan-400/50'
+                        ? 'bg-primary shadow-primary/50 w-8 shadow-md'
                         : 'w-2.5 bg-white/20 hover:bg-white/40'
                 "
                 :aria-label="`Slide ${idx + 1}`"

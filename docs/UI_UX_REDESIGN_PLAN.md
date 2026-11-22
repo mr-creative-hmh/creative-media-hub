@@ -52,15 +52,15 @@
 - [x] **Cards, View Toggle, Data Tables & Pagination:** `ViewModeToggle.vue` (persisted `table` | `cards` switch), `DataTableCard.vue` (dual-view/single-card responsive container with `.cf-table-wrapper`), and `Pagination.vue` upgraded to `.cf-glass`, active primary tokens, and `tabular-nums`.
 - [x] **RTL Shimmer Skeletons & Floating Glass Sidebar Polish:** `CinemaSkeleton.vue` upgraded to GPU-composited RTL-aware `.cf-shimmer` (`MediaCardSkeleton`, `HeroBannerSkeleton`, `TableRowSkeleton`, `ScoutFranchiseSkeleton`, `ScoutMetricSkeleton` aligned to `.cf-glass` and logical `end-2.5`); desktop `Sidebar.vue` converted to a floating rounded glass card (`rounded-3xl .cf-glass-elevated`); `AppLogo.vue` English subtitle truncation overflow fixed.
 
-### [/] Phase 5: Cinema Catalog & Discovery Pages
-- [ ] **Dashboard (`Dashboard/Index.vue`):** Hero spotlight carousel, continue watching shelf, recent additions, and quick media stats.
-- [ ] **Movies (`Movies/Index.vue`):** High-density poster grid, advanced genre/year/rating filters, sort dropdown, and batch selection.
-- [ ] **Series (`Series/Index.vue` & `Series/Show.vue`):** Show catalog and season/episode inspector with episode preview cards and missing episode markers.
-- [ ] **Collections (`Collections/Index.vue` & `Collections/Show.vue`):** Franchise collection cards, completion progress bars, and gap alerts.
-- [ ] **Watch History (`WatchHistory/Index.vue`):** Interactive timeline, resume controls, and clearing utilities.
-- [ ] **Media Cards & Modals:** Modernize `MediaCard.vue`, `HeroBanner.vue`, `FilterBar.vue`, and `MediaDetailModal.vue`.
+### [x] Phase 5: Cinema Catalog & Discovery Pages
+- [x] **Dashboard (`Dashboard/Index.vue`):** Hero spotlight carousel (`HeroBanner.vue`), continue watching shelf (`WatchHistoryBar.vue`), recent additions, Vibe selector strip, and quick media stats upgraded to semantic Cinema Dark tokens (`.cf-glass`, `bg-primary`, `tabular-nums`).
+- [x] **Movies (`Movies/Index.vue`):** High-density poster grid wrapped in `MotionList`, `FilterBar.vue` (`.cf-glass`, `.cf-field`, active primary pills), sort dropdown, and skeleton loading states.
+- [x] **Series (`Series/Index.vue` & `Series/Show.vue`):** Show catalog unified with `MediaCard.vue` and `MotionList`; season/episode inspector upgraded with `.cf-glass`, `FilterPills`, `tabular-nums`, and Bandersnatch interactive launch.
+- [x] **Collections (`Collections/Index.vue` & `Collections/Show.vue`):** Franchise collection cards with `PageBanner`, `MotionList`, completion progress bars, gap alerts, and accessible `ConfirmModal` replacing raw `window.confirm()`.
+- [x] **Watch History (`WatchHistory/Index.vue`):** Interactive timeline with `PageBanner`, `FilterPills` (`all`, `movie`, `series`, `collection`), `.cf-field` search, `MotionList` grids, `.cf-shimmer` skeletons, and `ConfirmModal` clear confirmation.
+- [x] **Media Cards & Modals:** Modernized `MediaCard.vue`, `HeroBanner.vue`, `FilterBar.vue`, `WatchHistoryCard.vue`, and `MediaDetailModal.vue` (accessible dialog with Escape guard for nested `FixMatchModal`, `.cf-glass-elevated`, and `tabular-nums` technical specs).
 
-### [ ] Phase 6: Acquisition & Studio Workspaces
+### [/] Phase 6: Acquisition & Studio Workspaces
 - [ ] **Scout (`Scout/Index.vue`):** Studio intelligence workspace, Discover trending releases, franchise gaps, quality upgrade scanner, and `TorrentSuggestionsModal.vue` overhaul.
 - [ ] **Downloader (`Downloader/Index.vue`):** Torrent client manager, speed gauges, torrent tree inspect, priority controls, and pause/resume buttons.
 - [ ] **Metadata Manager (`Metadata/Index.vue`):** Bulk poster fetcher, NFO inspector, and artwork refreshers.
