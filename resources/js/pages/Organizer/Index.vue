@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import {
     ref,
     computed,
@@ -10,10 +10,14 @@ import {
 import { Head } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import PageBanner from '@/components/common/PageBanner.vue';
 import OrganizerConfigStep, {
     type OrganizerStrategy,
 } from '@/components/organizer/OrganizerConfigStep.vue';
 import type { PlanItem } from '@/components/organizer/OrganizerItemCorrectionModal.vue';
+import { useOrganizerPlan } from '@/composables/useOrganizerPlan';
+import { useToast } from '@/composables/useToast';
+import { HardDrive, Play, Check, X } from '@lucide/vue';
 
 const OrganizerDryRunStep = defineAsyncComponent(
     () => import('@/components/organizer/OrganizerDryRunStep.vue'),
@@ -27,17 +31,6 @@ const OrganizerItemCorrectionModal = defineAsyncComponent(
 const OrganizerBatchCorrectionModal = defineAsyncComponent(
     () => import('@/components/organizer/OrganizerBatchCorrectionModal.vue'),
 );
-import { useOrganizerPlan } from '@/composables/useOrganizerPlan';
-import { useToast } from '@/composables/useToast';
-import {
-    HardDrive,
-    Sparkles,
-    Database,
-    Layers,
-    Play,
-    Check,
-    X,
-} from '@lucide/vue';
 
 const props = defineProps<{
     defaultMovieTemplate: string;
@@ -123,7 +116,6 @@ const titleLanguage = ref<'original' | 'english' | 'arabic'>('original');
 // Plan Composable
 const {
     startPlanJob,
-    fetchPlanStatus,
     pausePlanJob,
     resumePlanJob,
     cancelPlanJob,
@@ -217,6 +209,9 @@ onMounted(async () => {
 onUnmounted(() => {
     window.removeEventListener('cmh:navigate-step', handleStepNav);
     window.removeEventListener('organizer:navigate-step', handleStepNav);
+    if (executionStatus.value === 'running') {
+        pauseExecution();
+    }
 });
 
 const startDryRun = async () => {
@@ -230,7 +225,7 @@ const startDryRun = async () => {
             title_language: titleLanguage.value,
             fetch_episode_titles: fetchEpisodeTitles.value,
         });
-    } catch (e) {
+    } catch {
         toast.error(
             isRTL.value ? 'فشل بدء فحص الملفات' : 'Failed to launch plan job',
         );
@@ -360,7 +355,7 @@ const runBatchStep = async () => {
                     : 'All operations completed on disk!',
             );
         }
-    } catch (e) {
+    } catch {
         executionStatus.value = 'error';
         toast.error('Batch network error');
     }
@@ -410,9 +405,8 @@ const confirmAndExecutePlan = async () => {
             executionLogs.value = data.status.logs;
         }
 
-        // Kick off batch processing
         runBatchStep();
-    } catch (e) {
+    } catch {
         executionStatus.value = 'error';
         toast.error('Execution request failed');
     }
@@ -468,12 +462,6 @@ const resetWorkflow = () => {
     processedCount.value = 0;
     executionLogs.value = [];
 };
-
-onUnmounted(() => {
-    if (executionStatus.value === 'running') {
-        pauseExecution();
-    }
-});
 </script>
 
 <template>
@@ -484,99 +472,89 @@ onUnmounted(() => {
             "
         />
 
-        <div class="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
-            <!-- Page Header -->
-            <div
-                class="flex flex-col justify-between gap-4 md:flex-row md:items-center"
+        <div class="space-y-8 pb-12">
+            <!-- PageBanner Header with Step Navigator -->
+            <PageBanner
+                :icon="HardDrive"
+                :title="
+                    isRTL
+                        ? 'منظم الأقراص والمكتبة الذكي'
+                        : 'Physical Disk Organizer'
+                "
+                :description="
+                    isRTL
+                        ? 'إعادة هيكلة وتسمية المجلدات والملفات وفق المعايير القياسية مع محاكاة آمنة وتعديلات يدوية'
+                        : 'Standardize folder hierarchy, rename files cleanly with safe simulation and interactive manual corrections'
+                "
+                badge="Storage Studio"
             >
-                <div class="space-y-1">
-                    <div class="flex items-center gap-2">
-                        <span
-                            class="flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/20 px-2.5 py-0.5 text-[10px] font-black tracking-wider text-cyan-300 uppercase"
+                <template #actions>
+                    <!-- Step Navigator Indicator -->
+                    <div
+                        class="cf-glass border-border/80 flex items-center gap-1.5 rounded-2xl border p-1.5"
+                    >
+                        <button
+                            type="button"
+                            @click="step = 1"
+                            :disabled="step === 3"
+                            class="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all active:scale-95"
+                            :class="
+                                step === 1
+                                    ? 'bg-primary text-primary-foreground shadow-primary/25 shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                            "
                         >
-                            <Sparkles class="h-3 w-3" />
-                            Storage Studio
-                        </span>
+                            <span
+                                class="flex h-5 w-5 items-center justify-center rounded-full bg-black/20 text-[10px] tabular-nums"
+                                >1</span
+                            >
+                            <span>{{ isRTL ? 'الإعدادات' : 'Configure' }}</span>
+                        </button>
+                        <button
+                            type="button"
+                            @click="step = 2"
+                            :disabled="
+                                step === 1 ||
+                                step === 3 ||
+                                localPlanItems.length === 0
+                            "
+                            class="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all active:scale-95"
+                            :class="
+                                step === 2
+                                    ? 'bg-primary text-primary-foreground shadow-primary/25 shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40'
+                            "
+                        >
+                            <span
+                                class="flex h-5 w-5 items-center justify-center rounded-full bg-black/20 text-[10px] tabular-nums"
+                                >2</span
+                            >
+                            <span>{{
+                                isRTL ? 'مراجعة وتعديل' : 'Review Plan'
+                            }}</span>
+                        </button>
+                        <button
+                            type="button"
+                            @click="step = 3"
+                            :disabled="step !== 3"
+                            class="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all active:scale-95"
+                            :class="
+                                step === 3
+                                    ? 'bg-primary text-primary-foreground shadow-primary/25 shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40'
+                            "
+                        >
+                            <span
+                                class="flex h-5 w-5 items-center justify-center rounded-full bg-black/20 text-[10px] tabular-nums"
+                                >3</span
+                            >
+                            <span>{{
+                                isRTL ? 'التنفيذ الحي' : 'Execute'
+                            }}</span>
+                        </button>
                     </div>
-                    <h1
-                        class="flex items-center gap-3 text-2xl font-black tracking-tight text-white sm:text-3xl"
-                    >
-                        <HardDrive class="h-7 w-7 text-cyan-400" />
-                        {{
-                            isRTL
-                                ? 'منظم الأقراص والمكتبة الذكي'
-                                : 'Physical Disk Organizer'
-                        }}
-                    </h1>
-                    <p class="text-xs text-slate-400 sm:text-sm">
-                        {{
-                            isRTL
-                                ? 'إعادة هيكلة وتسمية المجلدات والملفات وفق المعايير القياسية مع محاكاة آمنة وتعديلات يدوية'
-                                : 'Standardize folder hierarchy, rename files cleanly with safe simulation and interactive manual corrections'
-                        }}
-                    </p>
-                </div>
-
-                <!-- Step Navigator Indicator -->
-                <div
-                    class="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-900/80 p-1.5 backdrop-blur-xl"
-                >
-                    <button
-                        @click="step = 1"
-                        :disabled="step === 3"
-                        class="flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all"
-                        :class="
-                            step === 1
-                                ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
-                                : 'text-slate-400 hover:text-white'
-                        "
-                    >
-                        <span
-                            class="flex h-5 w-5 items-center justify-center rounded-full bg-black/20 text-[10px]"
-                            >1</span
-                        >
-                        <span>{{ isRTL ? 'الإعدادات' : 'Configure' }}</span>
-                    </button>
-                    <button
-                        @click="step = 2"
-                        :disabled="
-                            step === 1 ||
-                            step === 3 ||
-                            localPlanItems.length === 0
-                        "
-                        class="flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all"
-                        :class="
-                            step === 2
-                                ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
-                                : 'text-slate-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-40'
-                        "
-                    >
-                        <span
-                            class="flex h-5 w-5 items-center justify-center rounded-full bg-black/20 text-[10px]"
-                            >2</span
-                        >
-                        <span>{{
-                            isRTL ? 'مراجعة وتعديل' : 'Review Plan'
-                        }}</span>
-                    </button>
-                    <button
-                        @click="step = 3"
-                        :disabled="step !== 3"
-                        class="flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all"
-                        :class="
-                            step === 3
-                                ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
-                                : 'text-slate-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-40'
-                        "
-                    >
-                        <span
-                            class="flex h-5 w-5 items-center justify-center rounded-full bg-black/20 text-[10px]"
-                            >3</span
-                        >
-                        <span>{{ isRTL ? 'التنفيذ الحي' : 'Execute' }}</span>
-                    </button>
-                </div>
-            </div>
+                </template>
+            </PageBanner>
 
             <!-- Step 1: Configuration -->
             <OrganizerConfigStep
@@ -663,21 +641,24 @@ onUnmounted(() => {
             v-if="showExecutionConfirmModal"
             class="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
             :dir="isRTL ? 'rtl' : 'ltr'"
+            @click.self="showExecutionConfirmModal = false"
         >
             <div
-                class="relative flex w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-900 shadow-2xl"
+                class="cf-glass-elevated border-border/80 bg-card/95 relative flex w-full max-w-lg flex-col overflow-hidden rounded-3xl border shadow-2xl"
             >
                 <div
-                    class="flex items-center justify-between border-b border-white/10 bg-slate-950/60 px-6 py-5"
+                    class="border-border/70 bg-background/40 flex items-center justify-between border-b px-6 py-5"
                 >
                     <div class="flex items-center gap-3">
                         <div
-                            class="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/20 text-cyan-400"
+                            class="border-primary/35 bg-primary/15 text-primary flex h-10 w-10 items-center justify-center rounded-2xl border"
                         >
                             <Play class="h-5 w-5 fill-current" />
                         </div>
                         <div>
-                            <h3 class="text-base font-extrabold text-white">
+                            <h3
+                                class="text-foreground text-base font-extrabold"
+                            >
                                 {{
                                     t('organizer.confirm_title') ||
                                     (isRTL
@@ -685,7 +666,7 @@ onUnmounted(() => {
                                         : 'Confirm Plan Execution')
                                 }}
                             </h3>
-                            <p class="text-xs text-slate-400">
+                            <p class="text-muted-foreground text-xs">
                                 {{
                                     t('organizer.confirm_desc') ||
                                     (isRTL
@@ -696,26 +677,28 @@ onUnmounted(() => {
                         </div>
                     </div>
                     <button
+                        type="button"
                         @click="showExecutionConfirmModal = false"
-                        class="cursor-pointer rounded-xl p-2 text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+                        class="border-border/60 bg-background/80 text-muted-foreground hover:bg-muted hover:text-foreground flex size-8 cursor-pointer items-center justify-center rounded-xl border transition-colors"
                     >
-                        <X class="h-5 w-5" />
+                        <X class="h-4 w-4" />
                     </button>
                 </div>
 
                 <div class="space-y-5 p-6 text-xs">
                     <!-- Summary info -->
                     <div
-                        class="space-y-2 rounded-2xl border border-white/10 bg-white/5 p-4"
+                        class="cf-glass border-border/80 space-y-2 rounded-2xl border p-4"
                     >
                         <div class="flex items-center justify-between">
-                            <span class="font-semibold text-slate-400">{{
+                            <span class="text-muted-foreground font-semibold">{{
                                 t('organizer.approved_files') ||
                                 (isRTL
                                     ? 'عدد الملفات المعتمدة:'
                                     : 'Approved files:')
                             }}</span>
-                            <span class="font-mono font-bold text-white"
+                            <span
+                                class="text-foreground font-mono font-bold tabular-nums"
                                 >{{
                                     localPlanItems.filter(
                                         (i) => i.status === 'ready',
@@ -725,14 +708,14 @@ onUnmounted(() => {
                             >
                         </div>
                         <div class="flex items-center justify-between">
-                            <span class="font-semibold text-slate-400">{{
+                            <span class="text-muted-foreground font-semibold">{{
                                 t('organizer.target_root') ||
                                 (isRTL
                                     ? 'مسار الوجهة الرئيسي:'
                                     : 'Target root:')
                             }}</span>
                             <span
-                                class="max-w-[240px] truncate font-mono font-bold text-cyan-300"
+                                class="text-primary max-w-[240px] truncate font-mono font-bold"
                                 :title="targetRoot"
                                 >{{ targetRoot }}</span
                             >
@@ -742,7 +725,7 @@ onUnmounted(() => {
                     <!-- Action selection: Move vs Copy -->
                     <div class="space-y-2">
                         <label
-                            class="block text-[11px] font-bold tracking-wider text-slate-300 uppercase"
+                            class="text-muted-foreground block text-[11px] font-bold tracking-wider uppercase"
                         >
                             {{
                                 t('organizer.action_mode') ||
@@ -757,8 +740,8 @@ onUnmounted(() => {
                                 class="flex cursor-pointer flex-col gap-1.5 rounded-2xl border p-3.5 transition-all"
                                 :class="
                                     executeMode === 'move'
-                                        ? 'border-cyan-400 bg-cyan-500/20 text-cyan-300 shadow-md ring-1 ring-cyan-500/50'
-                                        : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+                                        ? 'border-primary bg-primary/15 text-primary ring-primary/40 shadow-md ring-1'
+                                        : 'cf-glass border-border/70 text-muted-foreground hover:border-primary/35 hover:text-foreground'
                                 "
                             >
                                 <div class="flex items-center justify-between">
@@ -767,11 +750,11 @@ onUnmounted(() => {
                                     }}</span>
                                     <Check
                                         v-if="executeMode === 'move'"
-                                        class="h-4 w-4 text-cyan-400"
+                                        class="text-primary h-4 w-4"
                                     />
                                 </div>
                                 <p
-                                    class="text-[10px] leading-relaxed text-slate-400"
+                                    class="text-muted-foreground text-[10px] leading-relaxed"
                                 >
                                     {{
                                         t('organizer.mode_move_desc') ||
@@ -787,8 +770,8 @@ onUnmounted(() => {
                                 class="flex cursor-pointer flex-col gap-1.5 rounded-2xl border p-3.5 transition-all"
                                 :class="
                                     executeMode === 'copy'
-                                        ? 'border-cyan-400 bg-cyan-500/20 text-cyan-300 shadow-md ring-1 ring-cyan-500/50'
-                                        : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+                                        ? 'border-primary bg-primary/15 text-primary ring-primary/40 shadow-md ring-1'
+                                        : 'cf-glass border-border/70 text-muted-foreground hover:border-primary/35 hover:text-foreground'
                                 "
                             >
                                 <div class="flex items-center justify-between">
@@ -797,11 +780,11 @@ onUnmounted(() => {
                                     }}</span>
                                     <Check
                                         v-if="executeMode === 'copy'"
-                                        class="h-4 w-4 text-cyan-400"
+                                        class="text-primary h-4 w-4"
                                     />
                                 </div>
                                 <p
-                                    class="text-[10px] leading-relaxed text-slate-400"
+                                    class="text-muted-foreground text-[10px] leading-relaxed"
                                 >
                                     {{
                                         t('organizer.mode_copy_desc') ||
@@ -817,15 +800,15 @@ onUnmounted(() => {
                     <!-- Clean empty folders option -->
                     <div
                         v-if="executeMode === 'move'"
-                        class="rounded-xl border border-white/5 bg-white/5 p-3"
+                        class="cf-glass border-border/70 rounded-xl border p-3"
                     >
                         <label
-                            class="flex cursor-pointer items-center gap-2 text-slate-300 select-none"
+                            class="text-foreground flex cursor-pointer items-center gap-2 select-none"
                         >
                             <input
                                 type="checkbox"
                                 v-model="cleanupEmptyFolders"
-                                class="cursor-pointer rounded border-white/20 bg-slate-950 text-cyan-500"
+                                class="border-border bg-card text-primary cursor-pointer rounded"
                             />
                             <span class="text-xs font-bold">{{
                                 t('organizer.clean_empty_folders') ||
@@ -841,7 +824,7 @@ onUnmounted(() => {
                         <button
                             type="button"
                             @click="showExecutionConfirmModal = false"
-                            class="cursor-pointer rounded-xl bg-white/5 px-4 py-2.5 font-bold text-white transition-colors hover:bg-white/10"
+                            class="cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground h-10 cursor-pointer rounded-xl border px-4 font-bold transition-colors"
                         >
                             {{
                                 t('organizer.cancel') ||
@@ -851,7 +834,7 @@ onUnmounted(() => {
                         <button
                             type="button"
                             @click="confirmAndExecutePlan"
-                            class="flex cursor-pointer items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-400 px-6 py-2.5 font-black text-slate-950 shadow-lg shadow-emerald-500/20 transition-all hover:from-emerald-400 hover:to-emerald-300 active:scale-95"
+                            class="bg-primary text-primary-foreground shadow-primary/25 flex h-10 cursor-pointer items-center gap-2 rounded-xl px-6 font-black shadow-lg transition-all hover:brightness-105 active:scale-95"
                         >
                             <Play class="h-4 w-4 fill-current" />
                             <span>{{

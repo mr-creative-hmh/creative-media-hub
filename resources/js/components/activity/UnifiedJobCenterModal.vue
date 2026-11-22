@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
 import { router } from '@inertiajs/vue3';
 import { useActivityCenter } from '@/composables/useActivityCenter';
@@ -17,16 +17,8 @@ import {
     XCircle,
     X,
     Terminal,
-    RotateCcw,
-    RefreshCw,
     CheckCircle2,
-    AlertCircle,
-    ExternalLink,
-    HardDrive,
-    FileText,
     Check,
-    AlertTriangle,
-    Trash2,
     ArrowUpRight,
     Copy,
 } from '@lucide/vue';
@@ -37,11 +29,9 @@ const {
     activeJobsCount,
     isAnyRunning,
     isAnyPaused,
-    isAnyActive,
     closeActivityCenter,
     pauseAll,
     resumeAll,
-    cancelAll,
 } = useActivityCenter();
 
 const {
@@ -67,13 +57,12 @@ const {
     subtitleStatus,
     isSubtitleRunning,
     isSubtitlePaused,
-    isSubtitleCompleted,
     pauseHealthJob,
     resumeHealthJob,
     cancelHealthJob,
 } = useSubtitleJob();
 
-const { t, isRTL } = useI18n();
+const { isRTL } = useI18n();
 
 // Terminal filtering
 const terminalFilter = ref<'all' | 'success' | 'info' | 'error'>('all');
@@ -194,30 +183,30 @@ const navigateToEnginePage = (path: string) => {
         @click.self="closeActivityCenter"
     >
         <div
-            class="relative flex max-h-[92vh] w-full max-w-3xl flex-col space-y-6 overflow-hidden rounded-3xl border border-cyan-500/30 bg-[#080B12] p-5 shadow-2xl shadow-cyan-500/10 sm:p-7"
+            class="cf-glass-elevated border-border/80 bg-card/95 relative flex max-h-[92vh] w-full max-w-3xl flex-col space-y-6 overflow-hidden rounded-3xl border p-5 shadow-2xl sm:p-7"
         >
             <!-- Background Ambient Glow -->
             <div
-                class="ambient-glow pointer-events-none -top-28 -right-28 h-96 w-96 bg-cyan-500/15"
+                class="ambient-glow bg-primary/15 pointer-events-none absolute -end-28 -top-28 h-96 w-96"
             ></div>
             <div
-                class="ambient-glow pointer-events-none -bottom-28 -left-28 h-96 w-96 bg-indigo-500/10"
+                class="ambient-glow pointer-events-none absolute -start-28 -bottom-28 h-96 w-96 bg-indigo-500/10"
             ></div>
 
             <!-- Master Header -->
             <div
-                class="relative z-10 flex shrink-0 items-center justify-between border-b border-white/10 pb-4"
+                class="border-border/70 relative z-10 flex shrink-0 items-center justify-between border-b pb-4"
             >
                 <div class="flex items-center gap-3">
                     <div
-                        class="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 shadow-lg shadow-cyan-500/10"
+                        class="border-primary/35 bg-primary/15 text-primary shadow-primary/10 flex h-10 w-10 items-center justify-center rounded-2xl border shadow-lg"
                     >
                         <Activity class="h-5 w-5 animate-pulse" />
                     </div>
                     <div>
                         <div class="flex items-center gap-2.5">
                             <h2
-                                class="text-base font-black tracking-wide text-white sm:text-lg"
+                                class="text-foreground text-base font-black tracking-wide sm:text-lg"
                             >
                                 {{
                                     isRTL
@@ -226,20 +215,20 @@ const navigateToEnginePage = (path: string) => {
                                 }}
                             </h2>
                             <span
-                                class="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-black tracking-wider uppercase"
+                                class="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-black tracking-wider uppercase tabular-nums"
                                 :class="
                                     isAnyRunning
-                                        ? 'animate-pulse border border-cyan-500/40 bg-cyan-500/20 text-cyan-300'
+                                        ? 'border-primary/40 bg-primary/20 text-primary animate-pulse border'
                                         : isAnyPaused
                                           ? 'border border-amber-500/40 bg-amber-500/20 text-amber-300'
-                                          : 'border border-white/10 bg-white/5 text-slate-400'
+                                          : 'border-border bg-muted/50 text-muted-foreground border'
                                 "
                             >
                                 <span
                                     class="h-1.5 w-1.5 rounded-full"
                                     :class="
                                         isAnyRunning
-                                            ? 'animate-ping bg-cyan-400'
+                                            ? 'bg-primary animate-ping'
                                             : isAnyPaused
                                               ? 'bg-amber-400'
                                               : 'bg-slate-500'
@@ -258,7 +247,7 @@ const navigateToEnginePage = (path: string) => {
                                 }}
                             </span>
                         </div>
-                        <p class="mt-0.5 text-xs text-slate-400">
+                        <p class="text-muted-foreground mt-0.5 text-xs">
                             {{
                                 isRTL
                                     ? 'متابعة حية للفاحص الافتراضي، ومنظم القرص الفعلي، ومطهر الترجمات في نافذة واحدة.'
@@ -270,11 +259,11 @@ const navigateToEnginePage = (path: string) => {
 
                 <!-- Header Actions -->
                 <div class="flex items-center gap-2">
-                    <!-- Global Pause/Resume All (if multiple or any) -->
                     <button
                         v-if="isAnyRunning"
+                        type="button"
                         @click="pauseAll"
-                        class="hidden cursor-pointer items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-300 transition-all hover:bg-amber-500/25 sm:flex"
+                        class="hidden cursor-pointer items-center gap-1.5 rounded-xl border border-amber-500/35 bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-300 transition-all hover:bg-amber-500/25 sm:flex"
                         :title="
                             isRTL
                                 ? 'إيقاف جميع العمليات مؤقتاً'
@@ -286,8 +275,9 @@ const navigateToEnginePage = (path: string) => {
                     </button>
                     <button
                         v-else-if="isAnyPaused"
+                        type="button"
                         @click="resumeAll"
-                        class="hidden cursor-pointer items-center gap-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/20 px-3 py-1.5 text-xs font-bold text-cyan-300 transition-all hover:bg-cyan-500/30 sm:flex"
+                        class="border-primary/35 bg-primary/20 text-primary hover:bg-primary/30 hidden cursor-pointer items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all sm:flex"
                         :title="
                             isRTL
                                 ? 'استئناف جميع العمليات المتوقفة'
@@ -299,8 +289,9 @@ const navigateToEnginePage = (path: string) => {
                     </button>
 
                     <button
+                        type="button"
                         @click="closeActivityCenter"
-                        class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border border-white/5 bg-white/5 text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+                        class="border-border/60 bg-background/80 text-muted-foreground hover:bg-muted hover:text-foreground flex size-8 cursor-pointer items-center justify-center rounded-xl border transition-all"
                     >
                         <X class="h-4 w-4" />
                     </button>
@@ -311,12 +302,13 @@ const navigateToEnginePage = (path: string) => {
             <div class="relative z-10 grid shrink-0 grid-cols-3 gap-2 sm:gap-3">
                 <!-- Tab 1: Virtual Scanner -->
                 <button
+                    type="button"
                     @click="activeTab = 'scanner'"
-                    class="group relative cursor-pointer overflow-hidden rounded-2xl border p-3 text-left transition-all sm:p-3.5"
+                    class="group relative cursor-pointer overflow-hidden rounded-2xl border p-3 text-start transition-all sm:p-3.5"
                     :class="
                         activeTab === 'scanner'
-                            ? 'border-cyan-400/50 bg-cyan-500/15 shadow-lg ring-1 shadow-cyan-500/10 ring-cyan-500/30'
-                            : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]'
+                            ? 'border-primary bg-primary/15 shadow-primary/10 ring-primary/30 shadow-lg ring-1'
+                            : 'cf-glass border-border/70 hover:border-primary/35'
                     "
                 >
                     <div class="mb-1.5 flex items-center justify-between">
@@ -325,12 +317,12 @@ const navigateToEnginePage = (path: string) => {
                                 class="h-4 w-4 transition-transform group-hover:scale-110"
                                 :class="
                                     activeTab === 'scanner'
-                                        ? 'text-cyan-400'
-                                        : 'text-slate-400'
+                                        ? 'text-primary'
+                                        : 'text-muted-foreground'
                                 "
                             />
                             <span
-                                class="text-xs font-bold text-white sm:text-sm"
+                                class="text-foreground text-xs font-bold sm:text-sm"
                             >
                                 {{
                                     isRTL
@@ -343,7 +335,7 @@ const navigateToEnginePage = (path: string) => {
                             class="h-2 w-2 rounded-full"
                             :class="
                                 isScanning
-                                    ? 'animate-ping bg-cyan-400'
+                                    ? 'bg-primary animate-ping'
                                     : isScanPaused
                                       ? 'bg-amber-400'
                                       : 'bg-slate-600'
@@ -351,20 +343,20 @@ const navigateToEnginePage = (path: string) => {
                         ></span>
                     </div>
                     <div
-                        class="flex items-center justify-between font-mono text-[11px]"
+                        class="flex items-center justify-between font-mono text-[11px] tabular-nums"
                     >
                         <span
                             :class="
                                 isScanning
-                                    ? 'font-bold text-cyan-300'
+                                    ? 'text-primary font-bold'
                                     : isScanPaused
                                       ? 'font-bold text-amber-300'
-                                      : 'text-slate-400'
+                                      : 'text-muted-foreground'
                             "
                         >
                             {{ scanStatus.status }}
                         </span>
-                        <span class="font-bold text-slate-300">
+                        <span class="text-foreground font-bold">
                             {{ scanStatus.progress_percent }}%
                         </span>
                     </div>
@@ -372,12 +364,13 @@ const navigateToEnginePage = (path: string) => {
 
                 <!-- Tab 2: Disk Organizer -->
                 <button
+                    type="button"
                     @click="activeTab = 'organizer'"
-                    class="group relative cursor-pointer overflow-hidden rounded-2xl border p-3 text-left transition-all sm:p-3.5"
+                    class="group relative cursor-pointer overflow-hidden rounded-2xl border p-3 text-start transition-all sm:p-3.5"
                     :class="
                         activeTab === 'organizer'
-                            ? 'border-emerald-400/50 bg-emerald-500/15 shadow-lg ring-1 shadow-emerald-500/10 ring-emerald-500/30'
-                            : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]'
+                            ? 'border-primary bg-primary/15 shadow-primary/10 ring-primary/30 shadow-lg ring-1'
+                            : 'cf-glass border-border/70 hover:border-primary/35'
                     "
                 >
                     <div class="mb-1.5 flex items-center justify-between">
@@ -386,12 +379,12 @@ const navigateToEnginePage = (path: string) => {
                                 class="h-4 w-4 transition-transform group-hover:scale-110"
                                 :class="
                                     activeTab === 'organizer'
-                                        ? 'text-emerald-400'
-                                        : 'text-slate-400'
+                                        ? 'text-primary'
+                                        : 'text-muted-foreground'
                                 "
                             />
                             <span
-                                class="text-xs font-bold text-white sm:text-sm"
+                                class="text-foreground text-xs font-bold sm:text-sm"
                             >
                                 {{ isRTL ? 'منظم القرص' : 'Disk Organizer' }}
                             </span>
@@ -400,7 +393,7 @@ const navigateToEnginePage = (path: string) => {
                             class="h-2 w-2 rounded-full"
                             :class="
                                 isAnalyzing
-                                    ? 'animate-ping bg-emerald-400'
+                                    ? 'bg-primary animate-ping'
                                     : isOrgPaused
                                       ? 'bg-amber-400'
                                       : 'bg-slate-600'
@@ -408,20 +401,20 @@ const navigateToEnginePage = (path: string) => {
                         ></span>
                     </div>
                     <div
-                        class="flex items-center justify-between font-mono text-[11px]"
+                        class="flex items-center justify-between font-mono text-[11px] tabular-nums"
                     >
                         <span
                             :class="
                                 isAnalyzing
-                                    ? 'font-bold text-emerald-300'
+                                    ? 'text-primary font-bold'
                                     : isOrgPaused
                                       ? 'font-bold text-amber-300'
-                                      : 'text-slate-400'
+                                      : 'text-muted-foreground'
                             "
                         >
                             {{ planJobStatus.status }}
                         </span>
-                        <span class="font-bold text-slate-300">
+                        <span class="text-foreground font-bold">
                             {{ planJobStatus.progress_percent }}%
                         </span>
                     </div>
@@ -429,12 +422,13 @@ const navigateToEnginePage = (path: string) => {
 
                 <!-- Tab 3: Subtitle Studio -->
                 <button
+                    type="button"
                     @click="activeTab = 'subtitles'"
-                    class="group relative cursor-pointer overflow-hidden rounded-2xl border p-3 text-left transition-all sm:p-3.5"
+                    class="group relative cursor-pointer overflow-hidden rounded-2xl border p-3 text-start transition-all sm:p-3.5"
                     :class="
                         activeTab === 'subtitles'
-                            ? 'border-purple-400/50 bg-purple-500/15 shadow-lg ring-1 shadow-purple-500/10 ring-purple-500/30'
-                            : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]'
+                            ? 'border-primary bg-primary/15 shadow-primary/10 ring-primary/30 shadow-lg ring-1'
+                            : 'cf-glass border-border/70 hover:border-primary/35'
                     "
                 >
                     <div class="mb-1.5 flex items-center justify-between">
@@ -443,12 +437,12 @@ const navigateToEnginePage = (path: string) => {
                                 class="h-4 w-4 transition-transform group-hover:scale-110"
                                 :class="
                                     activeTab === 'subtitles'
-                                        ? 'text-purple-400'
-                                        : 'text-slate-400'
+                                        ? 'text-primary'
+                                        : 'text-muted-foreground'
                                 "
                             />
                             <span
-                                class="text-xs font-bold text-white sm:text-sm"
+                                class="text-foreground text-xs font-bold sm:text-sm"
                             >
                                 {{
                                     isRTL ? 'مطهر الترجمات' : 'Subtitle Studio'
@@ -459,7 +453,7 @@ const navigateToEnginePage = (path: string) => {
                             class="h-2 w-2 rounded-full"
                             :class="
                                 isSubtitleRunning
-                                    ? 'animate-ping bg-purple-400'
+                                    ? 'bg-primary animate-ping'
                                     : isSubtitlePaused
                                       ? 'bg-amber-400'
                                       : 'bg-slate-600'
@@ -467,20 +461,20 @@ const navigateToEnginePage = (path: string) => {
                         ></span>
                     </div>
                     <div
-                        class="flex items-center justify-between font-mono text-[11px]"
+                        class="flex items-center justify-between font-mono text-[11px] tabular-nums"
                     >
                         <span
                             :class="
                                 isSubtitleRunning
-                                    ? 'font-bold text-purple-300'
+                                    ? 'text-primary font-bold'
                                     : isSubtitlePaused
                                       ? 'font-bold text-amber-300'
-                                      : 'text-slate-400'
+                                      : 'text-muted-foreground'
                             "
                         >
                             {{ subtitleStatus.status }}
                         </span>
-                        <span class="font-bold text-slate-300">
+                        <span class="text-foreground font-bold">
                             {{ subtitleStatus.progress_percent }}%
                         </span>
                     </div>
@@ -489,64 +483,63 @@ const navigateToEnginePage = (path: string) => {
 
             <!-- Scrollable Content Area -->
             <div
-                class="custom-scrollbar relative z-10 flex-1 space-y-4 overflow-y-auto pr-1"
+                class="custom-scrollbar relative z-10 flex-1 space-y-4 overflow-y-auto pe-1"
             >
                 <!-- ENGINE 1: VIRTUAL SCANNER PANEL -->
                 <div v-if="activeTab === 'scanner'" class="space-y-4">
-                    <!-- Bento Metrics Grid -->
                     <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                         <div
-                            class="rounded-2xl border border-white/10 bg-white/[0.03] p-3"
+                            class="cf-glass border-border/70 rounded-2xl border p-3"
                         >
                             <span
-                                class="block text-[10px] font-bold text-slate-400 uppercase"
+                                class="text-muted-foreground block text-[10px] font-bold uppercase"
                                 >{{ isRTL ? 'حالة الفحص' : 'Scan State' }}</span
                             >
                             <span
-                                class="mt-1 block text-xs font-black text-white capitalize"
+                                class="text-foreground mt-1 block text-xs font-black capitalize"
                                 >{{ scanStatus.status }}</span
                             >
                         </div>
                         <div
-                            class="rounded-2xl border border-white/10 bg-white/[0.03] p-3"
+                            class="cf-glass border-border/70 rounded-2xl border p-3"
                         >
                             <span
-                                class="block text-[10px] font-bold text-slate-400 uppercase"
+                                class="text-muted-foreground block text-[10px] font-bold uppercase"
                                 >{{
                                     isRTL ? 'الملفات المفهرسة' : 'Indexed Files'
                                 }}</span
                             >
                             <span
-                                class="mt-1 block font-mono text-xs font-black text-cyan-400"
+                                class="text-primary mt-1 block font-mono text-xs font-black tabular-nums"
                                 >{{ scanStatus.processed_files }} /
                                 {{ scanStatus.total_files }}</span
                             >
                         </div>
                         <div
-                            class="rounded-2xl border border-white/10 bg-white/[0.03] p-3"
+                            class="cf-glass border-border/70 rounded-2xl border p-3"
                         >
                             <span
-                                class="block text-[10px] font-bold text-slate-400 uppercase"
+                                class="text-muted-foreground block text-[10px] font-bold uppercase"
                                 >{{
                                     isRTL ? 'نسبة الإنجاز' : 'Completion'
                                 }}</span
                             >
                             <span
-                                class="mt-1 block font-mono text-xs font-black text-emerald-400"
+                                class="mt-1 block font-mono text-xs font-black text-emerald-400 tabular-nums"
                                 >{{ scanStatus.progress_percent }}%</span
                             >
                         </div>
                         <div
-                            class="rounded-2xl border border-white/10 bg-white/[0.03] p-3"
+                            class="cf-glass border-border/70 rounded-2xl border p-3"
                         >
                             <span
-                                class="block text-[10px] font-bold text-slate-400 uppercase"
+                                class="text-muted-foreground block text-[10px] font-bold uppercase"
                                 >{{
                                     isRTL ? 'الملف الجاري' : 'Current Stream'
                                 }}</span
                             >
                             <span
-                                class="mt-1 block truncate font-mono text-[11px] font-bold text-slate-300"
+                                class="text-foreground mt-1 block truncate font-mono text-[11px] font-bold"
                                 :title="scanStatus.current_file || undefined"
                             >
                                 {{
@@ -560,12 +553,11 @@ const navigateToEnginePage = (path: string) => {
                         </div>
                     </div>
 
-                    <!-- Glowing Progress Bar -->
                     <div
-                        class="h-2 w-full overflow-hidden rounded-full border border-white/10 bg-white/5"
+                        class="border-border/70 bg-muted/50 h-2 w-full overflow-hidden rounded-full border"
                     >
                         <div
-                            class="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 transition-all duration-300"
+                            class="bg-primary h-full transition-all duration-300"
                             :style="{
                                 width: `${scanStatus.progress_percent || 0}%`,
                             }"
@@ -575,62 +567,61 @@ const navigateToEnginePage = (path: string) => {
 
                 <!-- ENGINE 2: DISK ORGANIZER PANEL -->
                 <div v-else-if="activeTab === 'organizer'" class="space-y-4">
-                    <!-- Bento Metrics Grid -->
                     <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                         <div
-                            class="rounded-2xl border border-white/10 bg-white/[0.03] p-3"
+                            class="cf-glass border-border/70 rounded-2xl border p-3"
                         >
                             <span
-                                class="block text-[10px] font-bold text-slate-400 uppercase"
+                                class="text-muted-foreground block text-[10px] font-bold uppercase"
                                 >{{
                                     isRTL ? 'حالة التوليد' : 'Plan State'
                                 }}</span
                             >
                             <span
-                                class="mt-1 block text-xs font-black text-white capitalize"
+                                class="text-foreground mt-1 block text-xs font-black capitalize"
                                 >{{ planJobStatus.status }}</span
                             >
                         </div>
                         <div
-                            class="rounded-2xl border border-white/10 bg-white/[0.03] p-3"
+                            class="cf-glass border-border/70 rounded-2xl border p-3"
                         >
                             <span
-                                class="block text-[10px] font-bold text-slate-400 uppercase"
+                                class="text-muted-foreground block text-[10px] font-bold uppercase"
                                 >{{
                                     isRTL ? 'العناصر المحللة' : 'Items Analyzed'
                                 }}</span
                             >
                             <span
-                                class="mt-1 block font-mono text-xs font-black text-emerald-400"
+                                class="mt-1 block font-mono text-xs font-black text-emerald-400 tabular-nums"
                                 >{{ planJobStatus.processed_count }} /
                                 {{ planJobStatus.total_files }}</span
                             >
                         </div>
                         <div
-                            class="rounded-2xl border border-white/10 bg-white/[0.03] p-3"
+                            class="cf-glass border-border/70 rounded-2xl border p-3"
                         >
                             <span
-                                class="block text-[10px] font-bold text-slate-400 uppercase"
+                                class="text-muted-foreground block text-[10px] font-bold uppercase"
                                 >{{
                                     isRTL ? 'نسبة الخطة' : 'Plan Progress'
                                 }}</span
                             >
                             <span
-                                class="mt-1 block font-mono text-xs font-black text-cyan-400"
+                                class="text-primary mt-1 block font-mono text-xs font-black tabular-nums"
                                 >{{ planJobStatus.progress_percent }}%</span
                             >
                         </div>
                         <div
-                            class="rounded-2xl border border-white/10 bg-white/[0.03] p-3"
+                            class="cf-glass border-border/70 rounded-2xl border p-3"
                         >
                             <span
-                                class="block text-[10px] font-bold text-slate-400 uppercase"
+                                class="text-muted-foreground block text-[10px] font-bold uppercase"
                                 >{{
                                     isRTL ? 'الإجراء الحالي' : 'Current Action'
                                 }}</span
                             >
                             <span
-                                class="mt-1 block truncate font-mono text-[11px] font-bold text-slate-300"
+                                class="text-foreground mt-1 block truncate font-mono text-[11px] font-bold"
                             >
                                 {{
                                     planJobStatus.current_action ||
@@ -644,12 +635,11 @@ const navigateToEnginePage = (path: string) => {
                         </div>
                     </div>
 
-                    <!-- Glowing Progress Bar -->
                     <div
-                        class="h-2 w-full overflow-hidden rounded-full border border-white/10 bg-white/5"
+                        class="border-border/70 bg-muted/50 h-2 w-full overflow-hidden rounded-full border"
                     >
                         <div
-                            class="h-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 transition-all duration-300"
+                            class="bg-primary h-full transition-all duration-300"
                             :style="{
                                 width: `${planJobStatus.progress_percent || 0}%`,
                             }"
@@ -659,74 +649,73 @@ const navigateToEnginePage = (path: string) => {
 
                 <!-- ENGINE 3: SUBTITLE STUDIO PANEL -->
                 <div v-else-if="activeTab === 'subtitles'" class="space-y-4">
-                    <!-- Bento Metrics Grid -->
                     <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
                         <div
-                            class="rounded-2xl border border-white/10 bg-white/[0.03] p-3"
+                            class="cf-glass border-border/70 rounded-2xl border p-3"
                         >
                             <span
-                                class="block text-[10px] font-bold text-slate-400 uppercase"
+                                class="text-muted-foreground block text-[10px] font-bold uppercase"
                                 >{{ isRTL ? 'الحالة' : 'Status' }}</span
                             >
                             <span
-                                class="mt-1 block text-xs font-black text-white capitalize"
+                                class="text-foreground mt-1 block text-xs font-black capitalize"
                                 >{{ subtitleStatus.status }}</span
                             >
                         </div>
                         <div
-                            class="rounded-2xl border border-white/10 bg-white/[0.03] p-3"
+                            class="cf-glass border-border/70 rounded-2xl border p-3"
                         >
                             <span
-                                class="block text-[10px] font-bold text-slate-400 uppercase"
+                                class="text-muted-foreground block text-[10px] font-bold uppercase"
                                 >{{ isRTL ? 'ملفات مفحوصة' : 'Scanned' }}</span
                             >
                             <span
-                                class="mt-1 block font-mono text-xs font-black text-purple-400"
+                                class="text-primary mt-1 block font-mono text-xs font-black tabular-nums"
                                 >{{ subtitleStatus.processed_count }} /
                                 {{ subtitleStatus.total_files }}</span
                             >
                         </div>
                         <div
-                            class="rounded-2xl border border-white/10 bg-white/[0.03] p-3"
+                            class="cf-glass border-border/70 rounded-2xl border p-3"
                         >
                             <span
-                                class="block text-[10px] font-bold text-slate-400 uppercase"
+                                class="text-muted-foreground block text-[10px] font-bold uppercase"
                                 >{{
                                     isRTL ? 'ترميز معالج' : 'UTF-8 Fixed'
                                 }}</span
                             >
                             <span
-                                class="mt-1 block font-mono text-xs font-black text-emerald-400"
+                                class="mt-1 block font-mono text-xs font-black text-emerald-400 tabular-nums"
                                 >{{
                                     subtitleStatus.summary.encoding_fixed_count
                                 }}</span
                             >
                         </div>
                         <div
-                            class="rounded-2xl border border-white/10 bg-white/[0.03] p-3"
+                            class="cf-glass border-border/70 rounded-2xl border p-3"
                         >
                             <span
-                                class="block text-[10px] font-bold text-slate-400 uppercase"
+                                class="text-muted-foreground block text-[10px] font-bold uppercase"
                                 >{{ isRTL ? 'تسمية معيارية' : 'Renamed' }}</span
                             >
                             <span
-                                class="mt-1 block font-mono text-xs font-black text-cyan-400"
+                                class="text-primary mt-1 block font-mono text-xs font-black tabular-nums"
                                 >{{
                                     subtitleStatus.summary.renamed_count
                                 }}</span
                             >
                         </div>
                         <div
-                            class="rounded-2xl border border-white/10 bg-white/[0.03] p-3"
+                            class="cf-glass border-border/70 rounded-2xl border p-3"
                         >
                             <span
-                                class="block text-[10px] font-bold text-slate-400 uppercase"
+                                class="text-muted-foreground block text-[10px] font-bold uppercase"
                                 >{{
                                     isRTL ? 'ملفات تالفة' : 'Deleted/Bad'
                                 }}</span
                             >
                             <span
-                                class="mt-1 block font-mono text-xs font-black text-amber-400"
+                                class="mt-1 block font-mono text-xs font-black text-amber-400 tabular-nums"
                                 >{{
                                     subtitleStatus.summary.deleted_count +
                                     subtitleStatus.summary.invalid_count
@@ -735,12 +724,11 @@ const navigateToEnginePage = (path: string) => {
                         </div>
                     </div>
 
-                    <!-- Glowing Progress Bar -->
                     <div
-                        class="h-2 w-full overflow-hidden rounded-full border border-white/10 bg-white/5"
+                        class="border-border/70 bg-muted/50 h-2 w-full overflow-hidden rounded-full border"
                     >
                         <div
-                            class="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500 transition-all duration-300"
+                            class="bg-primary h-full transition-all duration-300"
                             :style="{
                                 width: `${subtitleStatus.progress_percent || 0}%`,
                             }"
@@ -750,14 +738,14 @@ const navigateToEnginePage = (path: string) => {
 
                 <!-- Unified Live Terminal Output Feed -->
                 <div
-                    class="space-y-2.5 rounded-2xl border border-white/10 bg-black/70 p-3.5 sm:p-4"
+                    class="border-border/70 space-y-2.5 rounded-2xl border bg-black/80 p-3.5 sm:p-4"
                 >
                     <div
-                        class="flex items-center justify-between border-b border-white/5 pb-2"
+                        class="border-border/60 flex items-center justify-between border-b pb-2"
                     >
                         <div class="flex items-center gap-2">
-                            <Terminal class="h-3.5 w-3.5 text-cyan-400" />
-                            <span class="text-xs font-bold text-slate-300">
+                            <Terminal class="text-primary h-3.5 w-3.5" />
+                            <span class="text-foreground text-xs font-bold">
                                 {{
                                     activeTab === 'scanner'
                                         ? isRTL
@@ -777,8 +765,9 @@ const navigateToEnginePage = (path: string) => {
                         <div class="flex items-center gap-2">
                             <!-- Copy Terminal Output -->
                             <button
+                                type="button"
                                 @click="copyTerminalLogs"
-                                class="flex cursor-pointer items-center gap-1 rounded-lg bg-white/5 px-2 py-0.5 text-[10px] font-bold text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+                                class="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1 rounded-lg bg-white/5 px-2 py-0.5 text-[10px] font-bold transition-all hover:bg-white/10"
                                 :title="isRTL ? 'نسخ السجلات' : 'Copy Logs'"
                             >
                                 <Check
@@ -807,16 +796,13 @@ const navigateToEnginePage = (path: string) => {
                                         'error',
                                     ] as const"
                                     :key="flt"
+                                    type="button"
                                     @click="terminalFilter = flt"
                                     class="cursor-pointer rounded-lg px-2 py-0.5 font-bold uppercase transition-all"
                                     :class="
                                         terminalFilter === flt
-                                            ? activeTab === 'scanner'
-                                                ? 'bg-cyan-500 text-slate-950'
-                                                : activeTab === 'organizer'
-                                                  ? 'bg-emerald-500 text-slate-950'
-                                                  : 'bg-purple-500 text-white'
-                                            : 'bg-white/5 text-slate-400 hover:text-white'
+                                            ? 'bg-primary text-primary-foreground'
+                                            : 'text-muted-foreground hover:text-foreground bg-white/5'
                                     "
                                 >
                                     {{ flt }}
@@ -827,22 +813,22 @@ const navigateToEnginePage = (path: string) => {
 
                     <div
                         id="unified-terminal-feed"
-                        class="custom-scrollbar h-44 space-y-1.5 overflow-y-auto pr-2 font-mono text-[11px] sm:h-48"
+                        class="custom-scrollbar h-44 space-y-1.5 overflow-y-auto pe-2 font-mono text-[11px] tabular-nums sm:h-48"
                     >
                         <div
                             v-for="(log, idx) in activeLogs"
                             :key="idx"
                             class="flex items-start gap-2 leading-relaxed"
                         >
-                            <span class="shrink-0 text-slate-600 select-none"
+                            <span class="shrink-0 text-slate-500 select-none"
                                 >[{{ log.time }}]</span
                             >
                             <span
                                 :class="{
                                     'text-emerald-400': log.level === 'success',
-                                    'text-cyan-300': log.level === 'info',
+                                    'text-primary': log.level === 'info',
                                     'text-amber-400': log.level === 'warning',
-                                    'font-bold text-rose-400':
+                                    'text-destructive font-bold':
                                         log.level === 'error',
                                 }"
                             >
@@ -851,7 +837,7 @@ const navigateToEnginePage = (path: string) => {
                         </div>
                         <div
                             v-if="activeLogs.length === 0"
-                            class="py-8 text-center text-slate-600 italic"
+                            class="text-muted-foreground py-8 text-center italic"
                         >
                             {{
                                 isRTL
@@ -865,7 +851,7 @@ const navigateToEnginePage = (path: string) => {
 
             <!-- Unified Action Toolbar Footer -->
             <div
-                class="relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-3"
+                class="border-border/70 relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t pt-3"
             >
                 <!-- Left Engine Actions (Pause/Resume/Cancel) -->
                 <div class="flex items-center gap-2">
@@ -877,8 +863,9 @@ const navigateToEnginePage = (path: string) => {
                                 scanStatus.status === 'completed' ||
                                 scanStatus.status === 'cancelled'
                             "
+                            type="button"
                             @click="() => startFullScan()"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-cyan-500 px-4 py-2 text-xs font-extrabold text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:bg-cyan-400"
+                            class="bg-primary text-primary-foreground shadow-primary/25 flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-extrabold shadow-lg transition-all hover:brightness-105"
                         >
                             <Play class="h-3.5 w-3.5 fill-current" />
                             <span>{{
@@ -888,8 +875,9 @@ const navigateToEnginePage = (path: string) => {
 
                         <button
                             v-if="isScanning"
+                            type="button"
                             @click="pauseScan"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/20 px-4 py-2 text-xs font-bold text-amber-300 transition-all hover:bg-amber-500/30"
+                            class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-500/35 bg-amber-500/20 px-4 py-2 text-xs font-bold text-amber-300 transition-all hover:bg-amber-500/30"
                         >
                             <Pause class="h-3.5 w-3.5" />
                             <span>{{ isRTL ? 'إيقاف مؤقت' : 'Pause' }}</span>
@@ -897,8 +885,9 @@ const navigateToEnginePage = (path: string) => {
 
                         <button
                             v-if="isScanPaused"
+                            type="button"
                             @click="resumeScan"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-cyan-500 px-4 py-2 text-xs font-bold text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:bg-cyan-400"
+                            class="bg-primary text-primary-foreground shadow-primary/25 flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold shadow-lg transition-all hover:brightness-105"
                         >
                             <Play class="h-3.5 w-3.5 fill-current" />
                             <span>{{ isRTL ? 'استئناف' : 'Resume' }}</span>
@@ -909,8 +898,9 @@ const navigateToEnginePage = (path: string) => {
                     <template v-else-if="activeTab === 'organizer'">
                         <button
                             v-if="isAnalyzing"
+                            type="button"
                             @click="pausePlanJob"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/20 px-4 py-2 text-xs font-bold text-amber-300 transition-all hover:bg-amber-500/30"
+                            class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-500/35 bg-amber-500/20 px-4 py-2 text-xs font-bold text-amber-300 transition-all hover:bg-amber-500/30"
                         >
                             <Pause class="h-3.5 w-3.5" />
                             <span>{{ isRTL ? 'إيقاف مؤقت' : 'Pause' }}</span>
@@ -918,8 +908,9 @@ const navigateToEnginePage = (path: string) => {
 
                         <button
                             v-if="isOrgPaused"
+                            type="button"
                             @click="resumePlanJob"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-500 px-4 py-2 text-xs font-bold text-slate-950 shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-400"
+                            class="bg-primary text-primary-foreground shadow-primary/25 flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold shadow-lg transition-all hover:brightness-105"
                         >
                             <Play class="h-3.5 w-3.5 fill-current" />
                             <span>{{ isRTL ? 'استئناف' : 'Resume' }}</span>
@@ -927,8 +918,9 @@ const navigateToEnginePage = (path: string) => {
 
                         <button
                             v-if="planJobStatus.status === 'completed'"
+                            type="button"
                             @click="navigateToEnginePage('/organizer?step=2')"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-500 px-4 py-2 text-xs font-black text-slate-950 shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-400"
+                            class="bg-primary text-primary-foreground shadow-primary/25 flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-black shadow-lg transition-all hover:brightness-105"
                         >
                             <CheckCircle2 class="h-3.5 w-3.5" />
                             <span>{{
@@ -943,8 +935,9 @@ const navigateToEnginePage = (path: string) => {
                     <template v-else-if="activeTab === 'subtitles'">
                         <button
                             v-if="isSubtitleRunning"
+                            type="button"
                             @click="pauseHealthJob"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/20 px-4 py-2 text-xs font-bold text-amber-300 transition-all hover:bg-amber-500/30"
+                            class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-500/35 bg-amber-500/20 px-4 py-2 text-xs font-bold text-amber-300 transition-all hover:bg-amber-500/30"
                         >
                             <Pause class="h-3.5 w-3.5" />
                             <span>{{ isRTL ? 'إيقاف مؤقت' : 'Pause' }}</span>
@@ -952,8 +945,9 @@ const navigateToEnginePage = (path: string) => {
 
                         <button
                             v-if="isSubtitlePaused"
+                            type="button"
                             @click="resumeHealthJob"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-purple-500 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-purple-500/20 transition-all hover:bg-purple-400"
+                            class="bg-primary text-primary-foreground shadow-primary/25 flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold shadow-lg transition-all hover:brightness-105"
                         >
                             <Play class="h-3.5 w-3.5 fill-current" />
                             <span>{{ isRTL ? 'استئناف' : 'Resume' }}</span>
@@ -970,8 +964,9 @@ const navigateToEnginePage = (path: string) => {
                             (activeTab === 'subtitles' &&
                                 (isSubtitleRunning || isSubtitlePaused))
                         "
+                        type="button"
                         @click="handleCancelActiveJob"
-                        class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/15 px-3.5 py-2 text-xs font-bold text-rose-300 transition-all hover:bg-rose-500/25"
+                        class="border-destructive/35 bg-destructive/15 text-destructive hover:bg-destructive/25 flex cursor-pointer items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-bold transition-all"
                     >
                         <XCircle class="h-3.5 w-3.5" />
                         <span>{{ isRTL ? 'إلغاء العملية' : 'Cancel' }}</span>
@@ -982,8 +977,9 @@ const navigateToEnginePage = (path: string) => {
                 <div class="flex items-center gap-2">
                     <button
                         v-if="activeTab === 'scanner'"
+                        type="button"
                         @click="navigateToEnginePage('/scanner')"
-                        class="flex cursor-pointer items-center gap-1 rounded-xl border border-white/5 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 transition-all hover:bg-white/10 hover:text-white"
+                        class="cf-glass border-border/80 text-foreground hover:border-primary/40 flex cursor-pointer items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all"
                     >
                         <span>{{
                             isRTL ? 'صفحة الفاحص' : 'Scanner Page'
@@ -993,8 +989,9 @@ const navigateToEnginePage = (path: string) => {
 
                     <button
                         v-else-if="activeTab === 'organizer'"
+                        type="button"
                         @click="navigateToEnginePage('/organizer')"
-                        class="flex cursor-pointer items-center gap-1 rounded-xl border border-white/5 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 transition-all hover:bg-white/10 hover:text-white"
+                        class="cf-glass border-border/80 text-foreground hover:border-primary/40 flex cursor-pointer items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all"
                     >
                         <span>{{
                             isRTL ? 'صفحة المنظم' : 'Organizer Page'
@@ -1004,8 +1001,9 @@ const navigateToEnginePage = (path: string) => {
 
                     <button
                         v-else-if="activeTab === 'subtitles'"
+                        type="button"
                         @click="navigateToEnginePage('/subtitles')"
-                        class="flex cursor-pointer items-center gap-1 rounded-xl border border-white/5 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 transition-all hover:bg-white/10 hover:text-white"
+                        class="cf-glass border-border/80 text-foreground hover:border-primary/40 flex cursor-pointer items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all"
                     >
                         <span>{{
                             isRTL ? 'استوديو الترجمات' : 'Subtitle Studio'
@@ -1014,8 +1012,9 @@ const navigateToEnginePage = (path: string) => {
                     </button>
 
                     <button
+                        type="button"
                         @click="closeActivityCenter"
-                        class="cursor-pointer rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-slate-300 transition-all hover:bg-white/10 hover:text-white"
+                        class="cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground cursor-pointer rounded-xl border px-4 py-2 text-xs font-bold transition-all"
                     >
                         {{ isRTL ? 'إخفاء بالخلفية' : 'Minimize' }}
                     </button>

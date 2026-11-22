@@ -60,17 +60,17 @@
 - [x] **Watch History (`WatchHistory/Index.vue`):** Interactive timeline with `PageBanner`, `FilterPills` (`all`, `movie`, `series`, `collection`), `.cf-field` search, `MotionList` grids, `.cf-shimmer` skeletons, and `ConfirmModal` clear confirmation.
 - [x] **Media Cards & Modals:** Modernized `MediaCard.vue`, `HeroBanner.vue`, `FilterBar.vue`, `WatchHistoryCard.vue`, and `MediaDetailModal.vue` (accessible dialog with Escape guard for nested `FixMatchModal`, `.cf-glass-elevated`, and `tabular-nums` technical specs).
 
-### [/] Phase 6: Acquisition & Studio Workspaces
-- [ ] **Scout (`Scout/Index.vue`):** Studio intelligence workspace, Discover trending releases, franchise gaps, quality upgrade scanner, and `TorrentSuggestionsModal.vue` overhaul.
-- [ ] **Downloader (`Downloader/Index.vue`):** Torrent client manager, speed gauges, torrent tree inspect, priority controls, and pause/resume buttons.
-- [ ] **Metadata Manager (`Metadata/Index.vue`):** Bulk poster fetcher, NFO inspector, and artwork refreshers.
-- [ ] **Fix Match (`FixMatchModal.vue`):** Split-pane visual match resolver with TMDb poster comparison.
-- [ ] **Subtitles Workspace (`Subtitles/Index.vue`):** Multi-language subtitle downloader, sync analyzer, and language badges.
-- [ ] **Scanner (`Scanner/Index.vue`):** Real-time directory crawler HUD, discovery counters, and error resolution.
-- [ ] **Physical Organizer (`Organizer/Index.vue`):** 4-step wizard with dry-run diff viewer, batch corrections, and audit logs.
-- [ ] **Unified Job Center (`UnifiedJobCenterModal.vue`):** Real-time background job monitor with progress bars and abort triggers.
+### [x] Phase 6: Acquisition & Studio Workspaces
+- [x] **Scout (`Scout/Index.vue`):** Studio intelligence workspace with `PageBanner`, mode/provider pills, `.cf-glass` metric and franchise gap cards, `bg-primary` completion progress fill, `TorrentSuggestionsModal.vue`, and `FastOrganizeModal.vue` upgraded to `.cf-glass-elevated`, `.cf-field`, `.cf-shimmer`, and `tabular-nums`.
+- [x] **Downloader (`Downloader/Index.vue`):** Torrent client manager with `PageBanner`, connection badge, global transfer speed cards, `TorrentTreeItem.vue`, `FilterPills`, `.cf-field` Add Torrent modal, and `tabular-nums` on speeds, sizes, seeds/peers, ETA, and percentages.
+- [x] **Metadata Manager (`Metadata/Index.vue`):** Library enrichment workspace with `PageBanner`, health metrics (`tabular-nums`), Batch Enrich CTA, filter tabs, `.cf-field` search, and `.cf-glass` / `.cf-table-wrapper` table & cards.
+- [x] **Fix Match (`FixMatchModal.vue`):** Split-pane visual match resolver upgraded to `.cf-glass-elevated border-border/80`, `.cf-field` inputs, `bg-primary` active tabs and Apply CTAs, and `tabular-nums`.
+- [x] **Subtitles Workspace (`Subtitles/Index.vue`):** Multi-language subtitle hub with `PageBanner`, 6 `.cf-glass` coverage KPI cards (`tabular-nums`), segmented filter bar, `.cf-table-wrapper` coverage table, and `SubtitlePickerModal.vue` upgraded to `.cf-glass-elevated`.
+- [x] **Scanner (`Scanner/Index.vue`):** Real-time directory crawler HUD with `PageBanner`, 5 `.cf-glass` storage & scan metric cards, live scan progress banner, root library cards, and accessible `ConfirmModal` replacing `window.confirm()`.
+- [x] **Physical Organizer (`Organizer/Index.vue`):** 3-step wizard (`OrganizerConfigStep.vue`, `OrganizerDryRunStep.vue`, `OrganizerExecutionStep.vue`) + `OrganizerItemCorrectionModal.vue` and `OrganizerBatchCorrectionModal.vue` upgraded with `PageBanner`, `.cf-glass` stepper, `.cf-table-wrapper`, `.cf-field`, and `tabular-nums`.
+- [x] **Unified Job Center (`UnifiedJobCenterModal.vue`):** Real-time background job monitor upgraded to `.cf-glass-elevated border-border/80 rounded-3xl`, active job cards (`border-primary/35`, `bg-primary` progress bar), and `tabular-nums` terminal logs.
 
-### [ ] Phase 7: System Pages, Audits, Verification & Documentation
+### [/] Phase 7: System Pages, Audits, Verification & Documentation
 - [ ] **System Analytics (`Analytics/Index.vue`):** Storage consumption charts, stream metrics, and library breakdown.
 - [ ] **Settings (`Settings/Index.vue`):** Accent picker, storage paths, streaming transcode preferences, and API key management.
 - [ ] **Documentation (`Docs/Index.vue`):** Developer and user manual with syntax highlighting and deep links.

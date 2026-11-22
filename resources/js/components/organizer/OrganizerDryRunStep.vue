@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
@@ -142,52 +142,58 @@ const handleBatchEdit = () => {
     <div class="space-y-6">
         <!-- Summary Stats Card -->
         <div
-            class="flex flex-col justify-between gap-4 rounded-3xl border border-white/10 bg-slate-900/60 p-6 backdrop-blur-xl md:flex-row md:items-center"
+            class="cf-glass border-border/80 flex flex-col justify-between gap-4 rounded-3xl border p-6 backdrop-blur-xl md:flex-row md:items-center"
         >
             <div class="grid flex-1 grid-cols-2 gap-4 sm:grid-cols-4">
-                <div class="rounded-2xl border border-white/5 bg-white/5 p-4">
+                <div class="cf-glass border-border/70 rounded-2xl border p-4">
                     <div
-                        class="text-xs font-semibold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground text-xs font-semibold tracking-wider uppercase"
                     >
                         {{ isRTL ? 'إجمالي الملفات' : 'Total Items' }}
                     </div>
-                    <div class="mt-1 text-xl font-black text-white">
+                    <div
+                        class="text-foreground mt-1 text-xl font-black tabular-nums"
+                    >
                         {{ totalCount }}
                     </div>
                 </div>
                 <div
-                    class="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4"
+                    class="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-4"
                 >
                     <div
                         class="text-xs font-semibold tracking-wider text-emerald-400 uppercase"
                     >
                         {{ isRTL ? 'جاهزة للنقل' : 'Ready' }}
                     </div>
-                    <div class="mt-1 text-xl font-black text-emerald-300">
+                    <div
+                        class="mt-1 text-xl font-black text-emerald-300 tabular-nums"
+                    >
                         {{ readyCount }}
                     </div>
                 </div>
                 <div
-                    class="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4"
+                    class="rounded-2xl border border-amber-500/25 bg-amber-500/10 p-4"
                 >
                     <div
                         class="text-xs font-semibold tracking-wider text-amber-400 uppercase"
                     >
                         {{ isRTL ? 'تحذيرات / تكرار' : 'Conflicts' }}
                     </div>
-                    <div class="mt-1 text-xl font-black text-amber-300">
+                    <div
+                        class="mt-1 text-xl font-black text-amber-300 tabular-nums"
+                    >
                         {{ conflictCount }}
                     </div>
                 </div>
-                <div
-                    class="rounded-2xl border border-slate-500/20 bg-slate-500/10 p-4"
-                >
+                <div class="cf-glass border-border/70 rounded-2xl border p-4">
                     <div
-                        class="text-xs font-semibold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground text-xs font-semibold tracking-wider uppercase"
                     >
                         {{ isRTL ? 'مستبعدة' : 'Skipped' }}
                     </div>
-                    <div class="mt-1 text-xl font-black text-slate-300">
+                    <div
+                        class="text-muted-foreground mt-1 text-xl font-black tabular-nums"
+                    >
                         {{ skippedCount }}
                     </div>
                 </div>
@@ -196,17 +202,19 @@ const handleBatchEdit = () => {
             <!-- Action buttons -->
             <div class="flex shrink-0 items-center gap-3">
                 <button
+                    type="button"
                     @click="emit('back')"
-                    class="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-xs font-bold text-white transition-all hover:bg-white/10 active:scale-95"
+                    class="cf-glass border-border/80 text-foreground hover:border-primary/40 flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl border px-5 py-3 text-xs font-bold transition-all active:scale-95"
                 >
                     <ArrowLeft v-if="!isRTL" class="h-4 w-4" />
                     <ArrowRight v-else class="h-4 w-4" />
                     {{ isRTL ? 'العودة للإعدادات' : 'Back to Settings' }}
                 </button>
                 <button
+                    type="button"
                     @click="emit('execute')"
                     :disabled="readyCount === 0"
-                    class="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-400 px-6 py-3 text-xs font-black text-slate-950 shadow-xl shadow-emerald-500/20 transition-all hover:from-emerald-400 hover:to-emerald-300 active:scale-95 disabled:opacity-40"
+                    class="bg-primary text-primary-foreground shadow-primary/25 flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl px-6 py-3 text-xs font-black shadow-xl transition-all hover:brightness-105 active:scale-95 disabled:opacity-40"
                 >
                     <Play class="h-4 w-4 fill-current" />
                     {{
@@ -225,56 +233,61 @@ const handleBatchEdit = () => {
             <!-- Filter Pills -->
             <div class="flex items-center gap-1.5 overflow-x-auto pb-1">
                 <button
+                    type="button"
                     @click="statusFilter = 'all'"
-                    class="rounded-xl border px-3 py-1.5 text-xs font-bold whitespace-nowrap transition-all"
+                    class="min-h-9 cursor-pointer rounded-full border px-3.5 py-1.5 text-xs font-bold whitespace-nowrap tabular-nums transition-all active:scale-95"
                     :class="
                         statusFilter === 'all'
-                            ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-300 shadow-sm'
-                            : 'border-white/5 bg-white/5 text-slate-400 hover:bg-white/10'
+                            ? 'border-primary bg-primary text-primary-foreground shadow-xs'
+                            : 'cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground'
                     "
                 >
                     {{ isRTL ? 'الكل' : 'All' }} ({{ totalCount }})
                 </button>
                 <button
+                    type="button"
                     @click="statusFilter = 'ready'"
-                    class="rounded-xl border px-3 py-1.5 text-xs font-bold whitespace-nowrap transition-all"
+                    class="min-h-9 cursor-pointer rounded-full border px-3.5 py-1.5 text-xs font-bold whitespace-nowrap tabular-nums transition-all active:scale-95"
                     :class="
                         statusFilter === 'ready'
-                            ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-300 shadow-sm'
-                            : 'border-white/5 bg-white/5 text-slate-400 hover:bg-white/10'
+                            ? 'border-emerald-500 bg-emerald-500 text-slate-950 shadow-xs'
+                            : 'cf-glass border-border/80 text-muted-foreground hover:text-foreground hover:border-emerald-500/40'
                     "
                 >
                     {{ isRTL ? 'جاهزة' : 'Ready' }} ({{ readyCount }})
                 </button>
                 <button
+                    type="button"
                     @click="statusFilter = 'conflict'"
-                    class="rounded-xl border px-3 py-1.5 text-xs font-bold whitespace-nowrap transition-all"
+                    class="min-h-9 cursor-pointer rounded-full border px-3.5 py-1.5 text-xs font-bold whitespace-nowrap tabular-nums transition-all active:scale-95"
                     :class="
                         statusFilter === 'conflict'
-                            ? 'border-amber-500/40 bg-amber-500/20 text-amber-300 shadow-sm'
-                            : 'border-white/5 bg-white/5 text-slate-400 hover:bg-white/10'
+                            ? 'border-amber-500 bg-amber-500 text-slate-950 shadow-xs'
+                            : 'cf-glass border-border/80 text-muted-foreground hover:text-foreground hover:border-amber-500/40'
                     "
                 >
                     {{ isRTL ? 'تعارضات' : 'Conflicts' }} ({{ conflictCount }})
                 </button>
                 <button
+                    type="button"
                     @click="statusFilter = 'warning'"
-                    class="rounded-xl border px-3 py-1.5 text-xs font-bold whitespace-nowrap transition-all"
+                    class="min-h-9 cursor-pointer rounded-full border px-3.5 py-1.5 text-xs font-bold whitespace-nowrap tabular-nums transition-all active:scale-95"
                     :class="
                         statusFilter === 'warning'
-                            ? 'border-orange-500/40 bg-orange-500/20 text-orange-300 shadow-sm'
-                            : 'border-white/5 bg-white/5 text-slate-400 hover:bg-white/10'
+                            ? 'border-orange-500 bg-orange-500 text-slate-950 shadow-xs'
+                            : 'cf-glass border-border/80 text-muted-foreground hover:text-foreground hover:border-orange-500/40'
                     "
                 >
                     {{ isRTL ? 'تحذيرات' : 'Warnings' }} ({{ warningCount }})
                 </button>
                 <button
+                    type="button"
                     @click="statusFilter = 'skipped'"
-                    class="rounded-xl border px-3 py-1.5 text-xs font-bold whitespace-nowrap transition-all"
+                    class="min-h-9 cursor-pointer rounded-full border px-3.5 py-1.5 text-xs font-bold whitespace-nowrap tabular-nums transition-all active:scale-95"
                     :class="
                         statusFilter === 'skipped'
-                            ? 'border-slate-500/40 bg-slate-500/20 text-slate-200 shadow-sm'
-                            : 'border-white/5 bg-white/5 text-slate-400 hover:bg-white/10'
+                            ? 'border-primary bg-primary text-primary-foreground shadow-xs'
+                            : 'cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground'
                     "
                 >
                     {{ isRTL ? 'مستبعدة' : 'Skipped' }} ({{ skippedCount }})
@@ -285,8 +298,9 @@ const handleBatchEdit = () => {
             <div class="flex items-center gap-2">
                 <button
                     v-if="selectedPaths.size > 0"
+                    type="button"
                     @click="handleBatchEdit"
-                    class="flex items-center gap-1.5 rounded-xl border border-purple-500/40 bg-purple-500/20 px-3 py-2 text-xs font-bold text-purple-300 transition-all hover:bg-purple-500/30"
+                    class="border-primary/40 bg-primary/15 text-primary hover:bg-primary/25 flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-bold tabular-nums transition-all active:scale-95"
                 >
                     <Edit3 class="h-3.5 w-3.5" />
                     {{
@@ -298,7 +312,7 @@ const handleBatchEdit = () => {
 
                 <div class="relative w-full sm:w-64">
                     <Search
-                        class="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                        class="text-muted-foreground pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2"
                     />
                     <input
                         v-model="searchQuery"
@@ -308,7 +322,7 @@ const handleBatchEdit = () => {
                                 ? 'بحث بالاسم أو المسار...'
                                 : 'Search title or path...'
                         "
-                        class="w-full rounded-xl border border-white/10 bg-white/5 py-2 ps-9 pe-4 text-xs text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
+                        class="cf-field border-border/80 bg-card/80 text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full rounded-xl border ps-9 pe-4 text-xs focus:outline-none"
                     />
                 </div>
             </div>
@@ -316,37 +330,40 @@ const handleBatchEdit = () => {
 
         <!-- Dry Run Interactive Table -->
         <div
-            class="overflow-hidden rounded-3xl border border-white/10 bg-slate-900/60 shadow-2xl backdrop-blur-xl"
+            class="cf-table-wrapper cf-glass border-border/80 overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-xl"
         >
             <div class="overflow-x-auto">
-                <table class="w-full border-collapse text-left text-xs">
+                <table
+                    class="cf-table w-full border-collapse text-start text-xs"
+                >
                     <thead
-                        class="border-b border-white/10 bg-white/5 font-bold tracking-wider text-slate-400 uppercase"
+                        class="border-border/70 bg-muted/30 text-muted-foreground border-b font-bold tracking-wider uppercase"
                     >
                         <tr>
                             <th class="w-10 p-3 text-center">
                                 <button
+                                    type="button"
                                     @click="toggleSelectAll"
-                                    class="text-slate-400 hover:text-white"
+                                    class="text-muted-foreground hover:text-foreground cursor-pointer"
                                 >
                                     <CheckSquare
                                         v-if="isAllSelected"
-                                        class="h-4 w-4 text-cyan-400"
+                                        class="text-primary h-4 w-4"
                                     />
                                     <Square v-else class="h-4 w-4" />
                                 </button>
                             </th>
-                            <th class="p-3">
+                            <th class="p-3 text-start">
                                 {{ isRTL ? 'الملف الحالي' : 'Original File' }}
                             </th>
-                            <th class="p-3">
+                            <th class="p-3 text-start">
                                 {{
                                     isRTL
                                         ? 'البيانات المكتشفة'
                                         : 'Detected Info'
                                 }}
                             </th>
-                            <th class="p-3">
+                            <th class="p-3 text-start">
                                 {{
                                     isRTL
                                         ? 'المسار والاسم المقترح'
@@ -361,13 +378,13 @@ const handleBatchEdit = () => {
                             </th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-white/5">
+                    <tbody class="divide-border/50 divide-y">
                         <tr
                             v-for="item in paginatedItems"
                             :key="item.source_path"
                             class="group transition-colors hover:bg-white/[0.02]"
                             :class="{
-                                'bg-cyan-500/[0.04]': selectedPaths.has(
+                                'bg-primary/[0.06]': selectedPaths.has(
                                     item.source_path,
                                 ),
                             }"
@@ -375,14 +392,15 @@ const handleBatchEdit = () => {
                             <!-- Select checkbox -->
                             <td class="p-3 text-center">
                                 <button
+                                    type="button"
                                     @click="toggleSelectRow(item.source_path)"
-                                    class="text-slate-500 hover:text-white"
+                                    class="text-muted-foreground hover:text-foreground cursor-pointer"
                                 >
                                     <CheckSquare
                                         v-if="
                                             selectedPaths.has(item.source_path)
                                         "
-                                        class="h-4 w-4 text-cyan-400"
+                                        class="text-primary h-4 w-4"
                                     />
                                     <Square v-else class="h-4 w-4" />
                                 </button>
@@ -390,7 +408,7 @@ const handleBatchEdit = () => {
 
                             <!-- Source Path -->
                             <td
-                                class="max-w-xs truncate p-3 font-mono text-[11px] text-slate-300"
+                                class="text-muted-foreground max-w-xs truncate p-3 font-mono text-[11px]"
                                 :title="item.source_path"
                             >
                                 {{ item.source_path }}
@@ -403,23 +421,23 @@ const handleBatchEdit = () => {
                                 >
                                     <span
                                         v-if="item.type === 'movie'"
-                                        class="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[10px] font-bold text-cyan-300"
+                                        class="border-primary/30 bg-primary/15 text-primary rounded border px-1.5 py-0.5 text-[10px] font-bold"
                                     >
                                         Movie
                                     </span>
                                     <span
                                         v-else
-                                        class="rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-bold text-purple-300"
+                                        class="rounded border border-purple-500/30 bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-bold text-purple-300"
                                     >
                                         TV
                                     </span>
                                     <span
-                                        class="text-xs font-bold text-white"
+                                        class="text-foreground text-xs font-bold"
                                         >{{ item.clean_title }}</span
                                     >
                                     <span
                                         v-if="item.year"
-                                        class="text-slate-400"
+                                        class="text-muted-foreground tabular-nums"
                                         >({{ item.year }})</span
                                     >
                                     <span
@@ -427,7 +445,7 @@ const handleBatchEdit = () => {
                                             item.season !== undefined &&
                                             item.episode !== undefined
                                         "
-                                        class="font-mono font-bold text-cyan-400"
+                                        class="text-primary font-mono font-bold tabular-nums"
                                     >
                                         S{{
                                             String(item.season).padStart(
@@ -446,12 +464,12 @@ const handleBatchEdit = () => {
 
                             <!-- Destination Path Preview -->
                             <td
-                                class="max-w-sm truncate p-3 font-mono text-[11px] text-white"
+                                class="text-foreground max-w-sm truncate p-3 font-mono text-[11px]"
                                 :title="item.destination_path"
                             >
                                 <span
                                     v-if="item.is_manually_edited"
-                                    class="mr-1 rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-300"
+                                    class="me-1 rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-300"
                                 >
                                     Edited
                                 </span>
@@ -483,7 +501,7 @@ const handleBatchEdit = () => {
                                 </span>
                                 <span
                                     v-else
-                                    class="inline-flex items-center gap-1 rounded-lg border border-slate-500/30 bg-slate-500/20 px-2 py-1 text-[10px] font-bold text-slate-300"
+                                    class="border-border bg-muted/50 text-muted-foreground inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold"
                                 >
                                     <XCircle class="h-3 w-3" />
                                     Skipped
@@ -496,16 +514,18 @@ const handleBatchEdit = () => {
                                     class="flex items-center justify-center gap-1"
                                 >
                                     <button
+                                        type="button"
                                         @click="emit('edit-item', item)"
-                                        class="rounded-lg bg-white/5 p-1.5 text-slate-400 transition-colors hover:bg-cyan-500/20 hover:text-cyan-300"
+                                        class="bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary cursor-pointer rounded-lg p-1.5 transition-colors"
                                         title="Edit this item"
                                     >
                                         <Edit3 class="h-3.5 w-3.5" />
                                     </button>
                                     <button
                                         v-if="item.is_manually_edited"
+                                        type="button"
                                         @click="emit('reset-item', item)"
-                                        class="rounded-lg bg-white/5 p-1.5 text-slate-400 transition-colors hover:bg-amber-500/20 hover:text-amber-300"
+                                        class="bg-muted/50 text-muted-foreground cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-amber-500/20 hover:text-amber-300"
                                         title="Reset to original"
                                     >
                                         <RotateCcw class="h-3.5 w-3.5" />
@@ -519,7 +539,7 @@ const handleBatchEdit = () => {
 
             <!-- Pagination Bar -->
             <div
-                class="flex items-center justify-between border-t border-white/10 p-4 text-xs text-slate-400"
+                class="border-border/70 text-muted-foreground flex items-center justify-between border-t p-4 text-xs tabular-nums"
             >
                 <div>
                     {{
@@ -530,18 +550,20 @@ const handleBatchEdit = () => {
                 </div>
                 <div class="flex items-center gap-2">
                     <button
+                        type="button"
                         @click="currentPage = Math.max(1, currentPage - 1)"
                         :disabled="currentPage === 1"
-                        class="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 font-bold text-white transition-all hover:bg-white/10 disabled:opacity-30"
+                        class="cf-glass border-border/80 text-foreground hover:border-primary/40 cursor-pointer rounded-xl border px-3 py-1.5 font-bold transition-all disabled:opacity-30"
                     >
                         {{ isRTL ? 'السابق' : 'Previous' }}
                     </button>
                     <button
+                        type="button"
                         @click="
                             currentPage = Math.min(totalPages, currentPage + 1)
                         "
                         :disabled="currentPage === totalPages"
-                        class="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 font-bold text-white transition-all hover:bg-white/10 disabled:opacity-30"
+                        class="cf-glass border-border/80 text-foreground hover:border-primary/40 cursor-pointer rounded-xl border px-3 py-1.5 font-bold transition-all disabled:opacity-30"
                     >
                         {{ isRTL ? 'التالي' : 'Next' }}
                     </button>

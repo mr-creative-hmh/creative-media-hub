@@ -21,18 +21,18 @@ const props = withDefaults(
 
 <template>
     <section
-        :class="
-            cn(
-                'cf-glass relative overflow-hidden rounded-3xl p-5 sm:p-6',
-                props.class,
-            )
-        "
+        :class="cn('cf-glass relative rounded-3xl p-5 sm:p-6', props.class)"
     >
         <div
-            class="bg-primary/8 pointer-events-none absolute -end-16 -top-16 size-48 rounded-full blur-2xl"
-        />
+            class="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl"
+            aria-hidden="true"
+        >
+            <div
+                class="bg-primary/8 absolute -end-16 -top-16 size-48 rounded-full blur-2xl"
+            />
+        </div>
         <div
-            class="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+            class="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"
         >
             <div class="flex min-w-0 flex-1 items-start gap-3.5">
                 <div
@@ -61,12 +61,18 @@ const props = withDefaults(
                     >
                         {{ description }}
                     </p>
+                    <div
+                        v-if="$slots.meta"
+                        class="flex flex-wrap items-center gap-2 pt-1.5"
+                    >
+                        <slot name="meta" />
+                    </div>
                 </div>
             </div>
 
             <div
                 v-if="$slots.actions"
-                class="flex flex-wrap items-center gap-2 sm:shrink-0"
+                class="flex flex-wrap items-center gap-2.5 lg:shrink-0 lg:justify-end"
             >
                 <slot name="actions" />
             </div>

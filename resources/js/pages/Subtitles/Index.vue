@@ -1,53 +1,41 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue';
 import { useSubtitleJob } from '@/composables/useSubtitleJob';
 import { Head } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import PageBanner from '@/components/common/PageBanner.vue';
 import { useToast } from '@/composables/useToast';
 import { formatBytes } from '@/lib/formatters';
-
-const SubtitlePickerModal = defineAsyncComponent(
-    () => import('@/components/subtitles/SubtitlePickerModal.vue'),
-);
 import {
     Subtitles,
     Download,
     Check,
-    AlertCircle,
     Sparkles,
     Search,
-    Cpu,
     CheckCircle2,
     Globe,
-    ArrowDownToLine,
     RefreshCw,
-    Film,
-    Tv,
-    HardDrive,
     FileText,
     CheckCheck,
     ChevronLeft,
     ChevronRight,
-    SlidersHorizontal,
     ShieldCheck,
     Trash2,
     Tag,
-    Eye,
     Play,
     AlertTriangle,
-    Filter,
-    FolderCheck,
-    Pause,
-    XCircle,
-    Terminal,
 } from '@lucide/vue';
+
+const SubtitlePickerModal = defineAsyncComponent(
+    () => import('@/components/subtitles/SubtitlePickerModal.vue'),
+);
 
 const props = defineProps<{
     missingSubtitles: any[];
 }>();
 
-const { t, isRTL } = useI18n();
+const { isRTL } = useI18n();
 const toast = useToast();
 
 // Subtitle Picker Modal State
@@ -61,7 +49,7 @@ const openPickerModal = (item: any, lang: 'ar' | 'en') => {
     isPickerOpen.value = true;
 };
 
-const onSubtitleDownloaded = (sub: any) => {
+const onSubtitleDownloaded = () => {
     if (selectedMediaForPicker.value) {
         if (pickerLanguage.value === 'ar') {
             selectedMediaForPicker.value.missing_ar = false;
@@ -76,19 +64,11 @@ const activeMainTab = ref<'checker' | 'missing' | 'cloud'>('checker');
 
 // ================= SUBTITLE CHECKER STATE =================
 const {
-    isSubtitleModalOpen,
     subtitleStatus,
     isSubtitleRunning,
-    isSubtitlePaused,
-    isSubtitleCompleted,
-    openSubtitleModal,
     startHealthJob,
-    pauseHealthJob,
-    resumeHealthJob,
-    cancelHealthJob,
     fetchSubtitleStatus,
 } = useSubtitleJob();
-const isCheckingHealth = ref(false);
 const healthResults = ref<any | null>(null);
 const checkerDryRun = ref(true);
 const checkerDeleteInvalid = ref(true);
@@ -115,6 +95,7 @@ watch(
     (newItems) => {
         if (newItems && newItems.length > 0) {
             healthResults.value = {
+                ...subtitleStatus.value.summary,
                 summary: subtitleStatus.value.summary,
                 items: newItems,
             };
@@ -126,7 +107,6 @@ watch(
 const filteredCheckerItems = computed(() => {
     if (!healthResults.value || !healthResults.value.items) return [];
     return healthResults.value.items.filter((item: any) => {
-        // Status filter
         if (checkerFilter.value === 'invalid' && item.is_valid) return false;
         if (checkerFilter.value === 'valid' && !item.is_valid) return false;
         if (
@@ -141,7 +121,6 @@ const filteredCheckerItems = computed(() => {
         )
             return false;
 
-        // Search text
         if (checkerSearchText.value.trim()) {
             const q = checkerSearchText.value.toLowerCase().trim();
             const fn = (item.file_name || '').toLowerCase();
@@ -262,7 +241,6 @@ const downloadSub = async (item: any, lang: string) => {
         });
 
         if (res.ok) {
-            const data = await res.json();
             if (lang === 'ar') item.missing_ar = false;
             if (lang === 'en') item.missing_en = false;
             toast.success(
@@ -279,7 +257,7 @@ const downloadSub = async (item: any, lang: string) => {
                 'Subtitle Not Found',
             );
         }
-    } catch (e) {
+    } catch {
         toast.error('Failed to download subtitle', 'Download Error');
     } finally {
         downloadingId.value = null;
@@ -365,56 +343,28 @@ onMounted(() => {
                     : 'Subtitle Studio & Health Normalizer'
             "
         />
-        <Head
+
+        <!-- Header PageBanner -->
+        <PageBanner
+            class="mb-6"
+            :icon="Subtitles"
             :title="
                 isRTL
-                    ? 'إدارة ومطهر الترجمات الذكي'
+                    ? 'فاحص ومطهر الترجمات الذكي'
                     : 'Subtitle Studio & Health Normalizer'
             "
-        />
-
-        <!-- Header -->
-        <div
-            class="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-center"
+            :description="
+                isRTL
+                    ? 'فحص ملفات الترجمة، حذف القوالب التالفة والوهمية، الكشف فائق الدقة عن اللغة، وتوحيد الامتدادات (.ar.srt, .en.srt).'
+                    : 'Inspect library subtitles, prune corrupt/stub files, accurately detect dialogue language, and standardize extensions (.ar.srt, .en.srt).'
+            "
+            :badge="`${props.missingSubtitles?.length || 0} ${isRTL ? 'بدون ترجمة' : 'Missing'}`"
         >
-            <div>
-                <div class="flex items-center gap-3">
-                    <div
-                        class="flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 dark:bg-cyan-500/20"
-                    >
-                        <Subtitles class="h-6 w-6" />
-                    </div>
-                    <div>
-                        <h1
-                            class="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl dark:text-white"
-                        >
-                            {{
-                                isRTL
-                                    ? 'فاحص ومطهر الترجمات الذكي'
-                                    : 'Subtitle Studio & Health Normalizer'
-                            }}
-                        </h1>
-                        <p
-                            class="mt-0.5 text-xs text-slate-500 sm:text-sm dark:text-slate-400"
-                        >
-                            {{
-                                isRTL
-                                    ? 'فحص ملفات الترجمة، حذف القوالب التالفة والوهمية، الكشف فائق الدقة عن اللغة، وتوحيد الامتدادات (.ar.srt, .en.srt).'
-                                    : 'Inspect library subtitles, prune corrupt/stub files, accurately detect dialogue language, and standardize extensions (.ar.srt, .en.srt).'
-                            }}
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Quick Batch Download Buttons -->
-            <div
-                v-if="activeMainTab === 'missing'"
-                class="flex flex-wrap items-center gap-2"
-            >
+            <template v-if="activeMainTab === 'missing'" #actions>
                 <button
+                    type="button"
                     @click="downloadAllMissing('ar')"
-                    class="flex cursor-pointer items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-xs font-bold text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:bg-cyan-400"
+                    class="bg-primary text-primary-foreground shadow-primary/25 flex min-h-10 cursor-pointer items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold shadow-lg transition-all hover:brightness-105 active:scale-95"
                 >
                     <Download class="h-4 w-4" />
                     <span>{{
@@ -424,8 +374,9 @@ onMounted(() => {
                     }}</span>
                 </button>
                 <button
+                    type="button"
                     @click="downloadAllMissing('en')"
-                    class="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-xs font-bold text-slate-700 transition-all hover:bg-slate-200 dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
+                    class="cf-glass border-border/80 text-foreground hover:border-primary/40 flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold transition-all active:scale-95"
                 >
                     <Download class="h-4 w-4" />
                     <span>{{
@@ -434,20 +385,21 @@ onMounted(() => {
                             : 'Download All English'
                     }}</span>
                 </button>
-            </div>
-        </div>
+            </template>
+        </PageBanner>
 
         <!-- Studio Mode Selector Navigation Tabs -->
         <div
-            class="glass-panel mb-8 flex items-center gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-100/60 p-1.5 dark:border-white/10 dark:bg-black/30"
+            class="cf-glass border-border/80 mb-8 flex items-center gap-2 overflow-x-auto rounded-2xl border p-1.5"
         >
             <button
+                type="button"
                 @click="activeMainTab = 'checker'"
-                class="flex shrink-0 cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all"
+                class="flex min-h-10 shrink-0 cursor-pointer items-center gap-2 rounded-xl px-5 py-2 text-xs font-bold transition-all active:scale-95"
                 :class="
                     activeMainTab === 'checker'
-                        ? 'bg-cyan-500 font-black text-slate-950 shadow-lg shadow-cyan-500/20'
-                        : 'text-slate-600 hover:text-white dark:text-slate-400'
+                        ? 'bg-primary text-primary-foreground shadow-primary/25 font-black shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
                 "
             >
                 <ShieldCheck class="h-4 w-4" />
@@ -459,12 +411,13 @@ onMounted(() => {
             </button>
 
             <button
+                type="button"
                 @click="activeMainTab = 'missing'"
-                class="flex shrink-0 cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all"
+                class="flex min-h-10 shrink-0 cursor-pointer items-center gap-2 rounded-xl px-5 py-2 text-xs font-bold tabular-nums transition-all active:scale-95"
                 :class="
                     activeMainTab === 'missing'
-                        ? 'bg-cyan-500 font-black text-slate-950 shadow-lg shadow-cyan-500/20'
-                        : 'text-slate-600 hover:text-white dark:text-slate-400'
+                        ? 'bg-primary text-primary-foreground shadow-primary/25 font-black shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
                 "
             >
                 <FileText class="h-4 w-4" />
@@ -479,12 +432,13 @@ onMounted(() => {
             </button>
 
             <button
+                type="button"
                 @click="activeMainTab = 'cloud'"
-                class="flex shrink-0 cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all"
+                class="flex min-h-10 shrink-0 cursor-pointer items-center gap-2 rounded-xl px-5 py-2 text-xs font-bold transition-all active:scale-95"
                 :class="
                     activeMainTab === 'cloud'
-                        ? 'bg-cyan-500 font-black text-slate-950 shadow-lg shadow-cyan-500/20'
-                        : 'text-slate-600 hover:text-white dark:text-slate-400'
+                        ? 'bg-primary text-primary-foreground shadow-primary/25 font-black shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
                 "
             >
                 <Globe class="h-4 w-4" />
@@ -498,16 +452,16 @@ onMounted(() => {
         <div v-if="activeMainTab === 'checker'" class="space-y-6">
             <!-- Checker Control & Execution Panel -->
             <div
-                class="glass-panel space-y-6 rounded-3xl border border-cyan-500/30 bg-white p-6 shadow-2xl sm:p-8 dark:bg-[#121622]"
+                class="cf-glass-elevated border-border/80 space-y-6 rounded-3xl border p-6 shadow-2xl sm:p-8"
             >
                 <div
-                    class="flex flex-col justify-between gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-center dark:border-white/10"
+                    class="border-border/70 flex flex-col justify-between gap-4 border-b pb-5 lg:flex-row lg:items-center"
                 >
                     <div>
                         <h3
-                            class="flex items-center gap-2.5 text-base font-black text-slate-900 sm:text-lg dark:text-white"
+                            class="text-foreground flex items-center gap-2.5 text-base font-black sm:text-lg"
                         >
-                            <ShieldCheck class="h-5 w-5 text-cyan-400" />
+                            <ShieldCheck class="text-primary h-5 w-5" />
                             <span>{{
                                 isRTL
                                     ? 'أداة الفحص الشامل وتطهير ملفات الترجمة'
@@ -515,7 +469,7 @@ onMounted(() => {
                             }}</span>
                         </h3>
                         <p
-                            class="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500 dark:text-slate-400"
+                            class="text-muted-foreground mt-1 max-w-2xl text-xs leading-relaxed"
                         >
                             {{
                                 isRTL
@@ -527,15 +481,16 @@ onMounted(() => {
 
                     <!-- Primary Execution Button -->
                     <button
+                        type="button"
                         @click="runHealthCheck"
                         :disabled="isSubtitleRunning"
-                        class="flex shrink-0 cursor-pointer items-center justify-center gap-2.5 rounded-2xl bg-cyan-500 px-6 py-3 text-xs font-black text-slate-950 shadow-xl shadow-cyan-500/25 transition-all hover:bg-cyan-400 active:scale-95 disabled:opacity-50 sm:text-sm"
+                        class="bg-primary text-primary-foreground shadow-primary/25 flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-2.5 rounded-2xl px-6 py-3 text-xs font-black shadow-xl transition-all hover:brightness-105 active:scale-95 disabled:opacity-50 sm:text-sm"
                     >
                         <RefreshCw
                             v-if="isSubtitleRunning"
-                            class="h-4 w-4 animate-spin text-slate-950"
+                            class="h-4 w-4 animate-spin"
                         />
-                        <Play v-else class="h-4 w-4 fill-slate-950" />
+                        <Play v-else class="h-4 w-4 fill-current" />
                         <span>{{
                             checkerDryRun
                                 ? isRTL
@@ -556,23 +511,23 @@ onMounted(() => {
                         class="flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-all"
                         :class="
                             checkerDryRun
-                                ? 'border-cyan-500/40 bg-cyan-500/10 text-white'
-                                : 'border-slate-200 bg-slate-50 text-slate-400 dark:border-white/10 dark:bg-white/5'
+                                ? 'border-primary/45 bg-primary/10 text-foreground'
+                                : 'cf-glass border-border/70 text-muted-foreground hover:border-primary/30'
                         "
                     >
                         <div
                             class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border"
                             :class="
                                 checkerDryRun
-                                    ? 'border-cyan-400 bg-cyan-500 text-slate-950'
-                                    : 'border-slate-500'
+                                    ? 'border-primary bg-primary text-primary-foreground'
+                                    : 'border-border'
                             "
                         >
                             <Check v-if="checkerDryRun" class="h-3.5 w-3.5" />
                         </div>
                         <div>
                             <span
-                                class="block text-xs font-bold text-slate-900 dark:text-white"
+                                class="text-foreground block text-xs font-bold"
                                 >{{
                                     isRTL
                                         ? 'معاينة تجريبية (Dry-Run Preview)'
@@ -580,7 +535,7 @@ onMounted(() => {
                                 }}</span
                             >
                             <span
-                                class="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400"
+                                class="text-muted-foreground mt-0.5 block text-[11px]"
                                 >{{
                                     isRTL
                                         ? 'عرض النتائج والتوصيات دون حذف أو تعديل أي ملف على القرص'
@@ -596,16 +551,16 @@ onMounted(() => {
                         class="flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-all"
                         :class="
                             checkerDeleteInvalid
-                                ? 'border-rose-500/40 bg-rose-500/10 text-white'
-                                : 'border-slate-200 bg-slate-50 text-slate-400 dark:border-white/10 dark:bg-white/5'
+                                ? 'border-destructive/45 bg-destructive/10 text-foreground'
+                                : 'cf-glass border-border/70 text-muted-foreground hover:border-destructive/30'
                         "
                     >
                         <div
                             class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border"
                             :class="
                                 checkerDeleteInvalid
-                                    ? 'border-rose-400 bg-rose-500 text-white'
-                                    : 'border-slate-500'
+                                    ? 'border-destructive bg-destructive text-destructive-foreground'
+                                    : 'border-border'
                             "
                         >
                             <Check
@@ -615,7 +570,7 @@ onMounted(() => {
                         </div>
                         <div>
                             <span
-                                class="block text-xs font-bold text-slate-900 dark:text-white"
+                                class="text-foreground block text-xs font-bold"
                                 >{{
                                     isRTL
                                         ? 'حذف الملفات التالفة والقوالب الوهمية'
@@ -623,7 +578,7 @@ onMounted(() => {
                                 }}</span
                             >
                             <span
-                                class="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400"
+                                class="text-muted-foreground mt-0.5 block text-[11px]"
                                 >{{
                                     isRTL
                                         ? 'حذف أي ترجمة أقل من 5 حوارات أو تحتوي صفحات خطأ HTML'
@@ -639,16 +594,16 @@ onMounted(() => {
                         class="flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-all"
                         :class="
                             checkerAutoRename
-                                ? 'border-indigo-500/40 bg-indigo-500/10 text-white'
-                                : 'border-slate-200 bg-slate-50 text-slate-400 dark:border-white/10 dark:bg-white/5'
+                                ? 'border-primary/45 bg-primary/10 text-foreground'
+                                : 'cf-glass border-border/70 text-muted-foreground hover:border-primary/30'
                         "
                     >
                         <div
                             class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border"
                             :class="
                                 checkerAutoRename
-                                    ? 'border-indigo-400 bg-indigo-500 text-white'
-                                    : 'border-slate-500'
+                                    ? 'border-primary bg-primary text-primary-foreground'
+                                    : 'border-border'
                             "
                         >
                             <Check
@@ -658,7 +613,7 @@ onMounted(() => {
                         </div>
                         <div>
                             <span
-                                class="block text-xs font-bold text-slate-900 dark:text-white"
+                                class="text-foreground block text-xs font-bold"
                                 >{{
                                     isRTL
                                         ? 'توحيد صيغة الامتداد (.ar.srt)'
@@ -666,7 +621,7 @@ onMounted(() => {
                                 }}</span
                             >
                             <span
-                                class="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400"
+                                class="text-muted-foreground mt-0.5 block text-[11px]"
                                 >{{
                                     isRTL
                                         ? 'إعادة تسمية الملف تلقائياً وفقاً للغة الحوار المكتشفة'
@@ -680,7 +635,7 @@ onMounted(() => {
                 <!-- Optional Folder Path Input -->
                 <div class="pt-2">
                     <label
-                        class="mb-1.5 block text-xs font-bold text-slate-400"
+                        class="text-muted-foreground mb-1.5 block text-xs font-bold"
                     >
                         {{
                             isRTL
@@ -692,7 +647,7 @@ onMounted(() => {
                         type="text"
                         v-model="checkerCustomPath"
                         placeholder="e.g. H:\Entertainment\Movies\Inception (2010)"
-                        class="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 font-mono text-xs text-cyan-400 outline-none focus:border-cyan-500 dark:border-white/15 dark:bg-slate-900"
+                        class="cf-field border-border/80 bg-card/80 text-primary focus:border-primary focus:ring-primary/20 h-11 w-full rounded-xl border px-4 font-mono text-xs outline-none focus:ring-2"
                     />
                 </div>
             </div>
@@ -703,73 +658,93 @@ onMounted(() => {
                 class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5"
             >
                 <div
-                    class="glass-panel rounded-2xl border border-white/10 bg-white p-4 text-center dark:bg-[#121622]"
+                    class="cf-glass border-border/80 rounded-2xl border p-4 text-center"
                 >
                     <span
-                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground block text-[11px] font-bold tracking-wider uppercase"
                         >{{ isRTL ? 'إجمالي الملفات' : 'Total Scanned' }}</span
                     >
                     <span
-                        class="mt-1 block font-mono text-2xl font-black text-slate-900 dark:text-white"
-                        >{{ healthResults.total_scanned }}</span
+                        class="text-foreground mt-1 block font-mono text-2xl font-black tabular-nums"
+                        >{{
+                            healthResults.total_scanned ??
+                            healthResults.summary?.total_scanned ??
+                            0
+                        }}</span
                     >
                 </div>
 
                 <div
-                    class="glass-panel rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-center"
+                    class="cf-glass rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-center"
                 >
                     <span
-                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground block text-[11px] font-bold tracking-wider uppercase"
                         >{{ isRTL ? 'ترجمات سليمة' : 'Valid Subtitles' }}</span
                     >
                     <span
-                        class="mt-1 block font-mono text-2xl font-black text-emerald-400"
-                        >{{ healthResults.valid_count }}</span
+                        class="mt-1 block font-mono text-2xl font-black text-emerald-400 tabular-nums"
+                        >{{
+                            healthResults.valid_count ??
+                            healthResults.summary?.valid_count ??
+                            0
+                        }}</span
                     >
                 </div>
 
                 <div
-                    class="glass-panel rounded-2xl border border-rose-500/30 bg-rose-500/5 p-4 text-center"
+                    class="cf-glass border-destructive/30 bg-destructive/5 rounded-2xl border p-4 text-center"
                 >
                     <span
-                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground block text-[11px] font-bold tracking-wider uppercase"
                         >{{
                             isRTL ? 'ملفات تالفة / وهمية' : 'Corrupt / Stubs'
                         }}</span
                     >
                     <span
-                        class="mt-1 block font-mono text-2xl font-black text-rose-400"
-                        >{{ healthResults.invalid_count }}</span
+                        class="text-destructive mt-1 block font-mono text-2xl font-black tabular-nums"
+                        >{{
+                            healthResults.invalid_count ??
+                            healthResults.summary?.invalid_count ??
+                            0
+                        }}</span
                     >
                 </div>
 
                 <div
-                    class="glass-panel rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-4 text-center"
+                    class="cf-glass border-primary/30 bg-primary/5 rounded-2xl border p-4 text-center"
                 >
                     <span
-                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground block text-[11px] font-bold tracking-wider uppercase"
                         >{{
                             isRTL ? 'تعديل التسمية' : 'Renamed / Standard'
                         }}</span
                     >
                     <span
-                        class="mt-1 block font-mono text-2xl font-black text-cyan-400"
-                        >{{ healthResults.renamed_count }}</span
+                        class="text-primary mt-1 block font-mono text-2xl font-black tabular-nums"
+                        >{{
+                            healthResults.renamed_count ??
+                            healthResults.summary?.renamed_count ??
+                            0
+                        }}</span
                     >
                 </div>
 
                 <div
-                    class="glass-panel rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-4 text-center"
+                    class="cf-glass rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-4 text-center"
                 >
                     <span
-                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground block text-[11px] font-bold tracking-wider uppercase"
                         >{{
                             isRTL ? 'مطابقة معيارياً' : 'Already Standard'
                         }}</span
                     >
                     <span
-                        class="mt-1 block font-mono text-2xl font-black text-indigo-400"
-                        >{{ healthResults.already_standard_count }}</span
+                        class="mt-1 block font-mono text-2xl font-black text-indigo-400 tabular-nums"
+                        >{{
+                            healthResults.already_standard_count ??
+                            healthResults.summary?.already_standard_count ??
+                            0
+                        }}</span
                     >
                 </div>
             </div>
@@ -781,21 +756,21 @@ onMounted(() => {
                     healthResults.language_breakdown &&
                     Object.keys(healthResults.language_breakdown).length > 0
                 "
-                class="glass-panel flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white p-4 dark:bg-[#121622]"
+                class="cf-glass border-border/80 flex flex-wrap items-center gap-3 rounded-2xl border p-4"
             >
-                <span class="text-xs font-bold text-slate-400">{{
+                <span class="text-muted-foreground text-xs font-bold">{{
                     isRTL ? 'توزيع اللغات المكتشفة:' : 'Detected Languages:'
                 }}</span>
                 <div
                     v-for="lang in healthResults.language_breakdown"
                     :key="lang.code"
-                    class="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-bold dark:border-white/10 dark:bg-white/5"
+                    class="cf-glass border-border/70 flex items-center gap-1.5 rounded-xl border px-3 py-1 text-xs font-bold"
                 >
                     <span>{{ lang.flag }}</span>
-                    <span class="text-slate-900 dark:text-white"
+                    <span class="text-foreground"
                         >{{ lang.name_en }} ({{ lang.code }}):</span
                     >
-                    <span class="font-mono text-cyan-400">{{
+                    <span class="text-primary font-mono tabular-nums">{{
                         lang.count
                     }}</span>
                 </div>
@@ -805,7 +780,7 @@ onMounted(() => {
             <div v-if="healthResults" class="space-y-4">
                 <!-- Table Filter & Search Bar -->
                 <div
-                    class="flex flex-col items-stretch justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-100 p-3 sm:flex-row sm:items-center dark:border-white/10 dark:bg-white/5"
+                    class="cf-glass border-border/80 flex flex-col items-stretch justify-between gap-3 rounded-2xl border p-3 sm:flex-row sm:items-center"
                 >
                     <div
                         class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0"
@@ -839,15 +814,16 @@ onMounted(() => {
                                 },
                             ]"
                             :key="f.id"
+                            type="button"
                             @click="
                                 checkerFilter = f.id as any;
                                 checkerCurrentPage = 1;
                             "
-                            class="shrink-0 cursor-pointer rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all"
+                            class="min-h-9 shrink-0 cursor-pointer rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all active:scale-95"
                             :class="
                                 checkerFilter === f.id
-                                    ? 'bg-cyan-500 font-black text-slate-950 shadow-md shadow-cyan-500/20'
-                                    : 'bg-white/5 text-slate-400 hover:text-white'
+                                    ? 'bg-primary text-primary-foreground shadow-primary/25 font-black shadow-sm'
+                                    : 'cf-glass border-border/70 text-muted-foreground hover:text-foreground border'
                             "
                         >
                             {{ isRTL ? f.label_ar : f.label_en }}
@@ -856,7 +832,7 @@ onMounted(() => {
 
                     <div class="relative min-w-[240px]">
                         <Search
-                            class="absolute top-2.5 left-3 h-4 w-4 text-slate-400"
+                            class="text-muted-foreground pointer-events-none absolute start-3 top-2.5 h-4 w-4"
                         />
                         <input
                             v-model="checkerSearchText"
@@ -866,42 +842,44 @@ onMounted(() => {
                                     ? 'بحث بالاسم أو اللغة...'
                                     : 'Filter files or language...'
                             "
-                            class="w-full rounded-xl border border-slate-200 bg-white py-1.5 pr-3 pl-9 text-xs font-semibold text-slate-900 focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                            class="cf-field border-border/80 bg-card/80 text-foreground focus:border-primary h-9 w-full rounded-xl border ps-9 pe-3 text-xs font-semibold focus:outline-none"
                         />
                     </div>
                 </div>
 
                 <!-- Table Card Container -->
                 <div
-                    class="glass-panel overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl dark:border-white/10 dark:bg-[#121622]"
+                    class="cf-table-wrapper cf-glass border-border/80 overflow-hidden rounded-3xl border shadow-xl"
                 >
                     <div class="overflow-x-auto">
-                        <table class="w-full border-collapse text-left text-xs">
+                        <table
+                            class="cf-table w-full border-collapse text-start text-xs"
+                        >
                             <thead>
                                 <tr
-                                    class="border-b border-slate-200 bg-slate-50 font-mono text-[10px] tracking-wider text-slate-400 uppercase dark:border-white/10 dark:bg-white/[0.02]"
+                                    class="border-border/70 bg-muted/30 text-muted-foreground border-b font-mono text-[10px] tracking-wider uppercase"
                                 >
-                                    <th class="px-4 py-3 font-bold">
+                                    <th class="px-4 py-3 text-start font-bold">
                                         {{
                                             isRTL
                                                 ? 'اسم الملف الأصلي'
                                                 : 'File Name'
                                         }}
                                     </th>
-                                    <th class="px-4 py-3 font-bold">
+                                    <th class="px-4 py-3 text-start font-bold">
                                         {{ isRTL ? 'الحالة' : 'Status' }}
                                     </th>
-                                    <th class="px-4 py-3 font-bold">
+                                    <th class="px-4 py-3 text-start font-bold">
                                         {{
                                             isRTL
                                                 ? 'اللغة المكتشفة'
                                                 : 'Detected Language'
                                         }}
                                     </th>
-                                    <th class="px-4 py-3 font-bold">
+                                    <th class="px-4 py-3 text-start font-bold">
                                         {{ isRTL ? 'الحوارات' : 'Cues' }}
                                     </th>
-                                    <th class="px-4 py-3 font-bold">
+                                    <th class="px-4 py-3 text-start font-bold">
                                         {{
                                             isRTL
                                                 ? 'الإجراء المتخذ / المقترح'
@@ -910,24 +888,22 @@ onMounted(() => {
                                     </th>
                                 </tr>
                             </thead>
-                            <tbody
-                                class="divide-y divide-slate-100 dark:divide-white/5"
-                            >
+                            <tbody class="divide-border/50 divide-y">
                                 <tr
                                     v-for="(item, idx) in paginatedCheckerItems"
                                     :key="idx"
-                                    class="transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.03]"
+                                    class="transition-colors hover:bg-white/[0.03]"
                                 >
                                     <!-- File Name & Path -->
                                     <td class="max-w-xs px-4 py-3 sm:max-w-md">
                                         <div
-                                            class="truncate font-bold text-slate-900 dark:text-white"
+                                            class="text-foreground truncate font-bold"
                                             :title="item.file_name"
                                         >
                                             {{ item.file_name }}
                                         </div>
                                         <div
-                                            class="mt-0.5 truncate text-[10px] text-slate-400"
+                                            class="text-muted-foreground mt-0.5 truncate text-[10px]"
                                             :title="item.original_path"
                                         >
                                             {{ item.original_path }}
@@ -937,7 +913,7 @@ onMounted(() => {
                                                 item.issues &&
                                                 item.issues.length > 0
                                             "
-                                            class="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-rose-400"
+                                            class="text-destructive mt-1 flex items-center gap-1.5 text-[10px] font-bold"
                                         >
                                             <AlertTriangle
                                                 class="h-3 w-3 shrink-0"
@@ -955,7 +931,7 @@ onMounted(() => {
                                             :class="
                                                 item.is_valid
                                                     ? 'border border-emerald-500/30 bg-emerald-500/20 text-emerald-400'
-                                                    : 'border border-rose-500/30 bg-rose-500/20 text-rose-400'
+                                                    : 'border-destructive/30 bg-destructive/20 text-destructive border'
                                             "
                                         >
                                             <span
@@ -963,7 +939,7 @@ onMounted(() => {
                                                 :class="
                                                     item.is_valid
                                                         ? 'bg-emerald-400'
-                                                        : 'bg-rose-400'
+                                                        : 'bg-destructive'
                                                 "
                                             ></span>
                                             <span>{{
@@ -982,14 +958,14 @@ onMounted(() => {
                                             }}</span>
                                             <div>
                                                 <span
-                                                    class="block font-bold text-slate-900 dark:text-white"
+                                                    class="text-foreground block font-bold"
                                                     >{{
                                                         item.language_name
                                                     }}</span
                                                 >
                                                 <span
                                                     v-if="item.confidence"
-                                                    class="font-mono text-[10px] text-slate-400"
+                                                    class="text-muted-foreground font-mono text-[10px] tabular-nums"
                                                     >{{
                                                         Math.round(
                                                             item.confidence *
@@ -1003,10 +979,12 @@ onMounted(() => {
 
                                     <!-- Cues & Size -->
                                     <td
-                                        class="px-4 py-3 font-mono whitespace-nowrap text-slate-400"
+                                        class="text-muted-foreground px-4 py-3 font-mono whitespace-nowrap tabular-nums"
                                     >
                                         <div>{{ item.cue_count }} cues</div>
-                                        <div class="text-[10px] text-slate-500">
+                                        <div
+                                            class="text-muted-foreground/75 text-[10px]"
+                                        >
                                             {{ formatBytes(item.file_size) }}
                                         </div>
                                     </td>
@@ -1019,7 +997,7 @@ onMounted(() => {
                                                 item.action ===
                                                     'deleted_invalid'
                                             "
-                                            class="flex items-center gap-1 text-xs font-bold text-rose-400"
+                                            class="text-destructive flex items-center gap-1 text-xs font-bold"
                                         >
                                             <Trash2 class="h-3.5 w-3.5" />
                                             <span>{{
@@ -1033,7 +1011,7 @@ onMounted(() => {
                                                 item.action ===
                                                 'flagged_for_deletion'
                                             "
-                                            class="flex items-center gap-1 text-xs font-bold text-rose-400"
+                                            class="text-destructive flex items-center gap-1 text-xs font-bold"
                                         >
                                             <AlertTriangle
                                                 class="h-3.5 w-3.5"
@@ -1048,13 +1026,13 @@ onMounted(() => {
                                             v-else-if="
                                                 item.action === 'renamed'
                                             "
-                                            class="text-xs font-bold text-cyan-400"
+                                            class="text-primary text-xs font-bold"
                                         >
                                             <div
                                                 class="flex items-center gap-1"
                                             >
                                                 <Tag
-                                                    class="h-3.5 w-3.5 shrink-0 text-cyan-400"
+                                                    class="text-primary h-3.5 w-3.5 shrink-0"
                                                 />
                                                 <span class="truncate">{{
                                                     item.target_filename
@@ -1086,7 +1064,7 @@ onMounted(() => {
                                                 }}</span>
                                             </div>
                                             <span
-                                                class="text-[10px] text-slate-400"
+                                                class="text-muted-foreground text-[10px]"
                                                 >{{
                                                     isRTL
                                                         ? 'سيتم التعديل عند التنفيذ'
@@ -1117,9 +1095,9 @@ onMounted(() => {
                     <!-- Pagination -->
                     <div
                         v-if="totalCheckerPages > 1"
-                        class="flex items-center justify-between border-t border-slate-200 p-4 text-xs dark:border-white/10"
+                        class="border-border/70 flex items-center justify-between border-t p-4 text-xs tabular-nums"
                     >
-                        <span class="text-slate-400">
+                        <span class="text-muted-foreground">
                             {{ (checkerCurrentPage - 1) * checkerPerPage + 1 }}
                             -
                             {{
@@ -1130,8 +1108,9 @@ onMounted(() => {
                             }}
                             of {{ filteredCheckerItems.length }}
                         </span>
-                        <div class="flex items-center gap-1">
+                        <div class="flex items-center gap-1.5">
                             <button
+                                type="button"
                                 @click="
                                     checkerCurrentPage = Math.max(
                                         1,
@@ -1139,15 +1118,17 @@ onMounted(() => {
                                     )
                                 "
                                 :disabled="checkerCurrentPage === 1"
-                                class="cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-slate-300 disabled:opacity-30"
+                                class="cf-glass border-border/80 text-foreground hover:border-primary/40 cursor-pointer rounded-xl border px-3 py-1.5 font-bold disabled:opacity-30"
                             >
                                 {{ isRTL ? 'السابق' : 'Prev' }}
                             </button>
-                            <span class="px-3 py-1.5 font-mono text-cyan-400"
+                            <span
+                                class="text-primary px-3 py-1.5 font-mono font-bold"
                                 >{{ checkerCurrentPage }} /
                                 {{ totalCheckerPages }}</span
                             >
                             <button
+                                type="button"
                                 @click="
                                     checkerCurrentPage = Math.min(
                                         totalCheckerPages,
@@ -1157,7 +1138,7 @@ onMounted(() => {
                                 :disabled="
                                     checkerCurrentPage === totalCheckerPages
                                 "
-                                class="cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-slate-300 disabled:opacity-30"
+                                class="cf-glass border-border/80 text-foreground hover:border-primary/40 cursor-pointer rounded-xl border px-3 py-1.5 font-bold disabled:opacity-30"
                             >
                                 {{ isRTL ? 'التالي' : 'Next' }}
                             </button>
@@ -1171,12 +1152,12 @@ onMounted(() => {
         <div v-if="activeMainTab === 'missing'" class="space-y-6">
             <!-- Filter Bar -->
             <div
-                class="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-100 p-4 lg:flex-row lg:items-center dark:border-white/10 dark:bg-white/5"
+                class="cf-glass border-border/80 flex flex-col justify-between gap-4 rounded-2xl border p-4 lg:flex-row lg:items-center"
             >
                 <!-- Search text -->
                 <div class="relative flex-1">
                     <Search
-                        class="absolute top-2.5 left-3 h-4 w-4 text-slate-400"
+                        class="text-muted-foreground pointer-events-none absolute start-3 top-2.5 h-4 w-4"
                     />
                     <input
                         v-model="filterText"
@@ -1186,7 +1167,7 @@ onMounted(() => {
                                 ? 'تصفية حسب الاسم...'
                                 : 'Filter media items...'
                         "
-                        class="w-full rounded-xl border border-slate-200 bg-white py-2 pr-3 pl-9 text-xs font-semibold text-slate-900 focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                        class="cf-field border-border/80 bg-card/80 text-foreground focus:border-primary h-10 w-full rounded-xl border ps-9 pe-3 text-xs font-semibold focus:outline-none"
                     />
                 </div>
 
@@ -1195,15 +1176,15 @@ onMounted(() => {
                     <!-- Type Filter -->
                     <select
                         v-model="filterType"
-                        class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-slate-200"
+                        class="cf-glass border-border/80 bg-card text-foreground focus:border-primary h-10 rounded-xl border px-3 text-xs font-bold focus:outline-none"
                     >
-                        <option value="all">
+                        <option value="all" class="bg-card text-foreground">
                             {{ isRTL ? 'كل الوسائط' : 'All Media Types' }}
                         </option>
-                        <option value="movie">
+                        <option value="movie" class="bg-card text-foreground">
                             {{ isRTL ? 'الأفلام فقط' : 'Movies Only' }}
                         </option>
-                        <option value="episode">
+                        <option value="episode" class="bg-card text-foreground">
                             {{ isRTL ? 'حلقات المسلسلات' : 'Series Episodes' }}
                         </option>
                     </select>
@@ -1211,17 +1192,23 @@ onMounted(() => {
                     <!-- Status Filter -->
                     <select
                         v-model="filterStatus"
-                        class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-slate-200"
+                        class="cf-glass border-border/80 bg-card text-foreground focus:border-primary h-10 rounded-xl border px-3 text-xs font-bold focus:outline-none"
                     >
-                        <option value="all">
+                        <option value="all" class="bg-card text-foreground">
                             {{ isRTL ? 'كل الحالات' : 'All Status' }}
                         </option>
-                        <option value="missing_ar">
+                        <option
+                            value="missing_ar"
+                            class="bg-card text-foreground"
+                        >
                             {{
                                 isRTL ? 'ينقصها ترجمة عربية' : 'Missing Arabic'
                             }}
                         </option>
-                        <option value="missing_en">
+                        <option
+                            value="missing_en"
+                            class="bg-card text-foreground"
+                        >
                             {{
                                 isRTL
                                     ? 'ينقصها ترجمة إنجليزية'
@@ -1233,22 +1220,28 @@ onMounted(() => {
                     <!-- Per page -->
                     <select
                         v-model="perPage"
-                        class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-slate-200"
+                        class="cf-glass border-border/80 bg-card text-foreground focus:border-primary h-10 rounded-xl border px-3 text-xs font-bold tabular-nums focus:outline-none"
                     >
-                        <option :value="12">12 / page</option>
-                        <option :value="24">24 / page</option>
-                        <option :value="48">48 / page</option>
+                        <option :value="12" class="bg-card text-foreground">
+                            12 / page
+                        </option>
+                        <option :value="24" class="bg-card text-foreground">
+                            24 / page
+                        </option>
+                        <option :value="48" class="bg-card text-foreground">
+                            48 / page
+                        </option>
                     </select>
                 </div>
             </div>
 
             <!-- Items Counter -->
             <div
-                class="flex items-center justify-between px-1 text-xs font-bold text-slate-500"
+                class="text-muted-foreground flex items-center justify-between px-1 text-xs font-bold tabular-nums"
             >
                 <span>
                     {{ isRTL ? 'إجمالي العناصر:' : 'Total items:' }}
-                    <strong class="text-cyan-500">{{
+                    <strong class="text-primary">{{
                         filteredItems.length
                     }}</strong>
                 </span>
@@ -1266,7 +1259,7 @@ onMounted(() => {
                 <div
                     v-for="item in paginatedItems"
                     :key="`${item.type}-${item.id}`"
-                    class="glass-panel flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-cyan-500/40 dark:border-white/10 dark:bg-[#121622]"
+                    class="cf-glass border-border/80 hover:border-primary/45 flex flex-col justify-between rounded-2xl border p-4 shadow-sm transition-all"
                 >
                     <div>
                         <div
@@ -1276,8 +1269,8 @@ onMounted(() => {
                                 class="cinema-badge text-[10px] font-bold"
                                 :class="
                                     item.type === 'movie'
-                                        ? 'bg-cyan-500/20 text-cyan-300'
-                                        : 'bg-purple-500/20 text-purple-300'
+                                        ? 'border-primary/30 bg-primary/15 text-primary border'
+                                        : 'border border-purple-500/30 bg-purple-500/15 text-purple-300'
                                 "
                             >
                                 {{
@@ -1290,13 +1283,15 @@ onMounted(() => {
                                           : 'Episode'
                                 }}
                             </span>
-                            <span class="font-mono text-[10px] text-slate-400">
+                            <span
+                                class="text-muted-foreground font-mono text-[10px] tabular-nums"
+                            >
                                 {{ item.year || item.season_info || '' }}
                             </span>
                         </div>
 
                         <h4
-                            class="line-clamp-1 text-sm font-extrabold text-slate-900 dark:text-white"
+                            class="text-foreground line-clamp-1 text-sm font-extrabold"
                         >
                             {{
                                 isRTL && item.title_ar
@@ -1306,26 +1301,25 @@ onMounted(() => {
                         </h4>
                         <p
                             v-if="item.series_title"
-                            class="mt-0.5 line-clamp-1 text-xs text-slate-500"
+                            class="text-muted-foreground mt-0.5 line-clamp-1 text-xs"
                         >
                             {{ item.series_title }}
                         </p>
                     </div>
 
                     <!-- Action Buttons -->
-                    <div
-                        class="mt-4 space-y-2 border-t border-slate-100 pt-3 dark:border-white/5"
-                    >
+                    <div class="border-border/60 mt-4 space-y-2 border-t pt-3">
                         <div class="flex items-center gap-2">
                             <!-- Arabic Subtitle Action -->
                             <button
+                                type="button"
                                 @click="openPickerModal(item, 'ar')"
                                 :disabled="!item.missing_ar"
-                                class="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-all"
+                                class="flex min-h-9 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-all active:scale-95"
                                 :class="
                                     !item.missing_ar
-                                        ? 'cursor-default border border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
-                                        : 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20 hover:bg-cyan-400'
+                                        ? 'cursor-default border border-emerald-500/25 bg-emerald-500/10 text-emerald-400'
+                                        : 'bg-primary text-primary-foreground shadow-primary/25 shadow-sm hover:brightness-105'
                                 "
                             >
                                 <Check
@@ -1346,13 +1340,14 @@ onMounted(() => {
 
                             <!-- English Subtitle Action -->
                             <button
+                                type="button"
                                 @click="openPickerModal(item, 'en')"
                                 :disabled="!item.missing_en"
-                                class="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-all"
+                                class="flex min-h-9 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-all active:scale-95"
                                 :class="
                                     !item.missing_en
-                                        ? 'cursor-default border border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
-                                        : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/20'
+                                        ? 'cursor-default border border-emerald-500/25 bg-emerald-500/10 text-emerald-400'
+                                        : 'cf-glass border-border/80 text-foreground hover:border-primary/40 border'
                                 "
                             >
                                 <Check
@@ -1375,15 +1370,16 @@ onMounted(() => {
                         <!-- 1-Click Arabic Translation from English -->
                         <button
                             v-if="item.missing_ar"
+                            type="button"
                             @click="generateArabicFromEnglish(item)"
                             :disabled="isGeneratingArabicId === item.id"
-                            class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-bold text-cyan-400 transition-all hover:bg-cyan-500/20 active:scale-95 disabled:opacity-50"
+                            class="border-primary/35 bg-primary/10 text-primary hover:bg-primary/20 flex min-h-8 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-bold transition-all active:scale-95 disabled:opacity-50"
                         >
                             <RefreshCw
                                 v-if="isGeneratingArabicId === item.id"
-                                class="h-3 w-3 animate-spin text-cyan-400"
+                                class="text-primary h-3 w-3 animate-spin"
                             />
-                            <Sparkles v-else class="h-3 w-3 text-cyan-400" />
+                            <Sparkles v-else class="text-primary h-3 w-3" />
                             <span>{{
                                 isGeneratingArabicId === item.id
                                     ? isRTL
@@ -1401,19 +1397,17 @@ onMounted(() => {
             <!-- Empty State -->
             <div
                 v-else
-                class="glass-panel rounded-3xl p-12 text-center text-slate-500 dark:text-slate-400"
+                class="cf-glass border-border/80 text-muted-foreground rounded-3xl border p-12 text-center"
             >
                 <CheckCheck class="mx-auto mb-3 h-12 w-12 text-emerald-400" />
-                <h3
-                    class="text-base font-bold text-slate-800 dark:text-slate-200"
-                >
+                <h3 class="text-foreground text-base font-bold">
                     {{
                         isRTL
                             ? 'جميع الوسائط تحتوي على ترجمات كاملة!'
                             : 'All Media Subtitles Synchronized!'
                     }}
                 </h3>
-                <p class="mt-1 text-xs text-slate-500">
+                <p class="text-muted-foreground mt-1 text-xs">
                     {{
                         isRTL
                             ? 'لا توجد وسائط تنقصها ترجمات وفقاً لخيارات التصفية المحددة.'
@@ -1428,39 +1422,36 @@ onMounted(() => {
                 class="flex items-center justify-center gap-2 pt-6"
             >
                 <button
+                    type="button"
                     @click="setPage(currentPage - 1)"
                     :disabled="currentPage === 1"
-                    class="cursor-pointer rounded-xl border border-slate-200 bg-slate-100 p-2.5 text-slate-700 hover:bg-slate-200 disabled:opacity-30 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+                    class="cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground cursor-pointer rounded-xl border p-2.5 disabled:opacity-30"
                 >
-                    <ChevronLeft
-                        class="h-4 w-4"
-                        :class="isRTL ? 'rotate-180' : ''"
-                    />
+                    <ChevronLeft class="h-4 w-4 rtl:rotate-180" />
                 </button>
 
                 <button
                     v-for="p in totalPages"
                     :key="p"
+                    type="button"
                     @click="setPage(p)"
-                    class="h-10 w-10 cursor-pointer rounded-xl text-xs font-bold transition-all"
+                    class="size-10 cursor-pointer rounded-xl text-xs font-bold tabular-nums transition-all active:scale-95"
                     :class="
                         currentPage === p
-                            ? 'bg-cyan-500 font-black text-slate-950 shadow-lg shadow-cyan-500/20'
-                            : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10'
+                            ? 'bg-primary text-primary-foreground shadow-primary/25 font-black shadow-sm'
+                            : 'cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground border'
                     "
                 >
                     {{ p }}
                 </button>
 
                 <button
+                    type="button"
                     @click="setPage(currentPage + 1)"
                     :disabled="currentPage === totalPages"
-                    class="cursor-pointer rounded-xl border border-slate-200 bg-slate-100 p-2.5 text-slate-700 hover:bg-slate-200 disabled:opacity-30 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+                    class="cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground cursor-pointer rounded-xl border p-2.5 disabled:opacity-30"
                 >
-                    <ChevronRight
-                        class="h-4 w-4"
-                        :class="isRTL ? 'rotate-180' : ''"
-                    />
+                    <ChevronRight class="h-4 w-4 rtl:rotate-180" />
                 </button>
             </div>
         </div>
@@ -1468,14 +1459,12 @@ onMounted(() => {
         <!-- ================= TAB 3: LIVE CLOUD SEARCH ENGINE ================= -->
         <div
             v-if="activeMainTab === 'cloud'"
-            class="glass-panel mb-10 rounded-3xl border border-slate-200 bg-white p-6 shadow-xl sm:p-8 dark:border-white/10 dark:bg-[#121622]"
+            class="cf-glass-elevated border-border/80 mb-10 rounded-3xl border p-6 shadow-xl sm:p-8"
         >
             <div class="mb-4 flex flex-wrap items-center justify-between gap-4">
                 <div class="flex items-center gap-2">
-                    <Sparkles class="h-5 w-5 text-cyan-400" />
-                    <h3
-                        class="text-base font-extrabold text-slate-900 dark:text-white"
-                    >
+                    <Sparkles class="text-primary h-5 w-5" />
+                    <h3 class="text-foreground text-base font-extrabold">
                         {{
                             isRTL
                                 ? 'البحث السحابي الفوري (SubDL & OpenSubtitles Engine)'
@@ -1484,10 +1473,10 @@ onMounted(() => {
                     </h3>
                 </div>
                 <div
-                    class="flex items-center gap-2 font-mono text-xs font-bold text-emerald-500"
+                    class="flex items-center gap-2 font-mono text-xs font-bold text-emerald-400"
                 >
                     <span
-                        class="h-2 w-2 animate-pulse rounded-full bg-emerald-500"
+                        class="h-2 w-2 animate-pulse rounded-full bg-emerald-400"
                     ></span>
                     <span>SubDL & OpenSubtitles Live Active</span>
                 </div>
@@ -1496,7 +1485,7 @@ onMounted(() => {
             <div class="flex flex-col gap-3 sm:flex-row">
                 <div class="relative flex-1">
                     <Search
-                        class="absolute top-3.5 left-3.5 h-4 w-4 text-slate-400"
+                        class="text-muted-foreground pointer-events-none absolute start-3.5 top-3.5 h-4 w-4"
                     />
                     <input
                         v-model="searchQuery"
@@ -1507,26 +1496,39 @@ onMounted(() => {
                                 ? 'ابحث عن اسم الفيلم أو المسلسل...'
                                 : 'Search movie or series title...'
                         "
-                        class="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pr-4 pl-10 text-sm font-semibold text-slate-900 focus:border-cyan-500 focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                        class="cf-field border-border/80 bg-card/80 text-foreground focus:border-primary h-11 w-full rounded-2xl border ps-10 pe-4 text-sm font-semibold focus:outline-none"
                     />
                 </div>
 
                 <select
                     v-model="searchLang"
-                    class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 focus:border-cyan-500 focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-slate-200"
+                    class="cf-glass border-border/80 bg-card text-foreground focus:border-primary h-11 rounded-2xl border px-4 text-sm font-bold focus:outline-none"
                 >
-                    <option value="ar">🇸🇦 العربية (Arabic)</option>
-                    <option value="en">🇬🇧 English</option>
-                    <option value="es">🇪🇸 Español</option>
-                    <option value="fr">🇫🇷 Français</option>
-                    <option value="de">🇩🇪 Deutsch</option>
-                    <option value="tr">🇹🇷 Türkçe</option>
+                    <option value="ar" class="bg-card text-foreground">
+                        🇸🇦 العربية (Arabic)
+                    </option>
+                    <option value="en" class="bg-card text-foreground">
+                        🇬🇧 English
+                    </option>
+                    <option value="es" class="bg-card text-foreground">
+                        🇪🇸 Español
+                    </option>
+                    <option value="fr" class="bg-card text-foreground">
+                        🇫🇷 Français
+                    </option>
+                    <option value="de" class="bg-card text-foreground">
+                        🇩🇪 Deutsch
+                    </option>
+                    <option value="tr" class="bg-card text-foreground">
+                        🇹🇷 Türkçe
+                    </option>
                 </select>
 
                 <button
+                    type="button"
                     @click="performSearch"
                     :disabled="isSearching"
-                    class="flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-cyan-500 px-6 py-3 text-sm font-black text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:bg-cyan-400 disabled:opacity-50"
+                    class="bg-primary text-primary-foreground shadow-primary/25 flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-black shadow-lg transition-all hover:brightness-105 active:scale-95 disabled:opacity-50"
                 >
                     <RefreshCw
                         v-if="isSearching"
@@ -1540,10 +1542,10 @@ onMounted(() => {
             <!-- Search Results Display -->
             <div
                 v-if="searchResults && searchResults.length > 0"
-                class="mt-6 space-y-2.5 border-t border-slate-100 pt-4 dark:border-white/5"
+                class="border-border/60 mt-6 space-y-2.5 border-t pt-4"
             >
                 <div
-                    class="mb-2 text-xs font-bold tracking-wider text-slate-400 uppercase"
+                    class="text-muted-foreground mb-2 text-xs font-bold tracking-wider uppercase tabular-nums"
                 >
                     {{
                         isRTL
@@ -1555,21 +1557,21 @@ onMounted(() => {
                 <div
                     v-for="(sub, idx) in searchResults"
                     :key="idx"
-                    class="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-3.5 dark:border-white/5 dark:bg-slate-900/60"
+                    class="cf-glass border-border/70 flex items-center justify-between gap-4 rounded-2xl border p-3.5"
                 >
                     <div class="flex items-center gap-3 truncate">
-                        <FileText class="h-5 w-5 shrink-0 text-cyan-400" />
+                        <FileText class="text-primary h-5 w-5 shrink-0" />
                         <div class="truncate">
                             <div
-                                class="truncate text-xs font-bold text-slate-900 dark:text-white"
+                                class="text-foreground truncate text-xs font-bold"
                             >
                                 {{ sub.release || sub.file_name }}
                             </div>
                             <div
-                                class="mt-0.5 flex items-center gap-2 text-[11px] text-slate-500"
+                                class="text-muted-foreground mt-0.5 flex items-center gap-2 text-[11px] tabular-nums"
                             >
                                 <span
-                                    class="cinema-badge bg-cyan-500/10 text-[10px] text-cyan-400"
+                                    class="cinema-badge border-primary/30 bg-primary/10 text-primary border text-[10px]"
                                     >{{ sub.provider }}</span
                                 >
                                 <span
@@ -1589,6 +1591,7 @@ onMounted(() => {
                 </div>
             </div>
         </div>
+
         <!-- Interactive Subtitle Search & Selection Modal -->
         <SubtitlePickerModal
             v-if="isPickerOpen"
@@ -1600,14 +1603,3 @@ onMounted(() => {
         />
     </AppLayout>
 </template>
-
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-    transition: opacity 0.3s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-    opacity: 0;
-}
-</style>

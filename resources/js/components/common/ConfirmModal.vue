@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { Trash2, RotateCcw, Sparkles } from '@lucide/vue';
 import { useI18n } from '@/i18n/useI18n';
 import { Dialog, DialogContent } from '@/components/ui/dialog';

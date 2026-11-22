@@ -12,6 +12,7 @@ import {
     TorrentTreeNode,
 } from '@/composables/useDownloader';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import PageBanner from '@/components/common/PageBanner.vue';
 import TorrentTreeItem from '@/components/downloader/TorrentTreeItem.vue';
 
 const FastOrganizeModal = defineAsyncComponent(
@@ -645,44 +646,33 @@ const handleSaveSettings = async () => {
     <AppLayout v-slot="{ play }">
         <Head :title="t('nav.downloads')" />
         <!-- Top Header & Metrics -->
-        <div class="mb-8 flex flex-wrap items-center justify-between gap-4">
-            <div class="flex items-center gap-3">
-                <div
-                    class="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/20 text-cyan-400 shadow-lg shadow-cyan-500/10"
-                >
-                    <DownloadCloud class="h-5 w-5" />
-                </div>
-                <div>
-                    <h1 class="text-2xl font-extrabold text-white sm:text-3xl">
-                        {{ t('nav.downloads') }}
-                    </h1>
-                    <p class="mt-0.5 text-xs text-slate-400 sm:text-sm">
-                        {{
-                            isRTL
-                                ? 'إدارة التنزيلات الحقيقية في الخلفية، ملفات التورنت المحددة بشجرة المجلدات، ومجلدات الوجهة المخصصة.'
-                                : 'High-speed background downloads, selective folder tree torrents, and custom destination folders.'
-                        }}
-                    </p>
-                </div>
-            </div>
-
-            <div class="flex items-center gap-3">
+        <PageBanner
+            :icon="DownloadCloud"
+            :title="t('nav.downloads')"
+            :description="
+                isRTL
+                    ? 'إدارة التنزيلات الحقيقية في الخلفية، ملفات التورنت المحددة بشجرة المجلدات، ومجلدات الوجهة المخصصة.'
+                    : 'High-speed background downloads, selective folder tree torrents, and custom destination folders.'
+            "
+            class="mb-8"
+        >
+            <template #meta>
                 <!-- Daemon Engine Status Pill -->
                 <div
                     v-if="daemonStatus"
-                    class="glass-panel flex items-center gap-2 rounded-xl border px-3 py-2 font-mono text-xs"
+                    class="cf-glass inline-flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-xs tabular-nums"
                     :class="
                         daemonStatus.running
-                            ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300'
-                            : 'border-slate-700 bg-slate-900/40 text-slate-400'
+                            ? 'border-primary/40 bg-primary/10 text-primary'
+                            : 'border-border/80 text-muted-foreground'
                     "
                 >
                     <span
-                        class="h-2 w-2 rounded-full"
+                        class="size-2 rounded-full"
                         :class="
                             daemonStatus.running
-                                ? 'animate-pulse bg-cyan-400'
-                                : 'bg-slate-500'
+                                ? 'bg-primary animate-pulse'
+                                : 'bg-muted-foreground'
                         "
                     ></span>
                     <span class="font-sans font-bold">{{
@@ -701,8 +691,9 @@ const handleSaveSettings = async () => {
                         v-if="
                             daemonStatus.running && activeDownloads.length === 0
                         "
+                        type="button"
                         @click="stopDaemon"
-                        class="ml-1 cursor-pointer rounded border border-red-500/40 bg-red-500/20 px-2 py-0.5 text-[10px] text-red-300 transition-all hover:bg-red-500/30"
+                        class="ms-1 cursor-pointer rounded-full border border-red-500/40 bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300 transition-all hover:bg-red-500/30"
                         :title="
                             isRTL
                                 ? 'إيقاف المحرك وتحرير الذاكرة'
@@ -712,98 +703,108 @@ const handleSaveSettings = async () => {
                         {{ isRTL ? 'إيقاف' : 'Stop' }}
                     </button>
                 </div>
-                <button
-                    @click="showFastOrganize = true"
-                    class="flex cursor-pointer items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-600/20 px-3.5 py-2.5 text-xs font-bold text-emerald-300 shadow-sm transition-all hover:bg-emerald-600/30"
-                    :title="t('scout.organize_and_scan_help')"
-                >
-                    <FolderSync class="h-4 w-4 text-emerald-400" />
-                    <span class="hidden sm:inline">{{
-                        t('scout.organize_and_scan')
-                    }}</span>
-                </button>
+            </template>
 
+            <template #actions>
+                <!-- Primary CTA: Add Download -->
                 <button
-                    @click="showSettingsModal = true"
-                    class="glass-panel flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 px-3.5 py-2.5 text-xs font-bold text-slate-300 shadow-sm transition-all hover:border-cyan-500/40 hover:text-white"
-                    title="Downloader Settings"
-                >
-                    <Settings class="h-4 w-4 text-cyan-400" />
-                    <span class="hidden sm:inline">{{
-                        isRTL ? 'إعدادات التنزيل' : 'Settings'
-                    }}</span>
-                </button>
-
-                <button
-                    @click="showExplainModal = true"
-                    class="glass-panel flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-xs font-bold text-slate-300 shadow-sm transition-all hover:border-cyan-500/40 hover:text-white"
-                >
-                    <HelpCircle class="h-4 w-4 text-cyan-400" />
-                    <span>{{ isRTL ? 'دليل المحرك' : 'Guide' }}</span>
-                </button>
-
-                <button
+                    type="button"
                     @click="showAddModal = true"
-                    class="flex cursor-pointer items-center gap-2 rounded-xl bg-cyan-500 px-5 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:bg-cyan-400 active:scale-95"
+                    class="bg-primary text-primary-foreground shadow-primary/25 flex min-h-10 cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-black shadow-lg transition-all hover:brightness-105 active:scale-95"
                 >
-                    <Plus class="h-4 w-4" />
+                    <Plus class="size-4" />
                     <span>{{
                         isRTL ? 'إضافة تنزيل / تورنت' : 'Add Download'
                     }}</span>
                 </button>
-            </div>
-        </div>
+
+                <!-- Secondary CTA: Organize & Scan -->
+                <button
+                    type="button"
+                    @click="showFastOrganize = true"
+                    class="cf-glass flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-emerald-500/35 px-3.5 py-2.5 text-xs font-bold text-emerald-300 shadow-sm transition-all hover:border-emerald-400/60 hover:bg-emerald-500/15 active:scale-95"
+                    :title="t('scout.organize_and_scan_help')"
+                >
+                    <FolderSync class="size-4 text-emerald-400" />
+                    <span>{{ t('scout.organize_and_scan') }}</span>
+                </button>
+
+                <!-- Utility Icon Button: Settings -->
+                <button
+                    type="button"
+                    @click="showSettingsModal = true"
+                    class="cf-glass border-border/80 text-foreground hover:border-primary/40 flex size-10 cursor-pointer items-center justify-center rounded-xl border shadow-sm transition-all active:scale-95"
+                    :title="isRTL ? 'إعدادات التنزيل' : 'Downloader Settings'"
+                    :aria-label="
+                        isRTL ? 'إعدادات التنزيل' : 'Downloader Settings'
+                    "
+                >
+                    <Settings class="text-primary size-4" />
+                </button>
+
+                <!-- Utility Icon Button: Guide -->
+                <button
+                    type="button"
+                    @click="showExplainModal = true"
+                    class="cf-glass border-border/80 text-foreground hover:border-primary/40 flex size-10 cursor-pointer items-center justify-center rounded-xl border shadow-sm transition-all active:scale-95"
+                    :title="isRTL ? 'دليل المحرك' : 'Engine Guide'"
+                    :aria-label="isRTL ? 'دليل المحرك' : 'Engine Guide'"
+                >
+                    <HelpCircle class="text-primary size-4" />
+                </button>
+            </template>
+        </PageBanner>
 
         <!-- Real-Time Bandwidth & Queue Metrics Bar -->
         <div class="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
             <div
-                class="glass-panel flex items-center justify-between rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-4"
+                class="cf-glass border-primary/30 bg-primary/5 flex items-center justify-between rounded-2xl border p-4 tabular-nums"
             >
                 <div>
                     <span
-                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground block text-[11px] font-bold tracking-wider uppercase"
                         >{{ isRTL ? 'سرعة التنزيل' : 'Download Speed' }}</span
                     >
                     <span
-                        class="mt-1 block font-mono text-xl font-black text-cyan-400"
+                        class="text-primary mt-1 block font-mono text-xl font-black"
                         >{{ totalSpeedDownFormatted }}</span
                     >
                 </div>
                 <div
-                    class="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-400"
+                    class="bg-primary/15 text-primary flex size-9 items-center justify-center rounded-xl"
                 >
-                    <ArrowDown class="h-4 w-4" />
+                    <ArrowDown class="size-4" />
                 </div>
             </div>
 
             <div
-                class="glass-panel flex items-center justify-between rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-4"
+                class="cf-glass border-border/80 flex items-center justify-between rounded-2xl border p-4 tabular-nums"
             >
                 <div>
                     <span
-                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground block text-[11px] font-bold tracking-wider uppercase"
                         >{{
                             isRTL ? 'سرعة الرفع / التغذية' : 'Seeding Speed'
                         }}</span
                     >
                     <span
-                        class="mt-1 block font-mono text-xl font-black text-indigo-400"
+                        class="text-foreground mt-1 block font-mono text-xl font-black"
                         >{{ totalSpeedUpFormatted }}</span
                     >
                 </div>
                 <div
-                    class="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-400"
+                    class="bg-primary/15 text-primary flex size-9 items-center justify-center rounded-xl"
                 >
-                    <ArrowUp class="h-4 w-4" />
+                    <ArrowUp class="size-4" />
                 </div>
             </div>
 
             <div
-                class="glass-panel flex items-center justify-between rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4"
+                class="cf-glass flex items-center justify-between rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 tabular-nums"
             >
                 <div>
                     <span
-                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground block text-[11px] font-bold tracking-wider uppercase"
                         >{{ isRTL ? 'المهام النشطة' : 'Active Jobs' }}</span
                     >
                     <span
@@ -812,29 +813,29 @@ const handleSaveSettings = async () => {
                     >
                 </div>
                 <div
-                    class="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400"
+                    class="flex size-9 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400"
                 >
-                    <Radio class="h-4 w-4" />
+                    <Radio class="size-4" />
                 </div>
             </div>
 
             <div
-                class="glass-panel flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-4"
+                class="cf-glass border-border/80 flex items-center justify-between rounded-2xl border p-4 tabular-nums"
             >
                 <div>
                     <span
-                        class="block text-[11px] font-bold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground block text-[11px] font-bold tracking-wider uppercase"
                         >{{ isRTL ? 'مكتملة ومفهرسة' : 'Completed' }}</span
                     >
                     <span
-                        class="mt-1 block font-mono text-xl font-black text-white"
+                        class="text-foreground mt-1 block font-mono text-xl font-black"
                         >{{ completedDownloads.length }}</span
                     >
                 </div>
                 <div
-                    class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-slate-300"
+                    class="bg-muted text-foreground flex size-9 items-center justify-center rounded-xl"
                 >
-                    <CheckCircle2 class="h-4 w-4" />
+                    <CheckCircle2 class="size-4" />
                 </div>
             </div>
         </div>
@@ -857,12 +858,13 @@ const handleSaveSettings = async () => {
                     },
                 ]"
                 :key="filter.id"
+                type="button"
                 @click="activeFilter = filter.id as any"
-                class="shrink-0 cursor-pointer rounded-xl px-4 py-2 text-xs font-bold transition-all"
+                class="min-h-10 shrink-0 cursor-pointer rounded-full border px-4 py-2 text-xs font-bold transition-all active:scale-95"
                 :class="
                     activeFilter === filter.id
-                        ? 'bg-cyan-500 font-black text-slate-950 shadow-md shadow-cyan-500/20'
-                        : 'glass-panel border border-white/10 text-slate-400 hover:text-white'
+                        ? 'border-primary bg-primary text-primary-foreground shadow-primary/25 font-black shadow-md'
+                        : 'cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground'
                 "
             >
                 {{ isRTL ? filter.label_ar : filter.label_en }}
@@ -872,17 +874,17 @@ const handleSaveSettings = async () => {
         <!-- Downloads Table / Cards -->
         <div
             v-if="filteredItems.length === 0"
-            class="glass-panel space-y-4 rounded-3xl border border-white/10 p-12 text-center"
+            class="cf-glass border-border/80 space-y-4 rounded-3xl border p-12 text-center"
         >
-            <DownloadCloud class="mx-auto h-12 w-12 text-slate-600" />
-            <h3 class="text-base font-bold text-white">
+            <DownloadCloud class="text-muted-foreground mx-auto size-12" />
+            <h3 class="text-foreground text-base font-bold">
                 {{
                     isRTL
                         ? 'لا توجد تنزيلات في هذه القائمة'
                         : 'No downloads in this view'
                 }}
             </h3>
-            <p class="mx-auto max-w-sm text-xs text-slate-400">
+            <p class="text-muted-foreground mx-auto max-w-sm text-xs">
                 {{
                     isRTL
                         ? 'أضف رابط تورنت أو ملف .torrent أو تحميل مباشر لبدء تنزيل المحتوى بدقة دون أي تلف.'
@@ -895,7 +897,7 @@ const handleSaveSettings = async () => {
             <div
                 v-for="item in filteredItems"
                 :key="item.id"
-                class="glass-panel group relative space-y-4 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] p-5 transition-all hover:border-cyan-500/40"
+                class="cf-glass border-border/80 hover:border-primary/45 group relative space-y-4 overflow-hidden rounded-2xl border p-5 tabular-nums transition-all"
             >
                 <!-- Top Row: Icon, Title, Status Badges & Action Buttons -->
                 <div
@@ -1016,14 +1018,14 @@ const handleSaveSettings = async () => {
                             <!-- Progress Bar & Specs -->
                             <div class="max-w-2xl space-y-1.5">
                                 <div
-                                    class="h-2 w-full overflow-hidden rounded-full bg-white/10 shadow-inner"
+                                    class="bg-muted h-2 w-full overflow-hidden rounded-full shadow-inner"
                                 >
                                     <div
                                         class="relative h-full rounded-full transition-all duration-300"
                                         :class="
                                             item.status === 'completed'
                                                 ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
-                                                : 'bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500'
+                                                : 'bg-primary'
                                         "
                                         :style="{
                                             width: `${getProgressPercent(item)}%`,
@@ -1603,15 +1605,15 @@ const handleSaveSettings = async () => {
                 @click.self="showAddModal = false"
             >
                 <div
-                    class="glass-panel flex max-h-[92vh] w-full max-w-2xl flex-col space-y-5 rounded-3xl border border-cyan-500/30 p-6 shadow-2xl sm:p-8"
+                    class="cf-glass-elevated border-border/80 flex max-h-[92vh] w-full max-w-2xl flex-col space-y-5 rounded-3xl border p-6 shadow-2xl sm:p-8"
                 >
                     <div
-                        class="flex items-center justify-between border-b border-white/10 pb-3"
+                        class="border-border/70 flex items-center justify-between border-b pb-3"
                     >
                         <h3
-                            class="flex items-center gap-2 text-base font-extrabold text-white"
+                            class="text-foreground flex items-center gap-2 text-base font-extrabold"
                         >
-                            <DownloadCloud class="h-5 w-5 text-cyan-400" />
+                            <DownloadCloud class="text-primary size-5" />
                             <span>{{
                                 isRTL
                                     ? 'إضافة تنزيل وتورنت بهيكل المجلدات'
@@ -2152,12 +2154,12 @@ const handleSaveSettings = async () => {
                     </div>
 
                     <div
-                        class="flex items-center justify-end gap-3 border-t border-white/10 pt-3"
+                        class="border-border/70 flex items-center justify-end gap-3 border-t pt-3"
                     >
                         <button
                             type="button"
                             @click="showAddModal = false"
-                            class="cursor-pointer rounded-xl bg-white/5 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-white/10"
+                            class="text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer rounded-xl px-4 py-2 text-xs font-bold"
                         >
                             {{ t('common.close') }}
                         </button>
@@ -2170,7 +2172,7 @@ const handleSaveSettings = async () => {
                                 (downloadMode === 'torrent' &&
                                     selectedFileIndexes.length === 0)
                             "
-                            class="cursor-pointer rounded-xl bg-cyan-500 px-6 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-cyan-500/20 hover:bg-cyan-400 disabled:opacity-50"
+                            class="bg-primary text-primary-foreground shadow-primary/25 cursor-pointer rounded-xl px-6 py-2.5 text-xs font-black shadow-lg hover:brightness-105 disabled:opacity-50"
                         >
                             {{
                                 isRTL ? 'بدء التنزيل المباشر' : 'Start Download'
@@ -2189,7 +2191,7 @@ const handleSaveSettings = async () => {
                 @click.self="showSettingsModal = false"
             >
                 <div
-                    class="glass-panel w-full max-w-lg space-y-5 rounded-3xl border border-white/20 p-6 shadow-2xl sm:p-8"
+                    class="cf-glass-elevated border-border/80 w-full max-w-lg space-y-5 rounded-3xl border p-6 shadow-2xl sm:p-8"
                 >
                     <div
                         class="flex items-center justify-between border-b border-white/10 pb-3"

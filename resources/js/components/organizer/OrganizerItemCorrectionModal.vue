@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
@@ -8,17 +8,10 @@ import {
     Check,
     Film,
     Tv,
-    Folder,
-    Calendar,
-    Hash,
     Tag,
-    Layers,
     Subtitles,
-    AlertCircle,
     ArrowRight,
-    Search,
     ChevronDown,
-    Sparkles,
 } from '@lucide/vue';
 
 export interface PlanItem {
@@ -64,7 +57,7 @@ const emit = defineEmits<{
     (e: 'reset', item: PlanItem): void;
 }>();
 
-const { t, isRTL } = useI18n();
+const { isRTL } = useI18n();
 
 // Form state
 const type = ref<'movie' | 'series'>('movie');
@@ -153,7 +146,6 @@ watch(
     (newItem) => {
         if (newItem) {
             type.value = newItem.type || 'movie';
-            // Auto-detect custom category folder if item was placed in specialized path
             if (newItem.destination_path) {
                 const norm = newItem.destination_path.replace(/\\/g, '/');
                 if (norm.includes('/TV Shows/Arabic Series/')) {
@@ -190,8 +182,7 @@ watch(
             resolution.value = newItem.resolution || '1080p';
             manualDestinationPath.value = newItem.destination_path || '';
             customPathOverride.value =
-                !!newItem.is_manually_edited &&
-                !isPathGeneratedFromTemplate(newItem.destination_path);
+                !!newItem.is_manually_edited && !isPathGeneratedFromTemplate();
         }
     },
     { immediate: true },
@@ -202,7 +193,6 @@ function sanitizeSegment(val: string): string {
 }
 
 function sanitizePathCategory(val: string): string {
-    // Preserve forward slashes for nested categories like 'TV Shows/Arabic Series'
     return val
         .replace(/\\/g, '/')
         .replace(/[<>:"|?*]/g, '')
@@ -212,7 +202,7 @@ function sanitizePathCategory(val: string): string {
         .join('/');
 }
 
-function isPathGeneratedFromTemplate(destPath: string): boolean {
+function isPathGeneratedFromTemplate(): boolean {
     return true;
 }
 
@@ -296,7 +286,6 @@ const calculatedDestination = computed(() => {
         }
     }
 
-    // Clean double slashes and empty brackets
     path = path.replace(/\/+/g, '/').replace(/\s+/g, ' ').trim();
     path = path
         .replace(/\[\s*\]/g, '')
@@ -333,7 +322,6 @@ const updatedSubtitles = computed(() => {
 function handleSave() {
     if (!props.item) return;
 
-    // Preserve original_item for reset capability if not already stored
     const original =
         props.item.original_item || JSON.parse(JSON.stringify(props.item));
 
@@ -385,23 +373,24 @@ function handleReset() {
         v-if="isOpen && item"
         class="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
         :dir="isRTL ? 'rtl' : 'ltr'"
+        @click.self="$emit('close')"
     >
         <div
-            class="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-900 shadow-2xl"
+            class="cf-glass-elevated border-border/80 bg-card/95 relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border shadow-2xl"
         >
             <!-- Modal Header -->
             <div
-                class="flex items-center justify-between border-b border-white/10 bg-slate-950/60 px-6 py-5"
+                class="border-border/70 bg-background/40 flex items-center justify-between border-b px-6 py-5"
             >
                 <div class="flex items-center gap-3">
                     <div
-                        class="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/20 text-cyan-400"
+                        class="border-primary/35 bg-primary/15 text-primary flex h-10 w-10 items-center justify-center rounded-2xl border"
                     >
                         <Edit3 class="h-5 w-5" />
                     </div>
                     <div>
                         <h3
-                            class="flex items-center gap-2 text-base font-black text-white"
+                            class="text-foreground flex items-center gap-2 text-base font-black"
                         >
                             <span>{{
                                 isRTL
@@ -416,7 +405,7 @@ function handleReset() {
                             </span>
                         </h3>
                         <p
-                            class="max-w-lg truncate font-mono text-xs text-slate-400"
+                            class="text-muted-foreground max-w-lg truncate font-mono text-xs"
                             :title="item.filename"
                         >
                             {{ item.filename }}
@@ -425,21 +414,24 @@ function handleReset() {
                 </div>
 
                 <button
+                    type="button"
                     @click="$emit('close')"
-                    class="cursor-pointer rounded-xl p-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+                    class="border-border/60 bg-background/80 text-muted-foreground hover:bg-muted hover:text-foreground flex size-8 cursor-pointer items-center justify-center rounded-xl border transition-colors"
                 >
-                    <X class="h-5 w-5" />
+                    <X class="h-4 w-4" />
                 </button>
             </div>
 
             <!-- Modal Body (Scrollable) -->
-            <div class="flex-1 space-y-6 overflow-y-auto p-6 text-xs">
+            <div
+                class="custom-scrollbar flex-1 space-y-6 overflow-y-auto p-6 text-xs"
+            >
                 <!-- Source Path Info -->
                 <div
-                    class="space-y-1 rounded-2xl border border-white/5 bg-black/40 p-3.5"
+                    class="cf-glass border-border/70 space-y-1 rounded-2xl border p-3.5"
                 >
                     <div
-                        class="text-[10px] font-bold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground text-[10px] font-bold tracking-wider uppercase"
                     >
                         {{
                             isRTL
@@ -448,7 +440,7 @@ function handleReset() {
                         }}
                     </div>
                     <div
-                        class="truncate font-mono text-slate-300"
+                        class="text-foreground truncate font-mono"
                         :title="item.source_path"
                     >
                         {{ item.source_path }}
@@ -458,7 +450,7 @@ function handleReset() {
                 <!-- Media Type & Category Preset Selector -->
                 <div class="space-y-2.5">
                     <div class="flex items-center justify-between">
-                        <label class="block font-bold text-slate-300">
+                        <label class="text-foreground block font-bold">
                             {{
                                 isRTL
                                     ? 'التصنيف / نوع الوسائط ومجلد الوجهة:'
@@ -471,7 +463,7 @@ function handleReset() {
                                 showCustomCategoryInput =
                                     !showCustomCategoryInput
                             "
-                            class="cursor-pointer text-[11px] font-bold text-cyan-400 transition-colors hover:text-cyan-300"
+                            class="text-primary cursor-pointer text-[11px] font-bold transition-colors hover:brightness-110"
                         >
                             {{
                                 showCustomCategoryInput
@@ -494,8 +486,8 @@ function handleReset() {
                             :class="[
                                 'flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 font-bold transition-all',
                                 type === 'movie' && !customCategory
-                                    ? 'border-cyan-400 bg-cyan-500/20 text-cyan-300 shadow-md ring-1 ring-cyan-500/50'
-                                    : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white',
+                                    ? 'border-primary bg-primary/20 text-primary ring-primary/50 shadow-md ring-1'
+                                    : 'cf-glass border-border/70 text-muted-foreground hover:border-primary/40 hover:text-foreground',
                             ]"
                         >
                             <Film class="h-4 w-4" />
@@ -512,7 +504,7 @@ function handleReset() {
                                 'flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 font-bold transition-all',
                                 type === 'series' && !customCategory
                                     ? 'border-purple-400 bg-purple-500/20 text-purple-300 shadow-md ring-1 ring-purple-500/50'
-                                    : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white',
+                                    : 'cf-glass border-border/70 text-muted-foreground hover:text-foreground hover:border-purple-500/40',
                             ]"
                         >
                             <Tv class="h-4 w-4" />
@@ -534,7 +526,7 @@ function handleReset() {
                                 'flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 font-bold transition-all',
                                 customCategory === 'TV Shows/Arabic Series'
                                     ? 'border-emerald-400 bg-emerald-500/20 text-emerald-300 shadow-md ring-1 ring-emerald-500/50'
-                                    : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white',
+                                    : 'cf-glass border-border/70 text-muted-foreground hover:text-foreground hover:border-emerald-500/40',
                             ]"
                         >
                             <span class="text-sm">🕌</span>
@@ -551,7 +543,7 @@ function handleReset() {
                                 'flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 font-bold transition-all',
                                 customCategory === 'Anime'
                                     ? 'border-rose-400 bg-rose-500/20 text-rose-300 shadow-md ring-1 ring-rose-500/50'
-                                    : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white',
+                                    : 'cf-glass border-border/70 text-muted-foreground hover:text-foreground hover:border-rose-500/40',
                             ]"
                         >
                             <span class="text-sm">🎌</span>
@@ -568,7 +560,7 @@ function handleReset() {
                                 'col-span-2 flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 font-bold transition-all sm:col-span-1',
                                 customCategory === 'Documentaries'
                                     ? 'border-amber-400 bg-amber-500/20 text-amber-300 shadow-md ring-1 ring-amber-500/50'
-                                    : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white',
+                                    : 'cf-glass border-border/70 text-muted-foreground hover:text-foreground hover:border-amber-500/40',
                             ]"
                         >
                             <span class="text-sm">📽️</span>
@@ -583,7 +575,7 @@ function handleReset() {
                         <input
                             v-model="customCategory"
                             type="text"
-                            class="w-full rounded-xl border border-cyan-500/40 bg-slate-950 px-3.5 py-2 font-mono text-xs text-cyan-300 focus:border-cyan-400 focus:outline-none"
+                            class="cf-field border-primary/40 bg-card/80 text-primary focus:border-primary h-10 w-full rounded-xl border px-3.5 font-mono text-xs focus:outline-none"
                             :placeholder="
                                 type === 'series'
                                     ? 'e.g. TV Shows/Anime or Cartoons'
@@ -597,7 +589,7 @@ function handleReset() {
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <!-- Title -->
                     <div class="space-y-1.5 md:col-span-2">
-                        <label class="block font-bold text-slate-300">
+                        <label class="text-foreground block font-bold">
                             {{
                                 type === 'series'
                                     ? isRTL
@@ -608,30 +600,28 @@ function handleReset() {
                                       : 'Clean Movie Title:'
                             }}
                         </label>
-                        <div class="relative">
-                            <input
-                                v-model="cleanTitle"
-                                type="text"
-                                class="w-full rounded-xl border border-white/10 bg-slate-950 px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
-                                :placeholder="
-                                    type === 'series'
-                                        ? 'e.g. Breaking Bad'
-                                        : 'e.g. Inception'
-                                "
-                            />
-                        </div>
+                        <input
+                            v-model="cleanTitle"
+                            type="text"
+                            class="cf-field border-border/80 bg-card/80 text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full rounded-xl border px-3.5 focus:outline-none"
+                            :placeholder="
+                                type === 'series'
+                                    ? 'e.g. Breaking Bad'
+                                    : 'e.g. Inception'
+                            "
+                        />
                     </div>
 
                     <!-- Year -->
                     <div class="space-y-1.5">
-                        <label class="block font-bold text-slate-300">
+                        <label class="text-foreground block font-bold">
                             {{ isRTL ? 'سنة الإنتاج (Year):' : 'Release Year:' }}
                         </label>
                         <input
                             v-model="year"
                             type="text"
                             maxlength="4"
-                            class="w-full rounded-xl border border-white/10 bg-slate-950 px-3.5 py-2.5 font-mono text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
+                            class="cf-field border-border/80 bg-card/80 text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full rounded-xl border px-3.5 font-mono tabular-nums focus:outline-none"
                             placeholder="e.g. 2024"
                         />
                     </div>
@@ -639,7 +629,7 @@ function handleReset() {
                     <!-- Genre (Interactive Search & Autocomplete) -->
                     <div class="relative space-y-1.5">
                         <div class="flex items-center justify-between">
-                            <label class="block font-bold text-slate-300">
+                            <label class="text-foreground block font-bold">
                                 {{
                                     isRTL
                                         ? 'التصنيف الأساسي (Genre):'
@@ -650,26 +640,25 @@ function handleReset() {
                                 v-if="genre"
                                 type="button"
                                 @click="clearGenre"
-                                class="cursor-pointer text-[10px] font-bold text-red-400 transition-colors hover:text-red-300"
+                                class="text-destructive cursor-pointer text-[10px] font-bold transition-colors hover:brightness-110"
                             >
                                 {{ isRTL ? 'مسح التصنيف' : 'Clear' }}
                             </button>
                         </div>
 
-                        <!-- Genre Input with Quick Clear and Dropdown Toggle -->
                         <div class="relative">
                             <input
                                 v-model="genre"
                                 @focus="isGenreDropdownOpen = true"
                                 type="text"
-                                class="w-full rounded-xl border border-white/10 bg-slate-950 px-3.5 py-2.5 pr-8 text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
+                                class="cf-field border-border/80 bg-card/80 text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full rounded-xl border ps-3.5 pe-8 focus:outline-none"
                                 placeholder="e.g. Action, Drama, Sci-Fi"
                             />
                             <button
                                 v-if="genre"
                                 type="button"
                                 @click="clearGenre"
-                                class="absolute top-1/2 right-2.5 -translate-y-1/2 cursor-pointer p-1 text-slate-400 hover:text-white"
+                                class="text-muted-foreground hover:text-foreground absolute end-2.5 top-1/2 -translate-y-1/2 cursor-pointer p-1"
                             >
                                 <X class="h-3.5 w-3.5" />
                             </button>
@@ -679,7 +668,7 @@ function handleReset() {
                                 @click="
                                     isGenreDropdownOpen = !isGenreDropdownOpen
                                 "
-                                class="absolute top-1/2 right-2.5 -translate-y-1/2 cursor-pointer p-1 text-slate-400 hover:text-white"
+                                class="text-muted-foreground hover:text-foreground absolute end-2.5 top-1/2 -translate-y-1/2 cursor-pointer p-1"
                             >
                                 <ChevronDown class="h-3.5 w-3.5" />
                             </button>
@@ -688,24 +677,24 @@ function handleReset() {
                         <!-- Filtered Dropdown Popover -->
                         <div
                             v-if="isGenreDropdownOpen"
-                            class="absolute top-full right-0 left-0 z-20 mt-1 max-h-48 space-y-1 overflow-y-auto rounded-2xl border border-white/20 bg-slate-950 p-2 shadow-2xl backdrop-blur-xl"
+                            class="cf-glass-popover border-border/80 absolute inset-x-0 top-full z-20 mt-1 max-h-48 space-y-1 overflow-y-auto rounded-2xl border p-2 shadow-2xl backdrop-blur-xl"
                         >
                             <button
                                 v-for="g in filteredGenres"
                                 :key="g"
                                 type="button"
                                 @click="selectGenre(g)"
-                                class="flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-1.5 text-left text-xs transition-colors"
+                                class="flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-1.5 text-start text-xs transition-colors"
                                 :class="
                                     isGenreActive(g)
-                                        ? 'bg-cyan-500/20 font-bold text-cyan-300'
-                                        : 'text-slate-300 hover:bg-white/10'
+                                        ? 'bg-primary/20 text-primary font-bold'
+                                        : 'text-foreground hover:bg-muted/60'
                                 "
                             >
                                 <span>{{ g }}</span>
                                 <Check
                                     v-if="isGenreActive(g)"
-                                    class="h-3.5 w-3.5 text-cyan-400"
+                                    class="text-primary h-3.5 w-3.5"
                                 />
                             </button>
                         </div>
@@ -714,9 +703,9 @@ function handleReset() {
                     <!-- Quick Select Genre Badges / Chips -->
                     <div class="space-y-1.5 pt-1 md:col-span-2">
                         <div
-                            class="flex items-center gap-1.5 text-[11px] font-bold text-slate-400"
+                            class="text-muted-foreground flex items-center gap-1.5 text-[11px] font-bold"
                         >
-                            <Tag class="h-3.5 w-3.5 text-cyan-400" />
+                            <Tag class="text-primary h-3.5 w-3.5" />
                             <span>{{
                                 isRTL
                                     ? 'تصنيفات شائعة للاختيار السريع بنقرة واحدة:'
@@ -732,14 +721,14 @@ function handleReset() {
                                 :class="[
                                     'flex cursor-pointer items-center gap-1.5 rounded-xl border px-2.5 py-1 text-[11px] font-bold transition-all',
                                     isGenreActive(g)
-                                        ? 'scale-105 border-cyan-400 bg-cyan-500/25 text-cyan-300 shadow-md ring-1 ring-cyan-500/50'
-                                        : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white',
+                                        ? 'border-primary bg-primary/20 text-primary ring-primary/40 scale-105 shadow-sm ring-1'
+                                        : 'cf-glass border-border/70 text-muted-foreground hover:border-primary/35 hover:text-foreground',
                                 ]"
                             >
                                 <span>{{ g }}</span>
                                 <Check
                                     v-if="isGenreActive(g)"
-                                    class="h-3 w-3 text-cyan-400"
+                                    class="text-primary h-3 w-3"
                                 />
                             </button>
                         </div>
@@ -748,7 +737,7 @@ function handleReset() {
                     <!-- Series Specific Fields -->
                     <template v-if="type === 'series'">
                         <div class="space-y-1.5">
-                            <label class="block font-bold text-slate-300">
+                            <label class="text-foreground block font-bold">
                                 {{
                                     isRTL
                                         ? 'رقم الموسم (Season):'
@@ -760,13 +749,13 @@ function handleReset() {
                                 type="number"
                                 min="1"
                                 max="99"
-                                class="w-full rounded-xl border border-white/10 bg-slate-950 px-3.5 py-2.5 font-mono text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
+                                class="cf-field border-border/80 bg-card/80 text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full rounded-xl border px-3.5 font-mono tabular-nums focus:outline-none"
                                 placeholder="1"
                             />
                         </div>
 
                         <div class="space-y-1.5">
-                            <label class="block font-bold text-slate-300">
+                            <label class="text-foreground block font-bold">
                                 {{
                                     isRTL
                                         ? 'رقم الحلقة (Episode):'
@@ -778,13 +767,13 @@ function handleReset() {
                                 type="number"
                                 min="1"
                                 max="999"
-                                class="w-full rounded-xl border border-white/10 bg-slate-950 px-3.5 py-2.5 font-mono text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
+                                class="cf-field border-border/80 bg-card/80 text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full rounded-xl border px-3.5 font-mono tabular-nums focus:outline-none"
                                 placeholder="1"
                             />
                         </div>
 
                         <div class="space-y-1.5 md:col-span-2">
-                            <label class="block font-bold text-slate-300">
+                            <label class="text-foreground block font-bold">
                                 {{
                                     isRTL
                                         ? 'عنوان الحلقة (اختياري):'
@@ -794,7 +783,7 @@ function handleReset() {
                             <input
                                 v-model="episodeTitle"
                                 type="text"
-                                class="w-full rounded-xl border border-white/10 bg-slate-950 px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
+                                class="cf-field border-border/80 bg-card/80 text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full rounded-xl border px-3.5 focus:outline-none"
                                 placeholder="e.g. Pilot, Ozymandias"
                             />
                         </div>
@@ -806,7 +795,7 @@ function handleReset() {
                         class="space-y-1.5 md:col-span-2"
                     >
                         <label
-                            class="block flex items-center justify-between font-bold text-slate-300"
+                            class="text-foreground flex items-center justify-between font-bold"
                         >
                             <span>{{
                                 isRTL
@@ -814,7 +803,7 @@ function handleReset() {
                                     : 'Movie Collection / Franchise:'
                             }}</span>
                             <span
-                                class="text-[10px] font-normal text-slate-500"
+                                class="text-muted-foreground text-[10px] font-normal"
                             >
                                 {{
                                     isRTL
@@ -826,14 +815,14 @@ function handleReset() {
                         <input
                             v-model="collectionName"
                             type="text"
-                            class="w-full rounded-xl border border-white/10 bg-slate-950 px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
+                            class="cf-field border-border/80 bg-card/80 text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full rounded-xl border px-3.5 focus:outline-none"
                             placeholder="e.g. Harry Potter Collection, Marvel Cinematic Universe"
                         />
                     </div>
                 </div>
 
                 <!-- Custom Path Override Toggle -->
-                <div class="space-y-3 border-t border-white/10 pt-2">
+                <div class="border-border/70 space-y-3 border-t pt-2">
                     <div class="flex items-center justify-between">
                         <label
                             class="flex cursor-pointer items-center gap-2 select-none"
@@ -841,9 +830,9 @@ function handleReset() {
                             <input
                                 type="checkbox"
                                 v-model="customPathOverride"
-                                class="cursor-pointer rounded border-white/20 bg-slate-950 text-cyan-500 focus:ring-0"
+                                class="border-border bg-card text-primary cursor-pointer rounded focus:ring-0"
                             />
-                            <span class="font-bold text-slate-200">
+                            <span class="text-foreground font-bold">
                                 {{
                                     isRTL
                                         ? 'تخصيص مسار الوجهة يدوياً بالكامل (Direct Path Override)'
@@ -857,7 +846,7 @@ function handleReset() {
                         <input
                             v-model="manualDestinationPath"
                             type="text"
-                            class="w-full rounded-xl border border-cyan-500/50 bg-slate-950 px-3.5 py-2.5 font-mono text-xs text-cyan-300 focus:border-cyan-400 focus:outline-none"
+                            class="cf-field border-primary/50 bg-card/80 text-primary focus:border-primary h-10 w-full rounded-xl border px-3.5 font-mono text-xs focus:outline-none"
                             :placeholder="calculatedDestination"
                         />
                     </div>
@@ -865,28 +854,24 @@ function handleReset() {
 
                 <!-- Live Result Destination Preview -->
                 <div
-                    class="space-y-2.5 rounded-2xl border border-cyan-500/30 bg-cyan-950/20 p-4"
+                    class="border-primary/35 bg-primary/10 space-y-2.5 rounded-2xl border p-4"
                 >
                     <div
-                        class="flex items-center justify-between text-[11px] font-bold text-cyan-300"
+                        class="text-primary flex items-center justify-between text-[11px] font-bold"
                     >
                         <span class="flex items-center gap-1.5">
-                            <ArrowRight
-                                class="h-3.5 w-3.5"
-                                :class="isRTL ? 'rotate-180' : ''"
-                            />
+                            <ArrowRight class="h-3.5 w-3.5 rtl:rotate-180" />
                             <span>{{
                                 isRTL
                                     ? 'مسار الوجهة المنظم النهائي المتوقع:'
                                     : 'Calculated Final Destination Path:'
                             }}</span>
                         </span>
-                        <!-- Quick Token Badges -->
                         <div
                             class="flex items-center gap-1.5 font-mono text-[10px]"
                         >
                             <span
-                                class="rounded-md border border-cyan-400/30 bg-cyan-500/15 px-2 py-0.5 text-cyan-300"
+                                class="border-primary/35 bg-primary/15 text-primary rounded-md border px-2 py-0.5"
                             >
                                 {{
                                     customCategory ||
@@ -902,7 +887,7 @@ function handleReset() {
                         </div>
                     </div>
                     <div
-                        class="rounded-xl border border-white/5 bg-black/40 p-2.5 font-mono text-xs break-all text-white select-all"
+                        class="border-border/60 text-foreground rounded-xl border bg-black/50 p-2.5 font-mono text-xs break-all select-all"
                     >
                         {{ calculatedDestination }}
                     </div>
@@ -911,9 +896,9 @@ function handleReset() {
                 <!-- Companion Subtitles Preview -->
                 <div v-if="updatedSubtitles.length > 0" class="space-y-2">
                     <div
-                        class="flex items-center gap-1.5 text-[11px] font-bold text-slate-300"
+                        class="text-foreground flex items-center gap-1.5 text-[11px] font-bold"
                     >
-                        <Subtitles class="h-3.5 w-3.5 text-cyan-400" />
+                        <Subtitles class="text-primary h-3.5 w-3.5" />
                         <span>{{
                             isRTL
                                 ? `ملفات الترجمة المرافقة المتزامنة تلقائياً (${updatedSubtitles.length}):`
@@ -924,7 +909,7 @@ function handleReset() {
                         <div
                             v-for="(sub, idx) in updatedSubtitles"
                             :key="idx"
-                            class="flex items-center justify-between gap-2 rounded-xl border border-white/5 bg-black/30 p-2.5 font-mono text-[11px] text-slate-300"
+                            class="cf-glass border-border/70 text-foreground flex items-center justify-between gap-2 rounded-xl border p-2.5 font-mono text-[11px]"
                         >
                             <span
                                 class="flex-1 truncate"
@@ -932,7 +917,7 @@ function handleReset() {
                                 >{{ sub.destination }}</span
                             >
                             <span
-                                class="shrink-0 rounded border border-cyan-500/20 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-bold text-cyan-400 uppercase"
+                                class="border-primary/30 bg-primary/10 text-primary shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase"
                             >
                                 {{ sub.language || 'und' }}
                             </span>
@@ -943,14 +928,14 @@ function handleReset() {
 
             <!-- Modal Footer -->
             <div
-                class="flex items-center justify-between border-t border-white/10 bg-slate-950/80 px-6 py-4"
+                class="border-border/70 bg-background/50 flex items-center justify-between border-t px-6 py-4"
             >
                 <div>
                     <button
                         v-if="item.is_manually_edited"
                         @click="handleReset"
                         type="button"
-                        class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-500/30 px-4 py-2 text-xs font-bold text-amber-400 transition-colors hover:bg-amber-500/10 hover:text-amber-300"
+                        class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-500/35 px-4 py-2 text-xs font-bold text-amber-400 transition-colors hover:bg-amber-500/15 hover:text-amber-300"
                     >
                         <RotateCcw class="h-3.5 w-3.5" />
                         <span>{{
@@ -965,7 +950,7 @@ function handleReset() {
                     <button
                         @click="$emit('close')"
                         type="button"
-                        class="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+                        class="cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground h-10 cursor-pointer rounded-xl border px-4 text-xs font-bold transition-colors"
                     >
                         {{ isRTL ? 'إلغاء' : 'Cancel' }}
                     </button>
@@ -973,7 +958,7 @@ function handleReset() {
                     <button
                         @click="handleSave"
                         type="button"
-                        class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-cyan-500 px-5 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-cyan-500/25 transition-all hover:scale-105 hover:bg-cyan-400 active:scale-95"
+                        class="bg-primary text-primary-foreground shadow-primary/25 flex h-10 cursor-pointer items-center gap-1.5 rounded-xl px-5 text-xs font-black shadow-lg transition-all hover:brightness-105 active:scale-95"
                     >
                         <Check class="h-4 w-4" />
                         <span>{{

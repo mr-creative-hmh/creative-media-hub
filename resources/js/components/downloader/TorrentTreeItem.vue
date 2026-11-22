@@ -97,26 +97,26 @@ const indentStyle = computed(() => {
         <div
             v-if="node.type === 'folder'"
             @click="toggleOpen"
-            class="group flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-transparent px-2.5 py-1.5 transition-all hover:border-white/10 hover:bg-white/[0.06]"
+            class="hover:border-border/80 hover:bg-muted/50 group flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-transparent px-2.5 py-1.5 transition-all"
             :style="indentStyle"
         >
             <div class="flex min-w-0 flex-1 items-center gap-2">
                 <!-- Expand / Collapse Arrow -->
                 <button
                     type="button"
-                    class="cursor-pointer rounded p-0.5 text-slate-400 transition-colors group-hover:text-white"
+                    class="text-muted-foreground group-hover:text-foreground cursor-pointer rounded p-0.5 transition-colors"
                     @click.stop="toggleOpen"
                 >
-                    <ChevronDown v-if="isOpen" class="h-3.5 w-3.5" />
-                    <ChevronLeft v-else-if="isRTL" class="h-3.5 w-3.5" />
-                    <ChevronRight v-else class="h-3.5 w-3.5" />
+                    <ChevronDown v-if="isOpen" class="size-3.5" />
+                    <ChevronLeft v-else-if="isRTL" class="size-3.5" />
+                    <ChevronRight v-else class="size-3.5" />
                 </button>
 
                 <!-- Folder Checkbox (Tri-state) -->
                 <button
                     type="button"
                     @click="handleFolderCheckboxClick"
-                    class="cursor-pointer rounded p-0.5 text-slate-400 transition-transform hover:text-purple-300 active:scale-95"
+                    class="text-muted-foreground hover:text-primary cursor-pointer rounded p-0.5 transition-transform active:scale-95"
                     :title="
                         isRTL
                             ? 'تحديد / إلغاء تحديد المجلد بالكامل'
@@ -125,28 +125,28 @@ const indentStyle = computed(() => {
                 >
                     <CheckSquare
                         v-if="isAllSelected"
-                        class="h-4 w-4 fill-purple-500/20 text-purple-400"
+                        class="fill-primary/20 text-primary size-4"
                     />
                     <MinusSquare
                         v-else-if="isSomeSelected"
-                        class="h-4 w-4 fill-purple-400/20 text-purple-300"
+                        class="fill-primary/15 text-primary/80 size-4"
                     />
                     <Square
                         v-else
-                        class="h-4 w-4 text-slate-500 hover:text-slate-300"
+                        class="text-muted-foreground hover:text-foreground size-4"
                     />
                 </button>
 
                 <!-- Folder Icon -->
                 <FolderOpen
                     v-if="isOpen"
-                    class="h-4 w-4 shrink-0 text-amber-400"
+                    class="size-4 shrink-0 text-amber-400"
                 />
-                <Folder v-else class="h-4 w-4 shrink-0 text-amber-500/80" />
+                <Folder v-else class="size-4 shrink-0 text-amber-500/80" />
 
                 <!-- Folder Name -->
                 <span
-                    class="truncate text-[12px] font-bold text-slate-200 group-hover:text-white"
+                    class="text-foreground truncate text-[12px] font-bold"
                     :title="node.name"
                 >
                     {{ node.name }}
@@ -155,9 +155,9 @@ const indentStyle = computed(() => {
                 <!-- Video badge if folder has videos -->
                 <span
                     v-if="node.video_count && node.video_count > 0"
-                    class="py-0.2 flex shrink-0 items-center gap-1 rounded-md border border-purple-500/40 bg-purple-500/20 px-1.5 text-[9px] font-medium text-purple-300"
+                    class="border-primary/35 bg-primary/15 py-0.2 text-primary flex shrink-0 items-center gap-1 rounded-md border px-1.5 text-[9px] font-medium tabular-nums"
                 >
-                    <Film class="h-2.5 w-2.5" />
+                    <Film class="size-2.5" />
                     <span
                         >{{ node.video_count }}
                         {{ isRTL ? 'فيديو' : 'vid' }}</span
@@ -167,12 +167,12 @@ const indentStyle = computed(() => {
 
             <!-- Folder Metadata -->
             <div
-                class="flex shrink-0 items-center gap-2 font-mono text-[10px] text-slate-400"
+                class="text-muted-foreground flex shrink-0 items-center gap-2 font-mono text-[10px] tabular-nums"
             >
-                <span class="text-slate-500" v-if="node.file_count">
+                <span v-if="node.file_count">
                     {{ node.file_count }} {{ isRTL ? 'ملف' : 'files' }}
                 </span>
-                <span class="font-semibold text-slate-300">
+                <span class="text-foreground font-semibold">
                     {{ formatBytes(node.size) }}
                 </span>
             </div>
@@ -207,42 +207,42 @@ const indentStyle = computed(() => {
             class="group flex cursor-pointer items-center justify-between gap-2 rounded-xl border px-2.5 py-1.5 transition-all"
             :class="
                 isFileSelected
-                    ? 'border-purple-500/40 bg-purple-500/15 text-white shadow-sm shadow-purple-950/20'
-                    : 'border-transparent bg-black/20 text-slate-400 hover:border-white/5 hover:bg-white/[0.04]'
+                    ? 'border-primary/40 bg-primary/15 text-foreground shadow-xs'
+                    : 'bg-card/30 text-muted-foreground hover:border-border/60 hover:bg-muted/35 border-transparent'
             "
             :style="indentStyle"
         >
             <div class="flex min-w-0 flex-1 items-center gap-2.5">
                 <!-- Checkbox -->
                 <div
-                    class="flex h-4 w-4 shrink-0 items-center justify-center rounded-md border transition-all"
+                    class="flex size-4 shrink-0 items-center justify-center rounded-md border transition-all"
                     :class="
                         isFileSelected
-                            ? 'border-purple-400 bg-purple-500 text-slate-950 shadow-sm shadow-purple-500/40'
-                            : 'border-slate-600 bg-black/30 group-hover:border-slate-400'
+                            ? 'border-primary bg-primary text-primary-foreground shadow-primary/30 shadow-xs'
+                            : 'border-border bg-card/50 group-hover:border-primary/50'
                     "
                 >
-                    <Check v-if="isFileSelected" class="h-3 w-3 stroke-[3]" />
+                    <Check v-if="isFileSelected" class="size-3 stroke-[3]" />
                 </div>
 
                 <!-- File Type Icon -->
                 <Film
                     v-if="node.is_video"
-                    class="h-3.5 w-3.5 shrink-0 text-cyan-400"
+                    class="text-primary size-3.5 shrink-0"
                 />
                 <FileText
                     v-else-if="node.is_subtitle"
-                    class="h-3.5 w-3.5 shrink-0 text-emerald-400"
+                    class="size-3.5 shrink-0 text-emerald-400"
                 />
-                <File v-else class="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                <File v-else class="text-muted-foreground size-3.5 shrink-0" />
 
                 <!-- File Name -->
                 <span
                     class="truncate font-mono text-[11px] tracking-tight"
                     :class="
                         isFileSelected
-                            ? 'font-medium text-slate-100'
-                            : 'text-slate-400 group-hover:text-slate-200'
+                            ? 'text-foreground font-medium'
+                            : 'text-muted-foreground group-hover:text-foreground'
                     "
                     :title="node.name"
                 >
@@ -252,7 +252,7 @@ const indentStyle = computed(() => {
                 <!-- Video / Subtitle Tag -->
                 <span
                     v-if="node.is_video"
-                    class="py-0.2 shrink-0 rounded border border-cyan-500/30 bg-cyan-500/15 px-1.5 font-sans text-[9px] font-bold text-cyan-300 uppercase"
+                    class="border-primary/30 bg-primary/15 py-0.2 text-primary shrink-0 rounded border px-1.5 font-sans text-[9px] font-bold uppercase"
                 >
                     {{ node.extension || 'video' }}
                 </span>
@@ -266,11 +266,11 @@ const indentStyle = computed(() => {
 
             <!-- File Size -->
             <span
-                class="shrink-0 font-mono text-[10px]"
+                class="shrink-0 font-mono text-[10px] tabular-nums"
                 :class="
                     isFileSelected
-                        ? 'font-semibold text-purple-200'
-                        : 'text-slate-500'
+                        ? 'text-primary font-semibold'
+                        : 'text-muted-foreground'
                 "
             >
                 {{ formatBytes(node.size) }}

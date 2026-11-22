@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';

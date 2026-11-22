@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import PageBanner from '@/components/common/PageBanner.vue';
 import { useI18n } from '@/i18n/useI18n';
 import { formatBytes } from '@/lib/formatters';
 import ScoutFranchiseSkeleton from '@/components/common/skeletons/ScoutFranchiseSkeleton.vue';
@@ -737,341 +738,302 @@ onMounted(() => {
 
         <div class="space-y-8 pb-16" :dir="isRTL ? 'rtl' : 'ltr'">
             <!-- Hero Banner -->
-            <section
-                class="glass-panel relative overflow-hidden rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 via-slate-900/60 to-purple-950/30 p-6 lg:p-10"
+            <PageBanner
+                :icon="Compass"
+                :title="
+                    isRTL
+                        ? 'رادار اكتمال المكتبة واستكشاف الوسائط الجديدة'
+                        : 'Library Completion & Media Discovery Radar'
+                "
+                :badge="
+                    isRTL
+                        ? 'مستكشف نواقص المكتبة واستكشاف الجديد'
+                        : 'Media Scout Radar & Discovery'
+                "
+                :description="
+                    isRTL
+                        ? 'يكتشف الحلقات والمواسم المفقودة بدقة من مسلسلاتك، ويتيح استكشاف وبحث كافة الأفلام والمسلسلات الجديدة عبر TMDb مع روابط تورنت عالية السرعة والتنظيم التلقائي.'
+                        : 'Audits your library against TMDB for missing released episodes and seasons, plus live search & discovery for new unowned movies and TV series with 1-click torrent downloads.'
+                "
             >
-                <div
-                    class="ambient-glow pointer-events-none -top-20 -left-20 h-96 w-96 bg-cyan-500/10"
-                ></div>
-                <div
-                    class="ambient-glow pointer-events-none -right-20 -bottom-20 h-96 w-96 bg-purple-500/10"
-                ></div>
+                <template #actions>
+                    <!-- Fast Organize & Scan Button -->
+                    <button
+                        type="button"
+                        @click="isFastOrganizeOpen = true"
+                        class="bg-primary text-primary-foreground shadow-primary/25 flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black shadow-lg transition-all hover:brightness-105 active:scale-95"
+                        :title="
+                            isRTL
+                                ? 'تنظيم وفحص الملفات في H:\\Entertainment'
+                                : 'Organize and add to Library (Scan)'
+                        "
+                    >
+                        <FolderSync class="size-4" />
+                        <span>{{
+                            isRTL
+                                ? 'تنظيم وإضافة للمكتبة'
+                                : 'Organize & Scan Library'
+                        }}</span>
+                    </button>
 
+                    <!-- Refresh Button -->
+                    <button
+                        type="button"
+                        @click="refreshGaps"
+                        :disabled="refreshing"
+                        class="cf-glass border-border/80 text-foreground hover:border-primary/40 flex cursor-pointer items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold shadow-sm transition-all active:scale-95 disabled:opacity-50"
+                    >
+                        <RefreshCw
+                            class="text-primary size-4"
+                            :class="{ 'animate-spin': refreshing }"
+                        />
+                        <span>{{
+                            refreshing
+                                ? isRTL
+                                    ? 'جارٍ الفحص...'
+                                    : 'Auditing...'
+                                : isRTL
+                                  ? 'فحص وتحديث الرادار'
+                                  : 'Scan & Refresh Gaps'
+                        }}</span>
+                    </button>
+                </template>
+            </PageBanner>
+
+            <!-- Stats Badges -->
+            <div
+                class="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6 lg:gap-4"
+            >
+                <!-- Series Completion -->
                 <div
-                    class="relative z-10 flex flex-col items-start justify-between gap-6 md:flex-row md:items-center"
+                    @click="activeTab = 'series'"
+                    class="cf-glass border-border/80 hover:border-primary/45 group flex cursor-pointer items-center gap-3 rounded-2xl border p-4 tabular-nums transition-all active:scale-95"
+                    :title="
+                        isRTL ? 'عرض نواقص المسلسلات' : 'View TV series gaps'
+                    "
                 >
-                    <div class="max-w-2xl space-y-3">
-                        <div
-                            class="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/20 px-3 py-1 text-xs font-bold tracking-wider text-cyan-300 uppercase"
-                        >
-                            <Compass class="h-3.5 w-3.5" />
-                            <span>{{
-                                isRTL
-                                    ? 'مستكشف نواقص المكتبة واستكشاف الجديد'
-                                    : 'Media Scout Radar & Discovery'
-                            }}</span>
-                        </div>
-                        <h1
-                            class="text-3xl font-black tracking-tight text-white lg:text-4xl"
-                        >
-                            {{
-                                isRTL
-                                    ? 'رادار اكتمال المكتبة واستكشاف الوسائط الجديدة'
-                                    : 'Library Completion & Media Discovery Radar'
-                            }}
-                        </h1>
-                        <p
-                            class="text-sm leading-relaxed text-slate-300 lg:text-base"
-                        >
-                            {{
-                                isRTL
-                                    ? 'يكتشف الحلقات والمواسم المفقودة بدقة من مسلسلاتك، ويتيح استكشاف وبحث كافة الأفلام والمسلسلات الجديدة عبر TMDb مع روابط تورنت عالية السرعة والتنظيم التلقائي.'
-                                    : 'Audits your library against TMDB for missing released episodes and seasons, plus live search & discovery for new unowned movies and TV series with 1-click torrent downloads.'
-                            }}
-                        </p>
+                    <div
+                        class="shrink-0 rounded-xl border border-emerald-500/30 bg-emerald-500/15 p-3 text-emerald-400 transition-transform group-hover:scale-105"
+                    >
+                        <Tv class="size-5" />
                     </div>
-
-                    <!-- Header Quick Actions -->
-                    <div class="flex shrink-0 flex-wrap items-center gap-3">
-                        <!-- Fast Organize & Scan Button -->
-                        <button
-                            @click="isFastOrganizeOpen = true"
-                            class="flex cursor-pointer items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-400 active:scale-95"
-                            :title="
-                                isRTL
-                                    ? 'تنظيم وفحص الملفات في H:\\Entertainment'
-                                    : 'Organize and add to Library (Scan)'
-                            "
+                    <div class="min-w-0">
+                        <div
+                            class="text-2xl font-black tracking-tight text-emerald-400"
                         >
-                            <FolderSync class="h-4 w-4" />
-                            <span>{{
-                                isRTL
-                                    ? 'تنظيم وإضافة للمكتبة'
-                                    : 'Organize & Scan Library'
-                            }}</span>
-                        </button>
-
-                        <!-- Refresh Button -->
-                        <button
-                            @click="refreshGaps"
-                            :disabled="refreshing"
-                            class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-slate-800/80 px-4 py-2.5 text-xs font-bold text-white shadow-md transition-all hover:bg-slate-700 active:scale-95 disabled:opacity-50"
+                            {{ metrics.series_completion_rate || 100 }}%
+                        </div>
+                        <div
+                            class="text-muted-foreground truncate text-[11px] font-semibold uppercase"
                         >
-                            <RefreshCw
-                                class="h-4 w-4"
-                                :class="{ 'animate-spin': refreshing }"
-                            />
-                            <span>{{
-                                refreshing
-                                    ? isRTL
-                                        ? 'جارٍ الفحص...'
-                                        : 'Auditing...'
-                                    : isRTL
-                                      ? 'فحص وتحديث الرادار'
-                                      : 'Scan & Refresh Gaps'
-                            }}</span>
-                        </button>
+                            {{
+                                isRTL ? 'اكتمال المسلسلات' : 'Series Completion'
+                            }}
+                        </div>
                     </div>
                 </div>
 
-                <!-- Stats Badges -->
+                <!-- Franchise Completion -->
                 <div
-                    class="relative z-10 mt-8 grid grid-cols-2 gap-3 border-t border-white/10 pt-6 md:grid-cols-3 lg:grid-cols-6 lg:gap-4"
+                    @click="activeTab = 'collections'"
+                    class="cf-glass border-border/80 hover:border-primary/45 group flex cursor-pointer items-center gap-3 rounded-2xl border p-4 tabular-nums transition-all active:scale-95"
+                    :title="
+                        isRTL
+                            ? 'عرض نواقص سلاسل الأفلام'
+                            : 'View movie franchise gaps'
+                    "
                 >
-                    <!-- Series Completion -->
                     <div
-                        @click="activeTab = 'series'"
-                        class="group flex cursor-pointer items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition-all hover:border-emerald-500/30 hover:bg-emerald-500/10 active:scale-95"
-                        :title="
-                            isRTL ? 'عرض نواقص المسلسلات' : 'View TV series gaps'
-                        "
+                        class="border-primary/30 bg-primary/15 text-primary shrink-0 rounded-xl border p-3 transition-transform group-hover:scale-105"
                     >
-                        <div
-                            class="shrink-0 rounded-xl border border-emerald-500/30 bg-emerald-500/20 p-3 text-emerald-400 transition-transform group-hover:scale-105"
-                        >
-                            <Tv class="h-5 w-5" />
-                        </div>
-                        <div class="min-w-0">
-                            <div
-                                class="text-2xl font-black tracking-tight text-emerald-400"
-                            >
-                                {{ metrics.series_completion_rate || 100 }}%
-                            </div>
-                            <div
-                                class="truncate text-[11px] font-semibold text-slate-400 uppercase"
-                            >
-                                {{
-                                    isRTL
-                                        ? 'اكتمال المسلسلات'
-                                        : 'Series Completion'
-                                }}
-                            </div>
-                        </div>
+                        <Film class="size-5" />
                     </div>
-
-                    <!-- Franchise Completion -->
-                    <div
-                        @click="activeTab = 'collections'"
-                        class="group flex cursor-pointer items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition-all hover:border-cyan-500/30 hover:bg-cyan-500/10 active:scale-95"
-                        :title="
-                            isRTL
-                                ? 'عرض نواقص سلاسل الأفلام'
-                                : 'View movie franchise gaps'
-                        "
-                    >
+                    <div class="min-w-0">
                         <div
-                            class="shrink-0 rounded-xl border border-cyan-500/30 bg-cyan-500/20 p-3 text-cyan-400 transition-transform group-hover:scale-105"
+                            class="text-primary text-2xl font-black tracking-tight"
                         >
-                            <Film class="h-5 w-5" />
+                            {{ metrics.collections_completion_rate || 100 }}%
                         </div>
-                        <div class="min-w-0">
-                            <div
-                                class="text-2xl font-black tracking-tight text-cyan-400"
-                            >
-                                {{
-                                    metrics.collections_completion_rate || 100
-                                }}%
-                            </div>
-                            <div
-                                class="truncate text-[11px] font-semibold text-slate-400 uppercase"
-                            >
-                                {{
-                                    isRTL
-                                        ? 'اكتمال سلاسل الأفلام'
-                                        : 'Franchise Completion'
-                                }}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Missing Episodes -->
-                    <div
-                        @click="activeTab = 'episodes'"
-                        class="group flex cursor-pointer items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition-all hover:border-amber-500/30 hover:bg-amber-500/10 active:scale-95"
-                        :title="
-                            isRTL
-                                ? 'عرض جميع الحلقات الناقصة'
-                                : 'View all missing episodes'
-                        "
-                    >
                         <div
-                            class="shrink-0 rounded-xl border border-amber-500/30 bg-amber-500/20 p-3 text-amber-400 transition-transform group-hover:scale-105"
+                            class="text-muted-foreground truncate text-[11px] font-semibold uppercase"
                         >
-                            <Layers class="h-5 w-5" />
-                        </div>
-                        <div class="min-w-0">
-                            <div
-                                class="text-2xl font-black tracking-tight text-amber-400"
-                            >
-                                {{ metrics.missing_episodes_count || 0 }}
-                            </div>
-                            <div
-                                class="truncate text-[11px] font-semibold text-slate-400 uppercase"
-                            >
-                                {{ isRTL ? 'حلقات ناقصة' : 'Missing Episodes' }}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Missing Franchise Movies -->
-                    <div
-                        @click="activeTab = 'movies'"
-                        class="group flex cursor-pointer items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition-all hover:border-purple-500/30 hover:bg-purple-500/10 active:scale-95"
-                        :title="
-                            isRTL
-                                ? 'عرض جميع أفلام السلاسل الناقصة'
-                                : 'View all missing franchise movies'
-                        "
-                    >
-                        <div
-                            class="shrink-0 rounded-xl border border-purple-500/30 bg-purple-500/20 p-3 text-purple-400 transition-transform group-hover:scale-105"
-                        >
-                            <Award class="h-5 w-5" />
-                        </div>
-                        <div class="min-w-0">
-                            <div
-                                class="text-2xl font-black tracking-tight text-purple-400"
-                            >
-                                {{ metrics.missing_movies_count || 0 }}
-                            </div>
-                            <div
-                                class="truncate text-[11px] font-semibold text-slate-400 uppercase"
-                            >
-                                {{
-                                    isRTL
-                                        ? 'أفلام سلاسل مفقودة'
-                                        : 'Missing Movies'
-                                }}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Low Resolution Upgrades Card (<720p) -->
-                    <div
-                        @click="activeTab = 'low_resolution'"
-                        class="group flex cursor-pointer items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] p-4 transition-all hover:border-amber-400/60 hover:bg-amber-500/10 active:scale-95"
-                        :title="
-                            isRTL
-                                ? 'عرض كافة الملفات الأقل من 720p وترقيتها فوراً'
-                                : 'View all files below 720p for instant 1080p upgrade'
-                        "
-                    >
-                        <div
-                            class="shrink-0 rounded-xl border border-amber-500/40 bg-amber-500/20 p-3 text-amber-300 transition-transform group-hover:scale-105"
-                        >
-                            <ArrowDownUp class="h-5 w-5" />
-                        </div>
-                        <div class="min-w-0">
-                            <div
-                                class="flex items-center gap-1.5 text-2xl font-black tracking-tight text-amber-400"
-                            >
-                                <span>{{
-                                    lowResData.total_count ||
-                                    upgradeMetrics.total_low_res ||
-                                    0
-                                }}</span>
-                                <span
-                                    class="rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300"
-                                    >&lt;720p</span
-                                >
-                            </div>
-                            <div
-                                class="truncate text-[11px] font-semibold text-slate-400 uppercase"
-                            >
-                                {{
-                                    isRTL
-                                        ? 'ترقية دقة (<720p)'
-                                        : 'Low Resolution'
-                                }}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- CAM & Hardcoded Subs Card -->
-                    <div
-                        @click="activeTab = 'poor_quality'"
-                        class="group flex cursor-pointer items-center gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/[0.06] p-4 transition-all hover:border-rose-400/60 hover:bg-rose-500/10 active:scale-95"
-                        :title="
-                            isRTL
-                                ? 'عرض نسخ السينما والترجمات الكورية/الصينية المدمجة'
-                                : 'View forensically detected CAM & hardcoded subtitles for clean replacement'
-                        "
-                    >
-                        <div
-                            class="shrink-0 rounded-xl border border-rose-500/40 bg-rose-500/20 p-3 text-rose-300 transition-transform group-hover:scale-105"
-                        >
-                            <AlertTriangle class="h-5 w-5" />
-                        </div>
-                        <div class="min-w-0">
-                            <div
-                                class="flex items-center gap-1.5 text-2xl font-black tracking-tight text-rose-400"
-                            >
-                                <span>{{
-                                    poorQualityData.total_count ||
-                                    upgradeMetrics.total_poor_quality ||
-                                    0
-                                }}</span>
-                                <span
-                                    class="rounded border border-rose-500/30 bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-300"
-                                    >{{ isRTL ? 'سينما/مدمج' : 'CAM/HC' }}</span
-                                >
-                            </div>
-                            <div
-                                class="truncate text-[11px] font-semibold text-slate-400 uppercase"
-                            >
-                                {{
-                                    isRTL
-                                        ? 'نسخ CAM وترجمة مدمجة'
-                                        : 'CAM & HC Subs'
-                                }}
-                            </div>
+                            {{
+                                isRTL
+                                    ? 'اكتمال سلاسل الأفلام'
+                                    : 'Franchise Completion'
+                            }}
                         </div>
                     </div>
                 </div>
-            </section>
+
+                <!-- Missing Episodes -->
+                <div
+                    @click="activeTab = 'episodes'"
+                    class="cf-glass border-border/80 hover:border-primary/45 group flex cursor-pointer items-center gap-3 rounded-2xl border p-4 tabular-nums transition-all active:scale-95"
+                    :title="
+                        isRTL
+                            ? 'عرض جميع الحلقات الناقصة'
+                            : 'View all missing episodes'
+                    "
+                >
+                    <div
+                        class="shrink-0 rounded-xl border border-amber-500/30 bg-amber-500/15 p-3 text-amber-400 transition-transform group-hover:scale-105"
+                    >
+                        <Layers class="size-5" />
+                    </div>
+                    <div class="min-w-0">
+                        <div
+                            class="text-2xl font-black tracking-tight text-amber-400"
+                        >
+                            {{ metrics.missing_episodes_count || 0 }}
+                        </div>
+                        <div
+                            class="text-muted-foreground truncate text-[11px] font-semibold uppercase"
+                        >
+                            {{ isRTL ? 'حلقات ناقصة' : 'Missing Episodes' }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Missing Franchise Movies -->
+                <div
+                    @click="activeTab = 'movies'"
+                    class="cf-glass border-border/80 hover:border-primary/45 group flex cursor-pointer items-center gap-3 rounded-2xl border p-4 tabular-nums transition-all active:scale-95"
+                    :title="
+                        isRTL
+                            ? 'عرض جميع أفلام السلاسل الناقصة'
+                            : 'View all missing franchise movies'
+                    "
+                >
+                    <div
+                        class="border-primary/30 bg-primary/15 text-primary shrink-0 rounded-xl border p-3 transition-transform group-hover:scale-105"
+                    >
+                        <Award class="size-5" />
+                    </div>
+                    <div class="min-w-0">
+                        <div
+                            class="text-foreground text-2xl font-black tracking-tight"
+                        >
+                            {{ metrics.missing_movies_count || 0 }}
+                        </div>
+                        <div
+                            class="text-muted-foreground truncate text-[11px] font-semibold uppercase"
+                        >
+                            {{ isRTL ? 'أفلام سلاسل مفقودة' : 'Missing Movies' }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Low Resolution Upgrades Card (<720p) -->
+                <div
+                    @click="activeTab = 'low_resolution'"
+                    class="cf-glass group flex cursor-pointer items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] p-4 tabular-nums transition-all hover:border-amber-400/60 hover:bg-amber-500/10 active:scale-95"
+                    :title="
+                        isRTL
+                            ? 'عرض كافة الملفات الأقل من 720p وترقيتها فوراً'
+                            : 'View all files below 720p for instant 1080p upgrade'
+                    "
+                >
+                    <div
+                        class="shrink-0 rounded-xl border border-amber-500/40 bg-amber-500/20 p-3 text-amber-300 transition-transform group-hover:scale-105"
+                    >
+                        <ArrowDownUp class="size-5" />
+                    </div>
+                    <div class="min-w-0">
+                        <div
+                            class="flex items-center gap-1.5 text-2xl font-black tracking-tight text-amber-400"
+                        >
+                            <span>{{
+                                lowResData.total_count ||
+                                upgradeMetrics.total_low_res ||
+                                0
+                            }}</span>
+                            <span
+                                class="rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300"
+                                >&lt;720p</span
+                            >
+                        </div>
+                        <div
+                            class="text-muted-foreground truncate text-[11px] font-semibold uppercase"
+                        >
+                            {{ isRTL ? 'ترقية دقة (<720p)' : 'Low Resolution' }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CAM & Hardcoded Subs Card -->
+                <div
+                    @click="activeTab = 'poor_quality'"
+                    class="cf-glass group flex cursor-pointer items-center gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/[0.06] p-4 tabular-nums transition-all hover:border-rose-400/60 hover:bg-rose-500/10 active:scale-95"
+                    :title="
+                        isRTL
+                            ? 'عرض نسخ السينما والترجمات الكورية/الصينية المدمجة'
+                            : 'View forensically detected CAM & hardcoded subtitles for clean replacement'
+                    "
+                >
+                    <div
+                        class="shrink-0 rounded-xl border border-rose-500/40 bg-rose-500/20 p-3 text-rose-300 transition-transform group-hover:scale-105"
+                    >
+                        <AlertTriangle class="size-5" />
+                    </div>
+                    <div class="min-w-0">
+                        <div
+                            class="flex items-center gap-1.5 text-2xl font-black tracking-tight text-rose-400"
+                        >
+                            <span>{{
+                                poorQualityData.total_count ||
+                                upgradeMetrics.total_poor_quality ||
+                                0
+                            }}</span>
+                            <span
+                                class="rounded border border-rose-500/30 bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-300"
+                                >{{ isRTL ? 'سينما/مدمج' : 'CAM/HC' }}</span
+                            >
+                        </div>
+                        <div
+                            class="text-muted-foreground truncate text-[11px] font-semibold uppercase"
+                        >
+                            {{
+                                isRTL ? 'نسخ CAM وترجمة مدمجة' : 'CAM & HC Subs'
+                            }}
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- Reorganized Workspace & Navigation Control Center -->
             <div class="space-y-4">
                 <!-- Top Workspace Segmented Bar & Search Input -->
                 <div
-                    class="flex flex-col items-stretch justify-between gap-4 rounded-2xl border border-white/10 bg-slate-900/80 p-2 shadow-xl backdrop-blur-xl lg:flex-row lg:items-center"
+                    class="cf-glass border-border/80 flex flex-col items-stretch justify-between gap-4 rounded-2xl border p-2 shadow-xl lg:flex-row lg:items-center"
                 >
                     <!-- Primary Workspace Segments -->
                     <div
-                        class="flex shrink-0 scrollbar-none items-center gap-1.5 overflow-x-auto rounded-xl border border-white/10 bg-slate-950/70 p-1"
+                        class="border-border/80 bg-card/70 flex shrink-0 scrollbar-none items-center gap-1.5 overflow-x-auto rounded-xl border p-1"
                     >
                         <!-- Segment 1: Library Gaps Radar -->
                         <button
+                            type="button"
                             @click="navMode = 'gaps'"
                             :class="[
                                 'flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold whitespace-nowrap transition-all',
                                 navMode === 'gaps'
-                                    ? 'bg-cyan-500 font-black text-slate-950 shadow-md shadow-cyan-500/25'
-                                    : 'text-slate-400 hover:bg-white/5 hover:text-white',
+                                    ? 'bg-primary text-primary-foreground shadow-primary/25 font-black shadow-md'
+                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                             ]"
                         >
-                            <Compass class="h-4 w-4" />
+                            <Compass class="size-4" />
                             <span>{{
                                 isRTL
                                     ? 'رادار نواقص المكتبة'
                                     : 'Library Gaps Radar'
                             }}</span>
                             <span
-                                class="rounded-full px-2 py-0.5 text-[10px] font-black"
+                                class="rounded-full px-2 py-0.5 text-[10px] font-black tabular-nums"
                                 :class="
                                     navMode === 'gaps'
-                                        ? 'bg-black/20 text-slate-950'
-                                        : 'bg-cyan-500/20 text-cyan-300'
+                                        ? 'bg-primary-foreground/20 text-primary-foreground'
+                                        : 'bg-primary/15 text-primary'
                                 "
                             >
                                 {{
@@ -1083,25 +1045,26 @@ onMounted(() => {
 
                         <!-- Segment 2: Quality Upgrades (<720p & CAM/HC) -->
                         <button
+                            type="button"
                             @click="navMode = 'upgrades'"
                             :class="[
                                 'flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold whitespace-nowrap transition-all',
                                 navMode === 'upgrades'
-                                    ? 'bg-amber-500 font-black text-slate-950 shadow-md shadow-amber-500/25'
-                                    : 'text-slate-400 hover:bg-white/5 hover:text-white',
+                                    ? 'bg-primary text-primary-foreground shadow-primary/25 font-black shadow-md'
+                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                             ]"
                         >
-                            <ArrowDownUp class="h-4 w-4" />
+                            <ArrowDownUp class="size-4" />
                             <span>{{
                                 isRTL
                                     ? 'ترقية الجودات والنسخ'
                                     : 'Quality Upgrades'
                             }}</span>
                             <span
-                                class="rounded-full px-2 py-0.5 text-[10px] font-black"
+                                class="rounded-full px-2 py-0.5 text-[10px] font-black tabular-nums"
                                 :class="
                                     navMode === 'upgrades'
-                                        ? 'bg-black/20 text-slate-950'
+                                        ? 'bg-primary-foreground/20 text-primary-foreground'
                                         : 'bg-amber-500/20 text-amber-300'
                                 "
                             >
@@ -1114,15 +1077,16 @@ onMounted(() => {
 
                         <!-- Segment 3: Discover New Media (TMDb) -->
                         <button
+                            type="button"
                             @click="navMode = 'discover'"
                             :class="[
                                 'flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold whitespace-nowrap transition-all',
                                 navMode === 'discover'
-                                    ? 'bg-gradient-to-r from-cyan-500 to-purple-600 font-black text-white shadow-md shadow-purple-500/25'
-                                    : 'text-slate-400 hover:bg-white/5 hover:text-white',
+                                    ? 'bg-primary text-primary-foreground shadow-primary/25 font-black shadow-md'
+                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                             ]"
                         >
-                            <Sparkles class="h-4 w-4 text-amber-300" />
+                            <Sparkles class="size-4" />
                             <span>{{
                                 isRTL
                                     ? 'استكشاف وسائط جديدة (TMDb)'
@@ -1131,14 +1095,13 @@ onMounted(() => {
                         </button>
                     </div>
 
-                    <!-- Filter Search Input (Shown for Gaps and Upgrades; Discover has its own TMDb search bar) -->
+                    <!-- Filter Search Input -->
                     <div
                         v-if="navMode !== 'discover'"
                         class="relative min-w-[260px] lg:w-80"
                     >
                         <Search
-                            class="absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                            :class="isRTL ? 'right-3.5' : 'left-3.5'"
+                            class="text-muted-foreground pointer-events-none absolute start-3.5 top-1/2 size-4 -translate-y-1/2"
                         />
                         <input
                             type="text"
@@ -1152,8 +1115,7 @@ onMounted(() => {
                                       ? 'ابحث في النواقص...'
                                       : 'Filter gap titles...'
                             "
-                            class="w-full rounded-xl border border-white/10 bg-slate-950/80 py-2 text-xs text-white placeholder-slate-500 transition-all focus:border-cyan-500 focus:outline-none"
-                            :class="isRTL ? 'pr-10 pl-4' : 'pr-4 pl-10'"
+                            class="cf-field w-full rounded-xl py-2 ps-10 pe-4 text-xs"
                         />
                     </div>
                 </div>
@@ -1357,7 +1319,7 @@ onMounted(() => {
             <div v-if="activeTab === 'discover'" class="space-y-6">
                 <!-- Discover Control Bar -->
                 <div
-                    class="glass-panel space-y-4 rounded-3xl border border-cyan-500/30 bg-slate-900/60 p-6"
+                    class="cf-glass border-border/80 space-y-4 rounded-3xl border p-6"
                 >
                     <div
                         class="flex flex-col items-stretch justify-between gap-4 lg:flex-row lg:items-center"
@@ -1365,8 +1327,7 @@ onMounted(() => {
                         <!-- TMDb Live Search Input -->
                         <div class="relative flex-1">
                             <Search
-                                class="absolute top-1/2 h-5 w-5 -translate-y-1/2 text-cyan-400"
-                                :class="isRTL ? 'right-4' : 'left-4'"
+                                class="text-primary pointer-events-none absolute start-4 top-1/2 size-5 -translate-y-1/2"
                             />
                             <input
                                 type="text"
@@ -1376,45 +1337,47 @@ onMounted(() => {
                                         ? 'ابحث عن أي فيلم أو مسلسل جديد في قاعدة بيانات TMDb العالمية...'
                                         : 'Search any new movie or TV series on TMDb database...'
                                 "
-                                class="w-full rounded-2xl border border-white/10 bg-slate-950/80 py-3 text-sm text-white placeholder-slate-400 shadow-inner focus:border-cyan-400 focus:outline-none"
-                                :class="isRTL ? 'pr-12 pl-4' : 'pr-4 pl-12'"
+                                class="cf-field w-full rounded-2xl py-3 ps-12 pe-4 text-sm"
                             />
                         </div>
 
                         <div class="flex flex-wrap items-center gap-3">
                             <!-- Media Type Filter Pills -->
                             <div
-                                class="flex shrink-0 items-center gap-1 rounded-2xl border border-white/10 bg-slate-950/80 p-1"
+                                class="border-border/80 bg-card/70 flex shrink-0 items-center gap-1 rounded-2xl border p-1"
                             >
                                 <button
+                                    type="button"
                                     @click="discoverType = 'all'"
                                     :class="[
                                         'cursor-pointer rounded-xl px-3 py-1.5 text-xs font-bold transition-all',
                                         discoverType === 'all'
-                                            ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
-                                            : 'text-slate-400 hover:text-white',
+                                            ? 'bg-primary text-primary-foreground shadow-primary/20 shadow-md'
+                                            : 'text-muted-foreground hover:text-foreground',
                                     ]"
                                 >
                                     {{ isRTL ? 'الكل' : 'All Media' }}
                                 </button>
                                 <button
+                                    type="button"
                                     @click="discoverType = 'movie'"
                                     :class="[
                                         'cursor-pointer rounded-xl px-3 py-1.5 text-xs font-bold transition-all',
                                         discoverType === 'movie'
-                                            ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
-                                            : 'text-slate-400 hover:text-white',
+                                            ? 'bg-primary text-primary-foreground shadow-primary/20 shadow-md'
+                                            : 'text-muted-foreground hover:text-foreground',
                                     ]"
                                 >
                                     🎬 {{ isRTL ? 'أفلام' : 'Movies' }}
                                 </button>
                                 <button
+                                    type="button"
                                     @click="discoverType = 'tv'"
                                     :class="[
                                         'cursor-pointer rounded-xl px-3 py-1.5 text-xs font-bold transition-all',
                                         discoverType === 'tv'
-                                            ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
-                                            : 'text-slate-400 hover:text-white',
+                                            ? 'bg-primary text-primary-foreground shadow-primary/20 shadow-md'
+                                            : 'text-muted-foreground hover:text-foreground',
                                     ]"
                                 >
                                     📺 {{ isRTL ? 'مسلسلات' : 'TV Shows' }}
@@ -1423,37 +1386,40 @@ onMounted(() => {
 
                             <!-- Style Filter Pills (Animated vs Live-Action) -->
                             <div
-                                class="flex shrink-0 items-center gap-1 rounded-2xl border border-white/10 bg-slate-950/80 p-1"
+                                class="border-border/80 bg-card/70 flex shrink-0 items-center gap-1 rounded-2xl border p-1"
                             >
                                 <button
+                                    type="button"
                                     @click="discoverStyle = 'all'"
                                     :class="[
                                         'cursor-pointer rounded-xl px-3 py-1.5 text-xs font-bold transition-all',
                                         discoverStyle === 'all'
-                                            ? 'bg-purple-500 text-white shadow-md shadow-purple-500/20'
-                                            : 'text-slate-400 hover:text-white',
+                                            ? 'bg-primary text-primary-foreground shadow-primary/20 shadow-md'
+                                            : 'text-muted-foreground hover:text-foreground',
                                     ]"
                                 >
                                     {{ isRTL ? 'كل الأنماط' : 'All Styles' }}
                                 </button>
                                 <button
+                                    type="button"
                                     @click="discoverStyle = 'animated'"
                                     :class="[
                                         'cursor-pointer rounded-xl px-3 py-1.5 text-xs font-bold transition-all',
                                         discoverStyle === 'animated'
-                                            ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                                            : 'text-slate-400 hover:text-white',
+                                            ? 'bg-primary text-primary-foreground shadow-primary/20 shadow-md'
+                                            : 'text-muted-foreground hover:text-foreground',
                                     ]"
                                 >
                                     🎨 {{ isRTL ? 'رسوم متحركة' : 'Animated' }}
                                 </button>
                                 <button
+                                    type="button"
                                     @click="discoverStyle = 'live_action'"
                                     :class="[
                                         'cursor-pointer rounded-xl px-3 py-1.5 text-xs font-bold transition-all',
                                         discoverStyle === 'live_action'
-                                            ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                                            : 'text-slate-400 hover:text-white',
+                                            ? 'bg-primary text-primary-foreground shadow-primary/20 shadow-md'
+                                            : 'text-muted-foreground hover:text-foreground',
                                     ]"
                                 >
                                     🎭 {{ isRTL ? 'تمثيل حي' : 'Live-Action' }}
@@ -1463,10 +1429,10 @@ onMounted(() => {
                     </div>
 
                     <div
-                        class="flex items-center justify-between text-xs text-slate-400"
+                        class="text-muted-foreground flex items-center justify-between text-xs"
                     >
                         <span class="flex items-center gap-1.5">
-                            <Sparkles class="h-3.5 w-3.5 text-amber-400" />
+                            <Sparkles class="text-primary size-3.5" />
                             <span>{{
                                 discoverQuery
                                     ? isRTL
@@ -1479,9 +1445,9 @@ onMounted(() => {
                         </span>
                         <span
                             v-if="discoverLoading"
-                            class="flex items-center gap-1.5 font-bold text-cyan-400"
+                            class="text-primary flex items-center gap-1.5 font-bold"
                         >
-                            <Loader2 class="h-3.5 w-3.5 animate-spin" />
+                            <Loader2 class="size-3.5 animate-spin" />
                             <span>{{
                                 isRTL
                                     ? 'جارٍ البحث في TMDb...'
@@ -1499,16 +1465,22 @@ onMounted(() => {
                     <div
                         v-for="s in 6"
                         :key="s"
-                        class="flex animate-pulse flex-col justify-between overflow-hidden rounded-3xl border border-white/10 bg-slate-900/50 p-2"
+                        class="cf-glass border-border/60 flex flex-col justify-between overflow-hidden rounded-3xl border p-2"
                     >
                         <div
-                            class="relative aspect-[2/3] w-full overflow-hidden rounded-2xl bg-white/10"
+                            class="cf-shimmer bg-muted/60 relative aspect-[2/3] w-full overflow-hidden rounded-2xl"
                         ></div>
                         <div class="space-y-2 p-3">
-                            <div class="h-4 w-4/5 rounded bg-white/10"></div>
+                            <div
+                                class="cf-shimmer bg-muted/60 h-4 w-4/5 rounded"
+                            ></div>
                             <div class="flex items-center justify-between">
-                                <div class="h-3 w-1/3 rounded bg-white/5"></div>
-                                <div class="h-3 w-1/4 rounded bg-white/5"></div>
+                                <div
+                                    class="cf-shimmer bg-muted/40 h-3 w-1/3 rounded"
+                                ></div>
+                                <div
+                                    class="cf-shimmer bg-muted/40 h-3 w-1/4 rounded"
+                                ></div>
                             </div>
                         </div>
                     </div>
@@ -1522,7 +1494,7 @@ onMounted(() => {
                     <div
                         v-for="item in filteredDiscoverResults"
                         :key="item.tmdb_id"
-                        class="group glass-panel flex flex-col justify-between overflow-hidden rounded-3xl border border-white/10 bg-slate-900/50 transition-all duration-300 hover:border-cyan-500/40"
+                        class="cf-glass border-border/80 hover:border-primary/45 group flex flex-col justify-between overflow-hidden rounded-3xl border transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl"
                     >
                         <!-- Poster Container -->
                         <div

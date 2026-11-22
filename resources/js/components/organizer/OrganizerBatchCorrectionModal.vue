@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import { X, Check, Layers, Film, Tv, Tag, ArrowRight } from '@lucide/vue';
@@ -17,7 +17,7 @@ const emit = defineEmits<{
     (e: 'apply', updates: Partial<PlanItem>): void;
 }>();
 
-const { t, isRTL } = useI18n();
+const { isRTL } = useI18n();
 
 // Popular genres list
 const commonGenres = [
@@ -204,29 +204,30 @@ function handleApply() {
         v-if="isOpen"
         class="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
         :dir="isRTL ? 'rtl' : 'ltr'"
+        @click.self="$emit('close')"
     >
         <div
-            class="relative flex w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-900 text-xs shadow-2xl"
+            class="cf-glass-elevated border-border/80 bg-card/95 relative flex w-full max-w-xl flex-col overflow-hidden rounded-3xl border text-xs shadow-2xl"
         >
             <!-- Header -->
             <div
-                class="flex items-center justify-between border-b border-white/10 bg-slate-950/60 px-6 py-5"
+                class="border-border/70 bg-background/40 flex items-center justify-between border-b px-6 py-5"
             >
                 <div class="flex items-center gap-3">
                     <div
-                        class="flex h-10 w-10 items-center justify-center rounded-2xl border border-amber-500/30 bg-amber-500/20 text-amber-400"
+                        class="border-primary/35 bg-primary/15 text-primary flex h-10 w-10 items-center justify-center rounded-2xl border"
                     >
                         <Layers class="h-5 w-5" />
                     </div>
                     <div>
-                        <h3 class="text-base font-black text-white">
+                        <h3 class="text-foreground text-base font-black">
                             {{
                                 isRTL
                                     ? 'تصحيح جماعي للملفات المحددة'
                                     : 'Batch Metadata Correction'
                             }}
                         </h3>
-                        <p class="text-xs text-slate-400">
+                        <p class="text-muted-foreground text-xs tabular-nums">
                             {{
                                 isRTL
                                     ? `سيتم تطبيق التعديلات المختارة على (${selectedItems.length}) ملف محدد`
@@ -237,16 +238,19 @@ function handleApply() {
                 </div>
 
                 <button
+                    type="button"
                     @click="$emit('close')"
-                    class="cursor-pointer rounded-xl p-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+                    class="border-border/60 bg-background/80 text-muted-foreground hover:bg-muted hover:text-foreground flex size-8 cursor-pointer items-center justify-center rounded-xl border transition-colors"
                 >
-                    <X class="h-5 w-5" />
+                    <X class="h-4 w-4" />
                 </button>
             </div>
 
             <!-- Body -->
-            <div class="max-h-[70vh] space-y-4 overflow-y-auto p-6">
-                <p class="text-slate-300">
+            <div
+                class="custom-scrollbar max-h-[70vh] space-y-4 overflow-y-auto p-6"
+            >
+                <p class="text-muted-foreground">
                     {{
                         isRTL
                             ? 'اختر الحقول التي ترغب بتحديثها بشكل جماعي:'
@@ -256,15 +260,15 @@ function handleApply() {
 
                 <!-- 1. Type -->
                 <div
-                    class="space-y-2 rounded-2xl border border-white/5 bg-black/30 p-3.5"
+                    class="cf-glass border-border/70 space-y-2 rounded-2xl border p-3.5"
                 >
                     <label
-                        class="flex cursor-pointer items-center gap-2 font-bold text-white select-none"
+                        class="text-foreground flex cursor-pointer items-center gap-2 font-bold select-none"
                     >
                         <input
                             type="checkbox"
                             v-model="applyType"
-                            class="cursor-pointer rounded border-white/20 bg-slate-950 text-cyan-500"
+                            class="border-border bg-card text-primary cursor-pointer rounded"
                         />
                         <span>{{
                             isRTL
@@ -279,8 +283,8 @@ function handleApply() {
                             :class="[
                                 'flex cursor-pointer items-center justify-center gap-2 rounded-xl border py-2.5 font-bold transition-all',
                                 typeVal === 'movie'
-                                    ? 'border-cyan-400 bg-cyan-500/20 text-cyan-300 shadow-md ring-1 ring-cyan-500/50'
-                                    : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white',
+                                    ? 'border-primary bg-primary/20 text-primary ring-primary/50 shadow-md ring-1'
+                                    : 'cf-glass border-border/70 text-muted-foreground hover:border-primary/40 hover:text-foreground',
                             ]"
                         >
                             <Film class="h-4 w-4" />
@@ -295,7 +299,7 @@ function handleApply() {
                                 'flex cursor-pointer items-center justify-center gap-2 rounded-xl border py-2.5 font-bold transition-all',
                                 typeVal === 'series'
                                     ? 'border-purple-400 bg-purple-500/20 text-purple-300 shadow-md ring-1 ring-purple-500/50'
-                                    : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white',
+                                    : 'cf-glass border-border/70 text-muted-foreground hover:text-foreground hover:border-purple-500/40',
                             ]"
                         >
                             <Tv class="h-4 w-4" />
@@ -308,15 +312,15 @@ function handleApply() {
 
                 <!-- 2. Series / Media Title -->
                 <div
-                    class="space-y-2 rounded-2xl border border-white/5 bg-black/30 p-3.5"
+                    class="cf-glass border-border/70 space-y-2 rounded-2xl border p-3.5"
                 >
                     <label
-                        class="flex cursor-pointer items-center gap-2 font-bold text-white select-none"
+                        class="text-foreground flex cursor-pointer items-center gap-2 font-bold select-none"
                     >
                         <input
                             type="checkbox"
                             v-model="applySeriesTitle"
-                            class="cursor-pointer rounded border-white/20 bg-slate-950 text-cyan-500"
+                            class="border-border bg-card text-primary cursor-pointer rounded"
                         />
                         <span>{{
                             isRTL
@@ -328,22 +332,22 @@ function handleApply() {
                         v-if="applySeriesTitle"
                         v-model="seriesTitleVal"
                         type="text"
-                        class="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-white focus:border-cyan-400 focus:outline-none"
+                        class="cf-field border-border/80 bg-card/80 text-foreground focus:border-primary h-10 w-full rounded-xl border px-3 focus:outline-none"
                         placeholder="e.g. Breaking Bad"
                     />
                 </div>
 
                 <!-- 3. Season -->
                 <div
-                    class="space-y-2 rounded-2xl border border-white/5 bg-black/30 p-3.5"
+                    class="cf-glass border-border/70 space-y-2 rounded-2xl border p-3.5"
                 >
                     <label
-                        class="flex cursor-pointer items-center gap-2 font-bold text-white select-none"
+                        class="text-foreground flex cursor-pointer items-center gap-2 font-bold select-none"
                     >
                         <input
                             type="checkbox"
                             v-model="applySeason"
-                            class="cursor-pointer rounded border-white/20 bg-slate-950 text-cyan-500"
+                            class="border-border bg-card text-primary cursor-pointer rounded"
                         />
                         <span>{{
                             isRTL
@@ -357,22 +361,22 @@ function handleApply() {
                         type="number"
                         min="1"
                         max="99"
-                        class="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 font-mono text-white focus:border-cyan-400 focus:outline-none"
+                        class="cf-field border-border/80 bg-card/80 text-foreground focus:border-primary h-10 w-full rounded-xl border px-3 font-mono tabular-nums focus:outline-none"
                         placeholder="1"
                     />
                 </div>
 
                 <!-- 4. Collection Name -->
                 <div
-                    class="space-y-2 rounded-2xl border border-white/5 bg-black/30 p-3.5"
+                    class="cf-glass border-border/70 space-y-2 rounded-2xl border p-3.5"
                 >
                     <label
-                        class="flex cursor-pointer items-center gap-2 font-bold text-white select-none"
+                        class="text-foreground flex cursor-pointer items-center gap-2 font-bold select-none"
                     >
                         <input
                             type="checkbox"
                             v-model="applyCollection"
-                            class="cursor-pointer rounded border-white/20 bg-slate-950 text-cyan-500"
+                            class="border-border bg-card text-primary cursor-pointer rounded"
                         />
                         <span>{{
                             isRTL
@@ -384,23 +388,23 @@ function handleApply() {
                         v-if="applyCollection"
                         v-model="collectionVal"
                         type="text"
-                        class="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-white focus:border-cyan-400 focus:outline-none"
+                        class="cf-field border-border/80 bg-card/80 text-foreground focus:border-primary h-10 w-full rounded-xl border px-3 focus:outline-none"
                         placeholder="e.g. Harry Potter Collection"
                     />
                 </div>
 
                 <!-- 5. Genre (Interactive Chips & Custom Input) -->
                 <div
-                    class="space-y-2.5 rounded-2xl border border-white/5 bg-black/30 p-3.5"
+                    class="cf-glass border-border/70 space-y-2.5 rounded-2xl border p-3.5"
                 >
                     <div class="flex items-center justify-between">
                         <label
-                            class="flex cursor-pointer items-center gap-2 font-bold text-white select-none"
+                            class="text-foreground flex cursor-pointer items-center gap-2 font-bold select-none"
                         >
                             <input
                                 type="checkbox"
                                 v-model="applyGenre"
-                                class="cursor-pointer rounded border-white/20 bg-slate-950 text-cyan-500"
+                                class="border-border bg-card text-primary cursor-pointer rounded"
                             />
                             <span>{{
                                 isRTL
@@ -412,19 +416,18 @@ function handleApply() {
                             v-if="applyGenre && genreVal"
                             type="button"
                             @click="clearBatchGenre"
-                            class="cursor-pointer text-[10px] font-bold text-red-400 hover:text-red-300"
+                            class="text-destructive cursor-pointer text-[10px] font-bold hover:brightness-110"
                         >
                             {{ isRTL ? 'مسح' : 'Clear' }}
                         </button>
                     </div>
 
                     <template v-if="applyGenre">
-                        <!-- Quick Genre Badges / Chips -->
                         <div class="space-y-1.5 pt-1">
                             <div
-                                class="flex items-center gap-1 text-[10px] font-bold text-slate-400"
+                                class="text-muted-foreground flex items-center gap-1 text-[10px] font-bold"
                             >
-                                <Tag class="h-3 w-3 text-cyan-400" />
+                                <Tag class="text-primary h-3 w-3" />
                                 <span>{{
                                     isRTL
                                         ? 'انقر على التصنيف لاختياره مباشرة:'
@@ -440,32 +443,31 @@ function handleApply() {
                                     :class="[
                                         'flex cursor-pointer items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-bold transition-all',
                                         isGenreActive(g)
-                                            ? 'border-cyan-400 bg-cyan-500/25 text-cyan-300 shadow-sm ring-1 ring-cyan-500/50'
-                                            : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white',
+                                            ? 'border-primary bg-primary/20 text-primary ring-primary/50 shadow-sm ring-1'
+                                            : 'cf-glass border-border/70 text-muted-foreground hover:border-primary/35 hover:text-foreground',
                                     ]"
                                 >
                                     <span>{{ g }}</span>
                                     <Check
                                         v-if="isGenreActive(g)"
-                                        class="h-2.5 w-2.5 text-cyan-400"
+                                        class="text-primary h-2.5 w-2.5"
                                     />
                                 </button>
                             </div>
                         </div>
 
-                        <!-- Manual Genre Text Input -->
                         <div class="relative pt-1">
                             <input
                                 v-model="genreVal"
                                 type="text"
-                                class="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 pr-8 text-white focus:border-cyan-400 focus:outline-none"
+                                class="cf-field border-border/80 bg-card/80 text-foreground focus:border-primary h-10 w-full rounded-xl border ps-3 pe-8 focus:outline-none"
                                 placeholder="e.g. Action, Drama, Sci-Fi"
                             />
                             <button
                                 v-if="genreVal"
                                 type="button"
                                 @click="clearBatchGenre"
-                                class="absolute top-1/2 right-2.5 -translate-y-1/2 cursor-pointer p-1 text-slate-400 hover:text-white"
+                                class="text-muted-foreground hover:text-foreground absolute end-2.5 top-1/2 -translate-y-1/2 cursor-pointer p-1"
                             >
                                 <X class="h-3.5 w-3.5" />
                             </button>
@@ -476,15 +478,12 @@ function handleApply() {
                 <!-- Live Example Batch Preview Box -->
                 <div
                     v-if="previewFirstItemDest"
-                    class="space-y-1.5 rounded-2xl border border-cyan-500/20 bg-cyan-950/20 p-3.5"
+                    class="border-primary/35 bg-primary/10 space-y-1.5 rounded-2xl border p-3.5"
                 >
                     <div
-                        class="flex items-center gap-1 text-[10px] font-bold text-cyan-400"
+                        class="text-primary flex items-center gap-1 text-[10px] font-bold"
                     >
-                        <ArrowRight
-                            class="h-3 w-3"
-                            :class="isRTL ? 'rotate-180' : ''"
-                        />
+                        <ArrowRight class="h-3 w-3 rtl:rotate-180" />
                         <span>{{
                             isRTL
                                 ? 'معاينة النتيجة التقديرية لأول ملف محدد:'
@@ -492,7 +491,7 @@ function handleApply() {
                         }}</span>
                     </div>
                     <div
-                        class="rounded-xl border border-white/5 bg-black/40 p-2 font-mono text-[11px] break-all text-white select-all"
+                        class="border-border/60 text-foreground rounded-xl border bg-black/50 p-2 font-mono text-[11px] break-all select-all"
                     >
                         {{ previewFirstItemDest }}
                     </div>
@@ -501,12 +500,12 @@ function handleApply() {
 
             <!-- Footer -->
             <div
-                class="flex items-center justify-end gap-3 border-t border-white/10 bg-slate-950/80 px-6 py-4"
+                class="border-border/70 bg-background/50 flex items-center justify-end gap-3 border-t px-6 py-4"
             >
                 <button
                     @click="$emit('close')"
                     type="button"
-                    class="cursor-pointer rounded-xl px-4 py-2 font-bold text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+                    class="cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground h-10 cursor-pointer rounded-xl border px-4 font-bold transition-colors"
                 >
                     {{ isRTL ? 'إلغاء' : 'Cancel' }}
                 </button>
@@ -521,7 +520,7 @@ function handleApply() {
                         !applyCollection &&
                         !applyGenre
                     "
-                    class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-amber-500 px-5 py-2.5 font-black text-slate-950 shadow-lg shadow-amber-500/25 transition-all hover:scale-105 hover:bg-amber-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+                    class="bg-primary text-primary-foreground shadow-primary/25 flex h-10 cursor-pointer items-center gap-1.5 rounded-xl px-5 font-black shadow-lg transition-all hover:brightness-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     <Check class="h-4 w-4" />
                     <span>{{

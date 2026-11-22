@@ -6,6 +6,7 @@ import { useToast } from '@/composables/useToast';
 import { formatBytes } from '@/lib/formatters';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ConfirmModal from '@/components/common/ConfirmModal.vue';
+import PageBanner from '@/components/common/PageBanner.vue';
 
 const FixMatchModal = defineAsyncComponent(
     () => import('@/components/media/FixMatchModal.vue'),
@@ -13,36 +14,22 @@ const FixMatchModal = defineAsyncComponent(
 import {
     Sparkles,
     Search,
-    Image as ImageIcon,
     Globe,
     Film,
     Tv,
-    Star,
     RefreshCw,
     CheckCircle2,
-    AlertCircle,
-    Play,
-    SlidersHorizontal,
-    Edit,
-    ExternalLink,
     Check,
-    X,
     Trash2,
-    Database,
-    Filter,
-    ArrowRight,
     Wand2,
     Repeat,
     ArrowRightLeft,
     AlertTriangle,
-    HelpCircle,
     Layers,
     Copy,
     FileVideo,
     Folder,
-    HardDrive,
     FileEdit,
-    ShieldAlert,
 } from '@lucide/vue';
 
 const props = defineProps<{
@@ -560,139 +547,110 @@ const triggerBatchEnrich = async () => {
 
         <div class="mx-auto max-w-7xl space-y-8 pb-24">
             <!-- Header Showcase Hero -->
-            <div
-                class="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 via-[#0c1222] to-slate-950 p-8 shadow-2xl lg:p-10"
+            <PageBanner
+                :icon="Sparkles"
+                :title="
+                    isRTL
+                        ? 'إصلاح وتصحيح مكتبة الوسائط'
+                        : 'Fix Match & Error Resolution Studio'
+                "
+                :badge="
+                    isRTL
+                        ? 'استوديو تصحيح ومطابقة البيانات'
+                        : 'Metadata Correction & Triage Studio'
+                "
+                :description="
+                    isRTL
+                        ? 'استعراض المسار الفعلي للملفات، إصلاح التسميات غير المطابقة، إعادة تسمية الملفات على القرص، حذف العناصر غير المرغوبة من الفهرس، وجلب البوسترات بدقة.'
+                        : 'Inspect physical disk paths, fix unmatched titles, rename disk files to standard titles, remove obsolete indexes, and fetch pristine artwork.'
+                "
             >
-                <div
-                    class="pointer-events-none absolute -top-24 -right-24 h-96 w-96 rounded-full bg-cyan-500/10 blur-3xl"
-                ></div>
-                <div
-                    class="pointer-events-none absolute -bottom-24 -left-24 h-96 w-96 rounded-full bg-purple-500/10 blur-3xl"
-                ></div>
-
-                <div
-                    class="relative z-10 flex flex-col justify-between gap-6 md:flex-row md:items-center"
-                >
-                    <div>
-                        <div
-                            class="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-semibold tracking-wider text-cyan-400 uppercase"
-                        >
-                            <Sparkles class="h-3.5 w-3.5 animate-pulse" />
-                            <span>{{
-                                isRTL
-                                    ? 'استوديو تصحيح ومطابقة البيانات'
-                                    : 'Metadata Correction & Triage Studio'
-                            }}</span>
-                        </div>
-                        <h1
-                            class="text-3xl font-black tracking-tight text-white lg:text-4xl"
-                        >
-                            {{
-                                isRTL
-                                    ? 'إصلاح وتصحيح مكتبة الوسائط'
-                                    : 'Fix Match & Error Resolution Studio'
-                            }}
-                        </h1>
-                        <p
-                            class="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400"
-                        >
-                            {{
-                                isRTL
-                                    ? 'استعراض المسار الفعلي للملفات، إصلاح التسميات غير المطابقة، إعادة تسمية الملفات على القرص، حذف العناصر غير المرغوبة من الفهرس، وجلب البوسترات بدقة.'
-                                    : 'Inspect physical disk paths, fix unmatched titles, rename disk files to standard titles, remove obsolete indexes, and fetch pristine artwork.'
-                            }}
-                        </p>
-                    </div>
-
-                    <!-- Batch Trigger Action -->
+                <template #actions>
                     <button
+                        type="button"
                         @click="triggerBatchEnrich"
                         :disabled="isBatchEnriching"
-                        class="flex shrink-0 cursor-pointer items-center gap-2.5 self-start rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 px-6 py-3.5 text-sm font-black text-slate-950 shadow-xl shadow-cyan-500/20 transition-all hover:from-cyan-400 hover:to-purple-500 active:scale-95 disabled:opacity-50 md:self-center"
+                        class="bg-primary text-primary-foreground shadow-primary/25 flex shrink-0 cursor-pointer items-center gap-2.5 rounded-2xl px-6 py-3 text-sm font-black shadow-lg transition-all hover:brightness-105 active:scale-95 disabled:opacity-50"
                     >
                         <RefreshCw
                             v-if="isBatchEnriching"
-                            class="h-4 w-4 animate-spin"
+                            class="size-4 animate-spin"
                         />
-                        <Wand2 v-else class="h-4 w-4" />
+                        <Wand2 v-else class="size-4" />
                         <span>{{
                             isRTL
                                 ? 'معالجة ومطابقة شاملة تلقائية'
                                 : 'Auto-Fix All Unmatched'
                         }}</span>
                     </button>
-                </div>
+                </template>
+            </PageBanner>
 
-                <!-- Live Quick Stats Counter -->
+            <!-- Live Quick Stats Counter -->
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                 <div
-                    class="mt-8 grid grid-cols-2 gap-3 border-t border-white/10 pt-6 sm:grid-cols-3 lg:grid-cols-6"
+                    class="cf-glass border-border/80 rounded-2xl border p-3.5 tabular-nums"
                 >
-                    <div
-                        class="rounded-2xl border border-white/5 bg-white/[0.03] p-3.5"
+                    <span class="text-muted-foreground block text-xs">{{
+                        isRTL ? 'إجمالي العناصر' : 'Total Items'
+                    }}</span>
+                    <span
+                        class="text-foreground mt-1 block text-xl font-black"
+                        >{{ stats.total_items }}</span
                     >
-                        <span class="block text-xs text-slate-400">{{
-                            isRTL ? 'إجمالي العناصر' : 'Total Items'
-                        }}</span>
-                        <span
-                            class="mt-1 block text-xl font-black text-white"
-                            >{{ stats.total_items }}</span
-                        >
-                    </div>
-                    <div
-                        class="rounded-2xl border border-amber-500/10 bg-amber-500/5 p-3.5"
+                </div>
+                <div
+                    class="cf-glass rounded-2xl border border-amber-500/25 bg-amber-500/5 p-3.5 tabular-nums"
+                >
+                    <span class="block text-xs text-amber-300">{{
+                        isRTL ? 'غير مطابق' : 'Unmatched'
+                    }}</span>
+                    <span
+                        class="mt-1 block text-xl font-black text-amber-400"
+                        >{{ stats.unmatched_count ?? 0 }}</span
                     >
-                        <span class="block text-xs text-amber-300">{{
-                            isRTL ? 'غير مطابق' : 'Unmatched'
-                        }}</span>
-                        <span
-                            class="mt-1 block text-xl font-black text-amber-400"
-                            >{{ stats.unmatched_count ?? 0 }}</span
-                        >
-                    </div>
-                    <div
-                        class="rounded-2xl border border-rose-500/10 bg-rose-500/5 p-3.5"
+                </div>
+                <div
+                    class="cf-glass rounded-2xl border border-rose-500/25 bg-rose-500/5 p-3.5 tabular-nums"
+                >
+                    <span class="block text-xs text-rose-300">{{
+                        isRTL ? 'بدون بوستر' : 'Missing Posters'
+                    }}</span>
+                    <span class="mt-1 block text-xl font-black text-rose-400">{{
+                        stats.missing_posters_count
+                    }}</span>
+                </div>
+                <div
+                    class="cf-glass border-primary/25 bg-primary/5 rounded-2xl border p-3.5 tabular-nums"
+                >
+                    <span class="text-primary block text-xs">{{
+                        isRTL ? 'بدون عربي' : 'Missing Arabic'
+                    }}</span>
+                    <span class="text-primary mt-1 block text-xl font-black">{{
+                        stats.missing_arabic_count
+                    }}</span>
+                </div>
+                <div
+                    class="cf-glass border-border/80 rounded-2xl border p-3.5 tabular-nums"
+                >
+                    <span class="text-muted-foreground block text-xs">{{
+                        isRTL ? 'أفلام' : 'Movies'
+                    }}</span>
+                    <span
+                        class="text-foreground mt-1 block text-xl font-black"
+                        >{{ stats.movies_count }}</span
                     >
-                        <span class="block text-xs text-rose-300">{{
-                            isRTL ? 'بدون بوستر' : 'Missing Posters'
-                        }}</span>
-                        <span
-                            class="mt-1 block text-xl font-black text-rose-400"
-                            >{{ stats.missing_posters_count }}</span
-                        >
-                    </div>
-                    <div
-                        class="rounded-2xl border border-purple-500/10 bg-purple-500/5 p-3.5"
+                </div>
+                <div
+                    class="cf-glass border-border/80 rounded-2xl border p-3.5 tabular-nums"
+                >
+                    <span class="text-muted-foreground block text-xs">{{
+                        isRTL ? 'مسلسلات' : 'Series'
+                    }}</span>
+                    <span
+                        class="text-foreground mt-1 block text-xl font-black"
+                        >{{ stats.series_count }}</span
                     >
-                        <span class="block text-xs text-purple-300">{{
-                            isRTL ? 'بدون عربي' : 'Missing Arabic'
-                        }}</span>
-                        <span
-                            class="mt-1 block text-xl font-black text-purple-400"
-                            >{{ stats.missing_arabic_count }}</span
-                        >
-                    </div>
-                    <div
-                        class="rounded-2xl border border-cyan-500/10 bg-cyan-500/5 p-3.5"
-                    >
-                        <span class="block text-xs text-cyan-300">{{
-                            isRTL ? 'أفلام' : 'Movies'
-                        }}</span>
-                        <span
-                            class="mt-1 block text-xl font-black text-cyan-400"
-                            >{{ stats.movies_count }}</span
-                        >
-                    </div>
-                    <div
-                        class="rounded-2xl border border-emerald-500/10 bg-emerald-500/5 p-3.5"
-                    >
-                        <span class="block text-xs text-emerald-300">{{
-                            isRTL ? 'مسلسلات' : 'Series'
-                        }}</span>
-                        <span
-                            class="mt-1 block text-xl font-black text-emerald-400"
-                            >{{ stats.series_count }}</span
-                        >
-                    </div>
                 </div>
             </div>
 
@@ -702,76 +660,82 @@ const triggerBatchEnrich = async () => {
             >
                 <!-- Filter Tabs -->
                 <div
-                    class="flex w-full flex-wrap items-center gap-1.5 rounded-2xl border border-white/10 bg-slate-900/90 p-1.5 md:w-auto"
+                    class="cf-glass border-border/80 flex w-full flex-wrap items-center gap-1.5 rounded-2xl border p-1.5 md:w-auto"
                 >
                     <button
+                        type="button"
                         @click="applyFilter('all')"
                         class="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold transition-all"
                         :class="
                             activeFilter === 'all'
-                                ? 'bg-cyan-500 text-slate-950 shadow-md'
-                                : 'text-slate-400 hover:text-white'
+                                ? 'bg-primary text-primary-foreground shadow-primary/20 shadow-md'
+                                : 'text-muted-foreground hover:text-foreground'
                         "
                     >
                         {{ isRTL ? 'الكل' : 'All Media' }}
                     </button>
                     <button
+                        type="button"
                         @click="applyFilter('unmatched')"
                         class="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold transition-all"
                         :class="
                             activeFilter === 'unmatched'
-                                ? 'bg-amber-500 text-slate-950 shadow-md'
-                                : 'text-slate-400 hover:text-white'
+                                ? 'bg-primary text-primary-foreground shadow-primary/20 shadow-md'
+                                : 'text-muted-foreground hover:text-foreground'
                         "
                     >
                         {{ isRTL ? 'غير مطابق' : 'Unmatched' }}
                         <span
                             v-if="stats.unmatched_count"
-                            class="py-0.2 ml-1 rounded-full bg-black/30 px-1.5 text-[10px]"
+                            class="py-0.2 ms-1 rounded-full bg-black/25 px-1.5 text-[10px] tabular-nums"
                         >
                             {{ stats.unmatched_count }}
                         </span>
                     </button>
                     <button
+                        type="button"
                         @click="applyFilter('missing_posters')"
                         class="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold transition-all"
                         :class="
                             activeFilter === 'missing_posters'
-                                ? 'bg-rose-500 text-white shadow-md'
-                                : 'text-slate-400 hover:text-white'
+                                ? 'bg-primary text-primary-foreground shadow-primary/20 shadow-md'
+                                : 'text-muted-foreground hover:text-foreground'
                         "
                     >
                         {{ isRTL ? 'بدون بوستر' : 'Missing Posters' }}
                     </button>
                     <button
+                        type="button"
                         @click="applyFilter('missing_arabic')"
                         class="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold transition-all"
                         :class="
                             activeFilter === 'missing_arabic'
-                                ? 'bg-purple-500 text-white shadow-md'
-                                : 'text-slate-400 hover:text-white'
+                                ? 'bg-primary text-primary-foreground shadow-primary/20 shadow-md'
+                                : 'text-muted-foreground hover:text-foreground'
                         "
                     >
                         {{ isRTL ? 'بدون عربي' : 'Missing Arabic' }}
                     </button>
                     <button
+                        type="button"
                         @click="applyFilter('movies')"
                         class="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold transition-all"
                         :class="
                             activeFilter === 'movies'
-                                ? 'bg-slate-700 text-white'
-                                : 'text-slate-400 hover:text-white'
+                                ? 'bg-primary text-primary-foreground shadow-primary/20 shadow-md'
+                                : 'text-muted-foreground hover:text-foreground'
                         "
                     >
                         {{ isRTL ? 'أفلام فقط' : 'Movies Only' }}
                     </button>
                     <button
+                        type="button"
                         @click="applyFilter('series')"
                         class="cursor-pointer rounded-xl px-4 py-2 text-xs font-bold transition-all"
                         :class="
                             activeFilter === 'series'
-                                ? 'bg-slate-700 text-white'
-                                : 'text-slate-400 hover:text-white'
+                                ? 'bg-primary text-primary-foreground shadow-primary/20 shadow-md'
+                                : 'text-muted-foreground hover:text-foreground'
                         "
                     >
                         {{ isRTL ? 'مسلسلات فقط' : 'Series Only' }}
@@ -781,7 +745,7 @@ const triggerBatchEnrich = async () => {
                 <!-- Instant Search Input -->
                 <div class="relative w-full md:w-80">
                     <Search
-                        class="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-slate-400"
+                        class="text-muted-foreground pointer-events-none absolute start-3.5 top-1/2 size-4 -translate-y-1/2"
                     />
                     <input
                         v-model="searchQuery"
@@ -792,7 +756,7 @@ const triggerBatchEnrich = async () => {
                                 ? 'ابحث بالاسم أو المسار...'
                                 : 'Search title or disk path...'
                         "
-                        class="w-full rounded-2xl border border-white/10 bg-slate-900/90 py-2.5 pr-4 pl-10 font-mono text-xs text-white placeholder-slate-500 transition-all focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+                        class="cf-field w-full rounded-2xl py-2.5 ps-10 pe-4 font-mono text-xs"
                     />
                 </div>
             </div>
@@ -802,7 +766,7 @@ const triggerBatchEnrich = async () => {
                 <div
                     v-for="item in localItems"
                     :key="`${item.type}-${item.id}`"
-                    class="group flex flex-col gap-3 rounded-3xl border border-white/10 bg-slate-900/60 p-4 transition-all hover:border-cyan-500/40 hover:bg-slate-900/90"
+                    class="cf-glass border-border/80 hover:border-primary/45 group flex flex-col gap-3 rounded-3xl border p-4 transition-all"
                 >
                     <!-- Top Row: Poster, Title & Actions -->
                     <div
@@ -1008,10 +972,11 @@ const triggerBatchEnrich = async () => {
 
                             <!-- Fix Match Modal Trigger -->
                             <button
+                                type="button"
                                 @click="openFixMatch(item)"
-                                class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-cyan-500 px-4 py-2.5 text-xs font-black text-slate-950 shadow-md shadow-cyan-500/10 transition-all hover:bg-cyan-400 active:scale-95"
+                                class="bg-primary text-primary-foreground shadow-primary/20 flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-black shadow-md transition-all hover:brightness-105 active:scale-95"
                             >
-                                <Wand2 class="h-3.5 w-3.5" />
+                                <Wand2 class="size-3.5" />
                                 <span>{{
                                     isRTL ? 'إصلاح ومطابقة' : 'Fix Match'
                                 }}</span>

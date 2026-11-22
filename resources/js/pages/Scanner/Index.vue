@@ -1,10 +1,11 @@
-﻿<script setup lang="ts">
-import { ref, onMounted, computed, watch, nextTick } from 'vue';
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
 import { useScanner } from '@/composables/useScanner';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import PageBanner from '@/components/common/PageBanner.vue';
 import ConfirmModal from '@/components/common/ConfirmModal.vue';
 import {
     ScanLine,
@@ -14,27 +15,19 @@ import {
     XCircle,
     RotateCcw,
     CheckCircle2,
-    AlertCircle,
-    FileVideo,
     HardDrive,
     Terminal,
     Layers,
-    Cpu,
     RefreshCw,
     Trash2,
     Folder,
     Film,
     Tv,
     Sparkles,
-    Check,
-    Filter,
-    Clock,
-    Info,
-    ShieldAlert,
     ShieldCheck,
-    ArrowRight,
-    Image as ImageIcon,
     MessageSquare,
+    SlidersHorizontal,
+    ChevronDown,
 } from '@lucide/vue';
 
 const props = defineProps<{
@@ -68,7 +61,6 @@ const {
     rescanFresh,
     scanFolder,
     clearCatalog,
-    runBackgroundWorker,
     fetchStatus,
 } = useScanner();
 
@@ -82,6 +74,8 @@ const newDirType = ref('mixed');
 const isAddingDir = ref(false);
 const isBatchEnriching = ref(false);
 const isClearing = ref(false);
+const isToolsMenuOpen = ref(false);
+const toolsMenuRef = ref<HTMLElement | null>(null);
 const toast = useToast();
 const toastMessage = ref('');
 watch(toastMessage, (val: string) => {
@@ -176,7 +170,7 @@ const promptRemoveDirectory = (idx: number, dir: any) => {
                         ? 'تمت إزالة المجلد بنجاح.'
                         : 'Directory removed.';
                 }
-            } catch (e) {}
+            } catch {}
         },
     };
 };
@@ -332,153 +326,213 @@ watch(
     },
 );
 
+const handleDocumentClick = (e: MouseEvent) => {
+    if (
+        isToolsMenuOpen.value &&
+        toolsMenuRef.value &&
+        !toolsMenuRef.value.contains(e.target as Node)
+    ) {
+        isToolsMenuOpen.value = false;
+    }
+};
+
+const handleDocumentKeydown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && isToolsMenuOpen.value) {
+        isToolsMenuOpen.value = false;
+    }
+};
+
 onMounted(() => {
     fetchStatus();
+    document.addEventListener('click', handleDocumentClick);
+    document.addEventListener('keydown', handleDocumentKeydown);
+});
+
+onUnmounted(() => {
+    document.removeEventListener('click', handleDocumentClick);
+    document.removeEventListener('keydown', handleDocumentKeydown);
 });
 </script>
 
 <template>
-    <AppLayout v-slot="{ play }">
+    <AppLayout>
         <Head :title="t('scanner_view.title')" />
-        <!-- Header -->
-        <div class="mb-8">
-            <div class="flex flex-wrap items-center justify-between gap-4">
-                <div class="flex items-center gap-3">
-                    <div
-                        class="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-400"
-                    >
-                        <ScanLine class="h-5 w-5" />
-                    </div>
-                    <div>
-                        <h1
-                            class="text-2xl font-extrabold text-white sm:text-3xl"
-                        >
-                            {{ t('scanner_view.title') }}
-                        </h1>
-                        <p class="mt-0.5 text-xs text-slate-400 sm:text-sm">
-                            {{ t('scanner_view.subtitle') }}
-                        </p>
-                    </div>
-                </div>
 
-                <div class="flex flex-wrap items-center gap-2.5">
-                    <Link
-                        href="/subtitles?tab=checker"
-                        class="flex cursor-pointer items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3.5 py-2 text-xs font-bold text-cyan-300 transition-all hover:bg-cyan-500/20"
-                    >
-                        <ShieldCheck class="h-4 w-4 text-cyan-400" />
-                        <span>{{
-                            isRTL ? 'فاحص ومطهر الترجمات' : 'Subtitle Checker'
-                        }}</span>
-                    </Link>
+        <!-- Header PageBanner -->
+        <PageBanner
+            class="mb-8"
+            :icon="ScanLine"
+            :title="t('scanner_view.title')"
+            :description="t('scanner_view.subtitle')"
+            :badge="`${monitoredDirs.length} ${isRTL ? 'مجلدات مراقبة' : 'Folders'}`"
+        >
+            <template #actions>
+                <button
+                    type="button"
+                    @click="startScan"
+                    :disabled="isScanning"
+                    class="bg-primary text-primary-foreground shadow-primary/25 flex min-h-10 cursor-pointer items-center gap-2 rounded-xl px-5 py-2 text-xs font-black shadow-lg transition-all hover:brightness-105 active:scale-95 disabled:opacity-50"
+                >
+                    <Play class="h-4 w-4 fill-current" />
+                    <span>{{
+                        isRTL
+                            ? 'بدء فحص تدريجي للمجلدات'
+                            : 'Start Incremental Scan'
+                    }}</span>
+                </button>
 
+                <button
+                    type="button"
+                    @click="enrichMissingPosters"
+                    :disabled="isBatchEnriching"
+                    class="cf-glass border-border/80 text-foreground hover:border-primary/40 flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition-all active:scale-95 disabled:opacity-50"
+                >
+                    <RefreshCw
+                        v-if="isBatchEnriching"
+                        class="text-primary h-4 w-4 animate-spin"
+                    />
+                    <Sparkles v-else class="text-primary h-4 w-4" />
+                    <span>{{
+                        isRTL ? 'تحميل الأغلفة الناقصة' : 'Auto-Download Artwork'
+                    }}</span>
+                </button>
+
+                <div ref="toolsMenuRef" class="relative">
                     <button
-                        @click="enrichMissingPosters"
-                        :disabled="isBatchEnriching"
-                        class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-bold text-slate-300 transition-all hover:bg-white/10"
+                        type="button"
+                        @click.stop="isToolsMenuOpen = !isToolsMenuOpen"
+                        :aria-expanded="isToolsMenuOpen"
+                        aria-haspopup="menu"
+                        class="cf-glass border-border/80 text-foreground hover:border-primary/40 flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition-all active:scale-95"
                     >
-                        <RefreshCw
-                            v-if="isBatchEnriching"
-                            class="h-4 w-4 animate-spin text-cyan-400"
+                        <SlidersHorizontal class="text-primary h-4 w-4" />
+                        <span>{{ isRTL ? 'أدوات' : 'Tools' }}</span>
+                        <ChevronDown
+                            class="text-muted-foreground h-3.5 w-3.5 transition-transform duration-200"
+                            :class="isToolsMenuOpen ? 'rotate-180' : ''"
                         />
-                        <Sparkles v-else class="h-4 w-4 text-cyan-400" />
-                        <span>{{
-                            isRTL
-                                ? 'تحميل الأغلفة الناقصة تلقائياً'
-                                : 'Auto-Download Missing Artwork'
-                        }}</span>
                     </button>
 
-                    <button
-                        @click="promptRescanFresh"
-                        :disabled="isScanning"
-                        class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-bold text-amber-300 transition-all hover:border-amber-500/40 hover:bg-white/10"
+                    <div
+                        v-if="isToolsMenuOpen"
+                        role="menu"
+                        class="cf-glass-popover border-border/80 absolute end-0 top-full z-40 mt-2 min-w-[230px] rounded-2xl border p-1.5 shadow-2xl"
                     >
-                        <RotateCcw class="h-4 w-4" />
-                        <span>{{
-                            isRTL
-                                ? 'إعادة فحص شاملة للمكتبة'
-                                : 'Fresh Full Rescan'
-                        }}</span>
-                    </button>
+                        <button
+                            type="button"
+                            role="menuitem"
+                            :disabled="isScanning"
+                            @click="
+                                isToolsMenuOpen = false;
+                                promptRescanIncremental();
+                            "
+                            class="text-foreground hover:bg-primary/10 hover:text-primary flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-start text-xs font-bold transition-colors disabled:opacity-50"
+                        >
+                            <RotateCcw class="text-primary h-4 w-4 shrink-0" />
+                            <span>{{
+                                isRTL
+                                    ? 'إعادة فحص تدريجي'
+                                    : 'Incremental Rescan'
+                            }}</span>
+                        </button>
 
-                    <button
-                        @click="promptRescanIncremental"
-                        :disabled="isScanning"
-                        class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-bold text-cyan-300 transition-all hover:border-cyan-500/40 hover:bg-white/10"
-                    >
-                        <RotateCcw class="h-4 w-4" />
-                        <span>{{
-                            isRTL ? 'إعادة فحص تدريجي' : 'Incremental Rescan'
-                        }}</span>
-                    </button>
+                        <button
+                            type="button"
+                            role="menuitem"
+                            :disabled="isScanning"
+                            @click="
+                                isToolsMenuOpen = false;
+                                promptRescanFresh();
+                            "
+                            class="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-start text-xs font-bold text-amber-300 transition-colors hover:bg-amber-500/15 disabled:opacity-50"
+                        >
+                            <RotateCcw class="h-4 w-4 shrink-0" />
+                            <span>{{
+                                isRTL
+                                    ? 'إعادة فحص شاملة للمكتبة'
+                                    : 'Fresh Full Rescan'
+                            }}</span>
+                        </button>
 
-                    <button
-                        @click="promptClearCatalog"
-                        :disabled="isClearing || isScanning"
-                        class="flex cursor-pointer items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2 text-xs font-bold text-rose-400 transition-all hover:bg-rose-500/20"
-                    >
-                        <Trash2 class="h-4 w-4" />
-                        <span>{{
-                            isRTL
-                                ? 'مسح فهارس المكتبة والإحصائيات'
-                                : 'Clear Library Catalog'
-                        }}</span>
-                    </button>
+                        <Link
+                            href="/subtitles?tab=checker"
+                            role="menuitem"
+                            @click="isToolsMenuOpen = false"
+                            class="text-foreground hover:bg-primary/10 hover:text-primary flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-start text-xs font-bold transition-colors"
+                        >
+                            <ShieldCheck
+                                class="text-primary h-4 w-4 shrink-0"
+                            />
+                            <span>{{
+                                isRTL
+                                    ? 'فاحص ومطهر الترجمات'
+                                    : 'Subtitle Checker'
+                            }}</span>
+                        </Link>
 
-                    <button
-                        @click="startScan"
-                        :disabled="isScanning"
-                        class="flex cursor-pointer items-center gap-2 rounded-xl bg-cyan-500 px-5 py-2 text-xs font-black text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:bg-cyan-400 active:scale-95"
-                    >
-                        <Play class="h-4 w-4 fill-current" />
-                        <span>{{
-                            isRTL
-                                ? 'بدء فحص تدريجي للمجلدات'
-                                : 'Start Incremental Scan'
-                        }}</span>
-                    </button>
+                        <div class="border-border/70 my-1 border-t" />
+
+                        <button
+                            type="button"
+                            role="menuitem"
+                            :disabled="isClearing || isScanning"
+                            @click="
+                                isToolsMenuOpen = false;
+                                promptClearCatalog();
+                            "
+                            class="text-destructive hover:bg-destructive/15 flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-start text-xs font-bold transition-colors disabled:opacity-50"
+                        >
+                            <Trash2 class="h-4 w-4 shrink-0" />
+                            <span>{{
+                                isRTL
+                                    ? 'مسح فهارس المكتبة والإحصائيات'
+                                    : 'Clear Library Catalog'
+                            }}</span>
+                        </button>
+                    </div>
                 </div>
-            </div>
-        </div>
+            </template>
+        </PageBanner>
 
         <!-- 1. Stats Bento Row (Live Reactive Stats + 5th Collections Card) -->
         <div class="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
             <div
-                class="glass-panel flex items-center gap-4 rounded-2xl border border-white/10 p-5"
+                class="cf-glass border-border/80 flex items-center gap-4 rounded-2xl border p-5"
             >
                 <div
-                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"
+                    class="bg-primary/15 text-primary flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
                 >
                     <Film class="h-5 w-5" />
                 </div>
                 <div>
                     <span
-                        class="block text-xs font-bold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground block text-xs font-bold tracking-wider uppercase"
                         >{{ isRTL ? 'الأفلام المفهرسة' : 'Indexed Movies' }}</span
                     >
-                    <span class="mt-0.5 block text-2xl font-black text-white">{{
-                        currentStats.total_movies
-                    }}</span>
+                    <span
+                        class="text-foreground mt-0.5 block text-2xl font-black tabular-nums"
+                        >{{ currentStats.total_movies }}</span
+                    >
                 </div>
             </div>
 
             <div
-                class="glass-panel flex items-center gap-4 rounded-2xl border border-white/10 p-5"
+                class="cf-glass border-border/80 flex items-center gap-4 rounded-2xl border p-5"
             >
                 <div
-                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-400"
+                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-500/15 text-indigo-400"
                 >
                     <Tv class="h-5 w-5" />
                 </div>
                 <div>
                     <span
-                        class="block text-xs font-bold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground block text-xs font-bold tracking-wider uppercase"
                         >{{ isRTL ? 'المسلسلات المفهرسة' : 'TV Series' }}</span
                     >
-                    <span class="mt-0.5 block text-2xl font-black text-white"
+                    <span
+                        class="text-foreground mt-0.5 block text-2xl font-black tabular-nums"
                         >{{ currentStats.total_series }}
-                        <span class="text-xs text-slate-500"
+                        <span class="text-muted-foreground text-xs"
                             >({{ currentStats.total_episodes }} ep)</span
                         ></span
                     >
@@ -486,59 +540,62 @@ onMounted(() => {
             </div>
 
             <div
-                class="glass-panel flex items-center gap-4 rounded-2xl border border-white/10 p-5"
+                class="cf-glass border-border/80 flex items-center gap-4 rounded-2xl border p-5"
             >
                 <div
-                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400"
+                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-400"
                 >
                     <Layers class="h-5 w-5" />
                 </div>
                 <div>
                     <span
-                        class="block text-xs font-bold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground block text-xs font-bold tracking-wider uppercase"
                         >{{ isRTL ? 'سلاسل الأفلام' : 'Collections' }}</span
                     >
-                    <span class="mt-0.5 block text-2xl font-black text-white">{{
-                        currentStats.total_collections || 0
-                    }}</span>
+                    <span
+                        class="text-foreground mt-0.5 block text-2xl font-black tabular-nums"
+                        >{{ currentStats.total_collections || 0 }}</span
+                    >
                 </div>
             </div>
 
             <div
-                class="glass-panel flex items-center gap-4 rounded-2xl border border-white/10 p-5"
+                class="cf-glass border-border/80 flex items-center gap-4 rounded-2xl border p-5"
             >
                 <div
-                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400"
+                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-400"
                 >
                     <HardDrive class="h-5 w-5" />
                 </div>
                 <div>
                     <span
-                        class="block text-xs font-bold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground block text-xs font-bold tracking-wider uppercase"
                         >{{ isRTL ? 'حجم الوسائط' : 'Indexed Size' }}</span
                     >
-                    <span class="mt-0.5 block text-2xl font-black text-white">{{
-                        currentStats.storage_size_formatted
-                    }}</span>
+                    <span
+                        class="text-foreground mt-0.5 block text-2xl font-black tabular-nums"
+                        >{{ currentStats.storage_size_formatted }}</span
+                    >
                 </div>
             </div>
 
             <div
-                class="glass-panel col-span-2 flex items-center gap-4 rounded-2xl border border-white/10 p-5 sm:col-span-1"
+                class="cf-glass border-border/80 col-span-2 flex items-center gap-4 rounded-2xl border p-5 sm:col-span-1"
             >
                 <div
-                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-purple-500/10 text-purple-400"
+                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-purple-500/15 text-purple-400"
                 >
                     <MessageSquare class="h-5 w-5" />
                 </div>
                 <div>
                     <span
-                        class="block text-xs font-bold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground block text-xs font-bold tracking-wider uppercase"
                         >{{ isRTL ? 'ملفات الترجمة' : 'Subtitles' }}</span
                     >
-                    <span class="mt-0.5 block text-2xl font-black text-white">{{
-                        currentStats.total_subtitles
-                    }}</span>
+                    <span
+                        class="text-foreground mt-0.5 block text-2xl font-black tabular-nums"
+                        >{{ currentStats.total_subtitles }}</span
+                    >
                 </div>
             </div>
         </div>
@@ -550,10 +607,10 @@ onMounted(() => {
                 scanStatus.status === 'scanning' ||
                 scanStatus.status === 'paused'
             "
-            class="glass-panel relative mb-8 space-y-4 overflow-hidden rounded-3xl border border-cyan-500/30 p-6 shadow-lg shadow-cyan-500/5"
+            class="cf-glass-elevated border-primary/35 shadow-primary/10 relative mb-8 space-y-4 overflow-hidden rounded-3xl border p-6 shadow-lg"
         >
             <div
-                class="ambient-glow pointer-events-none -top-20 -right-20 h-80 w-80 bg-cyan-500/20"
+                class="ambient-glow bg-primary/15 pointer-events-none absolute -end-20 -top-20 h-80 w-80"
             ></div>
 
             <div
@@ -561,13 +618,13 @@ onMounted(() => {
             >
                 <div class="flex items-center gap-3">
                     <div
-                        class="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-400"
+                        class="bg-primary/20 text-primary flex h-9 w-9 items-center justify-center rounded-xl"
                     >
                         <RefreshCw class="h-5 w-5 animate-spin" />
                     </div>
                     <div>
                         <h3
-                            class="flex items-center gap-2 text-sm font-extrabold text-white"
+                            class="text-foreground flex items-center gap-2 text-sm font-extrabold"
                         >
                             <span>{{
                                 isRTL
@@ -575,14 +632,14 @@ onMounted(() => {
                                     : 'Virtual Scanner Active & Indexing...'
                             }}</span>
                             <span
-                                class="cinema-badge border-cyan-500/30 bg-cyan-500/20 text-[10px] text-cyan-300"
+                                class="cinema-badge border-primary/35 bg-primary/15 text-primary border text-[10px] tabular-nums"
                             >
                                 {{ scanStatus.processed_files }} /
                                 {{ scanStatus.total_files }}
                             </span>
                         </h3>
                         <p
-                            class="mt-0.5 max-w-lg truncate text-xs text-slate-400"
+                            class="text-muted-foreground mt-0.5 max-w-lg truncate text-xs"
                         >
                             {{
                                 scanStatus.current_file ||
@@ -598,23 +655,26 @@ onMounted(() => {
                 <div class="flex items-center gap-2">
                     <button
                         v-if="isScanning"
+                        type="button"
                         @click="pauseScan"
-                        class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/20 px-3.5 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/30"
+                        class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-500/35 bg-amber-500/20 px-3.5 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/30"
                     >
                         <Pause class="h-3.5 w-3.5" />
                         <span>{{ isRTL ? 'إيقاف مؤقت' : 'Pause' }}</span>
                     </button>
                     <button
                         v-if="isPaused"
+                        type="button"
                         @click="resumeScan"
-                        class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-cyan-500 px-3.5 py-1.5 text-xs font-bold text-slate-950 hover:bg-cyan-400"
+                        class="bg-primary text-primary-foreground flex cursor-pointer items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold hover:brightness-105"
                     >
                         <Play class="h-3.5 w-3.5 fill-current" />
                         <span>{{ isRTL ? 'استئناف' : 'Resume' }}</span>
                     </button>
                     <button
+                        type="button"
                         @click="cancelScan"
-                        class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/20 px-3.5 py-1.5 text-xs font-bold text-rose-300 hover:bg-rose-500/30"
+                        class="border-destructive/35 bg-destructive/20 text-destructive hover:bg-destructive/30 flex cursor-pointer items-center gap-1.5 rounded-xl border px-3.5 py-1.5 text-xs font-bold"
                     >
                         <XCircle class="h-3.5 w-3.5" />
                         <span>{{ isRTL ? 'إلغاء' : 'Cancel' }}</span>
@@ -625,17 +685,17 @@ onMounted(() => {
             <!-- Progress Bar -->
             <div class="relative z-10 space-y-1">
                 <div
-                    class="h-3 w-full overflow-hidden rounded-full border border-white/10 bg-white/5"
+                    class="border-border/80 bg-muted/40 h-3 w-full overflow-hidden rounded-full border"
                 >
                     <div
-                        class="relative h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 transition-all duration-300"
+                        class="bg-primary relative h-full transition-all duration-300"
                         :style="{
                             width: `${scanStatus.progress_percent || 0}%`,
                         }"
                     ></div>
                 </div>
                 <div
-                    class="flex justify-between text-[11px] font-bold text-slate-400"
+                    class="text-muted-foreground flex justify-between text-[11px] font-bold tabular-nums"
                 >
                     <span
                         >{{ isRTL ? 'نسبة الإنجاز' : 'Progress' }}:
@@ -650,13 +710,13 @@ onMounted(() => {
             </div>
         </div>
 
-        <!-- 3. Monitored Folders Grid (Creative-FileFlow Style) -->
+        <!-- 3. Monitored Folders Grid (CreativeFlow Style) -->
         <div class="mb-8 space-y-4">
             <div class="flex items-center justify-between">
                 <h3
-                    class="flex items-center gap-2 text-base font-bold text-white"
+                    class="text-foreground flex items-center gap-2 text-base font-bold"
                 >
-                    <Folder class="h-4 w-4 text-cyan-400" />
+                    <Folder class="text-primary h-4 w-4" />
                     <span>{{
                         isRTL
                             ? 'المجلدات المراقبة والمفهرسة'
@@ -673,25 +733,25 @@ onMounted(() => {
                 <div
                     v-for="(dir, idx) in monitoredDirs"
                     :key="dir.path"
-                    class="glass-panel group flex flex-col justify-between space-y-4 rounded-2xl border border-white/10 p-5 transition-all hover:border-cyan-500/40"
+                    class="cf-glass group border-border/80 hover:border-primary/45 flex flex-col justify-between space-y-4 rounded-2xl border p-5 transition-all"
                 >
                     <div class="flex items-start justify-between gap-3">
                         <div class="flex min-w-0 items-start gap-3">
                             <div
-                                class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400"
+                                class="bg-primary/15 text-primary mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
                             >
                                 <Folder class="h-4 w-4" />
                             </div>
                             <div class="min-w-0">
                                 <h4
-                                    class="truncate font-mono text-xs font-bold text-white"
+                                    class="text-foreground truncate font-mono text-xs font-bold"
                                     :title="dir.path"
                                 >
                                     {{ dir.path }}
                                 </h4>
                                 <div class="mt-1 flex items-center gap-2">
                                     <span
-                                        class="cinema-badge border-cyan-500/30 bg-cyan-500/20 text-[10px] text-cyan-300"
+                                        class="cinema-badge border-primary/35 bg-primary/15 text-primary border text-[10px]"
                                     >
                                         {{
                                             dir.type === 'movies'
@@ -707,7 +767,9 @@ onMounted(() => {
                                                     : 'Mixed'
                                         }}
                                     </span>
-                                    <span class="text-[11px] text-slate-400">
+                                    <span
+                                        class="text-muted-foreground text-[11px]"
+                                    >
                                         {{
                                             isRTL
                                                 ? 'فهرسة نشطة'
@@ -719,8 +781,9 @@ onMounted(() => {
                         </div>
 
                         <button
+                            type="button"
                             @click="promptRemoveDirectory(idx, dir)"
-                            class="cursor-pointer rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-rose-500/10 hover:text-rose-400"
+                            class="text-muted-foreground hover:bg-destructive/15 hover:text-destructive cursor-pointer rounded-lg p-1.5 transition-colors"
                             :title="isRTL ? 'إزالة المجلد' : 'Remove folder'"
                         >
                             <Trash2 class="h-4 w-4" />
@@ -728,10 +791,10 @@ onMounted(() => {
                     </div>
 
                     <div
-                        class="flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-3"
+                        class="border-border/60 flex flex-wrap items-center justify-between gap-2 border-t pt-3"
                     >
                         <span
-                            class="flex items-center gap-1 text-[11px] text-slate-400"
+                            class="text-muted-foreground flex items-center gap-1 text-[11px]"
                         >
                             <CheckCircle2
                                 class="h-3.5 w-3.5 text-emerald-400"
@@ -741,9 +804,10 @@ onMounted(() => {
 
                         <div class="flex items-center gap-2">
                             <button
+                                type="button"
                                 @click="scanSingleFolder(dir)"
                                 :disabled="isScanning"
-                                class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-bold text-cyan-400 transition-all hover:bg-cyan-500/20"
+                                class="border-primary/35 bg-primary/15 text-primary hover:bg-primary/25 flex cursor-pointer items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all active:scale-95 disabled:opacity-50"
                             >
                                 <Play class="h-3 w-3 fill-current" />
                                 <span>{{
@@ -752,9 +816,10 @@ onMounted(() => {
                             </button>
 
                             <button
+                                type="button"
                                 @click="promptFreshRescanFolder(dir)"
                                 :disabled="isScanning"
-                                class="flex cursor-pointer items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-amber-300 transition-all hover:border-amber-500/30 hover:bg-amber-500/20"
+                                class="cf-glass border-border/80 flex cursor-pointer items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-bold text-amber-300 transition-all hover:border-amber-500/40 hover:bg-amber-500/15 active:scale-95 disabled:opacity-50"
                                 :title="
                                     isRTL
                                         ? 'إعادة فحص جديدة لهذا المجلد ومسح عناصره السابقة'
@@ -772,17 +837,17 @@ onMounted(() => {
             <!-- Clean Empty State when no folders added -->
             <div
                 v-else
-                class="glass-panel space-y-2 rounded-3xl border border-white/10 p-10 text-center text-slate-400"
+                class="cf-glass border-border/80 text-muted-foreground space-y-2 rounded-3xl border p-10 text-center"
             >
-                <Folder class="mx-auto h-8 w-8 text-cyan-500/50" />
-                <p class="text-sm font-bold text-white">
+                <Folder class="text-primary/60 mx-auto h-8 w-8" />
+                <p class="text-foreground text-sm font-bold">
                     {{
                         isRTL
                             ? 'لم تقم بإضافة أي مجلدات للمكتبة بعد'
                             : 'No media folders added yet'
                     }}
                 </p>
-                <p class="mx-auto max-w-md text-xs text-slate-500">
+                <p class="text-muted-foreground mx-auto max-w-md text-xs">
                     {{
                         isRTL
                             ? 'أدخل مسار مجلد الأفلام أو المسلسلات أدناه للبدء بالفهرسة والمسح التلقائي.'
@@ -794,7 +859,7 @@ onMounted(() => {
             <!-- Add Folder Form -->
             <form
                 @submit.prevent="addDirectory"
-                class="glass-panel flex flex-col items-center gap-3 rounded-2xl border border-white/10 p-4 sm:flex-row"
+                class="cf-glass border-border/80 flex flex-col items-center gap-3 rounded-2xl border p-4 sm:flex-row"
             >
                 <div class="relative w-full flex-1">
                     <input
@@ -805,27 +870,27 @@ onMounted(() => {
                                 ? 'مثال: D:/Movies أو /Volumes/Media/TV'
                                 : 'e.g. D:/Movies or C:/Users/hasan/Videos'
                         "
-                        class="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 ps-10 pe-4 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+                        class="cf-field border-border/80 bg-card/80 text-foreground placeholder:text-muted-foreground focus:border-primary h-10 w-full rounded-xl border ps-10 pe-4 text-xs focus:outline-none"
                     />
                     <FolderPlus
-                        class="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                        class="text-muted-foreground pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2"
                     />
                 </div>
 
                 <div class="flex w-full items-center gap-2 sm:w-auto">
                     <select
                         v-model="newDirType"
-                        class="cursor-pointer rounded-xl border border-white/10 bg-[#080B12] px-3 py-2.5 text-xs text-slate-300 focus:border-cyan-500 focus:outline-none"
+                        class="cf-glass border-border/80 bg-card text-foreground focus:border-primary h-10 cursor-pointer rounded-xl border px-3 text-xs font-bold focus:outline-none"
                     >
-                        <option value="mixed">
+                        <option value="mixed" class="bg-card text-foreground">
                             {{
                                 isRTL ? 'مختلط (أفلام ومسلسلات)' : 'Mixed Content'
                             }}
                         </option>
-                        <option value="movies">
+                        <option value="movies" class="bg-card text-foreground">
                             {{ isRTL ? 'أفلام فقط' : 'Movies Only' }}
                         </option>
-                        <option value="series">
+                        <option value="series" class="bg-card text-foreground">
                             {{ isRTL ? 'مسلسلات فقط' : 'TV Series Only' }}
                         </option>
                     </select>
@@ -833,7 +898,7 @@ onMounted(() => {
                     <button
                         type="submit"
                         :disabled="isAddingDir || !newDirPath.trim()"
-                        class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-cyan-500 px-4 py-2.5 text-xs font-extrabold whitespace-nowrap text-slate-950 transition-all hover:bg-cyan-400 disabled:opacity-50"
+                        class="bg-primary text-primary-foreground shadow-primary/25 flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-extrabold whitespace-nowrap shadow-sm transition-all hover:brightness-105 active:scale-95 disabled:opacity-50"
                     >
                         <FolderPlus class="h-4 w-4" />
                         <span>{{ isRTL ? 'إضافة المجلد' : 'Add Folder' }}</span>
@@ -843,15 +908,13 @@ onMounted(() => {
         </div>
 
         <!-- 4. Real-time Diagnostic Terminal Feed -->
-        <div
-            class="glass-panel space-y-4 rounded-3xl border border-white/10 p-6"
-        >
+        <div class="cf-glass border-border/80 space-y-4 rounded-3xl border p-6">
             <div
-                class="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4"
+                class="border-border/70 flex flex-wrap items-center justify-between gap-3 border-b pb-4"
             >
                 <div class="flex items-center gap-2">
-                    <Terminal class="h-4 w-4 text-cyan-400" />
-                    <h3 class="text-sm font-extrabold text-white">
+                    <Terminal class="text-primary h-4 w-4" />
+                    <h3 class="text-foreground text-sm font-extrabold">
                         {{
                             isRTL
                                 ? 'سجل العمليات والفهرسة المباشر'
@@ -870,12 +933,13 @@ onMounted(() => {
                             'error',
                         ] as const"
                         :key="flt"
+                        type="button"
                         @click="terminalFilter = flt"
                         class="cursor-pointer rounded-lg px-2.5 py-1 font-bold uppercase transition-all"
                         :class="
                             terminalFilter === flt
-                                ? 'bg-cyan-500 font-black text-slate-950'
-                                : 'bg-white/5 text-slate-400 hover:text-white'
+                                ? 'bg-primary text-primary-foreground font-black shadow-xs'
+                                : 'bg-muted/50 text-muted-foreground hover:text-foreground'
                         "
                     >
                         {{ flt }}
@@ -886,22 +950,22 @@ onMounted(() => {
             <!-- Terminal Output Window -->
             <div
                 id="terminal-feed"
-                class="custom-scrollbar h-64 space-y-1.5 overflow-y-auto rounded-2xl border border-white/5 bg-black/80 p-4 font-mono text-xs"
+                class="custom-scrollbar border-border/60 h-64 space-y-1.5 overflow-y-auto rounded-2xl border bg-black/80 p-4 font-mono text-xs tabular-nums"
             >
                 <div
                     v-for="(log, idx) in filteredLogs"
                     :key="idx"
                     class="flex items-start gap-2.5 leading-relaxed"
                 >
-                    <span class="shrink-0 text-slate-600 select-none"
+                    <span class="shrink-0 text-slate-500 select-none"
                         >[{{ log.time }}]</span
                     >
                     <span
                         :class="{
                             'text-emerald-400': log.level === 'success',
-                            'text-cyan-300': log.level === 'info',
+                            'text-primary': log.level === 'info',
                             'text-amber-400': log.level === 'warning',
-                            'font-bold text-rose-400': log.level === 'error',
+                            'text-destructive font-bold': log.level === 'error',
                         }"
                     >
                         {{ log.message }}
@@ -910,7 +974,7 @@ onMounted(() => {
 
                 <div
                     v-if="filteredLogs.length === 0"
-                    class="py-12 text-center text-slate-600 italic"
+                    class="text-muted-foreground py-12 text-center italic"
                 >
                     {{
                         isRTL

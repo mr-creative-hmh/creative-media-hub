@@ -377,23 +377,24 @@ const startDownload = async (torrent: any) => {
 <template>
     <div
         v-if="isOpen"
-        class="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md"
+        class="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
         :dir="isRTL ? 'rtl' : 'ltr'"
+        @click.self="emit('close')"
     >
         <div
-            class="glass-panel relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-cyan-500/20 bg-slate-900/95 shadow-2xl"
+            class="cf-glass-elevated border-border/80 relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border shadow-2xl"
         >
             <!-- Ambient Glow Background -->
             <div
-                class="ambient-glow pointer-events-none -top-24 -left-24 h-96 w-96 bg-cyan-500/10"
+                class="bg-primary/10 pointer-events-none absolute -start-24 -top-24 size-96 rounded-full blur-3xl"
             ></div>
             <div
-                class="ambient-glow pointer-events-none -right-24 -bottom-24 h-96 w-96 bg-purple-500/10"
+                class="bg-primary/8 pointer-events-none absolute -end-24 -bottom-24 size-96 rounded-full blur-3xl"
             ></div>
 
             <!-- Header Section -->
             <div
-                class="relative z-10 flex items-start justify-between border-b border-white/10 bg-slate-950/50 p-6"
+                class="border-border/70 bg-card/50 relative z-10 flex items-start justify-between border-b p-6"
             >
                 <div class="flex items-start gap-4">
                     <img
@@ -801,9 +802,9 @@ const startDownload = async (torrent: any) => {
             <!-- Manual Query Override Search Bar -->
             <div class="relative z-10 px-6 pt-3">
                 <div
-                    class="flex items-center gap-2 rounded-2xl border border-white/10 bg-black/50 p-1.5 transition-colors focus-within:border-cyan-500/50"
+                    class="border-border/80 bg-card/70 focus-within:border-primary/60 flex items-center gap-2 rounded-2xl border p-1.5 transition-colors"
                 >
-                    <Search class="ml-2.5 h-4 w-4 shrink-0 text-cyan-400" />
+                    <Search class="text-primary ms-2.5 size-4 shrink-0" />
                     <input
                         v-model="customQuery"
                         @keydown.enter.prevent="fetchTorrents"
@@ -813,19 +814,19 @@ const startDownload = async (torrent: any) => {
                                 ? 'تعديل عنوان البحث أو إضافة كلمات مفتاحية (مثل 1080p, Remux)...'
                                 : 'Override search query or add keywords (e.g. 1080p, Remux, 2024)...'
                         "
-                        class="flex-1 bg-transparent px-2 text-xs font-semibold text-white placeholder-slate-500 focus:outline-none"
+                        class="text-foreground placeholder-muted-foreground flex-1 bg-transparent px-2 text-xs font-semibold focus:outline-none"
                     />
                     <button
                         type="button"
                         @click="fetchTorrents"
                         :disabled="loading"
-                        class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-cyan-500 px-3 py-1.5 text-xs font-black text-slate-950 shadow-md shadow-cyan-500/20 transition-all hover:bg-cyan-400 active:scale-95 disabled:opacity-50"
+                        class="bg-primary text-primary-foreground shadow-primary/20 flex cursor-pointer items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-black shadow-md transition-all hover:brightness-105 active:scale-95 disabled:opacity-50"
                     >
                         <RefreshCw
                             v-if="loading"
-                            class="h-3.5 w-3.5 animate-spin"
+                            class="size-3.5 animate-spin"
                         />
-                        <Search v-else class="h-3.5 w-3.5" />
+                        <Search v-else class="size-3.5" />
                         <span>{{ isRTL ? 'بحث' : 'Search' }}</span>
                     </button>
                 </div>
@@ -833,22 +834,23 @@ const startDownload = async (torrent: any) => {
 
             <!-- Controls & Options Bar -->
             <div
-                class="relative z-10 mt-3 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-slate-900/70 px-6 py-3"
+                class="border-border/70 bg-card/40 relative z-10 mt-3 flex flex-wrap items-center justify-between gap-3 border-b px-6 py-3"
             >
                 <!-- Quality Filters & Clean Filter -->
                 <div class="flex flex-wrap items-center gap-3">
                     <div
-                        class="flex items-center gap-1 rounded-xl border border-white/10 bg-black/40 p-1"
+                        class="border-border/80 bg-card/70 flex items-center gap-1 rounded-xl border p-1"
                     >
                         <button
                             v-for="q in qualities"
                             :key="q"
+                            type="button"
                             @click="selectedQuality = q"
                             :class="[
                                 'cursor-pointer rounded-lg px-3 py-1 text-xs font-bold transition-all',
                                 selectedQuality === q
-                                    ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
-                                    : 'text-slate-400 hover:bg-white/5 hover:text-white',
+                                    ? 'bg-primary text-primary-foreground shadow-primary/20 shadow-md'
+                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                             ]"
                         >
                             {{
@@ -921,32 +923,42 @@ const startDownload = async (torrent: any) => {
                     <div
                         v-for="s in 5"
                         :key="s"
-                        class="flex animate-pulse flex-col justify-between gap-4 rounded-2xl border border-white/[0.08] bg-slate-900/60 p-4.5 backdrop-blur-md md:flex-row md:items-center"
+                        class="cf-glass border-border/60 flex flex-col justify-between gap-4 rounded-2xl border p-4.5 md:flex-row md:items-center"
                     >
                         <!-- Title & Badges Placeholder -->
                         <div class="flex-1 space-y-2.5">
                             <div class="flex flex-wrap items-center gap-2">
                                 <div
-                                    class="h-5 w-14 rounded-lg bg-white/10"
+                                    class="cf-shimmer bg-muted/60 h-5 w-14 rounded-lg"
                                 ></div>
                                 <div
-                                    class="h-5 w-20 rounded-lg bg-white/10"
+                                    class="cf-shimmer bg-muted/60 h-5 w-20 rounded-lg"
                                 ></div>
                                 <div
-                                    class="h-5 w-12 rounded-lg bg-white/5"
+                                    class="cf-shimmer bg-muted/40 h-5 w-12 rounded-lg"
                                 ></div>
                             </div>
-                            <div class="h-4 w-5/6 rounded bg-white/10"></div>
-                            <div class="h-3 w-1/2 rounded bg-white/5"></div>
+                            <div
+                                class="cf-shimmer bg-muted/60 h-4 w-5/6 rounded"
+                            ></div>
+                            <div
+                                class="cf-shimmer bg-muted/40 h-3 w-1/2 rounded"
+                            ></div>
                         </div>
 
                         <!-- Meta (Seeds/Peers/Size) & Action Button Placeholder -->
                         <div class="flex shrink-0 items-center gap-4">
-                            <div class="space-y-1.5 text-right">
-                                <div class="h-3 w-16 rounded bg-white/10"></div>
-                                <div class="h-3 w-12 rounded bg-white/5"></div>
+                            <div class="space-y-1.5 text-end">
+                                <div
+                                    class="cf-shimmer bg-muted/60 h-3 w-16 rounded"
+                                ></div>
+                                <div
+                                    class="cf-shimmer bg-muted/40 h-3 w-12 rounded"
+                                ></div>
                             </div>
-                            <div class="h-10 w-28 rounded-xl bg-white/10"></div>
+                            <div
+                                class="cf-shimmer bg-muted/60 h-10 w-28 rounded-xl"
+                            ></div>
                         </div>
                     </div>
                 </div>
@@ -954,9 +966,9 @@ const startDownload = async (torrent: any) => {
                 <!-- Error Message -->
                 <div
                     v-else-if="errorMessage"
-                    class="flex items-center gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-400"
+                    class="border-destructive/30 bg-destructive/10 text-destructive flex items-center gap-3 rounded-2xl border p-4 text-xs"
                 >
-                    <AlertCircle class="h-4 w-4 shrink-0" />
+                    <AlertCircle class="size-4 shrink-0" />
                     <span>{{ errorMessage }}</span>
                 </div>
 
@@ -966,18 +978,18 @@ const startDownload = async (torrent: any) => {
                     class="space-y-3 py-12 text-center"
                 >
                     <div
-                        class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-500"
+                        class="border-border/80 bg-muted/40 text-muted-foreground mx-auto flex size-12 items-center justify-center rounded-2xl border"
                     >
-                        <AlertCircle class="h-6 w-6" />
+                        <AlertCircle class="size-6" />
                     </div>
-                    <p class="text-sm font-bold text-white">
+                    <p class="text-foreground text-sm font-bold">
                         {{
                             isRTL
                                 ? 'لم يتم العثور على تورنت نشط'
                                 : 'No Active Torrents Found'
                         }}
                     </p>
-                    <p class="mx-auto max-w-md text-xs text-slate-400">
+                    <p class="text-muted-foreground mx-auto max-w-md text-xs">
                         {{
                             isSeriesLike && searchMode === 'episode'
                                 ? isRTL
@@ -995,10 +1007,10 @@ const startDownload = async (torrent: any) => {
                     v-for="(torrent, index) in filteredTorrents"
                     :key="torrent.info_hash"
                     :class="[
-                        'glass-panel flex flex-col items-start justify-between gap-4 rounded-2xl p-4 transition-all md:flex-row md:items-center',
+                        'cf-glass flex flex-col items-start justify-between gap-4 rounded-2xl p-4 tabular-nums transition-all md:flex-row md:items-center',
                         index === 0 && getSeeds(torrent) >= 5
-                            ? 'border-2 border-cyan-400/50 bg-cyan-950/20 shadow-lg shadow-cyan-500/10'
-                            : 'border border-white/5 bg-slate-950/40 hover:border-cyan-500/30',
+                            ? 'border-primary/50 bg-primary/10 shadow-primary/10 border-2 shadow-lg'
+                            : 'border-border/80 hover:border-primary/40 border',
                     ]"
                 >
                     <div class="min-w-0 flex-1 space-y-2">
@@ -1282,13 +1294,14 @@ const startDownload = async (torrent: any) => {
 
                         <button
                             v-else
+                            type="button"
                             @click="handleDownloadClick(torrent)"
                             :disabled="downloadingHash === torrent.info_hash"
                             :class="[
                                 'flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all active:scale-95 disabled:opacity-50',
                                 getSeeds(torrent) === 0
                                     ? 'border border-rose-500/30 bg-rose-500/20 text-rose-300 hover:bg-rose-500/30'
-                                    : 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20 hover:bg-cyan-400',
+                                    : 'bg-primary text-primary-foreground shadow-primary/20 shadow-md hover:brightness-105',
                             ]"
                         >
                             <Loader2

@@ -873,24 +873,25 @@ const saveManualEdit = async () => {
     <div
         v-if="show"
         class="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
+        @click.self="closeModal"
     >
         <div
-            class="glass-panel relative flex max-h-[92vh] w-full max-w-2xl flex-col space-y-4 rounded-3xl border border-cyan-500/30 bg-[#0B0F19] p-6 shadow-2xl shadow-cyan-500/10 lg:p-8"
+            class="cf-glass-elevated border-border/80 relative flex max-h-[92vh] w-full max-w-2xl flex-col space-y-4 rounded-3xl border p-6 shadow-2xl lg:p-8"
         >
             <!-- Modal Header -->
             <div
-                class="flex shrink-0 items-center justify-between border-b border-white/10 pb-3"
+                class="border-border/70 flex shrink-0 items-center justify-between border-b pb-3"
             >
                 <div class="flex min-w-0 items-center gap-3">
                     <div
-                        class="shrink-0 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-2.5 text-cyan-400"
+                        class="border-primary/25 bg-primary/12 text-primary shrink-0 rounded-2xl border p-2.5"
                     >
-                        <Sparkles class="h-5 w-5 animate-pulse" />
+                        <Sparkles class="size-5 animate-pulse" />
                     </div>
                     <div class="min-w-0">
                         <div class="flex items-center gap-2">
                             <h3
-                                class="truncate text-lg font-bold tracking-wide text-white"
+                                class="text-foreground truncate text-lg font-bold tracking-tight"
                             >
                                 {{
                                     isRTL
@@ -899,12 +900,7 @@ const saveManualEdit = async () => {
                                 }}
                             </h3>
                             <span
-                                class="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold"
-                                :class="
-                                    isSeriesType
-                                        ? 'border border-purple-500/30 bg-purple-500/20 text-purple-300'
-                                        : 'border border-cyan-500/30 bg-cyan-500/20 text-cyan-300'
-                                "
+                                class="border-primary/30 bg-primary/15 text-primary shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold"
                             >
                                 {{
                                     isSeriesType
@@ -917,7 +913,9 @@ const saveManualEdit = async () => {
                                 }}
                             </span>
                         </div>
-                        <p class="mt-0.5 truncate text-xs text-slate-400">
+                        <p
+                            class="text-muted-foreground mt-0.5 truncate text-xs"
+                        >
                             {{
                                 item?.title ||
                                 item?.file_path ||
@@ -928,31 +926,32 @@ const saveManualEdit = async () => {
                     </div>
                 </div>
                 <button
+                    type="button"
                     @click="closeModal"
-                    class="shrink-0 rounded-xl p-2 text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+                    class="text-muted-foreground hover:bg-muted hover:text-foreground shrink-0 rounded-xl p-2 transition-colors"
                 >
-                    <X class="h-5 w-5" />
+                    <X class="size-5" />
                 </button>
             </div>
 
             <!-- Full Physical Storage Location Bar -->
             <div
-                class="flex shrink-0 flex-col justify-between gap-2.5 rounded-2xl border border-white/10 bg-slate-950/90 p-3 text-xs shadow-inner sm:flex-row sm:items-center"
+                class="border-border/80 bg-card/70 flex shrink-0 flex-col justify-between gap-2.5 rounded-2xl border p-3 text-xs shadow-inner sm:flex-row sm:items-center"
             >
                 <div
                     class="flex min-w-0 flex-1 items-start gap-2 overflow-hidden sm:items-center"
                 >
                     <FileVideo
                         v-if="!isSeriesType"
-                        class="mt-0.5 h-4 w-4 shrink-0 text-cyan-400 sm:mt-0"
+                        class="text-primary mt-0.5 size-4 shrink-0 sm:mt-0"
                     />
                     <Folder
                         v-else
-                        class="mt-0.5 h-4 w-4 shrink-0 text-purple-400 sm:mt-0"
+                        class="text-primary mt-0.5 size-4 shrink-0 sm:mt-0"
                     />
                     <div class="min-w-0 flex-1">
                         <span
-                            class="mb-0.5 block text-[10px] font-bold tracking-wider text-slate-500 uppercase"
+                            class="text-muted-foreground mb-0.5 block text-[10px] font-bold tracking-wider uppercase"
                         >
                             {{
                                 isRTL
@@ -961,7 +960,7 @@ const saveManualEdit = async () => {
                             }}
                         </span>
                         <span
-                            class="block font-mono text-[11px] leading-tight break-all text-slate-300 select-all"
+                            class="text-foreground/90 block font-mono text-[11px] leading-tight break-all select-all"
                         >
                             {{
                                 item?.file_path ||
@@ -974,7 +973,7 @@ const saveManualEdit = async () => {
                 <button
                     @click="copyFilePath(item?.file_path || item?.folder_path)"
                     type="button"
-                    class="flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.07] px-3 py-1.5 text-xs font-semibold text-slate-200 transition-all hover:border-cyan-500/30 hover:bg-white/[0.12] active:scale-95"
+                    class="border-border/80 bg-card text-foreground hover:border-primary/40 flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all active:scale-95"
                     :title="
                         isRTL
                             ? 'نسخ المسار الكامل إلى الحافظة'
@@ -983,9 +982,9 @@ const saveManualEdit = async () => {
                 >
                     <Check
                         v-if="copiedPath"
-                        class="h-3.5 w-3.5 text-emerald-400"
+                        class="size-3.5 text-emerald-400"
                     />
-                    <Copy v-else class="h-3.5 w-3.5 text-cyan-400" />
+                    <Copy v-else class="text-primary size-3.5" />
                     <span>{{
                         copiedPath
                             ? isRTL
@@ -1000,60 +999,64 @@ const saveManualEdit = async () => {
 
             <!-- Tab Navigation & Action Bar -->
             <div
-                class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-2"
+                class="border-border/60 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b pb-2"
             >
                 <div
-                    class="flex items-center gap-1.5 rounded-2xl border border-white/5 bg-slate-900/80 p-1"
+                    class="border-border/80 bg-card/70 flex items-center gap-1.5 rounded-2xl border p-1"
                 >
                     <button
+                        type="button"
                         @click="activeTab = 'search'"
                         class="flex cursor-pointer items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all"
                         :class="
                             activeTab === 'search'
-                                ? 'bg-cyan-500 font-bold text-slate-950 shadow-md'
-                                : 'text-slate-400 hover:text-white'
+                                ? 'bg-primary text-primary-foreground font-bold shadow-md'
+                                : 'text-muted-foreground hover:text-foreground'
                         "
                     >
-                        <Search class="h-3.5 w-3.5" />
+                        <Search class="size-3.5" />
                         <span>{{
                             isRTL ? 'بحث أونلاين' : 'Online Search'
                         }}</span>
                     </button>
                     <button
+                        type="button"
                         @click="activeTab = 'direct_id'"
                         class="flex cursor-pointer items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all"
                         :class="
                             activeTab === 'direct_id'
-                                ? 'bg-cyan-500 font-bold text-slate-950 shadow-md'
-                                : 'text-slate-400 hover:text-white'
+                                ? 'bg-primary text-primary-foreground font-bold shadow-md'
+                                : 'text-muted-foreground hover:text-foreground'
                         "
                     >
-                        <Hash class="h-3.5 w-3.5" />
+                        <Hash class="size-3.5" />
                         <span>{{ isRTL ? 'معرّف مباشر' : 'Direct ID' }}</span>
                     </button>
                     <button
+                        type="button"
                         @click="activeTab = 'manual'"
                         class="flex cursor-pointer items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all"
                         :class="
                             activeTab === 'manual'
-                                ? 'bg-cyan-500 font-bold text-slate-950 shadow-md'
-                                : 'text-slate-400 hover:text-white'
+                                ? 'bg-primary text-primary-foreground font-bold shadow-md'
+                                : 'text-muted-foreground hover:text-foreground'
                         "
                     >
-                        <SlidersHorizontal class="h-3.5 w-3.5" />
+                        <SlidersHorizontal class="size-3.5" />
                         <span>{{ isRTL ? 'تعديل يدوي' : 'Manual Edit' }}</span>
                     </button>
                     <button
                         v-if="!isSeriesType"
+                        type="button"
                         @click="switchToCollectionTab"
                         class="flex cursor-pointer items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all"
                         :class="
                             activeTab === 'collection'
-                                ? 'bg-cyan-500 font-bold text-slate-950 shadow-md'
-                                : 'text-slate-400 hover:text-white'
+                                ? 'bg-primary text-primary-foreground font-bold shadow-md'
+                                : 'text-muted-foreground hover:text-foreground'
                         "
                     >
-                        <Layers class="h-3.5 w-3.5" />
+                        <Layers class="size-3.5" />
                         <span>{{
                             isRTL ? 'إدارة السلسلة' : 'Collection'
                         }}</span>
@@ -1186,7 +1189,7 @@ const saveManualEdit = async () => {
                 <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
                     <div class="md:col-span-3">
                         <label
-                            class="mb-1.5 block text-xs font-medium text-slate-400"
+                            class="text-muted-foreground mb-1.5 block text-xs font-medium"
                             >{{
                                 isRTL ? 'عنوان الوسائط' : 'Media Title / Query'
                             }}</label
@@ -1196,12 +1199,12 @@ const saveManualEdit = async () => {
                             @keyup.enter="performSearch"
                             type="text"
                             placeholder="e.g. The Dark Knight, Fast and Furious, Inception..."
-                            class="w-full rounded-xl border border-white/10 bg-slate-900/90 px-3.5 py-2.5 text-sm text-white transition-all focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+                            class="cf-field w-full rounded-xl px-3.5 py-2.5 text-sm"
                         />
                     </div>
                     <div>
                         <label
-                            class="mb-1.5 block text-xs font-medium text-slate-400"
+                            class="text-muted-foreground mb-1.5 block text-xs font-medium"
                             >{{
                                 isRTL ? 'السنة (اختياري)' : 'Year (Optional)'
                             }}</label
@@ -1211,21 +1214,22 @@ const saveManualEdit = async () => {
                             @keyup.enter="performSearch"
                             type="text"
                             placeholder="2024"
-                            class="w-full rounded-xl border border-white/10 bg-slate-900/90 px-3.5 py-2.5 text-center text-sm text-white transition-all focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+                            class="cf-field w-full rounded-xl px-3.5 py-2.5 text-center text-sm tabular-nums"
                         />
                     </div>
                 </div>
 
                 <button
+                    type="button"
                     @click="performSearch"
                     :disabled="isSearching"
-                    class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 py-2.5 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50"
+                    class="bg-primary text-primary-foreground shadow-primary/20 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold shadow-lg transition-all hover:brightness-105 disabled:opacity-50"
                 >
                     <RefreshCw
                         v-if="isSearching"
-                        class="h-3.5 w-3.5 animate-spin"
+                        class="size-3.5 animate-spin"
                     />
-                    <Search v-else class="h-3.5 w-3.5" />
+                    <Search v-else class="size-3.5" />
                     <span>{{
                         isRTL
                             ? 'بحث في قواعد البيانات'
@@ -1236,7 +1240,7 @@ const saveManualEdit = async () => {
                 <!-- Search Results List -->
                 <div v-if="searchResults.length > 0" class="mt-4 space-y-2.5">
                     <h4
-                        class="text-xs font-semibold tracking-wider text-slate-400 uppercase"
+                        class="text-muted-foreground text-xs font-semibold tracking-wider uppercase tabular-nums"
                     >
                         {{
                             isRTL
@@ -1246,12 +1250,12 @@ const saveManualEdit = async () => {
                         ({{ searchResults.length }})
                     </h4>
                     <div
-                        class="grid max-h-60 grid-cols-1 gap-2.5 overflow-y-auto pr-1"
+                        class="grid max-h-60 grid-cols-1 gap-2.5 overflow-y-auto pe-1"
                     >
                         <div
                             v-for="res in searchResults"
                             :key="res.id"
-                            class="group flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-900/80 p-3 transition-all hover:border-cyan-500/50"
+                            class="cf-glass border-border/80 hover:border-primary/50 group flex items-center justify-between gap-3 rounded-2xl border p-3 transition-all"
                         >
                             <div
                                 class="flex items-center gap-3 overflow-hidden"
@@ -1259,19 +1263,19 @@ const saveManualEdit = async () => {
                                 <img
                                     v-if="res.poster_path"
                                     :src="res.poster_path"
-                                    class="h-16 w-12 shrink-0 rounded-lg border border-white/10 object-cover shadow-md"
+                                    class="border-border/80 h-16 w-12 shrink-0 rounded-lg border object-cover shadow-md"
                                     alt="Poster"
                                 />
                                 <div
                                     v-else
-                                    class="flex h-16 w-12 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-slate-800 text-slate-600"
+                                    class="border-border/80 bg-muted text-muted-foreground flex h-16 w-12 shrink-0 items-center justify-center rounded-lg border"
                                 >
-                                    <Film class="h-5 w-5" />
+                                    <Film class="size-5" />
                                 </div>
                                 <div class="truncate">
                                     <div class="flex items-center gap-2">
                                         <h5
-                                            class="truncate text-sm font-bold text-white transition-colors group-hover:text-cyan-400"
+                                            class="text-foreground group-hover:text-primary truncate text-sm font-bold transition-colors"
                                         >
                                             {{ res.title || res.name }}
                                         </h5>
@@ -1280,7 +1284,7 @@ const saveManualEdit = async () => {
                                                 res.release_year ||
                                                 res.first_air_year
                                             "
-                                            class="text-xs text-slate-400"
+                                            class="text-muted-foreground text-xs tabular-nums"
                                         >
                                             ({{
                                                 res.release_year ||
@@ -1290,12 +1294,12 @@ const saveManualEdit = async () => {
                                     </div>
                                     <p
                                         v-if="res.title_ar"
-                                        class="mt-0.5 truncate text-xs font-medium text-cyan-300"
+                                        class="text-primary mt-0.5 truncate text-xs font-medium"
                                     >
                                         {{ res.title_ar }}
                                     </p>
                                     <p
-                                        class="mt-0.5 max-w-md truncate text-xs text-slate-400"
+                                        class="text-muted-foreground mt-0.5 max-w-md truncate text-xs"
                                     >
                                         {{
                                             res.overview ||
@@ -1303,13 +1307,13 @@ const saveManualEdit = async () => {
                                         }}
                                     </p>
                                     <div
-                                        class="mt-1 flex items-center gap-3 text-[11px] text-slate-400"
+                                        class="text-muted-foreground mt-1 flex items-center gap-3 text-[11px] tabular-nums"
                                     >
                                         <span
                                             class="flex items-center gap-1 font-bold text-amber-400"
                                         >
                                             <Star
-                                                class="h-3 w-3 fill-amber-400"
+                                                class="size-3 fill-amber-400"
                                             />
                                             {{
                                                 res.rating
@@ -1319,18 +1323,19 @@ const saveManualEdit = async () => {
                                                     : 'N/A'
                                             }}
                                         </span>
-                                        <span class="font-bold text-cyan-400">{{
+                                        <span class="text-primary font-bold">{{
                                             res.provider || 'TMDb'
                                         }}</span>
                                     </div>
                                 </div>
                             </div>
                             <button
+                                type="button"
                                 @click="applyMatch(res)"
                                 :disabled="isSaving"
-                                class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl bg-cyan-500 px-4 py-2 text-xs font-bold text-slate-950 shadow-md shadow-cyan-500/10 transition-all hover:bg-cyan-400"
+                                class="bg-primary text-primary-foreground shadow-primary/20 flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold shadow-md transition-all hover:brightness-105"
                             >
-                                <Check class="h-3.5 w-3.5" />
+                                <Check class="size-3.5" />
                                 <span>{{ isRTL ? 'تطبيق' : 'Apply' }}</span>
                             </button>
                         </div>
@@ -1361,7 +1366,7 @@ const saveManualEdit = async () => {
 
                 <div>
                     <label
-                        class="mb-1.5 block text-xs font-medium text-slate-400"
+                        class="text-muted-foreground mb-1.5 block text-xs font-medium"
                         >{{
                             isRTL ? 'معرّف TMDb أو IMDb' : 'TMDb / IMDb ID'
                         }}</label
@@ -1372,18 +1377,19 @@ const saveManualEdit = async () => {
                             @keyup.enter="lookupAndApplyDirectId"
                             type="text"
                             placeholder="e.g. 27205 or tt1375666"
-                            class="flex-1 rounded-xl border border-white/10 bg-slate-900/90 px-3.5 py-2.5 font-mono text-sm text-white transition-all focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+                            class="cf-field flex-1 rounded-xl px-3.5 py-2.5 font-mono text-sm tabular-nums"
                         />
                         <button
+                            type="button"
                             @click="lookupAndApplyDirectId"
                             :disabled="isSearching"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition-all hover:bg-cyan-400 disabled:opacity-50"
+                            class="bg-primary text-primary-foreground flex cursor-pointer items-center gap-1.5 rounded-xl px-5 py-2.5 text-sm font-bold transition-all hover:brightness-105 disabled:opacity-50"
                         >
                             <RefreshCw
                                 v-if="isSearching"
-                                class="h-4 w-4 animate-spin"
+                                class="size-4 animate-spin"
                             />
-                            <Wand2 v-else class="h-4 w-4" />
+                            <Wand2 v-else class="size-4" />
                             <span>{{
                                 isRTL ? 'جلب وتطبيق' : 'Fetch & Apply'
                             }}</span>
@@ -1554,11 +1560,12 @@ const saveManualEdit = async () => {
 
                 <div class="flex justify-end pt-2">
                     <button
+                        type="button"
                         @click="saveManualEdit"
                         :disabled="isSaving"
-                        class="flex cursor-pointer items-center gap-2 rounded-xl bg-cyan-500 px-6 py-2.5 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:bg-cyan-400 disabled:opacity-50"
+                        class="bg-primary text-primary-foreground shadow-primary/20 flex cursor-pointer items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold shadow-lg transition-all hover:brightness-105 disabled:opacity-50"
                     >
-                        <Save class="h-4 w-4" />
+                        <Save class="size-4" />
                         <span>{{
                             isRTL ? 'حفظ التعديلات' : 'Save Changes'
                         }}</span>
@@ -1901,13 +1908,13 @@ const saveManualEdit = async () => {
                             (collectionMode === 'new' &&
                                 !newCollectionName.trim())
                         "
-                        class="flex cursor-pointer items-center gap-2 rounded-xl bg-cyan-500 px-6 py-2.5 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:bg-cyan-400 disabled:opacity-50"
+                        class="bg-primary text-primary-foreground shadow-primary/20 flex cursor-pointer items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold shadow-lg transition-all hover:brightness-105 disabled:opacity-50"
                     >
                         <RefreshCw
                             v-if="isSavingCollection"
-                            class="h-4 w-4 animate-spin"
+                            class="size-4 animate-spin"
                         />
-                        <Save v-else class="h-4 w-4" />
+                        <Save v-else class="size-4" />
                         <span>{{
                             isRTL
                                 ? 'حفظ وتطبيق إعدادات السلسلة'
