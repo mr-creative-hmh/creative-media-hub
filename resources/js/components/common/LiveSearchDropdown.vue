@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
@@ -252,12 +252,31 @@ const handleClickOutside = (e: MouseEvent) => {
     }
 };
 
+const handleGlobalKeyDown = (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        const target = e.target as HTMLElement | null;
+        const tagName = target?.tagName?.toLowerCase();
+        const isEditable =
+            tagName === 'input' ||
+            tagName === 'textarea' ||
+            Boolean(target?.isContentEditable);
+
+        if (!isEditable || target === inputRef.value) {
+            e.preventDefault();
+            inputRef.value?.focus();
+            inputRef.value?.select();
+        }
+    }
+};
+
 onMounted(() => {
     document.addEventListener('click', handleClickOutside);
+    window.addEventListener('keydown', handleGlobalKeyDown);
 });
 
 onUnmounted(() => {
     document.removeEventListener('click', handleClickOutside);
+    window.removeEventListener('keydown', handleGlobalKeyDown);
     if (debounceTimer) clearTimeout(debounceTimer);
     if (abortController) abortController.abort();
 });
@@ -268,7 +287,7 @@ onUnmounted(() => {
         <!-- Search Input Bar -->
         <div class="relative w-full">
             <Search
-                class="pointer-events-none absolute top-1/2 -translate-y-1/2 text-slate-400 transition-colors"
+                class="text-muted-foreground pointer-events-none absolute top-1/2 -translate-y-1/2 transition-colors"
                 :class="[
                     isRTL ? 'right-3.5' : 'left-3.5',
                     variant === 'large' ? 'h-5 w-5' : 'h-4 w-4',
@@ -284,34 +303,41 @@ onUnmounted(() => {
                 :placeholder="
                     placeholder ||
                     (isRTL
-                        ? 'ابحث في الأفلام والمسلسلات...'
-                        : 'Search movies & series...')
+                        ? 'ابحث في الأفلام والمسلسلات... (Ctrl+K)'
+                        : 'Search movies & series... (Ctrl+K)')
                 "
-                class="w-full border border-white/10 bg-white/[0.04] font-sans text-white shadow-inner transition-all placeholder:text-slate-500 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none"
+                class="placeholder:text-muted-foreground focus:border-primary focus:ring-primary/20 w-full border border-white/10 bg-white/[0.04] font-sans text-white shadow-inner transition-all hover:border-white/20 focus:ring-2 focus:outline-none"
                 :class="[
                     variant === 'large'
                         ? 'h-12 rounded-2xl text-sm'
                         : 'h-10 rounded-2xl text-xs sm:text-sm',
                     isRTL
                         ? variant === 'large'
-                            ? 'pr-11 pl-20'
-                            : 'pr-10 pl-16'
+                            ? 'pr-11 pl-24'
+                            : 'pr-10 pl-20'
                         : variant === 'large'
-                          ? 'pr-20 pl-11'
-                          : 'pr-16 pl-10',
+                          ? 'pr-24 pl-11'
+                          : 'pr-20 pl-10',
                 ]"
                 autocomplete="off"
                 spellcheck="false"
             />
 
-            <!-- Trailing Controls: Loading Spinner, Clear Button, Enter hint -->
+            <!-- Trailing Controls: Kbd shortcut badge, Loading Spinner, Clear Button, Enter button -->
             <div
                 class="absolute top-1/2 flex -translate-y-1/2 items-center gap-1.5"
                 :class="isRTL ? 'left-2.5' : 'right-2.5'"
             >
+                <div
+                    v-if="!query && !isLoading"
+                    class="border-border/80 text-muted-foreground pointer-events-none hidden items-center gap-0.5 rounded-lg border bg-white/[0.05] px-1.5 py-0.5 font-mono text-[10px] select-none sm:flex"
+                >
+                    <span class="text-[9px]">⌘</span>K
+                </div>
+
                 <Loader2
                     v-if="isLoading"
-                    class="h-4 w-4 animate-spin text-cyan-400"
+                    class="text-primary h-4 w-4 animate-spin"
                 />
 
                 <button
@@ -327,14 +353,14 @@ onUnmounted(() => {
                 <button
                     type="button"
                     @click="handleEnter"
-                    class="hidden cursor-pointer items-center gap-1 rounded-xl border border-cyan-500/30 bg-cyan-500/20 px-2.5 py-1 text-[11px] font-bold text-cyan-300 shadow-sm transition-all hover:bg-cyan-500/30 sm:flex"
+                    class="border-primary/30 bg-primary/20 text-primary hover:bg-primary/30 hidden cursor-pointer items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-bold shadow-sm transition-all sm:flex"
                 >
                     <span>{{ isRTL ? 'بحث' : 'Search' }}</span>
                 </button>
             </div>
         </div>
 
-        <!-- YTS-Style Floating Live Search Results Dropdown -->
+        <!-- Floating Live Search Results Dropdown -->
         <transition
             enter-active-class="transition duration-150 ease-out"
             enter-from-class="opacity-0 translate-y-1 scale-[0.98]"
@@ -345,14 +371,14 @@ onUnmounted(() => {
         >
             <div
                 v-if="isOpen && query.trim().length >= 2"
-                class="absolute top-full right-0 left-0 z-50 mt-2 overflow-hidden rounded-2xl border border-white/15 bg-[#0d1117]/95 shadow-2xl shadow-black/80 backdrop-blur-2xl"
+                class="border-border/80 cf-glass-popover absolute top-full right-0 left-0 z-50 mt-2 overflow-hidden rounded-2xl border shadow-2xl shadow-black/80 backdrop-blur-2xl"
             >
                 <!-- Loading State Shimmer (when no cached results yet) -->
                 <div
                     v-if="isLoading && totalResults === 0"
-                    class="flex items-center justify-center gap-3 p-5 text-xs text-slate-400"
+                    class="text-muted-foreground flex items-center justify-center gap-3 p-5 text-xs"
                 >
-                    <Loader2 class="h-4 w-4 animate-spin text-cyan-400" />
+                    <Loader2 class="text-primary h-4 w-4 animate-spin" />
                     <span>{{
                         isRTL
                             ? 'جاري البحث في المكتبة...'
@@ -363,7 +389,7 @@ onUnmounted(() => {
                 <!-- Empty State -->
                 <div
                     v-else-if="!isLoading && totalResults === 0"
-                    class="space-y-1.5 p-6 text-center text-slate-400"
+                    class="text-muted-foreground space-y-1.5 p-6 text-center"
                 >
                     <p class="text-xs font-medium text-slate-300 sm:text-sm">
                         {{
@@ -373,7 +399,7 @@ onUnmounted(() => {
                         }}
                         <span class="font-bold text-white">"{{ query }}"</span>
                     </p>
-                    <p class="text-[11px] text-slate-500">
+                    <p class="text-muted-foreground text-[11px]">
                         {{
                             isRTL
                                 ? 'جرّب البحث بكلمات أخرى أو تحقق من الحروف'
@@ -385,18 +411,18 @@ onUnmounted(() => {
                 <!-- Results List -->
                 <div
                     v-else
-                    class="custom-scrollbar max-h-[75vh] divide-y divide-white/5 overflow-y-auto"
+                    class="custom-scrollbar divide-border/40 max-h-[75vh] divide-y overflow-y-auto"
                 >
                     <!-- 1. Movies Section -->
                     <div v-if="movies.length > 0" class="p-2">
                         <div
-                            class="flex items-center justify-between px-3 py-1.5 text-[10px] font-black tracking-wider text-cyan-400 uppercase"
+                            class="text-primary flex items-center justify-between px-3 py-1.5 text-[10px] font-black tracking-wider uppercase"
                         >
                             <span class="flex items-center gap-1.5">
                                 <Film class="h-3 w-3" />
                                 <span>{{ isRTL ? 'الأفلام' : 'Movies' }}</span>
                             </span>
-                            <span class="text-slate-500">{{
+                            <span class="text-muted-foreground">{{
                                 movies.length
                             }}</span>
                         </div>
@@ -410,13 +436,13 @@ onUnmounted(() => {
                                 :class="
                                     allItems[selectedIndex]?.id === movie.id &&
                                     allItems[selectedIndex]?.type === 'movie'
-                                        ? 'border border-cyan-500/30 bg-cyan-500/15'
+                                        ? 'border-primary/30 bg-primary/15 border'
                                         : 'border border-transparent hover:bg-white/5'
                                 "
                             >
                                 <!-- Poster Thumbnail -->
                                 <div
-                                    class="relative h-14 w-10 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-slate-800 shadow-sm"
+                                    class="border-border/60 relative h-14 w-10 shrink-0 overflow-hidden rounded-lg border bg-slate-800 shadow-sm"
                                 >
                                     <img
                                         v-if="movie.poster"
@@ -437,13 +463,13 @@ onUnmounted(() => {
                                 <div class="min-w-0 flex-1">
                                     <div class="flex items-center gap-2">
                                         <h4
-                                            class="truncate text-xs font-bold text-white transition-colors group-hover:text-cyan-400 sm:text-sm"
+                                            class="group-hover:text-primary truncate text-xs font-bold text-white transition-colors sm:text-sm"
                                         >
                                             {{ movie.title }}
                                         </h4>
                                         <span
                                             v-if="movie.year"
-                                            class="shrink-0 font-mono text-[11px] text-slate-400"
+                                            class="text-muted-foreground shrink-0 font-mono text-[11px]"
                                         >
                                             ({{ movie.year }})
                                         </span>
@@ -454,7 +480,7 @@ onUnmounted(() => {
                                             movie.title_ar &&
                                             movie.title_ar !== movie.title
                                         "
-                                        class="mt-0.5 truncate text-[11px] text-slate-400"
+                                        class="text-muted-foreground mt-0.5 truncate text-[11px]"
                                         dir="rtl"
                                     >
                                         {{ movie.title_ar }}
@@ -478,7 +504,7 @@ onUnmounted(() => {
                                                 movie.quality === '4K'
                                                     ? 'border-amber-500/30 bg-amber-500/20 text-amber-300'
                                                     : movie.quality === '1080p'
-                                                      ? 'border-cyan-500/30 bg-cyan-500/20 text-cyan-300'
+                                                      ? 'border-primary/30 bg-primary/20 text-primary'
                                                       : 'border-slate-600/40 bg-slate-700/40 text-slate-300'
                                             "
                                         >
@@ -486,7 +512,7 @@ onUnmounted(() => {
                                         </span>
 
                                         <span
-                                            class="ml-auto text-[10px] font-medium text-slate-500"
+                                            class="text-muted-foreground ml-auto text-[10px] font-medium"
                                         >
                                             {{ isRTL ? 'فيلم' : 'Movie' }}
                                         </span>
@@ -495,7 +521,7 @@ onUnmounted(() => {
 
                                 <!-- Arrow indicator on hover -->
                                 <div
-                                    class="shrink-0 px-1 text-slate-500 transition-colors group-hover:text-cyan-400"
+                                    class="text-muted-foreground group-hover:text-primary shrink-0 px-1 transition-colors"
                                 >
                                     <ArrowLeft
                                         v-if="isRTL"
@@ -523,7 +549,7 @@ onUnmounted(() => {
                                         : 'Franchises & Collections'
                                 }}</span>
                             </span>
-                            <span class="text-slate-500">{{
+                            <span class="text-muted-foreground">{{
                                 collections.length
                             }}</span>
                         </div>
@@ -545,7 +571,7 @@ onUnmounted(() => {
                             >
                                 <!-- Poster Thumbnail -->
                                 <div
-                                    class="relative h-14 w-10 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-slate-800 shadow-sm"
+                                    class="border-border/60 relative h-14 w-10 shrink-0 overflow-hidden rounded-lg border bg-slate-800 shadow-sm"
                                 >
                                     <img
                                         v-if="col.poster"
@@ -572,7 +598,7 @@ onUnmounted(() => {
                                         </h4>
                                         <span
                                             v-if="col.year"
-                                            class="shrink-0 font-mono text-[11px] text-slate-400"
+                                            class="text-muted-foreground shrink-0 font-mono text-[11px]"
                                         >
                                             ({{ col.year }})
                                         </span>
@@ -597,7 +623,7 @@ onUnmounted(() => {
                                         </span>
 
                                         <span
-                                            class="ml-auto text-[10px] font-medium text-slate-500"
+                                            class="text-muted-foreground ml-auto text-[10px] font-medium"
                                         >
                                             {{ isRTL ? 'سلسلة' : 'Collection' }}
                                         </span>
@@ -606,7 +632,7 @@ onUnmounted(() => {
 
                                 <!-- Arrow indicator on hover -->
                                 <div
-                                    class="shrink-0 px-1 text-slate-500 transition-colors group-hover:text-amber-400"
+                                    class="text-muted-foreground shrink-0 px-1 transition-colors group-hover:text-amber-400"
                                 >
                                     <ArrowLeft
                                         v-if="isRTL"
@@ -632,7 +658,7 @@ onUnmounted(() => {
                                     isRTL ? 'المسلسلات التلفزيونية' : 'TV Series'
                                 }}</span>
                             </span>
-                            <span class="text-slate-500">{{
+                            <span class="text-muted-foreground">{{
                                 series.length
                             }}</span>
                         </div>
@@ -652,7 +678,7 @@ onUnmounted(() => {
                             >
                                 <!-- Poster Thumbnail -->
                                 <div
-                                    class="relative h-14 w-10 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-slate-800 shadow-sm"
+                                    class="border-border/60 relative h-14 w-10 shrink-0 overflow-hidden rounded-lg border bg-slate-800 shadow-sm"
                                 >
                                     <img
                                         v-if="show.poster"
@@ -679,7 +705,7 @@ onUnmounted(() => {
                                         </h4>
                                         <span
                                             v-if="show.year"
-                                            class="shrink-0 font-mono text-[11px] text-slate-400"
+                                            class="text-muted-foreground shrink-0 font-mono text-[11px]"
                                         >
                                             ({{ show.year }})
                                         </span>
@@ -690,7 +716,7 @@ onUnmounted(() => {
                                             show.title_ar &&
                                             show.title_ar !== show.title
                                         "
-                                        class="mt-0.5 truncate text-[11px] text-slate-400"
+                                        class="text-muted-foreground mt-0.5 truncate text-[11px]"
                                         dir="rtl"
                                     >
                                         {{ show.title_ar }}
@@ -715,7 +741,7 @@ onUnmounted(() => {
                                         </span>
 
                                         <span
-                                            class="ml-auto text-[10px] font-medium text-slate-500"
+                                            class="text-muted-foreground ml-auto text-[10px] font-medium"
                                         >
                                             {{ isRTL ? 'مسلسل' : 'Series' }}
                                         </span>
@@ -724,7 +750,7 @@ onUnmounted(() => {
 
                                 <!-- Arrow indicator on hover -->
                                 <div
-                                    class="shrink-0 px-1 text-slate-500 transition-colors group-hover:text-purple-400"
+                                    class="text-muted-foreground shrink-0 px-1 transition-colors group-hover:text-purple-400"
                                 >
                                     <ArrowLeft
                                         v-if="isRTL"
@@ -741,12 +767,12 @@ onUnmounted(() => {
 
                     <!-- Footer: View All Results Action Bar -->
                     <div
-                        class="flex items-center justify-between border-t border-white/5 bg-white/[0.02] p-2"
+                        class="border-border/40 flex items-center justify-between border-t bg-white/[0.02] p-2"
                     >
                         <button
                             type="button"
                             @click="handleEnter"
-                            class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-3 py-2 text-xs font-bold text-cyan-400 transition-all hover:bg-cyan-500/20"
+                            class="border-primary/25 bg-primary/10 text-primary hover:bg-primary/20 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold transition-all"
                         >
                             <Sparkles class="h-3.5 w-3.5" />
                             <span>{{

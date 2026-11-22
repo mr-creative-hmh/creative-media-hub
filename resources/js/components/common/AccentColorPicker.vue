@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref } from 'vue';
 import { onClickOutside } from '@vueuse/core';
 import { Palette, Check } from '@lucide/vue';
@@ -37,7 +37,7 @@ const selectPalette = (key: AccentColor) => {
         <button
             @click="isOpen = !isOpen"
             type="button"
-            class="glass-panel group flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-300 shadow-sm transition-all hover:border-cyan-500/40 hover:text-white active:scale-95"
+            class="group hover:border-primary/40 focus-visible:ring-primary/30 relative flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-slate-300 shadow-sm transition-all hover:bg-white/[0.06] hover:text-white focus-visible:ring-2 focus-visible:outline-none active:scale-95"
             :title="t('accent_theme.change_accent')"
             :aria-expanded="isOpen"
         >
@@ -70,7 +70,7 @@ const selectPalette = (key: AccentColor) => {
         >
             <div
                 v-if="isOpen"
-                class="absolute z-50 mt-2 w-64 rounded-2xl border border-white/15 bg-[#0B0F19]/95 p-2 text-start text-xs shadow-2xl shadow-black/80 backdrop-blur-2xl"
+                class="border-border/80 cf-glass-popover absolute z-50 mt-2 w-64 rounded-2xl border p-2 text-start text-xs shadow-2xl shadow-black/80 backdrop-blur-2xl"
                 :class="
                     isRTL
                         ? 'left-0 origin-top-left'
@@ -79,16 +79,16 @@ const selectPalette = (key: AccentColor) => {
             >
                 <!-- Menu Header -->
                 <div
-                    class="mb-1 flex items-center justify-between border-b border-white/10 px-2.5 py-2 text-start"
+                    class="border-border/60 mb-1 flex items-center justify-between border-b px-2.5 py-2 text-start"
                 >
                     <span
                         class="flex items-center gap-1.5 font-bold tracking-wide text-white"
                     >
-                        <Palette class="h-3.5 w-3.5 text-cyan-400" />
+                        <Palette class="text-primary h-3.5 w-3.5" />
                         {{ t('accent_theme.title') }}
                     </span>
                     <span
-                        class="font-mono text-[10px] tracking-widest text-slate-400 uppercase"
+                        class="text-muted-foreground font-mono text-[10px] tracking-widest uppercase"
                     >
                         {{ ACCENT_PALETTES.length }}
                     </span>
@@ -105,7 +105,7 @@ const selectPalette = (key: AccentColor) => {
                         class="flex w-full cursor-pointer items-center justify-between rounded-xl p-2 text-start transition-all"
                         :class="[
                             currentAccent === palette.key
-                                ? 'bg-white/10 font-bold text-white ring-1 ring-white/20'
+                                ? 'bg-primary/15 ring-primary/30 font-bold text-white ring-1'
                                 : 'text-slate-300 hover:bg-white/5 hover:text-white',
                         ]"
                     >
@@ -148,7 +148,7 @@ const selectPalette = (key: AccentColor) => {
                         >
                             <Check
                                 v-if="currentAccent === palette.key"
-                                class="h-4 w-4 shrink-0 text-cyan-400"
+                                class="text-primary h-4 w-4 shrink-0"
                             />
                         </div>
                     </button>

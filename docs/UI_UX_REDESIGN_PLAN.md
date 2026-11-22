@@ -38,13 +38,13 @@
 - [x] **Profile Settings & Management Views:** Built `Users/Index.vue` for admin management with profile creation, editing, avatar grid, and PIN resets.
 - [x] **Feature Tests & Static Analysis:** Full PHPUnit test suite passing: **205 / 205 tests passed** (1,519 assertions); `vendor/bin/phpstan analyse` passing with 0 errors at Level 7.
 
-### [/] Phase 3: Application Shell & Navigation Redesign
-- [ ] **Responsive Sidebar:** Collapsible grouped sidebar with icon-rail mode, tooltips (`reka-ui`), active accent pills, and smooth transition.
-- [ ] **Floating Glass Navbar:** Fixed floating glass navbar (`.cf-glass-elevated`) with live search dropdown, active profile indicator, accent color picker, quick downloads drawer pill, and language toggle.
-- [ ] **Mobile Bottom Navigation & Drawer:** Floating mobile bottom navigation bar + RTL-aware sliding menu drawer for small viewports.
-- [ ] **AppLayout Shell:** Integrate `AppAmbientBackground`, `Navbar`, `Sidebar`, `MobileBottomNav`, `GlobalToaster`, and `UnifiedJobCenterModal` into persistent modern layout.
+### [x] Phase 3: Application Shell & Navigation Redesign
+- [x] **Responsive Sidebar:** Full-height sticky aside (`h-screen`) with anchored top brand logo (`AppLogo`), collapsible grouped sidebar with icon-rail mode (`w-20` vs `w-64`), Reka UI tooltips (`:side="isRTL ? 'left' : 'right'"`), middle `min-h-0 flex-1` scroll area, admin-guarded Fast Scan CTA, and permanently pinned bottom User Profile Bento Card (aligned squircle avatar, name, role/kids badge, Switch Profile / Logout action).
+- [x] **Floating Glass Navbar:** Fixed floating glass navbar (`.cf-glass-elevated`) with live search dropdown (`Ctrl+K` / `⌘K` global shortcut), active profile indicator, accent color picker, quick downloads drawer pill, compact mobile language toggle, and desktop sidebar collapse button. Mobile logo icon-only rendering on `< lg`.
+- [x] **Mobile Bottom Navigation & Drawer:** Floating mobile bottom navigation dock + RTL-aware sliding menu drawer (`MobileMenuDrawer.vue`) with backdrop blur, accordion nav sections, and ESC/swipe dismiss.
+- [x] **AppLayout Shell:** Modern two-column desktop shell (full-height sticky sidebar + content column with floating navbar, main slot wrapped in `MotionPage`, and aligned footer) with `overflow-x-clip`, SSR-safe persisted sidebar collapse, and ambient backdrop.
 
-### [ ] Phase 4: Shared CreativeFlow UI Primitives
+### [/] Phase 4: Shared CreativeFlow UI Primitives
 - [ ] **Page Header & Banner:** `PageBanner.vue` with breadcrumbs, title, badge indicators, and action slots.
 - [ ] **Filter Controls:** `FilterPills.vue` with smooth scroll and active accent badges.
 - [ ] **Base Modal:** `BaseModal.vue` built on `reka-ui` Dialog with backdrop blur, keyboard trap, and responsive sheets on mobile.

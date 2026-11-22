@@ -21,7 +21,15 @@
         "watch_history": "Watch History",
         "scout": "Media Scout",
         "active_downloads": "Active Downloads",
-        "users": "Manage Profiles"
+        "users": "Manage Profiles",
+        "section_cinema": "Cinema & Media",
+        "section_discovery": "Discovery & Scout",
+        "section_studio": "Studio Workspaces",
+        "section_system": "System & Admin",
+        "collapse_sidebar": "Collapse Sidebar",
+        "expand_sidebar": "Expand Sidebar",
+        "more": "More",
+        "manage_profiles": "Manage Profiles"
     },
     "common": {
         "continue_watching": "Continue Watching",
@@ -694,6 +702,8 @@
         "switch_profile": "Switch Profile",
         "pin_protected": "PIN Protected",
         "one_click_access": "1-Click Access",
-        "enter_pin_count": "Enter :count-Digit PIN"
+        "enter_pin_count": "Enter :count-Digit PIN",
+        "active_profile": "Active Profile",
+        "logout": "Sign Out"
     }
 }

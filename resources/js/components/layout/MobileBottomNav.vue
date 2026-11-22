@@ -1,22 +1,28 @@
 ﻿<script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
+import { useLocale } from '@/composables/useLocale';
 import { home } from '@/routes';
 import { index as moviesRoute } from '@/routes/movies';
 import { index as seriesRoute } from '@/routes/series';
 import { index as collectionsRoute } from '@/routes/collections';
-import { index as scoutRoute } from '@/routes/scout';
-import { index as watchHistoryRoute } from '@/routes/watch-history';
-import {
-    LayoutDashboard,
-    Film,
-    Tv,
-    Layers,
-    Compass,
-    History,
-} from '@lucide/vue';
+import { LayoutDashboard, Film, Tv, Layers, Menu } from '@lucide/vue';
 
-const { t, isRTL } = useI18n();
+withDefaults(
+    defineProps<{
+        isMenuOpen?: boolean;
+    }>(),
+    {
+        isMenuOpen: false,
+    },
+);
+
+const emit = defineEmits<{
+    (e: 'open-menu'): void;
+}>();
+
+const { t } = useI18n();
+const { isRtl } = useLocale();
 
 const navItems = [
     {
@@ -43,21 +49,9 @@ const navItems = [
         icon: Layers,
         pattern: '^/collections',
     },
-    {
-        nameKey: 'nav.scout',
-        href: scoutRoute.url(),
-        icon: Compass,
-        pattern: '^/scout',
-    },
-    {
-        nameKey: 'nav.watch_history',
-        href: watchHistoryRoute.url(),
-        icon: History,
-        pattern: '^/watch-history',
-    },
 ];
 
-const isActive = (pattern: string) => {
+const isCurrentUrl = (pattern: string) => {
     if (typeof window !== 'undefined') {
         return new RegExp(pattern).test(window.location.pathname);
     }
@@ -67,55 +61,70 @@ const isActive = (pattern: string) => {
 
 <template>
     <nav
-        class="glass-panel fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#07090E]/95 px-2 py-1.5 shadow-2xl backdrop-blur-2xl transition-all duration-300 lg:hidden"
-        :dir="isRTL ? 'rtl' : 'ltr'"
+        aria-label="Mobile navigation"
+        :dir="isRtl ? 'rtl' : 'ltr'"
+        class="border-border/80 cf-glass-elevated fixed inset-x-3 bottom-3 z-40 mx-auto mb-[env(safe-area-inset-bottom)] max-w-md rounded-3xl border px-2 py-1.5 shadow-2xl backdrop-blur-2xl transition-all select-none lg:hidden"
     >
-        <div class="mx-auto flex max-w-lg items-center justify-around">
+        <div class="grid grid-cols-5 items-center">
+            <!-- Main 4 Cinema Links -->
             <Link
                 v-for="item in navItems"
                 :key="item.href"
                 :href="item.href"
                 prefetch
-                class="group relative flex cursor-pointer flex-col items-center justify-center rounded-2xl px-1.5 py-1 transition-all duration-200"
+                class="flex min-h-[48px] cursor-pointer flex-col items-center justify-center rounded-2xl px-1 py-1 transition-all duration-200 active:scale-90"
                 :class="
-                    isActive(item.pattern)
-                        ? 'font-black text-cyan-400'
-                        : 'font-medium text-slate-400 hover:text-white'
+                    isCurrentUrl(item.pattern)
+                        ? 'bg-primary/15 text-primary font-bold shadow-xs'
+                        : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                 "
             >
-                <!-- Active Indicator Glow Pill -->
-                <div
-                    v-if="isActive(item.pattern)"
-                    class="absolute -top-1.5 h-1 w-6 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 shadow-lg shadow-cyan-400/50"
-                ></div>
-
-                <!-- Icon with active scale -->
-                <div
-                    class="rounded-xl p-1 transition-all duration-200"
+                <component
+                    :is="item.icon"
+                    class="size-5 transition-transform"
                     :class="
-                        isActive(item.pattern)
-                            ? 'scale-110 bg-cyan-500/15 shadow-inner'
-                            : 'group-hover:scale-105'
+                        isCurrentUrl(item.pattern)
+                            ? 'scale-105 stroke-[2.25]'
+                            : 'stroke-[1.75]'
                     "
-                >
-                    <component
-                        :is="item.icon"
-                        class="h-5 w-5 transition-transform"
-                        :class="
-                            isActive(item.pattern)
-                                ? 'text-cyan-400'
-                                : 'text-slate-400 group-hover:text-slate-200'
-                        "
-                    />
-                </div>
-
-                <!-- Label -->
+                />
                 <span
-                    class="mt-0.5 max-w-[62px] truncate text-[10px] leading-tight tracking-tight"
+                    class="mt-0.5 max-w-[60px] truncate text-center text-[10px]"
+                    :class="
+                        isCurrentUrl(item.pattern)
+                            ? 'font-black'
+                            : 'font-semibold'
+                    "
                 >
                     {{ t(item.nameKey) }}
                 </span>
             </Link>
+
+            <!-- 5. More Menu Trigger -->
+            <button
+                type="button"
+                class="flex min-h-[48px] cursor-pointer flex-col items-center justify-center rounded-2xl px-1 py-1 transition-all duration-200 active:scale-90"
+                :class="
+                    isMenuOpen
+                        ? 'bg-primary/15 text-primary font-bold shadow-xs'
+                        : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                "
+                :title="t('nav.more') || (isRtl ? 'المزيد' : 'More')"
+                @click="emit('open-menu')"
+            >
+                <Menu
+                    class="size-5 transition-transform"
+                    :class="
+                        isMenuOpen ? 'scale-105 stroke-[2.25]' : 'stroke-[1.75]'
+                    "
+                />
+                <span
+                    class="mt-0.5 text-center text-[10px]"
+                    :class="isMenuOpen ? 'font-black' : 'font-semibold'"
+                >
+                    {{ t('nav.more') || (isRtl ? 'المزيد' : 'More') }}
+                </span>
+            </button>
         </div>
     </nav>
 </template>

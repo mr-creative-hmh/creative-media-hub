@@ -1,5 +1,6 @@
 import type { Page, Router } from '@inertiajs/core';
 import type { createHeadManager } from '@inertiajs/vue3';
+import type { AuthProfile } from './auth';
 
 declare module 'vite/client' {
     interface ImportMetaEnv {
@@ -18,6 +19,9 @@ declare module '@inertiajs/core' {
         sharedPageProps: {
             name: string;
             sidebarOpen: boolean;
+            auth: {
+                user: AuthProfile | null;
+            };
             [key: string]: unknown;
         };
     }

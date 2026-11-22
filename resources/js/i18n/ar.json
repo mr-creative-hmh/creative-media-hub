@@ -21,7 +21,15 @@
         "watch_history": "سجل المشاهدة",
         "scout": "مستكشف الوسائط",
         "active_downloads": "التنزيلات النشطة",
-        "users": "إدارة المستخدمين"
+        "users": "إدارة المستخدمين",
+        "section_cinema": "السينما والوسائط",
+        "section_discovery": "الاستكشاف والبحث",
+        "section_studio": "استوديو العمليات",
+        "section_system": "النظام والإدارة",
+        "collapse_sidebar": "تصغير الشريط الجانبي",
+        "expand_sidebar": "توسيع الشريط الجانبي",
+        "more": "المزيد",
+        "manage_profiles": "إدارة المستخدمين"
     },
     "common": {
         "continue_watching": "متابعة المشاهدة",
@@ -694,6 +702,8 @@
         "switch_profile": "تبديل الملف الشخصي",
         "pin_protected": "محمي برمز PIN",
         "one_click_access": "دخول بنقرة واحدة",
-        "enter_pin_count": "أدخل رمز PIN المكون من :count أرقام"
+        "enter_pin_count": "أدخل رمز PIN المكون من :count أرقام",
+        "active_profile": "الملف الحالي",
+        "logout": "تسجيل الخروج"
     }
 }
