@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Genre;
 use App\Models\MediaItem;
 use App\Models\Person;
+use App\Models\UserFavorite;
 use App\Services\Metadata\ArtworkDownloadService;
 use App\Services\Metadata\MetadataAggregator;
+use App\Services\ParentalControlService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -15,19 +17,16 @@ use Inertia\Inertia;
 
 class MediaController extends Controller
 {
-    protected MetadataAggregator $metadata;
-
-    protected ArtworkDownloadService $artwork;
-
-    public function __construct(MetadataAggregator $metadata, ArtworkDownloadService $artwork)
-    {
-        $this->metadata = $metadata;
-        $this->artwork = $artwork;
-    }
+    public function __construct(
+        protected MetadataAggregator $metadata,
+        protected ArtworkDownloadService $artwork,
+        protected ParentalControlService $parentalControl,
+    ) {}
 
     public function index(Request $request)
     {
         $query = MediaItem::query()->with(['genres', 'directors', 'subtitles']);
+        $query = $this->parentalControl->applyScope($query, $request->user());
 
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {
@@ -53,7 +52,12 @@ class MediaController extends Controller
         }
 
         if ($request->boolean('favorite_only')) {
-            $query->favorites();
+            $user = $request->user();
+            if ($user) {
+                $query->whereHas('userFavorites', fn ($q) => $q->where('user_id', $user->id));
+            } else {
+                $query->favorites();
+            }
         }
 
         if ($vibe = $request->input('vibe')) {
@@ -172,13 +176,34 @@ class MediaController extends Controller
         ]);
     }
 
-    public function toggleFavorite(MediaItem $mediaItem)
+    public function toggleFavorite(Request $request, MediaItem $mediaItem): JsonResponse
     {
-        $mediaItem->update(['is_favorite' => ! $mediaItem->is_favorite]);
+        $user = $request->user();
+        if ($user) {
+            $fav = UserFavorite::where('user_id', $user->id)
+                ->where('favoritable_type', MediaItem::class)
+                ->where('favoritable_id', $mediaItem->id)
+                ->first();
+
+            if ($fav) {
+                $fav->delete();
+                $isFav = false;
+            } else {
+                UserFavorite::create([
+                    'user_id' => $user->id,
+                    'favoritable_type' => MediaItem::class,
+                    'favoritable_id' => $mediaItem->id,
+                ]);
+                $isFav = true;
+            }
+        } else {
+            $mediaItem->update(['is_favorite' => ! $mediaItem->is_favorite]);
+            $isFav = (bool) $mediaItem->is_favorite;
+        }
 
         return response()->json([
             'status' => 'success',
-            'is_favorite' => $mediaItem->is_favorite,
+            'is_favorite' => $isFav,
         ]);
     }
 

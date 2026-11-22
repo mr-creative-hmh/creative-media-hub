@@ -37,6 +37,7 @@ use Illuminate\Support\Str;
  * @property bool $is_favorite
  * @property ?string $original_language
  * @property ?string $origin_country
+ * @property ?string $content_rating
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
  * @property-read Collection<int, Season> $seasons
@@ -44,6 +45,7 @@ use Illuminate\Support\Str;
  * @property-read Collection<int, Genre> $genres
  * @property-read Collection<int, Person> $people
  * @property-read Collection<int, Person> $actors
+ * @property-read Collection<int, UserFavorite> $userFavorites
  */
 class Series extends Model
 {
@@ -135,6 +137,14 @@ class Series extends Model
     public function scopeFavorites(Builder $query): Builder
     {
         return $query->where('is_favorite', true);
+    }
+
+    /**
+     * @return MorphMany<UserFavorite, $this>
+     */
+    public function userFavorites(): MorphMany
+    {
+        return $this->morphMany(UserFavorite::class, 'favoritable');
     }
 
     public function resolveRouteBinding($value, $field = null): ?self

@@ -30,6 +30,10 @@ class StreamController extends Controller
      */
     public function streamMovie(MediaItem $mediaItem, Request $request)
     {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
         $filePath = $mediaItem->file_path;
 
         if ($filePath && File::exists($filePath)) {
@@ -46,6 +50,10 @@ class StreamController extends Controller
      */
     public function streamEpisode(Episode $episode, Request $request)
     {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
         $filePath = $episode->file_path;
 
         if ($filePath && File::exists($filePath)) {
@@ -62,6 +70,10 @@ class StreamController extends Controller
      */
     public function streamSubtitle(Subtitle $subtitle, Request $request)
     {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
         return $this->subtitleService->streamSubtitle($subtitle, $request);
     }
 
@@ -70,6 +82,10 @@ class StreamController extends Controller
      */
     public function streamRemuxMovie(MediaItem $mediaItem, Request $request)
     {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
         return $this->remuxService->streamRemuxFile(
             $mediaItem->file_path,
             $request,
@@ -85,6 +101,10 @@ class StreamController extends Controller
      */
     public function streamRemuxEpisode(Episode $episode, Request $request)
     {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
         return $this->remuxService->streamRemuxFile(
             $episode->file_path,
             $request,
@@ -100,6 +120,10 @@ class StreamController extends Controller
      */
     public function streamMseMovie(MediaItem $mediaItem, Request $request)
     {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
         return $this->mseService->streamMseFile(
             $mediaItem->file_path,
             $request,
@@ -115,6 +139,10 @@ class StreamController extends Controller
      */
     public function streamMseEpisode(Episode $episode, Request $request)
     {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
         return $this->mseService->streamMseFile(
             $episode->file_path,
             $request,

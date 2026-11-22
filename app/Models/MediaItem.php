@@ -44,6 +44,7 @@ use Illuminate\Support\Str;
  * @property ?string $collection_poster
  * @property ?string $original_language
  * @property ?string $origin_country
+ * @property ?string $content_rating
  * @property ?string $video_profile
  * @property int $video_bitrate
  * @property int $audio_channels
@@ -64,6 +65,7 @@ use Illuminate\Support\Str;
  * @property-read Collection<int, Person> $directors
  * @property-read Collection<int, Subtitle> $subtitles
  * @property-read Collection<int, WatchHistory> $watchHistories
+ * @property-read Collection<int, UserFavorite> $userFavorites
  */
 class MediaItem extends Model
 {
@@ -156,6 +158,14 @@ class MediaItem extends Model
     public function subtitles(): MorphMany
     {
         return $this->morphMany(Subtitle::class, 'subtitlable');
+    }
+
+    /**
+     * @return MorphMany<UserFavorite, $this>
+     */
+    public function userFavorites(): MorphMany
+    {
+        return $this->morphMany(UserFavorite::class, 'favoritable');
     }
 
     /**

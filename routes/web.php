@@ -1,6 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CollectionController;
 use App\Http\Controllers\CollectionManagementController;
 use App\Http\Controllers\DashboardController;
@@ -17,6 +20,7 @@ use App\Http\Controllers\SeriesController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\StreamController;
 use App\Http\Controllers\SubtitleController;
+use App\Http\Controllers\UserManagementController;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
@@ -40,81 +44,106 @@ $statelessMiddleware = [
     AddLinkHeadersForPreloadedAssets::class,
 ];
 
-// Home & Media Discovery Dashboard (Inertia HTML Pages & Stateful Form Actions)
-Route::get('/', [DashboardController::class, 'index'])->name('home');
-Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+/*
+|--------------------------------------------------------------------------
+| Public Authentication Routes (LAN Friendly PIN Profile Selector)
+|--------------------------------------------------------------------------
+*/
+Route::get('/login', [AuthController::class, 'loginView'])->name('login');
+Route::get('/api/auth/profiles', [AuthController::class, 'getProfiles'])->name('api.auth.profiles');
+Route::post('/api/auth/verify-pin', [AuthController::class, 'verifyPin'])->name('api.auth.verify-pin');
+Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+Route::get('/api/auth/me', [AuthController::class, 'me'])->name('api.auth.me');
 
-// Virtual Movies Hub
-Route::get('/movies', [MediaController::class, 'index'])->name('movies.index');
-Route::get('/movies/{mediaItem}', [MediaController::class, 'show'])->name('movies.show');
-Route::get('/movie/{mediaItem}', [MediaController::class, 'show'])->name('movies.show.slug');
-Route::post('/movies/{mediaItem}/favorite', [MediaController::class, 'toggleFavorite'])->name('movies.favorite');
-
-// Movie Collections & Boxsets
-Route::get('/collections', [CollectionController::class, 'index'])->name('collections.index');
-Route::get('/collections/{slug}', [CollectionController::class, 'show'])->name('collections.show');
-
-// Virtual TV Series Hub
-Route::get('/series', [SeriesController::class, 'index'])->name('series.index');
-Route::get('/series/{series}', [SeriesController::class, 'show'])->name('series.show');
-Route::get('/series/{series}/season/{seasonNumber}', [SeriesController::class, 'showSeason'])->name('series.season.show');
-Route::get('/series/{series}/season/{seasonNumber}/episode/{episodeNumber}', [SeriesController::class, 'showEpisode'])->name('series.episode.show');
-Route::get('/series/{series}/s/{seasonNumber}/e/{episodeNumber}', [SeriesController::class, 'showEpisode'])->name('series.episode.short');
-Route::post('/series/{series}/favorite', [SeriesController::class, 'toggleFavorite'])->name('series.favorite');
-
-// Studio, Scanner, Organizer, Subtitles, Watch History, Analytics, Scout, Downloads, Docs, Settings Pages
-Route::get('/metadata', [MetadataManagementController::class, 'index'])->name('metadata.index');
-Route::get('/scanner', [ScannerController::class, 'index'])->name('scanner.index');
-Route::get('/organizer', [DiskOrganizerController::class, 'index'])->name('organizer.index');
-Route::get('/subtitles', [SubtitleController::class, 'index'])->name('subtitles.index');
-Route::get('/watch-history', [StreamController::class, 'watchHistoryPage'])->name('watch-history.index');
-Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics.index');
-Route::get('/scout', [MediaScoutController::class, 'index'])->name('scout.index');
-Route::get('/downloads', [DownloadManagerController::class, 'index'])->name('downloads.index');
-Route::inertia('/docs', 'Docs/Index')->name('docs.index');
-Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
-
-// Stateless JSON API & Media Streaming Endpoints (No Session / Cookie / Inertia Middleware Overhead)
+/*
+|--------------------------------------------------------------------------
+| Stateless Cinema Video Streaming & Instant Search (Pure HTTP Range)
+|--------------------------------------------------------------------------
+*/
 Route::withoutMiddleware($statelessMiddleware)->group(function (): void {
-    // Global Instant Live Search (YTS Style)
     Route::get('/api/search/instant', [SearchController::class, 'instantSearch'])->name('api.search.instant');
+    Route::get('/stream/movie/{mediaItem}', [StreamController::class, 'streamMovie'])->name('stream.movie');
+    Route::get('/stream/episode/{episode}', [StreamController::class, 'streamEpisode'])->name('stream.episode');
+    Route::get('/api/stream/episode/{episode}', [StreamController::class, 'streamEpisode'])->name('api.stream.episode');
+    Route::get('/stream/subtitles/{subtitle}', [StreamController::class, 'streamSubtitle'])->name('stream.subtitle');
+    Route::get('/stream/remux/movie/{mediaItem}', [StreamController::class, 'streamRemuxMovie'])->name('stream.remux.movie');
+    Route::get('/stream/remux/episode/{episode}', [StreamController::class, 'streamRemuxEpisode'])->name('stream.remux.episode');
+    Route::get('/stream/mse/movie/{mediaItem}', [StreamController::class, 'streamMseMovie'])->name('stream.mse.movie');
+    Route::get('/stream/mse/episode/{episode}', [StreamController::class, 'streamMseEpisode'])->name('stream.mse.episode');
+});
 
-    // Movies & Cast API
-    Route::get('/api/media/search-metadata', [MediaController::class, 'searchMetadata'])->name('api.media.search-metadata');
-    Route::post('/api/media/{mediaItem}/fix-match', [MediaController::class, 'fixMatch'])->name('api.media.fix-match');
-    Route::post('/api/media/{mediaItem}/update-metadata', [MediaController::class, 'updateMetadata'])->name('api.media.update-metadata');
-    Route::get('/api/fix-match/collections', [FixMatchCollectionController::class, 'getCollections'])->name('api.fix-match.collections');
-    Route::post('/api/fix-match/collection', [FixMatchCollectionController::class, 'updateCollection'])->name('api.fix-match.update-collection');
-    Route::delete('/api/media/{id}', [ScannerController::class, 'deleteSingleMedia'])->name('api.media.delete');
+/*
+|--------------------------------------------------------------------------
+| Core Cinema & Streaming Routes (Accessible by All Authenticated Profiles)
+|--------------------------------------------------------------------------
+*/
+Route::middleware('auth')->group(function (): void {
+    // 1. Dashboard
+    Route::get('/', [DashboardController::class, 'index'])->name('home');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    // 2. Movies Catalog & Details
+    Route::get('/movies', [MediaController::class, 'index'])->name('movies.index');
+    Route::get('/movies/{mediaItem}', [MediaController::class, 'show'])->name('movies.show');
+    Route::get('/movie/{mediaItem}', [MediaController::class, 'show'])->name('movies.show.slug');
+    Route::post('/movies/{mediaItem}/favorite', [MediaController::class, 'toggleFavorite'])->name('movies.favorite');
     Route::get('/api/vibes', [MediaController::class, 'getVibes'])->name('api.vibes');
     Route::get('/api/person/{person}', [MediaController::class, 'getCastExplorer'])->name('api.person');
 
-    // Collections Management API
-    Route::get('/api/collections/management/overview', [CollectionManagementController::class, 'overview'])->name('api.collections.management.overview');
-    Route::post('/api/collections/management/sync-tmdb', [CollectionManagementController::class, 'syncTmdb'])->name('api.collections.management.sync-tmdb');
-    Route::post('/api/collections/management/detach-movie', [CollectionManagementController::class, 'detachMovie'])->name('api.collections.management.detach-movie');
-    Route::post('/api/collections/management/assign-movie', [CollectionManagementController::class, 'assignMovie'])->name('api.collections.management.assign-movie');
-    Route::post('/api/collections/management/update-collection', [CollectionManagementController::class, 'updateCollection'])->name('api.collections.management.update-collection');
-    Route::get('/api/collections/management/search-movies', [CollectionManagementController::class, 'searchMovies'])->name('api.collections.management.search-movies');
+    // 3. Movie Collections
+    Route::get('/collections', [CollectionController::class, 'index'])->name('collections.index');
+    Route::get('/collections/{slug}', [CollectionController::class, 'show'])->name('collections.show');
 
-    // Series Metadata API
-    Route::get('/api/series/search-metadata', [SeriesController::class, 'searchMetadata'])->name('api.series.search-metadata');
-    Route::post('/api/series/{series}/fix-match', [SeriesController::class, 'fixMatch'])->name('api.series.fix-match');
-    Route::post('/api/series/{series}/update-metadata', [SeriesController::class, 'updateMetadata'])->name('api.series.update-metadata');
+    // 4. TV Series Catalog & Deep Links
+    Route::get('/series', [SeriesController::class, 'index'])->name('series.index');
+    Route::get('/series/{series}', [SeriesController::class, 'show'])->name('series.show');
+    Route::get('/series/{series}/season/{seasonNumber}', [SeriesController::class, 'showSeason'])->name('series.season.show');
+    Route::get('/series/{series}/season/{seasonNumber}/episode/{episodeNumber}', [SeriesController::class, 'showEpisode'])->name('series.episode.show');
+    Route::get('/series/{series}/s/{seasonNumber}/e/{episodeNumber}', [SeriesController::class, 'showEpisode'])->name('series.episode.short');
+    Route::post('/series/{series}/favorite', [SeriesController::class, 'toggleFavorite'])->name('series.favorite');
 
-    // Metadata & Cover Studio API
-    Route::post('/api/metadata/batch-enrich', [MetadataManagementController::class, 'batchEnrich'])->name('api.metadata.batch-enrich');
-    Route::post('/api/metadata/lookup-id', [MetadataManagementController::class, 'lookupId'])->name('api.metadata.lookup-id');
-    Route::post('/api/metadata/{type}/{id}/reparse', [MetadataManagementController::class, 'reparseItem'])->name('api.metadata.reparse');
-    Route::post('/api/metadata/{type}/{id}/convert-type', [MetadataManagementController::class, 'convertType'])->name('api.metadata.convert-type');
-    Route::post('/api/metadata/{type}/{id}/rename-file', [MetadataManagementController::class, 'renameFile'])->name('api.metadata.rename-file');
-    Route::post('/api/metadata/{type}/{id}/verify-file', [MetadataManagementController::class, 'verifyFile'])->name('api.metadata.verify-file');
-    Route::post('/api/metadata/{type}/{id}/relocate-file', [MetadataManagementController::class, 'relocateFile'])->name('api.metadata.relocate-file');
-    Route::get('/api/collections/list', [MetadataManagementController::class, 'listCollections'])->name('api.collections.list');
-    Route::post('/api/metadata/movie/{id}/collection', [MetadataManagementController::class, 'updateMovieCollection'])->name('api.metadata.movie.collection');
-    Route::delete('/api/metadata/{type}/{id}', [MetadataManagementController::class, 'deleteItem'])->name('api.metadata.delete-item');
+    // 5. In-Player Media Progress & Stream State
+    Route::post('/api/playback/progress', [StreamController::class, 'saveProgress'])->name('api.playback.progress');
+    Route::post('/api/watch-history/progress', [StreamController::class, 'saveProgress']);
+    Route::post('/api/stream/stop', [StreamController::class, 'stopStream'])->name('api.stream.stop');
+    Route::get('/api/stream/cache-status', [StreamController::class, 'getCacheStatus'])->name('api.stream.cache-status');
+    Route::get('/api/stream/playlist', [StreamController::class, 'getPlaylist'])->name('api.stream.playlist');
+    Route::get('/api/media/duration', [StreamController::class, 'getMediaDuration'])->name('api.media.duration');
+    Route::get('/api/media/seek-keyframe', [StreamController::class, 'getSeekKeyframe'])->name('api.media.seek-keyframe');
 
-    // Virtual Media Scanner API
+    // 6. Watch History Hub (Scoped to Active Profile)
+    Route::get('/watch-history', [StreamController::class, 'watchHistoryPage'])->name('watch-history.index');
+    Route::get('/api/watch-history', [StreamController::class, 'getWatchHistory'])->name('api.watch-history.index');
+    Route::delete('/api/watch-history/{id}', [StreamController::class, 'deleteWatchHistory'])->name('api.watch-history.delete');
+    Route::delete('/api/watch-history', [StreamController::class, 'clearWatchHistory'])->name('api.watch-history.clear');
+    Route::post('/api/watch-history/clear-all', [StreamController::class, 'clearWatchHistory']);
+
+    // 7. Player In-Stream Subtitle Search, Download & Arabic Generation
+    Route::get('/api/subtitles/search', [SubtitleController::class, 'search'])->name('api.subtitles.search');
+    Route::post('/api/subtitles/download', [SubtitleController::class, 'downloadForMedia'])->name('api.subtitles.download');
+    Route::post('/api/subtitles/generate-arabic', [SubtitleController::class, 'generateArabic'])->name('api.subtitles.generate-arabic');
+    Route::post('/api/subtitles/translate-arabic', [SubtitleController::class, 'generateArabic'])->name('api.subtitles.translate-arabic');
+    Route::get('/api/subtitles/for-media', [SubtitleController::class, 'forMedia'])->name('api.subtitles.for-media');
+    Route::get('/api/subtitles/list', [SubtitleController::class, 'forMedia'])->name('api.subtitles.list');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Server Management Studio & Administrator Protected Hub
+|--------------------------------------------------------------------------
+| Completely hidden and inaccessible to regular viewer profiles.
+*/
+Route::middleware(['auth', 'admin'])->group(function (): void {
+    // 1. User Management Studio
+    Route::get('/users', [UserManagementController::class, 'index'])->name('users.index');
+    Route::get('/api/users', [UserManagementController::class, 'index'])->name('api.users.index');
+    Route::post('/api/users', [UserManagementController::class, 'store'])->name('api.users.store');
+    Route::put('/api/users/{user}', [UserManagementController::class, 'update'])->name('api.users.update');
+    Route::post('/api/users/{user}/reset-pin', [UserManagementController::class, 'resetPin'])->name('api.users.reset-pin');
+    Route::delete('/api/users/{user}', [UserManagementController::class, 'destroy'])->name('api.users.destroy');
+
+    // 2. Virtual Media Scanner & Job Center
+    Route::get('/scanner', [ScannerController::class, 'index'])->name('scanner.index');
     Route::post('/api/scanner/directories', [ScannerController::class, 'addDirectory'])->name('api.scanner.directories.add');
     Route::delete('/api/scanner/directories/{index?}', [ScannerController::class, 'removeDirectory'])->name('api.scanner.directories.remove');
     Route::post('/api/scanner/start', [ScannerController::class, 'startScan'])->name('api.scanner.start');
@@ -128,8 +157,10 @@ Route::withoutMiddleware($statelessMiddleware)->group(function (): void {
     Route::post('/api/library/enrich-missing', [ScannerController::class, 'enrichMissing'])->name('api.library.enrich-missing');
     Route::post('/api/library/clear-demo', [ScannerController::class, 'clearDemoCatalog'])->name('api.library.clear-demo');
     Route::post('/api/scanner/clear-catalog', [ScannerController::class, 'clearDemoCatalog'])->name('api.scanner.clear-catalog');
+    Route::delete('/api/media/{id}', [ScannerController::class, 'deleteSingleMedia'])->name('api.media.delete');
 
-    // Physical Disk Organizer API
+    // 3. Physical Disk Organizer Studio
+    Route::get('/organizer', [DiskOrganizerController::class, 'index'])->name('organizer.index');
     Route::get('/api/organizer/load-virtual', [DiskOrganizerController::class, 'loadFromVirtualLibrary'])->name('api.organizer.load-virtual');
     Route::post('/api/organizer/scan', [DiskOrganizerController::class, 'scan'])->name('api.organizer.scan');
     Route::get('/api/organizer/browse-directory', [DiskOrganizerController::class, 'browseDirectory'])->name('api.organizer.browse-directory');
@@ -154,46 +185,35 @@ Route::withoutMiddleware($statelessMiddleware)->group(function (): void {
     Route::post('/api/organizer/watcher/folder', [DiskOrganizerController::class, 'updateWatchedFolders'])->name('api.organizer.watcher.folder');
     Route::post('/api/organizer/watcher/run-now', [DiskOrganizerController::class, 'runWatcherNow'])->name('api.organizer.watcher.run-now');
 
-    // Subtitles API
-    Route::get('/api/subtitles/search', [SubtitleController::class, 'search'])->name('api.subtitles.search');
-    Route::post('/api/subtitles/download', [SubtitleController::class, 'downloadForMedia'])->name('api.subtitles.download');
-    Route::post('/api/subtitles/generate-arabic', [SubtitleController::class, 'generateArabic'])->name('api.subtitles.generate-arabic');
-    Route::post('/api/subtitles/translate-arabic', [SubtitleController::class, 'generateArabic'])->name('api.subtitles.translate-arabic');
-    Route::get('/api/subtitles/for-media', [SubtitleController::class, 'forMedia'])->name('api.subtitles.for-media');
-    Route::get('/api/subtitles/list', [SubtitleController::class, 'forMedia'])->name('api.subtitles.list');
-    Route::post('/api/subtitles/verify-engine', [SubtitleController::class, 'verifyEngine'])->name('api.subtitles.verify-engine');
-    Route::post('/api/subtitles/check', [SubtitleController::class, 'checkHealth'])->name('api.subtitles.check');
-    Route::post('/api/subtitles/health-check/start', [SubtitleController::class, 'startHealthJob'])->name('api.subtitles.health-start');
-    Route::post('/api/subtitles/health-check/batch', [SubtitleController::class, 'processHealthBatch'])->name('api.subtitles.health-batch');
-    Route::get('/api/subtitles/health-check/status', [SubtitleController::class, 'getHealthJobStatus'])->name('api.subtitles.health-status');
-    Route::post('/api/subtitles/health-check/pause', [SubtitleController::class, 'pauseHealthJob'])->name('api.subtitles.health-pause');
-    Route::post('/api/subtitles/health-check/resume', [SubtitleController::class, 'resumeHealthJob'])->name('api.subtitles.health-resume');
-    Route::post('/api/subtitles/health-check/cancel', [SubtitleController::class, 'cancelHealthJob'])->name('api.subtitles.health-cancel');
+    // 4. Metadata Studio & Match Corrections
+    Route::get('/metadata', [MetadataManagementController::class, 'index'])->name('metadata.index');
+    Route::post('/api/metadata/batch-enrich', [MetadataManagementController::class, 'batchEnrich'])->name('api.metadata.batch-enrich');
+    Route::post('/api/metadata/lookup-id', [MetadataManagementController::class, 'lookupId'])->name('api.metadata.lookup-id');
+    Route::post('/api/metadata/{type}/{id}/reparse', [MetadataManagementController::class, 'reparseItem'])->name('api.metadata.reparse');
+    Route::post('/api/metadata/{type}/{id}/convert-type', [MetadataManagementController::class, 'convertType'])->name('api.metadata.convert-type');
+    Route::post('/api/metadata/{type}/{id}/rename-file', [MetadataManagementController::class, 'renameFile'])->name('api.metadata.rename-file');
+    Route::post('/api/metadata/{type}/{id}/verify-file', [MetadataManagementController::class, 'verifyFile'])->name('api.metadata.verify-file');
+    Route::post('/api/metadata/{type}/{id}/relocate-file', [MetadataManagementController::class, 'relocateFile'])->name('api.metadata.relocate-file');
+    Route::get('/api/collections/list', [MetadataManagementController::class, 'listCollections'])->name('api.collections.list');
+    Route::post('/api/metadata/movie/{id}/collection', [MetadataManagementController::class, 'updateMovieCollection'])->name('api.metadata.movie.collection');
+    Route::delete('/api/metadata/{type}/{id}', [MetadataManagementController::class, 'deleteItem'])->name('api.metadata.delete-item');
+    Route::get('/api/media/search-metadata', [MediaController::class, 'searchMetadata'])->name('api.media.search-metadata');
+    Route::post('/api/media/{mediaItem}/fix-match', [MediaController::class, 'fixMatch'])->name('api.media.fix-match');
+    Route::post('/api/media/{mediaItem}/update-metadata', [MediaController::class, 'updateMetadata'])->name('api.media.update-metadata');
+    Route::get('/api/fix-match/collections', [FixMatchCollectionController::class, 'getCollections'])->name('api.fix-match.collections');
+    Route::post('/api/fix-match/collection', [FixMatchCollectionController::class, 'updateCollection'])->name('api.fix-match.update-collection');
+    Route::get('/api/series/search-metadata', [SeriesController::class, 'searchMetadata'])->name('api.series.search-metadata');
+    Route::post('/api/series/{series}/fix-match', [SeriesController::class, 'fixMatch'])->name('api.series.fix-match');
+    Route::post('/api/series/{series}/update-metadata', [SeriesController::class, 'updateMetadata'])->name('api.series.update-metadata');
+    Route::get('/api/collections/management/overview', [CollectionManagementController::class, 'overview'])->name('api.collections.management.overview');
+    Route::post('/api/collections/management/sync-tmdb', [CollectionManagementController::class, 'syncTmdb'])->name('api.collections.management.sync-tmdb');
+    Route::post('/api/collections/management/detach-movie', [CollectionManagementController::class, 'detachMovie'])->name('api.collections.management.detach-movie');
+    Route::post('/api/collections/management/assign-movie', [CollectionManagementController::class, 'assignMovie'])->name('api.collections.management.assign-movie');
+    Route::post('/api/collections/management/update-collection', [CollectionManagementController::class, 'updateCollection'])->name('api.collections.management.update-collection');
+    Route::get('/api/collections/management/search-movies', [CollectionManagementController::class, 'searchMovies'])->name('api.collections.management.search-movies');
 
-    // Cinema Video & Subtitle Streaming Engine (HTTP 206 Partial Content + Audio Transcoding + MSE)
-    Route::get('/stream/movie/{mediaItem}', [StreamController::class, 'streamMovie'])->name('stream.movie');
-    Route::get('/stream/episode/{episode}', [StreamController::class, 'streamEpisode'])->name('stream.episode');
-    Route::get('/api/stream/episode/{episode}', [StreamController::class, 'streamEpisode'])->name('api.stream.episode');
-    Route::get('/stream/subtitles/{subtitle}', [StreamController::class, 'streamSubtitle'])->name('stream.subtitle');
-    Route::get('/stream/remux/movie/{mediaItem}', [StreamController::class, 'streamRemuxMovie'])->name('stream.remux.movie');
-    Route::get('/stream/remux/episode/{episode}', [StreamController::class, 'streamRemuxEpisode'])->name('stream.remux.episode');
-    Route::get('/stream/mse/movie/{mediaItem}', [StreamController::class, 'streamMseMovie'])->name('stream.mse.movie');
-    Route::get('/stream/mse/episode/{episode}', [StreamController::class, 'streamMseEpisode'])->name('stream.mse.episode');
-
-    // Playback & Watch History APIs
-    Route::post('/api/playback/progress', [StreamController::class, 'saveProgress'])->name('api.playback.progress');
-    Route::post('/api/watch-history/progress', [StreamController::class, 'saveProgress']);
-    Route::get('/api/watch-history', [StreamController::class, 'getWatchHistory'])->name('api.watch-history.index');
-    Route::delete('/api/watch-history/{id}', [StreamController::class, 'deleteWatchHistory'])->name('api.watch-history.delete');
-    Route::delete('/api/watch-history', [StreamController::class, 'clearWatchHistory'])->name('api.watch-history.clear');
-    Route::post('/api/watch-history/clear-all', [StreamController::class, 'clearWatchHistory']);
-    Route::get('/api/media/duration', [StreamController::class, 'getMediaDuration'])->name('api.media.duration');
-    Route::get('/api/media/seek-keyframe', [StreamController::class, 'getSeekKeyframe'])->name('api.media.seek-keyframe');
-    Route::post('/api/stream/stop', [StreamController::class, 'stopStream'])->name('api.stream.stop');
-    Route::get('/api/stream/cache-status', [StreamController::class, 'getCacheStatus'])->name('api.stream.cache-status');
-    Route::get('/api/stream/playlist', [StreamController::class, 'getPlaylist'])->name('api.stream.playlist');
-
-    // Media Scout API
+    // 5. Media Scout (Admin Only)
+    Route::get('/scout', [MediaScoutController::class, 'index'])->name('scout.index');
     Route::get('/api/scout/gaps', [MediaScoutController::class, 'getGaps'])->name('api.scout.gaps');
     Route::get('/api/scout/upgrades', [MediaScoutController::class, 'getUpgrades'])->name('api.scout.upgrades');
     Route::post('/api/scout/refresh', [MediaScoutController::class, 'refresh'])->name('api.scout.refresh');
@@ -203,7 +223,8 @@ Route::withoutMiddleware($statelessMiddleware)->group(function (): void {
     Route::post('/api/scout/download', [MediaScoutController::class, 'download'])->name('api.scout.download');
     Route::post('/api/scout/organize-and-scan', [MediaScoutController::class, 'organizeAndScan'])->name('api.scout.organize-and-scan');
 
-    // Download & Background Ingestion API
+    // 6. Real Downloader & Torrent Ingestion Center (Admin Only)
+    Route::get('/downloads', [DownloadManagerController::class, 'index'])->name('downloads.index');
     Route::get('/api/downloads/list', [DownloadManagerController::class, 'list'])->name('api.downloads.list');
     Route::get('/api/downloads/daemon/status', [DownloadManagerController::class, 'daemonStatus'])->name('api.downloads.daemon.status');
     Route::post('/api/downloads/daemon/stop', [DownloadManagerController::class, 'stopDaemon'])->name('api.downloads.daemon.stop');
@@ -219,13 +240,31 @@ Route::withoutMiddleware($statelessMiddleware)->group(function (): void {
     Route::post('/api/downloads/{id}/organize', [DownloadManagerController::class, 'organize'])->name('api.downloads.organize');
     Route::delete('/api/downloads/{id}', [DownloadManagerController::class, 'destroy'])->name('api.downloads.destroy');
 
-    // System Settings & API Providers API
+    // 7. Subtitles Server Hub Diagnostics
+    Route::get('/subtitles', [SubtitleController::class, 'index'])->name('subtitles.index');
+    Route::post('/api/subtitles/verify-engine', [SubtitleController::class, 'verifyEngine'])->name('api.subtitles.verify-engine');
+    Route::post('/api/subtitles/check', [SubtitleController::class, 'checkHealth'])->name('api.subtitles.check');
+    Route::post('/api/subtitles/health-check/start', [SubtitleController::class, 'startHealthJob'])->name('api.subtitles.health-start');
+    Route::post('/api/subtitles/health-check/batch', [SubtitleController::class, 'processHealthBatch'])->name('api.subtitles.health-batch');
+    Route::get('/api/subtitles/health-check/status', [SubtitleController::class, 'getHealthJobStatus'])->name('api.subtitles.health-status');
+    Route::post('/api/subtitles/health-check/pause', [SubtitleController::class, 'pauseHealthJob'])->name('api.subtitles.health-pause');
+    Route::post('/api/subtitles/health-check/resume', [SubtitleController::class, 'resumeHealthJob'])->name('api.subtitles.health-resume');
+    Route::post('/api/subtitles/health-check/cancel', [SubtitleController::class, 'cancelHealthJob'])->name('api.subtitles.health-cancel');
+
+    // 8. Storage Analytics
+    Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics.index');
+
+    // 9. Documentation
+    Route::inertia('/docs', 'Docs/Index')->name('docs.index');
+
+    // 10. System Settings & API Providers
+    Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
     Route::post('/api/settings', [SettingsController::class, 'update'])->name('api.settings.update');
     Route::post('/api/settings/test-provider', [SettingsController::class, 'testProvider'])->name('api.settings.test-provider');
     Route::get('/api/settings/media-cache-stats', [SettingsController::class, 'getMediaCacheStats'])->name('api.settings.media-cache-stats');
     Route::post('/api/settings/clear-media-cache', [SettingsController::class, 'clearMediaCache'])->name('api.settings.clear-media-cache');
 
-    // Database Backup & Disaster Recovery API
+    // 11. Database Backup & Disaster Recovery
     Route::get('/api/database/backups', [DatabaseBackupController::class, 'listBackups'])->name('api.database.backups.list');
     Route::post('/api/database/backups/create', [DatabaseBackupController::class, 'createBackup'])->name('api.database.backups.create');
     Route::get('/api/database/backup/export', [DatabaseBackupController::class, 'exportJson'])->name('api.database.backup.export');

@@ -30,15 +30,15 @@
 - [x] **1B. UI Primitives:** Port `resources/js/components/ui/dialog/*`, `resources/js/components/ui/tooltip/*`, and `resources/js/components/ui/sonner/*`.
 - [x] **1B. Toast Modernization:** Wire `resources/js/composables/useToast.ts` and `resources/js/components/common/GlobalToaster.vue` to `vue-sonner`.
 
-### [/] Phase 2: Multi-Profile PIN Auth, Parental Controls & User Management
-- [ ] **Database & Models:** Migrate `users` table with PIN authentication, avatar customization, role (`admin` / `member` / `kid`), and parental rating limits (`G`, `PG`, `PG-13`, `R`, `NC-17`). Create `UserFavorite` model.
-- [ ] **Authentication Backend:** Implement `AuthController` (profile selection, PIN verification, session token, quick profile switch) and `EnsureAdmin` middleware.
-- [ ] **User Management Backend:** Implement `UserManagementController` (CRUD profiles, avatar selection, parental age limit controls, PIN reset).
-- [ ] **Auth Frontend Views:** Build `Auth/Login.vue` (theatrical Netflix/Plex-style avatar selector) and `PinPad.vue` (keyboard & touch-friendly 4-digit PIN pad).
-- [ ] **Profile Settings & Management Views:** Build `Users/Index.vue` for admin management and profile switcher in Navbar.
-- [ ] **Feature Tests:** PHPUnit feature tests for PIN authentication, parental ratings filtering, and admin authorization.
+### [x] Phase 2: Multi-Profile PIN Auth, Parental Controls & User Management
+- [x] **Database & Models:** Migrated `users` table with PIN authentication, avatar customization, role (`admin` / `user`), and parental rating limits (`G`, `PG`, `PG-13`, `R`, `NC-17`). Created `UserFavorite` model with polymorphic relations.
+- [x] **Authentication Backend:** Implemented `AuthController` (profile selection, PIN verification, session token, quick profile switch) and `EnsureAdmin` middleware. Fixed `config/auth.php` default guard/provider for `User` model.
+- [x] **User Management Backend:** Implemented `UserManagementController` (CRUD profiles, avatar selection, parental age limit controls, PIN reset, self-delete/last-admin safeguards).
+- [x] **Auth Frontend Views:** Built `Auth/Login.vue` (theatrical Netflix/Plex-style avatar selector) and `PinPad.vue` (keyboard & touch-friendly PIN pad).
+- [x] **Profile Settings & Management Views:** Built `Users/Index.vue` for admin management with profile creation, editing, avatar grid, and PIN resets.
+- [x] **Feature Tests & Static Analysis:** Full PHPUnit test suite passing: **205 / 205 tests passed** (1,519 assertions); `vendor/bin/phpstan analyse` passing with 0 errors at Level 7.
 
-### [ ] Phase 3: Application Shell & Navigation Redesign
+### [/] Phase 3: Application Shell & Navigation Redesign
 - [ ] **Responsive Sidebar:** Collapsible grouped sidebar with icon-rail mode, tooltips (`reka-ui`), active accent pills, and smooth transition.
 - [ ] **Floating Glass Navbar:** Fixed floating glass navbar (`.cf-glass-elevated`) with live search dropdown, active profile indicator, accent color picker, quick downloads drawer pill, and language toggle.
 - [ ] **Mobile Bottom Navigation & Drawer:** Floating mobile bottom navigation bar + RTL-aware sliding menu drawer for small viewports.
