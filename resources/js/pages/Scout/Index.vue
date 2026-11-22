@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -44,7 +44,7 @@ import {
     Subtitles,
     Volume2,
     Flame,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 interface MetricData {
     missing_episodes_count?: number;
@@ -808,9 +808,7 @@ onMounted(() => {
                         @click="activeTab = 'series'"
                         class="group flex cursor-pointer items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition-all hover:border-emerald-500/30 hover:bg-emerald-500/10 active:scale-95"
                         :title="
-                            isRTL
-                                ? 'عرض نواقص المسلسلات'
-                                : 'View TV series gaps'
+                            isRTL ? 'عرض نواقص المسلسلات' : 'View TV series gaps'
                         "
                     >
                         <div
@@ -1187,9 +1185,7 @@ onMounted(() => {
                     >
                         <Film class="h-3.5 w-3.5" />
                         <span>{{
-                            isRTL
-                                ? 'سلاسل الأفلام غير المكتملة'
-                                : 'Franchise Gaps'
+                            isRTL ? 'سلاسل الأفلام غير المكتملة' : 'Franchise Gaps'
                         }}</span>
                         <span
                             class="rounded-full bg-cyan-500/20 px-1.5 py-0.5 text-[10px] font-black text-cyan-300"

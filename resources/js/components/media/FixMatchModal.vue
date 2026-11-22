@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
@@ -30,7 +30,7 @@ import {
     Link2,
     Unlink,
     Plus,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const props = withDefaults(
     defineProps<{

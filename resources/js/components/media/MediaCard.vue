@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { useI18n } from '@/i18n/useI18n';
-import { Play, Star, Heart, Subtitles, Film } from 'lucide-vue-next';
+import { Play, Star, Heart, Subtitles, Film } from '@lucide/vue';
 
 const props = defineProps<{
     item: any;

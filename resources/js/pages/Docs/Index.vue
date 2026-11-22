@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
@@ -38,7 +38,7 @@ import {
     FileText,
     Code2,
     Globe,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const { t, isRTL } = useI18n();
 
@@ -1051,8 +1051,8 @@ const tabs = [
                                         >// Arabic TV Series Pattern:</span
                                     >
                                     <span class="text-slate-300"
-                                        >Series/الاختيار/الموسم 1/الاختيار
-                                        الحلقة 01.mp4</span
+                                        >Series/الاختيار/الموسم 1/الاختيار الحلقة
+                                        01.mp4</span
                                     >
                                 </div>
                             </div>

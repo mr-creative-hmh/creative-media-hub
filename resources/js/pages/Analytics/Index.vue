@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
@@ -21,7 +21,7 @@ import {
     ArrowUpRight,
     PieChart,
     Disc3,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 interface HostDrive {
     drive: string;
@@ -294,9 +294,7 @@ const surroundPercent = computed(() => {
                     <span
                         class="text-xs font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400"
                         >{{
-                            isRTL
-                                ? 'المسلسلات والحلقات'
-                                : 'TV Series & Episodes'
+                            isRTL ? 'المسلسلات والحلقات' : 'TV Series & Episodes'
                         }}</span
                     >
                     <Tv class="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
@@ -723,9 +721,7 @@ const surroundPercent = computed(() => {
                 <div
                     class="flex items-center justify-between border-t border-slate-200 pt-2 text-xs text-slate-500 dark:border-white/10 dark:text-slate-400"
                 >
-                    <span>{{
-                        isRTL ? 'خلال 30 يوماً:' : 'Last 30 days:'
-                    }}</span>
+                    <span>{{ isRTL ? 'خلال 30 يوماً:' : 'Last 30 days:' }}</span>
                     <span class="font-mono font-bold text-emerald-400">{{
                         stats.recent_inflow?.days_30_formatted || '0 GB'
                     }}</span>

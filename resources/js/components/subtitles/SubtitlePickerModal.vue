@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
@@ -15,7 +15,7 @@ import {
     HardDrive,
     Filter,
     RefreshCw,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 interface SubtitleResult {
     provider: string;

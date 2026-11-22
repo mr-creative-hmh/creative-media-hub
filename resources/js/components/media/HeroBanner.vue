@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
@@ -11,7 +11,7 @@ import {
     Film,
     Video,
     Clock,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const props = defineProps<{
     items?: any[];

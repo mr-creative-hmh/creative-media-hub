@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from 'vue';
-import { X, Play, Clock, Tv, Film } from 'lucide-vue-next';
+import { X, Play, Clock, Tv, Film } from '@lucide/vue';
 import { useI18n } from '@/i18n/useI18n';
 import { formatEpisodeTitle } from '@/lib/mediaTitle';
 

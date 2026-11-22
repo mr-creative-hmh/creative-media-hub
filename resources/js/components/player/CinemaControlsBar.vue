@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed } from 'vue';
 import {
     Play,
@@ -17,7 +17,7 @@ import {
     Maximize2,
     Minimize2,
     Check,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { useI18n } from '@/i18n/useI18n';
 
 const props = withDefaults(

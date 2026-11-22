@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { X, Search, Download, Loader2, Sparkles, Star } from 'lucide-vue-next';
+import { X, Search, Download, Loader2, Sparkles, Star } from '@lucide/vue';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
 

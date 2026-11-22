@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import {
     X,
     Sliders,
@@ -7,7 +7,7 @@ import {
     Moon,
     Clock,
     RotateCcw,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { useI18n } from '@/i18n/useI18n';
 
 const props = defineProps<{

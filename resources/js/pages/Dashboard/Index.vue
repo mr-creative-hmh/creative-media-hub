@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, defineAsyncComponent } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
@@ -35,7 +35,7 @@ import {
     Star,
     ArrowRight,
     Layers,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const props = defineProps<{
     featuredMedia: any[];

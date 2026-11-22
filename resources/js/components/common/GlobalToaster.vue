@@ -1,13 +1,7 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { useToast, type LocalizedText } from '@/composables/useToast';
 import { useI18n } from '@/i18n/useI18n';
-import {
-    CheckCircle2,
-    AlertCircle,
-    AlertTriangle,
-    Info,
-    X,
-} from 'lucide-vue-next';
+import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from '@lucide/vue';
 
 const { toasts, dismiss } = useToast();
 const { isRTL, locale } = useI18n();

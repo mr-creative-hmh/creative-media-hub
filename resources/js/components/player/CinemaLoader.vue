@@ -1,7 +1,7 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
-import { Film, Sparkles } from 'lucide-vue-next';
+import { Film, Sparkles } from '@lucide/vue';
 
 interface Props {
     statusText?: string;

@@ -1,14 +1,7 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
-import {
-    Tv,
-    Film,
-    Clock,
-    Award,
-    AlertTriangle,
-    Sparkles,
-} from 'lucide-vue-next';
+import { Tv, Film, Clock, Award, AlertTriangle, Sparkles } from '@lucide/vue';
 import ScoutMetricSkeleton from '@/components/common/skeletons/ScoutMetricSkeleton.vue';
 
 const props = defineProps<{
@@ -73,9 +66,7 @@ const totalUpgradesCount = computed(() => {
                 <div class="mt-3">
                     <h4 class="text-xs font-bold text-white">
                         {{
-                            isRTL
-                                ? 'مسلسلات ناقصة المواسم'
-                                : 'Incomplete Series'
+                            isRTL ? 'مسلسلات ناقصة المواسم' : 'Incomplete Series'
                         }}
                     </h4>
                     <p class="mt-0.5 text-[11px] text-slate-400">
@@ -148,9 +139,7 @@ const totalUpgradesCount = computed(() => {
                 </div>
                 <div class="mt-3">
                     <h4 class="text-xs font-bold text-white">
-                        {{
-                            isRTL ? 'سلاسل أفلام غير مكتملة' : 'Franchise Gaps'
-                        }}
+                        {{ isRTL ? 'سلاسل أفلام غير مكتملة' : 'Franchise Gaps' }}
                     </h4>
                     <p class="mt-0.5 text-[11px] text-slate-400">
                         {{

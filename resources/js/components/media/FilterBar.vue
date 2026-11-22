@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import { router } from '@inertiajs/vue3';
@@ -18,7 +18,7 @@ import {
     Globe,
     Search,
     X,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import SvgFlag from '@/components/common/SvgFlag.vue';
 import LiveSearchDropdown from '@/components/common/LiveSearchDropdown.vue';
 

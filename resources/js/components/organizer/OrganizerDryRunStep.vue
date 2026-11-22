@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
@@ -13,7 +13,7 @@ import {
     ArrowRight,
     ArrowLeft,
     Play,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import type { PlanItem } from '@/components/organizer/OrganizerItemCorrectionModal.vue';
 
 const props = defineProps<{

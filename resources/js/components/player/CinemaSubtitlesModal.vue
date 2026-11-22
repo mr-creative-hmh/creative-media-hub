@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import {
     X,
     Check,
@@ -9,7 +9,7 @@ import {
     Sparkles,
     Loader2,
     Volume2,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { useI18n } from '@/i18n/useI18n';
 import type { SubtitleItem } from '@/composables/player/useCinemaSubtitles';
 

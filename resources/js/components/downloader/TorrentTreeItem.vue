@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed } from 'vue';
 import { TorrentTreeNode } from '@/composables/useDownloader';
 import {
@@ -14,7 +14,7 @@ import {
     MinusSquare,
     Square,
     Check,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 defineOptions({
     name: 'TorrentTreeItem',

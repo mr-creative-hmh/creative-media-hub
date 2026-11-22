@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
@@ -60,7 +60,7 @@ import {
     Activity,
     PlayCircle,
     FolderCheck,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const props = defineProps<{
     initialDownloads?: DownloadItem[];
@@ -1337,9 +1337,7 @@ const handleSaveSettings = async () => {
                             class="cursor-pointer rounded-lg border border-amber-500/40 bg-amber-500/20 px-2.5 py-1 text-[11px] font-bold text-amber-200 transition-all hover:bg-amber-500/30"
                         >
                             {{
-                                isRTL
-                                    ? 'إعادة الفحص والاتصال'
-                                    : 'Force Re-check'
+                                isRTL ? 'إعادة الفحص والاتصال' : 'Force Re-check'
                             }}
                         </button>
                     </div>

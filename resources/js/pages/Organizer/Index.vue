@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import {
     ref,
     computed,
@@ -37,7 +37,7 @@ import {
     Play,
     Check,
     X,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const props = defineProps<{
     defaultMovieTemplate: string;

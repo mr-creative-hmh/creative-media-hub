@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
@@ -26,7 +26,7 @@ import {
     Subtitles,
     Minus,
     Plus,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const props = defineProps<{
     isOpen: boolean;
@@ -901,9 +901,7 @@ const startDownload = async (torrent: any) => {
                             >
                                 <Sparkles class="h-3 w-3 text-amber-400" />
                                 <span>{{
-                                    isRTL
-                                        ? 'الأعلى جودة وتوزيعاً'
-                                        : 'Top Choice'
+                                    isRTL ? 'الأعلى جودة وتوزيعاً' : 'Top Choice'
                                 }}</span>
                             </span>
 

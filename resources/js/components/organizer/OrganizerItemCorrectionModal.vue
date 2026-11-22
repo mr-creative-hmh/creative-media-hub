@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
@@ -19,7 +19,7 @@ import {
     Search,
     ChevronDown,
     Sparkles,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 export interface PlanItem {
     id: string;
@@ -625,9 +625,7 @@ function handleReset() {
                     <!-- Year -->
                     <div class="space-y-1.5">
                         <label class="block font-bold text-slate-300">
-                            {{
-                                isRTL ? 'سنة الإنتاج (Year):' : 'Release Year:'
-                            }}
+                            {{ isRTL ? 'سنة الإنتاج (Year):' : 'Release Year:' }}
                         </label>
                         <input
                             v-model="year"

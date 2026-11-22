@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, watch, nextTick } from 'vue';
-import { Terminal, ChevronDown, ChevronUp } from 'lucide-vue-next';
+import { Terminal, ChevronDown, ChevronUp } from '@lucide/vue';
 import { useI18n } from '@/i18n/useI18n';
 
 export interface OrganizerLogItem {

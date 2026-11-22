@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, watch, defineAsyncComponent } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
@@ -9,7 +9,7 @@ import {
     Sparkles,
     SlidersHorizontal,
     Layers,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const FixMatchModal = defineAsyncComponent(() => import('./FixMatchModal.vue'));
 

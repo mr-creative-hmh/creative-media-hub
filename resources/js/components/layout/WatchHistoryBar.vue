@@ -1,9 +1,9 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
 import { Link } from '@inertiajs/vue3';
-import { Clock, ChevronRight, ChevronLeft } from 'lucide-vue-next';
+import { Clock, ChevronRight, ChevronLeft } from '@lucide/vue';
 import WatchHistoryCard from '@/components/media/WatchHistoryCard.vue';
 
 const props = withDefaults(

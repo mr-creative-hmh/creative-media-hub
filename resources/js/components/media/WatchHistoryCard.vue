@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
@@ -10,7 +10,7 @@ import {
     Layers,
     Gamepad2,
     Subtitles,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { getCleanEpisodeTitle } from '@/lib/mediaTitle';
 
 export interface WatchHistoryItem {

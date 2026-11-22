@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue';
 import {
     AlertTriangle,
@@ -8,7 +8,7 @@ import {
     ShieldAlert,
     Sparkles,
     AlertCircle,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { useI18n } from '@/i18n/useI18n';
 
 const props = withDefaults(

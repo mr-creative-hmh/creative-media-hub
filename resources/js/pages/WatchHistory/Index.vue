@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { formatEpisodeTitle, formatSeasonEpisodeTitle } from '@/lib/mediaTitle';
@@ -22,7 +22,7 @@ import {
     ChevronLeft,
     Sparkles,
     Gamepad2,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const { t, isRTL } = useI18n();
 const toast = useToast();

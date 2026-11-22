@@ -1,8 +1,8 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
-import { Sparkles } from 'lucide-vue-next';
+import { Sparkles } from '@lucide/vue';
 
 const { isRTL } = useI18n();
 
@@ -90,9 +90,7 @@ onBeforeUnmount(() => {
                 <span
                     class="font-sans text-xs font-bold tracking-wide text-slate-100"
                 >
-                    {{
-                        isRTL ? 'جاري الانتقال والتحديث...' : 'Loading Page...'
-                    }}
+                    {{ isRTL ? 'جاري الانتقال والتحديث...' : 'Loading Page...' }}
                 </span>
 
                 <!-- Animated Equalizer Bars -->

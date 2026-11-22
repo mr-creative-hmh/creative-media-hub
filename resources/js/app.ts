@@ -3,7 +3,6 @@ import '../css/app.css';
 import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createApp, h } from 'vue';
-import { initializeTheme } from '@/composables/useAppearance';
 import { initializeThemeAccent } from '@/composables/useThemeAccent';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Creative Media Hub';
@@ -26,5 +25,4 @@ void createInertiaApp({
     },
 });
 
-initializeTheme();
 initializeThemeAccent();

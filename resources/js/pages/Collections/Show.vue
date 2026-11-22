@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, defineAsyncComponent } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -29,7 +29,7 @@ import {
     Unlink,
     SlidersHorizontal,
     Plus,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 interface MovieDetail {
     id: number;

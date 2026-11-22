@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
@@ -22,7 +22,7 @@ import {
     Star,
     ArrowRight,
     ArrowLeft,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const props = defineProps<{
     show: boolean;

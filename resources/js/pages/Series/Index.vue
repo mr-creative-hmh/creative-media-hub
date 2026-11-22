@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
@@ -7,7 +7,7 @@ import HeroBanner from '@/components/media/HeroBanner.vue';
 import WatchHistoryBar from '@/components/layout/WatchHistoryBar.vue';
 import FilterBar from '@/components/media/FilterBar.vue';
 import Pagination from '@/components/common/Pagination.vue';
-import { Tv, Star, Layers, ScanLine, Plus, Heart } from 'lucide-vue-next';
+import { Tv, Star, Layers, ScanLine, Plus, Heart } from '@lucide/vue';
 
 const props = defineProps<{
     seriesList: {

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
 import { router } from '@inertiajs/vue3';
 import { useActivityCenter } from '@/composables/useActivityCenter';
@@ -29,7 +29,7 @@ import {
     Trash2,
     ArrowUpRight,
     Copy,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const {
     isActivityCenterOpen,

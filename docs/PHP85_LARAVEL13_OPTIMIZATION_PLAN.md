@@ -23,9 +23,8 @@
 | :--- | :--- | :--- | :--- | :--- |
 | **Phase 0: Environment & Tooling Unblock** | Complete | `ad1e5d5` | PHP `8.5.12` (0 OPcache warnings); Pint PASS; PHPUnit **162/162 (1,273 assertions, 20.84s)** native 512M; `vue-tsc` 0 errors; `vp build` **8.07s** (`AppLayout` 285.29 kB / 77.16 kB gz, `app.js` 212.72 kB / 72.39 kB gz, `app.css` 221.30 kB / 27.45 kB gz, Fonts 54 files / 579.66 kB down from 60 files / 693 kB, -6 files / -113.3 kB); `vp lint` 67w/0e (no OOM); `vp check` 112 fmt drift (no OOM); PHPStan L7 baseline 884 errors | Herd `php85/php.ini` OPcache + 512M (+ `.bak`), CI PHP 8.5 / Node 24, `vite.config.ts` ignores + drop Bunny font, untrack `graphify-out/` (132 files -> 0), isolate `DatabaseBackupAndRestoreTest` |
 | **Phase 1: P0 Runtime Crashes & Correctness** | Complete | `7429379` | Pint PASS; `artisan optimize` PASS (`config`/`events`/`routes`/`views` all cached); PHPUnit **178/178 (1,322 assertions, 23.51s, +16 regression tests)**; `vue-tsc` 0 errors; `vp check resources/js` **PASS (105 formatted, 0 warnings, 0 errors — down from 67w)**; `vp build` **11.59s** (`AppLayout` 285.93 kB / 76.99 kB gz, `app.js` 215.83 kB / 73.56 kB gz, `app.css` 209.55 kB / 25.82 kB gz, Fonts 54 files / 579.66 kB); 0 multi-root SFCs | Backend P0 bugfixes (`SearchController`, `buildMasterIndex`, `VirtualLibraryScannerService`, `DatabaseBackupService` 64 KB header reader + WAL checkpoint + sidecar unlink, DB column/type bugs, route cache, `config/services.php`, PHP 8.5 deprecations) + Frontend P0s (`useI18n` SSR guard, `useToast`, `PageTransitionLoader` `networkError`, `useDownloader` idle/hidden pause, 67 `vp lint` warnings -> 0, 12 multi-root SFCs -> 0) |
-| **Phase 2: Backend & Frontend Performance** | Complete | *(Phase 2 commit — SHA logged in Phase 3)* | Pint PASS; `artisan optimize` PASS; PHPUnit **186/186 (1,410 assertions, 21.57s, +8 tests)**; `vue-tsc` 0 errors; `vp lint` 0w/0e (106 formatted); `vp build` **8.86s**: `AppLayout` **71.71 kB / 19.76 kB gz (-74.9% vs 285.93 kB)**, `AppLayout.css` **3.34 kB (-54.5%)**, `app.js` **166.92 kB / 52.99 kB gz (-22.7%)**, `app.css` **201.88 kB / 24.99 kB gz**, Fonts **12 `.woff2` files / 165.16 kB (-71.5% vs P1, -76.2% vs P0 60 files / 693 kB)**, `Organizer/Index` **35.26 kB (-56.6%)**, `Scout/Index` **83.39 kB (-22.7%)**, `Subtitles/Index` **36.37 kB (-25.7%)**, 14 on-demand async chunks | Native SQLite `pragmas` in `config/database.php`, stateless `/stream/*` & `/api/*` middleware + `session_write_close()`, 21 DB index optimizations (9 dropped, 12 added), N+1/`SELECT *`/memoization/`Http::pool` fixes, async-split players/modals/Arabic locale (`v-if` gated), `@fontsource` woff2 subsetting, Tailwind `@source not` |
-| **Phase 3A: Unused Package & Dead Code Cleanup** | Pending | — | — | Remove verified unused Composer & npm packages (`chisel`, `fortify`, `sail`, `@laravel/passkeys`, `hls.js`, `reka-ui`, `cva`, `vue-input-otp`, `@rollup/rollup-*`, `vue-sonner`/`clsx`/`tailwind-merge` w/ dead `lib/` files), migrate `lucide-vue-next` -> `@lucide/vue` |
-| **Phase 3B: Toolchain & Dependency Upgrades** | Pending | — | — | Bump `php` -> `^8.5`, `laravel/boost` -> `^2.10`, `phpunit/phpunit` -> `^13.4`, `@types/node` -> `^24`, `vue-tsc` -> `^3.3.14` (keep TS `<7`), `@vueuse/core` -> `^15.0.0`; isolated `vite-plus` `0.3.0` -> `^1.7.0` migration via `vp migrate` |
+| **Phase 2: Backend & Frontend Performance** | Complete | `4abb87b` | Pint PASS; `artisan optimize` PASS; PHPUnit **186/186 (1,410 assertions, 21.57s, +8 tests)**; `vue-tsc` 0 errors; `vp lint` 0w/0e (106 formatted); `vp build` **8.86s**: `AppLayout` **71.71 kB / 19.76 kB gz (-74.9% vs 285.93 kB)**, `AppLayout.css` **3.34 kB (-54.5%)**, `app.js` **166.92 kB / 52.99 kB gz (-22.7%)**, `app.css` **201.88 kB / 24.99 kB gz**, Fonts **12 `.woff2` files / 165.16 kB (-71.5% vs P1, -76.2% vs P0 60 files / 693 kB)**, `Organizer/Index` **35.26 kB (-56.6%)**, `Scout/Index` **83.39 kB (-22.7%)**, `Subtitles/Index` **36.37 kB (-25.7%)**, 14 on-demand async chunks | Native SQLite `pragmas` in `config/database.php`, stateless `/stream/*` & `/api/*` middleware + `session_write_close()`, 21 DB index optimizations (9 dropped, 12 added), N+1/`SELECT *`/memoization/`Http::pool` fixes, async-split players/modals/Arabic locale (`v-if` gated), `@fontsource` woff2 subsetting, Tailwind `@source not` |
+| **Phase 3: Dependency Cleanup & Toolchain Upgrades** | Complete | *(Phase 3 commit)* | Pint PASS; `artisan optimize` PASS; PHPUnit **186/186 (1,410 assertions, 23.67s, PHPUnit 13.4.8 on PHP 8.5.13)**; `vue-tsc` **0 errors**; `vp check resources/js` **PASS (93 formatted, 0 warnings, 0 errors)**; `npm run build` **10.41s** (`AppLayout` 72.56 kB / 19.88 kB gz, `AppLayout.css` 3.34 kB, `app.js` 166.10 kB / 52.74 kB gz, `app.css` 201.74 kB / 24.97 kB gz, `runtime-core` 73.99 kB / 29.00 kB gz, Fonts 12 `.woff2` files / 165.16 kB, 14 async chunks) | Removed 3 Composer pkgs (`laravel/fortify`, `laravel/chisel`, `laravel/sail` + 23 transitive), 9 npm pkgs (`@laravel/passkeys`, `hls.js`, `reka-ui`, `class-variance-authority`, `vue-input-otp`, `vue-sonner`, `clsx`, `tailwind-merge`, `lucide-vue-next`), 12 dead frontend files + `config/fortify.php`. Migrated 61 files to `@lucide/vue`. Retained `laravel/pao`, `concurrently@10.0.3`, `@laravel/multiplex`, `typescript@5.9.3`. Bumped: `php ^8.5` (`8.5.13`), `laravel/boost ^2.10`, `phpunit/phpunit ^13.4` (`13.4.8`), `@types/node ^24.0.0` (`24.19.2`), `vue-tsc ^3.3.14` (`3.3.14`), `@vueuse/core ^15.0.0` (`15.0.0`), `vite-plus ^1.7.0` (`1.7.0`). |
 | **Phase 4: Architecture Modernization & Refactoring** | Paused (Awaiting User Review) | — | — | Persistent `AppLayout`, `<Link prefetch>`, Inertia v3 `useHttp`/`useForm`/`Inertia::defer`/`Inertia::once`, `Model::shouldBeStrict()`, Eloquent `casts()`/`Attribute`/`#[Scope]`, burn down 884 PHPStan L7 errors, deduplicate composables & `formatBytes()` |
 
 ---
@@ -36,20 +35,20 @@
 
 | Package | Section | Constraint | Installed | Latest | Action / Target Phase | Guardrails / Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `php` | `require` | `^8.3` | `8.5.12` | `8.5.12` | Bump to `^8.5` (**Phase 3B**) | `composer.lock` already installs 18 Symfony 8.1 pkgs (`>=8.4.1`). Sync CI to PHP 8.5 first (Phase 0). |
+| `php` | `require` | `^8.5` | `8.5.13` | `8.5.13` | **Bumped to `^8.5` (Phase 3B - Done)** | `composer.lock` already installs 18 Symfony 8.1 pkgs (`>=8.4.1`). Verified clean on PHP 8.5.13. |
 | `laravel/framework` | `require` | `^13.17` | `13.43.0` | `13.43.0` | Keep (Up to date) | Full PHP 8.5 & PHPUnit 13 (`^13.0.3`) support; Laravel 14 slated Q1 2027. |
 | `inertiajs/inertia-laravel` | `require` | `^3.0` | `3.7.0` | `3.7.0` | Keep (Up to date) | Supports Live Props, `QUERY` redirects, `BigInt`, v3 schema. |
 | `laravel/tinker` | `require` | `^3.0` | `3.2.0` | `3.2.0` | Keep (Up to date) | Supports PHPUnit `^13.4`. |
 | `laravel/wayfinder` | `require` | `^0.1.14` | `0.1.23` | `0.1.23` | Keep (User decision) | Keep enabled in `vite.config.ts`. |
-| `laravel/chisel` | `require` | `^0.1.0` | `0.1.1` | `0.1.1` | **Remove** (**Phase 3A**) | Starter-kit scaffold removal tool; unused in runtime. |
-| `laravel/fortify` | `require` | `^1.37.2` | `1.43.0` | `1.43.0` | **Remove** (**Phase 3A**) | Already in `dont-discover`; clean `tests/TestCase.php` (`Features` / `skipUnlessFortifyHas()`), `config/fortify.php`, and stale `dont-discover` entries (incl. `laravel/passkeys`) first. |
-| `phpunit/phpunit` | `require-dev` | `^12.5.23` | `12.5.45` | `13.4.8` | Upgrade to `^13.4` (**Phase 3B**) | Requires PHP `>=8.4`. Verified compatible with `laravel/framework 13.43.0`, `collision 8.9.6`, `pao 1.1.6`, `larastan 3.15.0`. Clear PHPUnit 12 deprecations first. |
+| `laravel/chisel` | `require` | — | — | `0.1.1` | **Removed (Phase 3A - Done)** | Starter-kit scaffold removal tool; deleted from `composer.json`. |
+| `laravel/fortify` | `require` | — | — | `1.43.0` | **Removed (Phase 3A - Done)** | Deleted `config/fortify.php`, cleaned `tests/TestCase.php`, pruned `dont-discover`. |
+| `phpunit/phpunit` | `require-dev` | `^13.4` | `13.4.8` | `13.4.8` | **Upgraded to `^13.4` (Phase 3B - Done)** | Running PHPUnit 13.4.8 on PHP 8.5.13. 186/186 tests passing. |
 | `larastan/larastan` | `require-dev` | `^3.9` | `3.15.0` | `3.15.0` | Keep (Up to date) | Ships `phpstan/phpstan 2.3.7` with PHP 8.5 support. |
-| `laravel/boost` | `require-dev` | `*` | `2.10.4` | `2.10.4` | Pin to `^2.10` (**Phase 3B**) | Avoid unguarded wildcard `*` major jumps. |
+| `laravel/boost` | `require-dev` | `^2.10` | `2.10.4` | `2.10.4` | **Pinned to `^2.10` (Phase 3B - Done)** | Avoided wildcard `*`. |
 | `laravel/pail` | `require-dev` | `^1.2.5` | `1.3.0` | `1.3.0` | Keep (Up to date) | Used by local dev workflow. |
 | `laravel/pao` | `require-dev` | `^1.0.6` | `1.1.6` | `1.1.6` | **Keep** (Up to date) | Agent-optimized PHPUnit/Artisan output; supports PHPUnit `^13.1.7`. |
 | `laravel/pint` | `require-dev` | `^1.27` | `1.32.3` | `1.32.3` | Keep (Up to date) | Full PHP 8.5 syntax formatting support. |
-| `laravel/sail` | `require-dev` | `^1.53` | `1.71.0` | `1.71.0` | **Remove** (**Phase 3A**) | User confirmed removal (no Docker Sail usage). |
+| `laravel/sail` | `require-dev` | — | — | `1.71.0` | **Removed (Phase 3A - Done)** | User confirmed removal (no Docker Sail usage). |
 | `nunomaduro/collision` | `require-dev` | `^8.9.3` | `8.9.6` | `8.9.6` | Keep (Up to date) | Supports PHPUnit `<14.0.0`. |
 | `fakerphp/faker` | `require-dev` | `^1.24` | `1.24.1` | `1.24.1` | Keep (Up to date) | Used by factories/tests. |
 | `mockery/mockery` | `require-dev` | `^1.6` | `1.6.15` | `1.6.15` | Keep (Up to date) | Used by tests. |
@@ -63,28 +62,28 @@
 | `@inertiajs/vite` | `dependencies` | `^3.0.0` | `3.11.0` | `3.11.0` | Keep (Up to date) | Zero-config dev SSR & page resolution. |
 | `laravel-vite-plugin` | `dependencies` | `^3.0.0` | `3.2.1` | `3.2.1` | Keep (Up to date) | Remove unused `bunny('Instrument Sans')` call in Phase 0. |
 | `tailwindcss` / `@tailwindcss/vite` | `deps` / `devDeps` | `^4.1.1` / `^4.1.11` | `4.3.5` | `4.3.5` | Keep (Up to date) | Native scrollbar utils, `@container-size`, Lightning CSS. |
-| `@lucide/vue` | `dependencies` | `^1.17.0` | `1.77.0` | `1.77.0` | Keep (Up to date) | Canonical Vue 3 Lucide package. |
-| `lucide-vue-next` | `dependencies` | `^1.0.0` | `1.0.0` | `1.0.0` | **Remove** (**Phase 3A**) | Officially **deprecated**; migrate all imports to `@lucide/vue`. |
-| `@vueuse/core` | `dependencies` | `^12.8.2` | `12.8.2` | `15.0.0` | **Upgrade to `^15.0.0`** (**Phase 3B**) | User confirmed. Audit `templateRef`, `useThrottleFn` (`trailing: true`), `computedAsync`, `useClipboard`, `createSharedComposable` (currently only 1 call in `AccentColorPicker.vue:23`). |
-| `@fontsource/{cairo,outfit,plus-jakarta-sans}` | `dependencies` | `^5.3.0` | `5.3.0` | `5.3.0` | Keep & subset (**Phase 2**) | Trim imports to `woff2` + `latin`/`arabic` subsets only. |
-| `@laravel/passkeys` | `dependencies` | `^0.2.0` | `0.2.0` | `0.4.1` | **Remove** (**Phase 3A**) | Unused; backend `laravel/passkeys` is not installed. |
-| `hls.js` | `dependencies` | `^1.7.3` | `1.7.4` | `1.7.4` | **Remove** (**Phase 3A**) | Unused in `resources/js/`. |
-| `reka-ui` | `dependencies` | `^2.9.8` | `2.11.0` | `2.11.0` | **Remove** (**Phase 3A**) | Unused in `resources/js/`. |
-| `class-variance-authority` | `dependencies` | `^0.7.1` | `0.7.1` | `0.7.1` | **Remove** (**Phase 3A**) | Unused in `resources/js/`. |
-| `vue-input-otp` | `dependencies` | `^0.3.2` | `0.3.2` | `0.4.0` | **Remove** (**Phase 3A**) | Unused starter-kit 2FA leftover. |
-| `vue-sonner`, `clsx`, `tailwind-merge` | `dependencies` | `^2.0.0`, `^2.1.1`, `^3.2.0` | `2.0.9`, `2.1.1`, `3.7.1` | Latest | **Remove** w/ dead `lib/` (**Phase 3A**) | Only referenced by dead `lib/flashToast.ts` & `lib/utils.ts`; `vite.config.ts:83` `sortTailwindcss.functions` is string-only. |
-| `tw-animate-css` | `dependencies` | `^1.2.5` | `1.4.0` | `1.4.0` | Verify / Keep | Confirm usage in `resources/css/app.css` during Phase 2/3A. |
-| `vite` | `devDependencies` | `^8.0.0` | `8.3.8` | `8.3.8` | Keep / Alias on `vite-plus` 1.7 (**Phase 3B**) | Uses Rolldown `1.2.19`. |
-| `vite-plus` | `devDependencies` | `0.3.0` | `0.3.0` | `1.7.0` | **Upgrade to `^1.7.0`** (**Phase 3B**) | Isolate commit via `vp migrate`; add `"overrides": { "vite": "@voidzero-dev/vite-plus-core" }`, drop 22 deprecated `yuku-*` bindings, verify `vp check`/`vp build`/`vp dev`/Wayfinder. |
+| `@lucide/vue` | `dependencies` | `^1.17.0` | `1.77.0` | `1.77.0` | Keep (Up to date) | Canonical Vue 3 Lucide package. All 61 frontend files migrated to it. |
+| `lucide-vue-next` | `dependencies` | — | — | `1.0.0` | **Removed (Phase 3A - Done)** | Fully migrated to `@lucide/vue`. |
+| `@vueuse/core` | `dependencies` | `^15.0.0` | `15.0.0` | `15.0.0` | **Upgraded to `^15.0.0` (Phase 3B - Done)** | User confirmed. 0 deprecation issues. |
+| `@fontsource/{cairo,outfit,plus-jakarta-sans}` | `dependencies` | `^5.3.0` | `5.3.0` | `5.3.0` | Keep & subset (Phase 2 - Done) | Trimmed imports to `woff2` + `latin`/`arabic` subsets only (12 files / 165 kB). |
+| `@laravel/passkeys` | `dependencies` | — | — | `0.4.1` | **Removed (Phase 3A - Done)** | Unused package removed. |
+| `hls.js` | `dependencies` | — | — | `1.7.4` | **Removed (Phase 3A - Done)** | Unused in `resources/js/`. |
+| `reka-ui` | `dependencies` | — | — | `2.11.0` | **Removed (Phase 3A - Done)** | Unused in `resources/js/`. |
+| `class-variance-authority` | `dependencies` | — | — | `0.7.1` | **Removed (Phase 3A - Done)** | Unused in `resources/js/`. |
+| `vue-input-otp` | `dependencies` | — | — | `0.4.0` | **Removed (Phase 3A - Done)** | Unused starter-kit 2FA leftover. |
+| `vue-sonner`, `clsx`, `tailwind-merge` | `dependencies` | — | — | Latest | **Removed (Phase 3A - Done)** | Removed alongside dead `lib/flashToast.ts` & `lib/utils.ts`. |
+| `tw-animate-css` | `dependencies` | `^1.2.5` | `1.4.0` | `1.4.0` | Keep | Used in animation utilities. |
+| `vite` | `devDependencies` | `^8.0.0` | `8.3.8` | `8.3.8` | Keep (Up to date) | Uses Rolldown `1.2.19`. Direct binary aliased in scripts. |
+| `vite-plus` | `devDependencies` | `^1.7.0` | `1.7.0` | `1.7.0` | **Upgraded to `^1.7.0` (Phase 3B - Done)** | Powers `vp check` and `vp check --fix` (oxlint + oxfmt). |
 | `@vitejs/plugin-vue` | `devDependencies` | `^6.0.0` | `6.0.11` | `6.0.11` | Keep (Up to date) | Vite 8 compatible. |
 | `@laravel/vite-plugin-wayfinder` | `devDependencies` | `^0.1.3` | `0.1.11` | `0.1.11` | Keep (User decision) | Vite 8 compatible. |
-| `vue-tsc` | `devDependencies` | `^2.2.4` | `2.2.12` | `3.3.14` | **Upgrade to `^3.3.14`** (**Phase 3B**) | Aligns with Volar 3 & TS `5.9.x`/`6.0.x`. |
-| `typescript` | `devDependencies` | `^5.2.2` | `5.9.3` | `7.0.2` | **Keep `<7` (`5.9.x` or `6.0.x`)** | **DO NOT upgrade to TS 7.0.x** — drops `./lib/tsc` and breaks `vue-tsc` (`ERR_PACKAGE_PATH_NOT_EXPORTED`). |
-| `@types/node` | `devDependencies` | `^22.13.5` | `22.20.5` | `26.6.6` | **Upgrade to `^24`** (**Phase 3B**) | Match installed Node `v24.18.0` (do not jump to `26`). |
-| `concurrently` | `devDependencies` | `^10.0.3` | `10.0.7` | `10.0.7` | **KEEP** | Required by Laravel 13 `php artisan dev` (`DevCommand::runViaConcurrently()`) on Windows! |
-| `@laravel/multiplex` | `optionalDependencies` | `^0.4.1` | `MISSING` (win) | `0.4.5` | **KEEP** | `os: ["darwin","linux"]` 0-byte no-op on Windows; powers `php artisan dev` on macOS/Linux. |
-| `@rollup/rollup-{linux,win32}-*` | `optionalDependencies` | `4.9.5` | `4.9.5` | `4.68.8` | **Remove** (**Phase 3A**) | Obsolete Rollup 4.9.5 workaround; Vite 8 uses Rolldown. |
-| `react` (extraneous) | *(none)* | — | `19.3.1` | — | Prune (**Phase 3A**) | Extraneous `node_modules` artifact (`npm prune`). |
+| `vue-tsc` | `devDependencies` | `^3.3.14` | `3.3.14` | `3.3.14` | **Upgraded to `^3.3.14` (Phase 3B - Done)** | Aligns with Volar 3 & TS 5.9.3. 0 errors. |
+| `typescript` | `devDependencies` | `^5.9.3` | `5.9.3` | `7.0.2` | **Keep `<7` (5.9.3)** | Prevented TS 7.0 breakages with `vue-tsc`. |
+| `@types/node` | `devDependencies` | `^24.0.0` | `24.19.2` | `26.6.6` | **Upgraded to `^24` (Phase 3B - Done)** | Aligned with Node 24. |
+| `concurrently` | `devDependencies` | `^10.0.3` | `10.0.7` | `10.0.7` | **KEEP** | Required by Laravel 13 `php artisan dev` on Windows! |
+| `@laravel/multiplex` | `optionalDependencies` | `^0.4.1` | `MISSING` (win) | `0.4.5` | **KEEP** | `os: ["darwin","linux"]` no-op on Windows; powers dev on macOS/Linux. |
+| `@rollup/rollup-{linux,win32}-*` | `optionalDependencies` | — | — | `4.68.8` | **Removed (Phase 3A - Done)** | Obsolete Rollup 4.9.5 workaround; Vite 8 uses Rolldown. |
+| `react` (extraneous) | *(none)* | — | — | — | **Pruned (Phase 3A - Done)** | Extraneous `node_modules` artifact removed. |
 
 ---
 

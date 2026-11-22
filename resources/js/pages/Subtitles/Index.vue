@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue';
 import { useSubtitleJob } from '@/composables/useSubtitleJob';
 import { Head } from '@inertiajs/vue3';
@@ -40,7 +40,7 @@ import {
     Pause,
     XCircle,
     Terminal,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const props = defineProps<{
     missingSubtitles: any[];

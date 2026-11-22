@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, watch, defineAsyncComponent } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
@@ -8,7 +8,7 @@ import WatchHistoryBar from '@/components/layout/WatchHistoryBar.vue';
 import FilterBar from '@/components/media/FilterBar.vue';
 import MediaCard from '@/components/media/MediaCard.vue';
 import Pagination from '@/components/common/Pagination.vue';
-import { Film, ScanLine, Plus } from 'lucide-vue-next';
+import { Film, ScanLine, Plus } from '@lucide/vue';
 
 const MediaDetailModal = defineAsyncComponent(
     () => import('@/components/media/MediaDetailModal.vue'),

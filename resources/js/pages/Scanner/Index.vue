@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
@@ -35,7 +35,7 @@ import {
     ArrowRight,
     Image as ImageIcon,
     MessageSquare,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const props = defineProps<{
     directories: Array<{
@@ -455,9 +455,7 @@ onMounted(() => {
                 <div>
                     <span
                         class="block text-xs font-bold tracking-wider text-slate-400 uppercase"
-                        >{{
-                            isRTL ? 'الأفلام المفهرسة' : 'Indexed Movies'
-                        }}</span
+                        >{{ isRTL ? 'الأفلام المفهرسة' : 'Indexed Movies' }}</span
                     >
                     <span class="mt-0.5 block text-2xl font-black text-white">{{
                         currentStats.total_movies
@@ -821,9 +819,7 @@ onMounted(() => {
                     >
                         <option value="mixed">
                             {{
-                                isRTL
-                                    ? 'مختلط (أفلام ومسلسلات)'
-                                    : 'Mixed Content'
+                                isRTL ? 'مختلط (أفلام ومسلسلات)' : 'Mixed Content'
                             }}
                         </option>
                         <option value="movies">

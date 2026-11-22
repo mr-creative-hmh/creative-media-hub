@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
@@ -13,7 +13,7 @@ import {
     Loader2,
     ArrowRight,
     ArrowLeft,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const props = withDefaults(
     defineProps<{
@@ -629,9 +629,7 @@ onUnmounted(() => {
                             <span class="flex items-center gap-1.5">
                                 <Tv class="h-3 w-3" />
                                 <span>{{
-                                    isRTL
-                                        ? 'المسلسلات التلفزيونية'
-                                        : 'TV Series'
+                                    isRTL ? 'المسلسلات التلفزيونية' : 'TV Series'
                                 }}</span>
                             </span>
                             <span class="text-slate-500">{{

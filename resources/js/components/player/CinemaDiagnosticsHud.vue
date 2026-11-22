@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from 'vue';
-import { X, Activity, Server, Cpu, HardDrive } from 'lucide-vue-next';
+import { X, Activity, Server, Cpu, HardDrive } from '@lucide/vue';
 import { useI18n } from '@/i18n/useI18n';
 
 const props = defineProps<{

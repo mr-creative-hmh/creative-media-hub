@@ -1,7 +1,7 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
-import { X, Check, Layers, Film, Tv, Tag, ArrowRight } from 'lucide-vue-next';
+import { X, Check, Layers, Film, Tv, Tag, ArrowRight } from '@lucide/vue';
 import type { PlanItem } from './OrganizerItemCorrectionModal.vue';
 
 const props = defineProps<{

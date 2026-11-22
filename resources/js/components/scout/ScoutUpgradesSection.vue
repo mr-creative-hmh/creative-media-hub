@@ -1,7 +1,7 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
-import { Sparkles, AlertTriangle, Search, Film, Tv } from 'lucide-vue-next';
+import { Sparkles, AlertTriangle, Search, Film, Tv } from '@lucide/vue';
 
 const props = defineProps<{
     lowResItems?: any[];

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
@@ -13,7 +13,7 @@ import {
     Sparkles,
     Languages,
     Tag,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 export interface OrganizerStrategy {
     id: string;

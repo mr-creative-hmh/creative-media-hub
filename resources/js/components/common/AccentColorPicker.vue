@@ -1,7 +1,7 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref } from 'vue';
 import { onClickOutside } from '@vueuse/core';
-import { Palette, Check } from 'lucide-vue-next';
+import { Palette, Check } from '@lucide/vue';
 import { useThemeAccent, type AccentColor } from '@/composables/useThemeAccent';
 import { useI18n } from '@/i18n/useI18n';
 

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
@@ -25,7 +25,7 @@ import {
     HardDrive,
     BookOpen,
     Activity,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const { t, isRTL } = useI18n();
 const { scanStatus, isScanning, isPaused, openScanModal } = useScanner();

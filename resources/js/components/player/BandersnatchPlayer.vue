@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
@@ -26,7 +26,7 @@ import {
     Type,
     Plus,
     Minus,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 interface CueItem {
     start: number;

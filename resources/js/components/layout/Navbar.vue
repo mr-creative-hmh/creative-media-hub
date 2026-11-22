@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import { router, Link } from '@inertiajs/vue3';
@@ -33,7 +33,7 @@ import {
     Pause,
     BookOpen,
     Compass,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const { t, locale, setLocale, isRTL } = useI18n();
 const { scanStatus, isScanning, isPaused, openScanModal } = useScanner();
