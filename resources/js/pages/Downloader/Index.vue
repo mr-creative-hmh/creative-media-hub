@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
+import { ref, computed, watch, onMounted, defineAsyncComponent } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
@@ -13,6 +13,7 @@ import {
 } from '@/composables/useDownloader';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import PageBanner from '@/components/common/PageBanner.vue';
+import ClientPagination from '@/components/common/ClientPagination.vue';
 import TorrentTreeItem from '@/components/downloader/TorrentTreeItem.vue';
 
 const FastOrganizeModal = defineAsyncComponent(
@@ -166,6 +167,18 @@ const filteredItems = computed(() => {
         );
     }
     return downloads.value.filter((d) => d.status === activeFilter.value);
+});
+
+const currentPage = ref(1);
+const perPage = ref(10);
+
+watch(activeFilter, () => {
+    currentPage.value = 1;
+});
+
+const paginatedDownloads = computed(() => {
+    const start = (currentPage.value - 1) * perPage.value;
+    return filteredItems.value.slice(start, start + perPage.value);
 });
 
 const defaultTargetFolder = computed(() => {
@@ -895,7 +908,7 @@ const handleSaveSettings = async () => {
 
         <div v-else class="space-y-4">
             <div
-                v-for="item in filteredItems"
+                v-for="item in paginatedDownloads"
                 :key="item.id"
                 class="cf-glass border-border/80 hover:border-primary/45 group relative space-y-4 overflow-hidden rounded-2xl border p-5 tabular-nums transition-all"
             >
@@ -1595,6 +1608,19 @@ const handleSaveSettings = async () => {
                     </div>
                 </transition>
             </div>
+
+            <ClientPagination
+                :current-page="currentPage"
+                :total-items="filteredItems.length"
+                :per-page="perPage"
+                :per-page-options="[10, 20, 50]"
+                :scroll-to-top="true"
+                @update:current-page="currentPage = $event"
+                @update:per-page="
+                    perPage = $event;
+                    currentPage = 1;
+                "
+            />
         </div>
 
         <!-- Add Download Modal with Torrent File Selection & Folder Settings -->

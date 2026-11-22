@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, defineAsyncComponent } from 'vue';
+import { ref, computed, watch, defineAsyncComponent } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import ClientPagination from '@/components/common/ClientPagination.vue';
 import MotionList from '@/components/motion/MotionList.vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
@@ -67,6 +68,20 @@ const selectedSeason = () => {
         props.series.seasons?.[0]
     );
 };
+
+const currentPage = ref(1);
+const perPage = ref(24);
+
+watch([selectedSeasonId, perPage], () => {
+    currentPage.value = 1;
+});
+
+const seasonEpisodes = computed(() => selectedSeason()?.episodes || []);
+
+const paginatedEpisodes = computed(() => {
+    const start = (currentPage.value - 1) * perPage.value;
+    return seasonEpisodes.value.slice(start, start + perPage.value);
+});
 
 const handleMetadataUpdated = (updatedItem: any) => {
     Object.assign(props.series, updatedItem);
@@ -345,161 +360,182 @@ const playEpisode = (
         </div>
 
         <!-- Episodes List Grid -->
-        <MotionList
-            v-if="selectedSeason()?.episodes?.length"
-            class="mb-12 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
-        >
-            <div
-                v-for="ep in selectedSeason()?.episodes"
-                :key="ep.id"
-                @click="playEpisode(ep, play)"
-                class="cf-glass group border-border/80 hover:border-primary/50 flex cursor-pointer flex-col overflow-hidden rounded-2xl border shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl"
+        <div v-if="seasonEpisodes.length" class="mb-12 space-y-6">
+            <MotionList
+                class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
             >
                 <div
-                    class="relative aspect-video w-full overflow-hidden bg-slate-950"
+                    v-for="ep in paginatedEpisodes"
+                    :key="ep.id"
+                    @click="playEpisode(ep, play)"
+                    class="cf-glass group border-border/80 hover:border-primary/50 flex cursor-pointer flex-col overflow-hidden rounded-2xl border shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl"
                 >
-                    <img
-                        :src="
-                            ep.still_path ||
-                            series.backdrop_path ||
-                            series.poster_path ||
-                            '/placeholder.jpg'
-                        "
-                        :alt="ep.title"
-                        class="h-full w-full object-cover opacity-90 transition-transform duration-500 group-hover:scale-105"
-                        loading="lazy"
-                    />
                     <div
-                        class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80"
-                    ></div>
-
-                    <!-- Play Hover Overlay -->
-                    <div
-                        v-if="isBandersnatch(ep)"
-                        class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/65 p-3 text-center opacity-0 backdrop-blur-xs transition-opacity group-hover:opacity-100"
+                        class="relative aspect-video w-full overflow-hidden bg-slate-950"
                     >
+                        <img
+                            :src="
+                                ep.still_path ||
+                                series.backdrop_path ||
+                                series.poster_path ||
+                                '/placeholder.jpg'
+                            "
+                            :alt="ep.title"
+                            class="h-full w-full object-cover opacity-90 transition-transform duration-500 group-hover:scale-105"
+                            loading="lazy"
+                        />
+                        <div
+                            class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80"
+                        ></div>
+
+                        <!-- Play Hover Overlay -->
+                        <div
+                            v-if="isBandersnatch(ep)"
+                            class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/65 p-3 text-center opacity-0 backdrop-blur-xs transition-opacity group-hover:opacity-100"
+                        >
+                            <button
+                                type="button"
+                                @click.stop="
+                                    launchInteractiveBandersnatch(ep, $event)
+                                "
+                                class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 px-3 py-2 text-xs font-black text-white shadow-xl shadow-rose-600/50 transition-all hover:scale-105 hover:from-rose-500 hover:to-red-500 active:scale-95"
+                            >
+                                <Gamepad2 class="h-4 w-4" />
+                                <span>{{
+                                    isRTL
+                                        ? 'بدء العرض التفاعلي'
+                                        : 'Play Interactive Story'
+                                }}</span>
+                            </button>
+                            <button
+                                type="button"
+                                @click.stop="playEpisode(ep, play)"
+                                class="flex cursor-pointer items-center justify-center gap-1 rounded-lg bg-white/10 px-3 py-1 text-[10px] font-medium text-slate-200 transition-colors hover:bg-white/20 hover:text-white"
+                            >
+                                <Play class="h-3 w-3 fill-current" />
+                                <span>{{
+                                    isRTL ? 'مشاهدة عادية' : 'Normal Playback'
+                                }}</span>
+                            </button>
+                        </div>
+                        <div
+                            v-else
+                            class="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100"
+                        >
+                            <div
+                                class="bg-primary text-primary-foreground shadow-primary/40 flex h-12 w-12 items-center justify-center rounded-full shadow-xl transition-transform group-hover:scale-110"
+                            >
+                                <Play class="ms-0.5 h-5 w-5 fill-current" />
+                            </div>
+                        </div>
+
+                        <!-- Episode Number / Interactive Badge -->
+                        <span
+                            v-if="isBandersnatch(ep)"
+                            class="cinema-badge absolute start-2.5 top-2.5 flex animate-pulse items-center gap-1 border border-red-400 bg-gradient-to-r from-red-600 to-rose-600 text-[10px] font-black tracking-wider text-white shadow-lg shadow-red-500/40"
+                        >
+                            <Gamepad2 class="h-3.5 w-3.5" />
+                            <span>{{
+                                isRTL ? 'فيلم تفاعلي' : 'INTERACTIVE'
+                            }}</span>
+                        </span>
+                        <span
+                            v-else
+                            class="cinema-badge border-primary/40 text-primary absolute start-2.5 top-2.5 border bg-black/80 text-[10px] font-bold tabular-nums"
+                        >
+                            EP {{ ep.episode_number }}
+                        </span>
+
+                        <!-- Resolution & Subtitles Badges -->
+                        <div
+                            class="absolute end-2.5 top-2.5 flex items-center gap-1"
+                        >
+                            <span
+                                v-if="ep.subtitles && ep.subtitles.length > 0"
+                                class="cinema-badge flex items-center gap-0.5 border border-emerald-500/40 bg-black/80 text-[9px] text-emerald-400 tabular-nums"
+                            >
+                                <Subtitles class="h-2.5 w-2.5" />
+                                <span>{{ ep.subtitles.length }} CC</span>
+                            </span>
+                            <span
+                                v-if="
+                                    ep.resolution && ep.resolution !== 'Unknown'
+                                "
+                                class="cinema-badge border-primary/40 text-primary border bg-black/80 text-[9px] tabular-nums"
+                            >
+                                {{ ep.resolution }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-1 flex-col justify-between p-4">
+                        <div>
+                            <h4
+                                class="text-foreground group-hover:text-primary line-clamp-1 text-sm font-bold transition-colors"
+                            >
+                                {{
+                                    isRTL && ep.title_ar
+                                        ? ep.title_ar
+                                        : ep.title
+                                }}
+                            </h4>
+                            <p
+                                class="text-muted-foreground mt-1 line-clamp-2 text-xs leading-relaxed"
+                            >
+                                {{
+                                    isRTL && ep.overview_ar
+                                        ? ep.overview_ar
+                                        : ep.overview ||
+                                          `${t('series.season')} ${selectedSeason()?.season_number} ${t('series.episode')} ${ep.episode_number}`
+                                }}
+                            </p>
+                        </div>
+
+                        <div
+                            class="border-border/60 text-muted-foreground mt-3 flex items-center justify-between border-t pt-2 text-[11px] font-semibold tabular-nums"
+                        >
+                            <span class="flex items-center gap-1">
+                                <Clock class="text-primary h-3 w-3" />
+                                <span>{{
+                                    ep.runtime_minutes
+                                        ? ep.runtime_minutes + ' min'
+                                        : t('series.ready_to_stream')
+                                }}</span>
+                            </span>
+                            <span class="font-mono text-[10px]">{{
+                                ep.video_codec || 'HEVC'
+                            }}</span>
+                        </div>
+
                         <button
+                            v-if="isBandersnatch(ep)"
                             type="button"
                             @click.stop="
                                 launchInteractiveBandersnatch(ep, $event)
                             "
-                            class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 px-3 py-2 text-xs font-black text-white shadow-xl shadow-rose-600/50 transition-all hover:scale-105 hover:from-rose-500 hover:to-red-500 active:scale-95"
+                            class="mt-2.5 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-bold text-rose-400 shadow-sm transition-all hover:border-rose-500/60 hover:bg-rose-500/20"
                         >
-                            <Gamepad2 class="h-4 w-4" />
+                            <Gamepad2 class="h-3.5 w-3.5" />
                             <span>{{
                                 isRTL
-                                    ? 'بدء العرض التفاعلي'
-                                    : 'Play Interactive Story'
-                            }}</span>
-                        </button>
-                        <button
-                            type="button"
-                            @click.stop="playEpisode(ep, play)"
-                            class="flex cursor-pointer items-center justify-center gap-1 rounded-lg bg-white/10 px-3 py-1 text-[10px] font-medium text-slate-200 transition-colors hover:bg-white/20 hover:text-white"
-                        >
-                            <Play class="h-3 w-3 fill-current" />
-                            <span>{{
-                                isRTL ? 'مشاهدة عادية' : 'Normal Playback'
+                                    ? 'تجربة تفاعلية (اختر مسارك)'
+                                    : 'Interactive Experience (Choose Your Path)'
                             }}</span>
                         </button>
                     </div>
-                    <div
-                        v-else
-                        class="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100"
-                    >
-                        <div
-                            class="bg-primary text-primary-foreground shadow-primary/40 flex h-12 w-12 items-center justify-center rounded-full shadow-xl transition-transform group-hover:scale-110"
-                        >
-                            <Play class="ms-0.5 h-5 w-5 fill-current" />
-                        </div>
-                    </div>
-
-                    <!-- Episode Number / Interactive Badge -->
-                    <span
-                        v-if="isBandersnatch(ep)"
-                        class="cinema-badge absolute start-2.5 top-2.5 flex animate-pulse items-center gap-1 border border-red-400 bg-gradient-to-r from-red-600 to-rose-600 text-[10px] font-black tracking-wider text-white shadow-lg shadow-red-500/40"
-                    >
-                        <Gamepad2 class="h-3.5 w-3.5" />
-                        <span>{{ isRTL ? 'فيلم تفاعلي' : 'INTERACTIVE' }}</span>
-                    </span>
-                    <span
-                        v-else
-                        class="cinema-badge border-primary/40 text-primary absolute start-2.5 top-2.5 border bg-black/80 text-[10px] font-bold tabular-nums"
-                    >
-                        EP {{ ep.episode_number }}
-                    </span>
-
-                    <!-- Resolution & Subtitles Badges -->
-                    <div
-                        class="absolute end-2.5 top-2.5 flex items-center gap-1"
-                    >
-                        <span
-                            v-if="ep.subtitles && ep.subtitles.length > 0"
-                            class="cinema-badge flex items-center gap-0.5 border border-emerald-500/40 bg-black/80 text-[9px] text-emerald-400 tabular-nums"
-                        >
-                            <Subtitles class="h-2.5 w-2.5" />
-                            <span>{{ ep.subtitles.length }} CC</span>
-                        </span>
-                        <span
-                            v-if="ep.resolution && ep.resolution !== 'Unknown'"
-                            class="cinema-badge border-primary/40 text-primary border bg-black/80 text-[9px] tabular-nums"
-                        >
-                            {{ ep.resolution }}
-                        </span>
-                    </div>
                 </div>
+            </MotionList>
 
-                <div class="flex flex-1 flex-col justify-between p-4">
-                    <div>
-                        <h4
-                            class="text-foreground group-hover:text-primary line-clamp-1 text-sm font-bold transition-colors"
-                        >
-                            {{ isRTL && ep.title_ar ? ep.title_ar : ep.title }}
-                        </h4>
-                        <p
-                            class="text-muted-foreground mt-1 line-clamp-2 text-xs leading-relaxed"
-                        >
-                            {{
-                                isRTL && ep.overview_ar
-                                    ? ep.overview_ar
-                                    : ep.overview ||
-                                      `${t('series.season')} ${selectedSeason()?.season_number} ${t('series.episode')} ${ep.episode_number}`
-                            }}
-                        </p>
-                    </div>
-
-                    <div
-                        class="border-border/60 text-muted-foreground mt-3 flex items-center justify-between border-t pt-2 text-[11px] font-semibold tabular-nums"
-                    >
-                        <span class="flex items-center gap-1">
-                            <Clock class="text-primary h-3 w-3" />
-                            <span>{{
-                                ep.runtime_minutes
-                                    ? ep.runtime_minutes + ' min'
-                                    : t('series.ready_to_stream')
-                            }}</span>
-                        </span>
-                        <span class="font-mono text-[10px]">{{
-                            ep.video_codec || 'HEVC'
-                        }}</span>
-                    </div>
-
-                    <button
-                        v-if="isBandersnatch(ep)"
-                        type="button"
-                        @click.stop="launchInteractiveBandersnatch(ep, $event)"
-                        class="mt-2.5 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-bold text-rose-400 shadow-sm transition-all hover:border-rose-500/60 hover:bg-rose-500/20"
-                    >
-                        <Gamepad2 class="h-3.5 w-3.5" />
-                        <span>{{
-                            isRTL
-                                ? 'تجربة تفاعلية (اختر مسارك)'
-                                : 'Interactive Experience (Choose Your Path)'
-                        }}</span>
-                    </button>
-                </div>
-            </div>
-        </MotionList>
+            <ClientPagination
+                :current-page="currentPage"
+                :total-items="seasonEpisodes.length"
+                :per-page="perPage"
+                :per-page-options="[12, 24, 48]"
+                :scroll-to-top="true"
+                @update:current-page="currentPage = $event"
+                @update:per-page="perPage = $event"
+            />
+        </div>
 
         <div
             v-else

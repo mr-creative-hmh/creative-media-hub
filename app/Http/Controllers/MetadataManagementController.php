@@ -51,6 +51,8 @@ class MetadataManagementController extends Controller
     {
         $filter = $request->input('filter', 'all'); // all, unmatched, missing_posters, missing_arabic, movies, series
         $search = $request->input('search');
+        $page = max(1, (int) $request->input('page', 1));
+        $perPage = min(100, max(12, (int) $request->input('per_page', 24)));
 
         $moviesQuery = MediaItem::query()->withCount('subtitles');
         $seriesQuery = Series::query()->withCount(['seasons', 'episodes']);
@@ -98,7 +100,7 @@ class MetadataManagementController extends Controller
             default => null,
         };
 
-        $movies = $moviesQuery->orderByDesc('created_at')->limit(50)->get()->map(function ($m) {
+        $movies = $moviesQuery->orderByDesc('created_at')->get()->map(function ($m) {
             return [
                 'id' => $m->id,
                 'title' => $m->title,
@@ -119,10 +121,11 @@ class MetadataManagementController extends Controller
                 'is_matched' => ! empty($m->tmdb_id),
                 'subtitles_count' => (int) ($m->subtitles_count ?? 0),
                 'file_path' => $m->file_path,
+                'created_at_ts' => $m->created_at?->timestamp ?? 0,
             ];
         });
 
-        $seriesList = $seriesQuery->orderByDesc('created_at')->limit(50)->get()->map(function ($s) {
+        $seriesList = $seriesQuery->orderByDesc('created_at')->get()->map(function ($s) {
             return [
                 'id' => $s->id,
                 'title' => $s->title,
@@ -143,10 +146,19 @@ class MetadataManagementController extends Controller
                 'seasons_count' => (int) ($s->seasons_count ?? 0),
                 'episodes_count' => (int) ($s->episodes_count ?? 0),
                 'file_path' => $s->folder_path,
+                'created_at_ts' => $s->created_at?->timestamp ?? 0,
             ];
         });
 
-        $combined = $movies->concat($seriesList)->values();
+        $combined = $movies
+            ->concat($seriesList)
+            ->sortByDesc('created_at_ts')
+            ->values();
+
+        $totalCombined = $combined->count();
+        $lastPage = max(1, (int) ceil($totalCombined / $perPage));
+        $page = min($page, $lastPage);
+        $items = $combined->slice(($page - 1) * $perPage, $perPage)->values()->all();
 
         $moviesCount = MediaItem::count();
         $seriesCount = Series::count();
@@ -161,11 +173,20 @@ class MetadataManagementController extends Controller
         ];
 
         return Inertia::render('Metadata/Index', [
-            'items' => $combined,
+            'items' => $items,
+            'pagination' => [
+                'current_page' => $page,
+                'last_page' => $lastPage,
+                'per_page' => $perPage,
+                'total' => $totalCombined,
+                'from' => $totalCombined > 0 ? (($page - 1) * $perPage) + 1 : 0,
+                'to' => min($page * $perPage, $totalCombined),
+            ],
             'stats' => $stats,
             'filters' => [
                 'filter' => $filter,
                 'search' => $search,
+                'per_page' => $perPage,
             ],
         ]);
     }

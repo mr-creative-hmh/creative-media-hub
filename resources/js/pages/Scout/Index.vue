@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import PageBanner from '@/components/common/PageBanner.vue';
+import ClientPagination from '@/components/common/ClientPagination.vue';
 import { useI18n } from '@/i18n/useI18n';
 import { formatBytes } from '@/lib/formatters';
 import ScoutFranchiseSkeleton from '@/components/common/skeletons/ScoutFranchiseSkeleton.vue';
@@ -191,7 +192,6 @@ const lowResMediaType = ref<'all' | 'movie' | 'episode'>('all');
 const lowResResolution = ref<string>('all');
 const lowResEpisodeView = ref<'grouped' | 'individual'>('grouped');
 const expandedLowResSeries = ref<Record<string, boolean>>({});
-const individualEpisodesLimit = ref(60);
 const poorQualityCategory = ref<string>('all');
 const poorQualityMediaType = ref<'all' | 'movie' | 'episode'>('all');
 
@@ -599,7 +599,8 @@ const filteredLowResEpisodes = computed(() => {
 });
 
 const visibleLowResEpisodes = computed(() => {
-    return filteredLowResEpisodes.value.slice(0, individualEpisodesLimit.value);
+    const start = (lowResEpisodesPage.value - 1) * 18;
+    return filteredLowResEpisodes.value.slice(start, start + 18);
 });
 
 const filteredLowResSeriesGroups = computed(() => {
@@ -663,6 +664,72 @@ const filteredPoorQualityItems = computed(() => {
     }
     return list;
 });
+
+// Pagination State
+const seriesGapsPage = ref(1);
+const collectionGapsPage = ref(1);
+const episodesPage = ref(1);
+const moviesPage = ref(1);
+const discoverPage = ref(1);
+const poorQualityPage = ref(1);
+const lowResMoviesPage = ref(1);
+const lowResSeriesPage = ref(1);
+const lowResEpisodesPage = ref(1);
+
+const paginateList = (items: any[], page: number, perPage: number): any[] => {
+    const start = (page - 1) * perPage;
+    return items.slice(start, start + perPage);
+};
+
+const paginatedSeriesGaps = computed(() =>
+    paginateList(seriesGaps.value, seriesGapsPage.value, 10),
+);
+const paginatedCollectionGaps = computed(() =>
+    paginateList(collectionGaps.value, collectionGapsPage.value, 10),
+);
+const paginatedEpisodes = computed(() =>
+    paginateList(flatEpisodes.value, episodesPage.value, 18),
+);
+const paginatedMovies = computed(() =>
+    paginateList(flatMovies.value, moviesPage.value, 18),
+);
+const paginatedDiscoverResults = computed(() =>
+    paginateList(filteredDiscoverResults.value, discoverPage.value, 18),
+);
+const paginatedPoorQualityItems = computed(() =>
+    paginateList(filteredPoorQualityItems.value, poorQualityPage.value, 18),
+);
+const paginatedLowResMovies = computed(() =>
+    paginateList(filteredLowResMovies.value, lowResMoviesPage.value, 18),
+);
+const paginatedLowResSeriesGroups = computed(() =>
+    paginateList(filteredLowResSeriesGroups.value, lowResSeriesPage.value, 10),
+);
+
+watch(
+    [
+        activeTab,
+        navMode,
+        searchQuery,
+        discoverQuery,
+        discoverType,
+        discoverStyle,
+        lowResMediaType,
+        lowResResolution,
+        poorQualityCategory,
+    ],
+    () => {
+        seriesGapsPage.value = 1;
+        collectionGapsPage.value = 1;
+        episodesPage.value = 1;
+        moviesPage.value = 1;
+        discoverPage.value = 1;
+        poorQualityPage.value = 1;
+        lowResMoviesPage.value = 1;
+        lowResSeriesPage.value = 1;
+        lowResEpisodesPage.value = 1;
+    },
+);
 
 const onDownloadStarted = (payload: any) => {
     if (payload?.gapItem?.id) {
@@ -1492,8 +1559,8 @@ onMounted(() => {
                     class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
                 >
                     <div
-                        v-for="item in filteredDiscoverResults"
-                        :key="item.tmdb_id"
+                        v-for="item in paginatedDiscoverResults"
+                        :key="`${item.media_type}_${item.tmdb_id}`"
                         class="cf-glass border-border/80 hover:border-primary/45 group flex flex-col justify-between overflow-hidden rounded-3xl border transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl"
                     >
                         <!-- Poster Container -->
@@ -1680,6 +1747,14 @@ onMounted(() => {
                             </div>
                         </div>
                     </div>
+
+                    <ClientPagination
+                        :current-page="discoverPage"
+                        :total-items="filteredDiscoverResults.length"
+                        :per-page="18"
+                        :scroll-to-top="true"
+                        @update:current-page="discoverPage = $event"
+                    />
                 </div>
 
                 <!-- Empty State -->
@@ -1784,7 +1859,7 @@ onMounted(() => {
                         class="grid grid-cols-1 gap-6 lg:grid-cols-2"
                     >
                         <div
-                            v-for="sg in seriesGaps"
+                            v-for="sg in paginatedSeriesGaps"
                             :key="sg.series_id"
                             class="glass-panel flex flex-col justify-between space-y-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-900/40 p-6 transition-all hover:border-cyan-500/30"
                         >
@@ -2043,6 +2118,14 @@ onMounted(() => {
                                 </div>
                             </div>
                         </div>
+
+                        <ClientPagination
+                            :current-page="seriesGapsPage"
+                            :total-items="seriesGaps.length"
+                            :per-page="10"
+                            :scroll-to-top="true"
+                            @update:current-page="seriesGapsPage = $event"
+                        />
                     </div>
 
                     <!-- Series Empty State -->
@@ -2105,7 +2188,7 @@ onMounted(() => {
                         class="grid grid-cols-1 gap-6 lg:grid-cols-2"
                     >
                         <div
-                            v-for="cg in collectionGaps"
+                            v-for="cg in paginatedCollectionGaps"
                             :key="cg.collection_id"
                             class="glass-panel flex flex-col justify-between space-y-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-900/40 p-6 transition-all hover:border-purple-500/30"
                         >
@@ -2296,6 +2379,14 @@ onMounted(() => {
                                 </div>
                             </div>
                         </div>
+
+                        <ClientPagination
+                            :current-page="collectionGapsPage"
+                            :total-items="collectionGaps.length"
+                            :per-page="10"
+                            :scroll-to-top="true"
+                            @update:current-page="collectionGapsPage = $event"
+                        />
                     </div>
 
                     <!-- Collections Empty State -->
@@ -2341,7 +2432,7 @@ onMounted(() => {
                         class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
                     >
                         <div
-                            v-for="ep in flatEpisodes"
+                            v-for="ep in paginatedEpisodes"
                             :key="ep.id"
                             class="glass-panel flex items-center justify-between gap-4 rounded-2xl border border-white/5 bg-slate-900/40 p-4 transition-all hover:border-cyan-500/30"
                         >
@@ -2401,6 +2492,15 @@ onMounted(() => {
                             </button>
                         </div>
                     </div>
+
+                    <ClientPagination
+                        v-if="flatEpisodes.length > 0"
+                        :current-page="episodesPage"
+                        :total-items="flatEpisodes.length"
+                        :per-page="18"
+                        :scroll-to-top="true"
+                        @update:current-page="episodesPage = $event"
+                    />
                 </div>
 
                 <!-- SECTION 4: FLAT MOVIES VIEW -->
@@ -2421,7 +2521,7 @@ onMounted(() => {
                         class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
                     >
                         <div
-                            v-for="m in flatMovies"
+                            v-for="m in paginatedMovies"
                             :key="m.id"
                             class="glass-panel flex items-center justify-between gap-4 rounded-2xl border border-white/5 bg-slate-900/40 p-4 transition-all hover:border-purple-500/30"
                         >
@@ -2476,6 +2576,15 @@ onMounted(() => {
                             </button>
                         </div>
                     </div>
+
+                    <ClientPagination
+                        v-if="flatMovies.length > 0"
+                        :current-page="moviesPage"
+                        :total-items="flatMovies.length"
+                        :per-page="18"
+                        :scroll-to-top="true"
+                        @update:current-page="moviesPage = $event"
+                    />
                 </div>
 
                 <!-- SECTION 5 & 6: QUALITY UPGRADES WORKSPACE (FORENSIC ALERTS FIRST, THEN LOW-RES) -->
@@ -2694,8 +2803,8 @@ onMounted(() => {
                         class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
                     >
                         <div
-                            v-for="it in filteredPoorQualityItems"
-                            :key="it.id"
+                            v-for="it in paginatedPoorQualityItems"
+                            :key="`pq_${it.type}_${it.id}`"
                             class="glass-panel group flex flex-col justify-between gap-4 rounded-3xl border border-rose-500/25 bg-slate-900/60 p-5 transition-all hover:border-rose-500/60 hover:shadow-xl hover:shadow-rose-500/10"
                         >
                             <div class="space-y-3">
@@ -2868,6 +2977,15 @@ onMounted(() => {
                             </button>
                         </div>
                     </div>
+
+                    <ClientPagination
+                        v-if="filteredPoorQualityItems.length > 0"
+                        :current-page="poorQualityPage"
+                        :total-items="filteredPoorQualityItems.length"
+                        :per-page="18"
+                        :scroll-to-top="true"
+                        @update:current-page="poorQualityPage = $event"
+                    />
 
                     <!-- Empty State (Only in dedicated poor_quality tab or when all_upgrades has nothing) -->
                     <div
@@ -3086,8 +3204,8 @@ onMounted(() => {
                             class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
                         >
                             <div
-                                v-for="m in filteredLowResMovies"
-                                :key="m.id"
+                                v-for="m in paginatedLowResMovies"
+                                :key="`lrm_${m.id}`"
                                 class="glass-panel group flex items-center justify-between gap-4 rounded-2xl border border-amber-500/20 bg-slate-900/50 p-4 transition-all hover:border-amber-500/50 hover:shadow-lg hover:shadow-amber-500/5"
                             >
                                 <div
@@ -3201,6 +3319,14 @@ onMounted(() => {
                                 </button>
                             </div>
                         </div>
+
+                        <ClientPagination
+                            :current-page="lowResMoviesPage"
+                            :total-items="filteredLowResMovies.length"
+                            :per-page="18"
+                            :scroll-to-top="true"
+                            @update:current-page="lowResMoviesPage = $event"
+                        />
                     </div>
 
                     <!-- Episodes Section (Grouped by Series vs Individual Paginated) -->
@@ -3280,7 +3406,7 @@ onMounted(() => {
                             class="grid grid-cols-1 gap-4 md:grid-cols-2"
                         >
                             <div
-                                v-for="group in filteredLowResSeriesGroups"
+                                v-for="group in paginatedLowResSeriesGroups"
                                 :key="group.id"
                                 class="glass-panel overflow-hidden rounded-3xl border border-amber-500/25 bg-slate-900/60 transition-all hover:border-amber-500/50"
                             >
@@ -3460,9 +3586,17 @@ onMounted(() => {
                                     </div>
                                 </div>
                             </div>
+
+                            <ClientPagination
+                                :current-page="lowResSeriesPage"
+                                :total-items="filteredLowResSeriesGroups.length"
+                                :per-page="10"
+                                :scroll-to-top="true"
+                                @update:current-page="lowResSeriesPage = $event"
+                            />
                         </div>
 
-                        <!-- Individual Episodes Grid (Capped + Show More) -->
+                        <!-- Individual Episodes Grid (Paginated) -->
                         <div v-else class="space-y-4">
                             <div
                                 class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
@@ -3581,28 +3715,15 @@ onMounted(() => {
                                 </div>
                             </div>
 
-                            <!-- Load More Button -->
-                            <div
-                                v-if="
-                                    visibleLowResEpisodes.length <
-                                    filteredLowResEpisodes.length
+                            <ClientPagination
+                                :current-page="lowResEpisodesPage"
+                                :total-items="filteredLowResEpisodes.length"
+                                :per-page="18"
+                                :scroll-to-top="true"
+                                @update:current-page="
+                                    lowResEpisodesPage = $event
                                 "
-                                class="flex justify-center pt-2"
-                            >
-                                <button
-                                    @click="individualEpisodesLimit += 60"
-                                    class="flex cursor-pointer items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/20 px-6 py-2.5 text-xs font-black text-amber-300 transition-all hover:bg-amber-500/30"
-                                >
-                                    <span>
-                                        {{
-                                            isRTL
-                                                ? `عرض 60 حلقة إضافية (${visibleLowResEpisodes.length} من أصل ${filteredLowResEpisodes.length})`
-                                                : `Load More Episodes (${visibleLowResEpisodes.length} of ${filteredLowResEpisodes.length})`
-                                        }}
-                                    </span>
-                                    <ChevronDown class="h-4 w-4" />
-                                </button>
-                            </div>
+                            />
                         </div>
                     </div>
 

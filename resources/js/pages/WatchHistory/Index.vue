@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import PageBanner from '@/components/common/PageBanner.vue';
+import ClientPagination from '@/components/common/ClientPagination.vue';
 import FilterPills, {
     type FilterPillOption,
 } from '@/components/common/FilterPills.vue';
@@ -145,6 +146,44 @@ const seriesList = computed(() => {
     return filteredItems.value.filter(
         (i) => i.watchable_type === 'episode' || i.type === 'episode',
     );
+});
+
+const currentPage = ref(1);
+const perPage = ref(12);
+const moviesPage = ref(1);
+const collectionsPage = ref(1);
+const seriesPage = ref(1);
+const sectionPerPage = 8;
+
+watch([activeTab, searchQuery], () => {
+    currentPage.value = 1;
+    moviesPage.value = 1;
+    collectionsPage.value = 1;
+    seriesPage.value = 1;
+});
+
+watch(perPage, () => {
+    currentPage.value = 1;
+});
+
+const paginatedFilteredItems = computed(() => {
+    const start = (currentPage.value - 1) * perPage.value;
+    return filteredItems.value.slice(start, start + perPage.value);
+});
+
+const paginatedMoviesList = computed(() => {
+    const start = (moviesPage.value - 1) * sectionPerPage;
+    return moviesList.value.slice(start, start + sectionPerPage);
+});
+
+const paginatedCollectionsList = computed(() => {
+    const start = (collectionsPage.value - 1) * sectionPerPage;
+    return collectionsList.value.slice(start, start + sectionPerPage);
+});
+
+const paginatedSeriesList = computed(() => {
+    const start = (seriesPage.value - 1) * sectionPerPage;
+    return seriesList.value.slice(start, start + sectionPerPage);
 });
 
 // Remove individual item
@@ -468,7 +507,7 @@ onMounted(() => {
                         class="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
                     >
                         <WatchHistoryCard
-                            v-for="item in moviesList"
+                            v-for="item in paginatedMoviesList"
                             :key="`${item.watchable_type}_${item.watchable_id}`"
                             :item="item"
                             @play="play"
@@ -476,6 +515,13 @@ onMounted(() => {
                             @play-interactive="playBandersnatch"
                         />
                     </MotionList>
+
+                    <ClientPagination
+                        :current-page="moviesPage"
+                        :total-items="moviesList.length"
+                        :per-page="sectionPerPage"
+                        @update:current-page="moviesPage = $event"
+                    />
                 </div>
 
                 <!-- Section B: Collections Watch History -->
@@ -519,7 +565,7 @@ onMounted(() => {
                         class="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
                     >
                         <WatchHistoryCard
-                            v-for="item in collectionsList"
+                            v-for="item in paginatedCollectionsList"
                             :key="`${item.watchable_type}_${item.watchable_id}`"
                             :item="item"
                             @play="play"
@@ -527,6 +573,13 @@ onMounted(() => {
                             @play-interactive="playBandersnatch"
                         />
                     </MotionList>
+
+                    <ClientPagination
+                        :current-page="collectionsPage"
+                        :total-items="collectionsList.length"
+                        :per-page="sectionPerPage"
+                        @update:current-page="collectionsPage = $event"
+                    />
                 </div>
 
                 <!-- Section C: Series Watch History -->
@@ -570,7 +623,7 @@ onMounted(() => {
                         class="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
                     >
                         <WatchHistoryCard
-                            v-for="item in seriesList"
+                            v-for="item in paginatedSeriesList"
                             :key="`${item.watchable_type}_${item.watchable_id}`"
                             :item="item"
                             @play="play"
@@ -578,6 +631,13 @@ onMounted(() => {
                             @play-interactive="playBandersnatch"
                         />
                     </MotionList>
+
+                    <ClientPagination
+                        :current-page="seriesPage"
+                        :total-items="seriesList.length"
+                        :per-page="sectionPerPage"
+                        @update:current-page="seriesPage = $event"
+                    />
                 </div>
             </div>
 
@@ -591,8 +651,14 @@ onMounted(() => {
                     >
                         {{
                             t('common.showing_results', {
-                                from: 1,
-                                to: filteredItems.length,
+                                from:
+                                    filteredItems.length > 0
+                                        ? (currentPage - 1) * perPage + 1
+                                        : 0,
+                                to: Math.min(
+                                    currentPage * perPage,
+                                    filteredItems.length,
+                                ),
                                 total: filteredItems.length,
                             })
                         }}
@@ -619,7 +685,7 @@ onMounted(() => {
                     class="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
                 >
                     <WatchHistoryCard
-                        v-for="item in filteredItems"
+                        v-for="item in paginatedFilteredItems"
                         :key="`${item.watchable_type}_${item.watchable_id}`"
                         :item="item"
                         @play="play"
@@ -627,6 +693,16 @@ onMounted(() => {
                         @play-interactive="playBandersnatch"
                     />
                 </MotionList>
+
+                <ClientPagination
+                    :current-page="currentPage"
+                    :total-items="filteredItems.length"
+                    :per-page="perPage"
+                    :per-page-options="[12, 24, 48]"
+                    :scroll-to-top="true"
+                    @update:current-page="currentPage = $event"
+                    @update:per-page="perPage = $event"
+                />
             </div>
         </div>
 

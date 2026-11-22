@@ -5,6 +5,7 @@ import { Head } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import PageBanner from '@/components/common/PageBanner.vue';
+import ClientPagination from '@/components/common/ClientPagination.vue';
 import { useToast } from '@/composables/useToast';
 import { formatBytes } from '@/lib/formatters';
 import {
@@ -140,6 +141,10 @@ const totalCheckerPages = computed(() =>
     ),
 );
 
+watch([checkerFilter, checkerSearchText, checkerPerPage], () => {
+    checkerCurrentPage.value = 1;
+});
+
 const paginatedCheckerItems = computed(() => {
     const start = (checkerCurrentPage.value - 1) * checkerPerPage.value;
     return filteredCheckerItems.value.slice(
@@ -154,6 +159,18 @@ const searchQuery = ref('Inception');
 const searchLang = ref('ar');
 const isSearching = ref(false);
 const searchResults = ref<any[] | null>(null);
+const cloudCurrentPage = ref(1);
+const cloudPerPage = ref(15);
+
+watch(cloudPerPage, () => {
+    cloudCurrentPage.value = 1;
+});
+
+const paginatedCloudResults = computed(() => {
+    if (!searchResults.value) return [];
+    const start = (cloudCurrentPage.value - 1) * cloudPerPage.value;
+    return searchResults.value.slice(start, start + cloudPerPage.value);
+});
 
 // Missing subtitles filter & pagination
 const filterText = ref('');
@@ -161,6 +178,10 @@ const filterType = ref<'all' | 'movie' | 'episode'>('all');
 const filterStatus = ref<'all' | 'missing_ar' | 'missing_en'>('all');
 const currentPage = ref(1);
 const perPage = ref(12);
+
+watch([filterText, filterType, filterStatus, perPage], () => {
+    currentPage.value = 1;
+});
 
 const filteredItems = computed(() => {
     return (props.missingSubtitles || []).filter((item) => {
@@ -204,6 +225,7 @@ const setPage = (p: number) => {
 
 const performSearch = async () => {
     if (!searchQuery.value.trim()) return;
+    cloudCurrentPage.value = 1;
     isSearching.value = true;
     try {
         const res = await fetch(
@@ -1094,55 +1116,17 @@ onMounted(() => {
 
                     <!-- Pagination -->
                     <div
-                        v-if="totalCheckerPages > 1"
-                        class="border-border/70 flex items-center justify-between border-t p-4 text-xs tabular-nums"
+                        v-if="filteredCheckerItems.length > 0"
+                        class="border-border/70 border-t p-4"
                     >
-                        <span class="text-muted-foreground">
-                            {{ (checkerCurrentPage - 1) * checkerPerPage + 1 }}
-                            -
-                            {{
-                                Math.min(
-                                    checkerCurrentPage * checkerPerPage,
-                                    filteredCheckerItems.length,
-                                )
-                            }}
-                            of {{ filteredCheckerItems.length }}
-                        </span>
-                        <div class="flex items-center gap-1.5">
-                            <button
-                                type="button"
-                                @click="
-                                    checkerCurrentPage = Math.max(
-                                        1,
-                                        checkerCurrentPage - 1,
-                                    )
-                                "
-                                :disabled="checkerCurrentPage === 1"
-                                class="cf-glass border-border/80 text-foreground hover:border-primary/40 cursor-pointer rounded-xl border px-3 py-1.5 font-bold disabled:opacity-30"
-                            >
-                                {{ isRTL ? 'السابق' : 'Prev' }}
-                            </button>
-                            <span
-                                class="text-primary px-3 py-1.5 font-mono font-bold"
-                                >{{ checkerCurrentPage }} /
-                                {{ totalCheckerPages }}</span
-                            >
-                            <button
-                                type="button"
-                                @click="
-                                    checkerCurrentPage = Math.min(
-                                        totalCheckerPages,
-                                        checkerCurrentPage + 1,
-                                    )
-                                "
-                                :disabled="
-                                    checkerCurrentPage === totalCheckerPages
-                                "
-                                class="cf-glass border-border/80 text-foreground hover:border-primary/40 cursor-pointer rounded-xl border px-3 py-1.5 font-bold disabled:opacity-30"
-                            >
-                                {{ isRTL ? 'التالي' : 'Next' }}
-                            </button>
-                        </div>
+                        <ClientPagination
+                            :current-page="checkerCurrentPage"
+                            :total-items="filteredCheckerItems.length"
+                            :per-page="checkerPerPage"
+                            :per-page-options="[15, 30, 50]"
+                            @update:current-page="checkerCurrentPage = $event"
+                            @update:per-page="checkerPerPage = $event"
+                        />
                     </div>
                 </div>
             </div>
@@ -1417,42 +1401,16 @@ onMounted(() => {
             </div>
 
             <!-- Pagination Bar -->
-            <div
-                v-if="totalPages > 1"
-                class="flex items-center justify-center gap-2 pt-6"
-            >
-                <button
-                    type="button"
-                    @click="setPage(currentPage - 1)"
-                    :disabled="currentPage === 1"
-                    class="cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground cursor-pointer rounded-xl border p-2.5 disabled:opacity-30"
-                >
-                    <ChevronLeft class="h-4 w-4 rtl:rotate-180" />
-                </button>
-
-                <button
-                    v-for="p in totalPages"
-                    :key="p"
-                    type="button"
-                    @click="setPage(p)"
-                    class="size-10 cursor-pointer rounded-xl text-xs font-bold tabular-nums transition-all active:scale-95"
-                    :class="
-                        currentPage === p
-                            ? 'bg-primary text-primary-foreground shadow-primary/25 font-black shadow-sm'
-                            : 'cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground border'
-                    "
-                >
-                    {{ p }}
-                </button>
-
-                <button
-                    type="button"
-                    @click="setPage(currentPage + 1)"
-                    :disabled="currentPage === totalPages"
-                    class="cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground cursor-pointer rounded-xl border p-2.5 disabled:opacity-30"
-                >
-                    <ChevronRight class="h-4 w-4 rtl:rotate-180" />
-                </button>
+            <div v-if="filteredItems.length > 0" class="pt-4">
+                <ClientPagination
+                    :current-page="currentPage"
+                    :total-items="filteredItems.length"
+                    :per-page="perPage"
+                    :per-page-options="[12, 24, 48]"
+                    :scroll-to-top="true"
+                    @update:current-page="currentPage = $event"
+                    @update:per-page="perPage = $event"
+                />
             </div>
         </div>
 
@@ -1555,7 +1513,7 @@ onMounted(() => {
                     ({{ searchResults.length }})
                 </div>
                 <div
-                    v-for="(sub, idx) in searchResults"
+                    v-for="(sub, idx) in paginatedCloudResults"
                     :key="idx"
                     class="cf-glass border-border/70 flex items-center justify-between gap-4 rounded-2xl border p-3.5"
                 >
@@ -1588,6 +1546,17 @@ onMounted(() => {
                     >
                         {{ isRTL ? 'متطابق بنسبة 100%' : '100% Synced' }}
                     </span>
+                </div>
+
+                <div class="pt-3">
+                    <ClientPagination
+                        :current-page="cloudCurrentPage"
+                        :total-items="searchResults.length"
+                        :per-page="cloudPerPage"
+                        :per-page-options="[15, 30, 50]"
+                        @update:current-page="cloudCurrentPage = $event"
+                        @update:per-page="cloudPerPage = $event"
+                    />
                 </div>
             </div>
         </div>

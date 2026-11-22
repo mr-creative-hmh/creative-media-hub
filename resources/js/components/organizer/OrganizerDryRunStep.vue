@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
+import ClientPagination from '@/components/common/ClientPagination.vue';
 import {
     Search,
     CheckSquare,
@@ -38,7 +39,7 @@ const selectedPaths = ref<Set<string>>(new Set());
 const currentPage = ref(1);
 const rowsPerPage = ref(15);
 
-watch([statusFilter, searchQuery], () => {
+watch([statusFilter, searchQuery, rowsPerPage], () => {
     currentPage.value = 1;
 });
 
@@ -92,9 +93,6 @@ const skippedCount = computed(
 );
 
 // Pagination
-const totalPages = computed(
-    () => Math.ceil(filteredItems.value.length / rowsPerPage.value) || 1,
-);
 const paginatedItems = computed(() => {
     const start = (currentPage.value - 1) * rowsPerPage.value;
     return filteredItems.value.slice(start, start + rowsPerPage.value);
@@ -538,36 +536,15 @@ const handleBatchEdit = () => {
             </div>
 
             <!-- Pagination Bar -->
-            <div
-                class="border-border/70 text-muted-foreground flex items-center justify-between border-t p-4 text-xs tabular-nums"
-            >
-                <div>
-                    {{
-                        isRTL
-                            ? `عرض صفحة ${currentPage} من ${totalPages}`
-                            : `Showing page ${currentPage} of ${totalPages}`
-                    }}
-                </div>
-                <div class="flex items-center gap-2">
-                    <button
-                        type="button"
-                        @click="currentPage = Math.max(1, currentPage - 1)"
-                        :disabled="currentPage === 1"
-                        class="cf-glass border-border/80 text-foreground hover:border-primary/40 cursor-pointer rounded-xl border px-3 py-1.5 font-bold transition-all disabled:opacity-30"
-                    >
-                        {{ isRTL ? 'السابق' : 'Previous' }}
-                    </button>
-                    <button
-                        type="button"
-                        @click="
-                            currentPage = Math.min(totalPages, currentPage + 1)
-                        "
-                        :disabled="currentPage === totalPages"
-                        class="cf-glass border-border/80 text-foreground hover:border-primary/40 cursor-pointer rounded-xl border px-3 py-1.5 font-bold transition-all disabled:opacity-30"
-                    >
-                        {{ isRTL ? 'التالي' : 'Next' }}
-                    </button>
-                </div>
+            <div class="border-border/70 border-t p-4">
+                <ClientPagination
+                    :current-page="currentPage"
+                    :total-items="filteredItems.length"
+                    :per-page="rowsPerPage"
+                    :per-page-options="[15, 30, 50]"
+                    @update:current-page="currentPage = $event"
+                    @update:per-page="rowsPerPage = $event"
+                />
             </div>
         </div>
     </div>

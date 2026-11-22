@@ -6,6 +6,7 @@ import { useToast } from '@/composables/useToast';
 import { formatBytes } from '@/lib/formatters';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ConfirmModal from '@/components/common/ConfirmModal.vue';
+import ClientPagination from '@/components/common/ClientPagination.vue';
 import PageBanner from '@/components/common/PageBanner.vue';
 
 const FixMatchModal = defineAsyncComponent(
@@ -45,6 +46,15 @@ const props = defineProps<{
     filters: {
         filter?: string;
         search?: string;
+        per_page?: number;
+    };
+    pagination?: {
+        current_page: number;
+        last_page: number;
+        per_page: number;
+        total: number;
+        from: number;
+        to: number;
     };
 }>();
 
@@ -107,6 +117,9 @@ const applyFilter = (filterKey: string) => {
         {
             filter: filterKey,
             search: searchQuery.value || undefined,
+            page: 1,
+            per_page:
+                props.pagination?.per_page || props.filters?.per_page || 24,
         },
         { preserveState: true },
     );
@@ -118,8 +131,38 @@ const handleSearch = () => {
         {
             filter: activeFilter.value,
             search: searchQuery.value || undefined,
+            page: 1,
+            per_page:
+                props.pagination?.per_page || props.filters?.per_page || 24,
         },
         { preserveState: true },
+    );
+};
+
+const handlePageChange = (page: number) => {
+    router.get(
+        '/metadata',
+        {
+            filter: activeFilter.value,
+            search: searchQuery.value || undefined,
+            page,
+            per_page:
+                props.pagination?.per_page || props.filters?.per_page || 24,
+        },
+        { preserveState: true, preserveScroll: false },
+    );
+};
+
+const handlePerPageChange = (perPage: number) => {
+    router.get(
+        '/metadata',
+        {
+            filter: activeFilter.value,
+            search: searchQuery.value || undefined,
+            page: 1,
+            per_page: perPage,
+        },
+        { preserveState: true, preserveScroll: false },
     );
 };
 
@@ -1038,6 +1081,16 @@ const triggerBatchEnrich = async () => {
                         </button>
                     </div>
                 </div>
+
+                <ClientPagination
+                    :current-page="pagination?.current_page ?? 1"
+                    :total-items="pagination?.total ?? localItems.length"
+                    :per-page="pagination?.per_page ?? 24"
+                    :per-page-options="[12, 24, 48, 100]"
+                    :scroll-to-top="true"
+                    @update:current-page="handlePageChange"
+                    @update:per-page="handlePerPageChange"
+                />
             </div>
 
             <!-- Empty State -->

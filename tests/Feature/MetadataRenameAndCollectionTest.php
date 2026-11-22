@@ -477,4 +477,48 @@ class MetadataRenameAndCollectionTest extends TestCase
             ->where('collections.0.name', 'The Dark Knight Collection')
         );
     }
+
+    public function test_metadata_index_paginates_combined_items_and_returns_pagination_props(): void
+    {
+        for ($i = 1; $i <= 10; $i++) {
+            MediaItem::create([
+                'title' => "Movie {$i}",
+                'release_year' => 2020,
+                'file_path' => "C:/test/movie_{$i}.mkv",
+            ]);
+        }
+
+        for ($i = 1; $i <= 5; $i++) {
+            Series::create([
+                'title' => "Series {$i}",
+                'release_year' => 2021,
+                'folder_path' => "C:/test/series_{$i}",
+            ]);
+        }
+
+        $page1 = $this->get('/metadata?page=1&per_page=12');
+        $page1->assertStatus(200);
+        $page1->assertInertia(fn ($page) => $page->component('Metadata/Index')
+            ->has('items', 12)
+            ->where('pagination.current_page', 1)
+            ->where('pagination.last_page', 2)
+            ->where('pagination.per_page', 12)
+            ->where('pagination.total', 15)
+            ->where('pagination.from', 1)
+            ->where('pagination.to', 12)
+            ->where('filters.per_page', 12)
+        );
+
+        $page2 = $this->get('/metadata?page=2&per_page=12');
+        $page2->assertStatus(200);
+        $page2->assertInertia(fn ($page) => $page->component('Metadata/Index')
+            ->has('items', 3)
+            ->where('pagination.current_page', 2)
+            ->where('pagination.last_page', 2)
+            ->where('pagination.per_page', 12)
+            ->where('pagination.total', 15)
+            ->where('pagination.from', 13)
+            ->where('pagination.to', 15)
+        );
+    }
 }

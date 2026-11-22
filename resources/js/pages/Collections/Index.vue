@@ -4,6 +4,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import WatchHistoryBar from '@/components/layout/WatchHistoryBar.vue';
 import PageBanner from '@/components/common/PageBanner.vue';
+import ClientPagination from '@/components/common/ClientPagination.vue';
 import FilterPills, {
     type FilterPillOption,
 } from '@/components/common/FilterPills.vue';
@@ -298,6 +299,31 @@ const filteredAndSortedCollections = computed(() => {
     });
 
     return list;
+});
+
+const currentPage = ref(1);
+const perPage = ref(12);
+
+watch(
+    [
+        searchQuery,
+        selectedSort,
+        sortDirection,
+        activeStatus,
+        selectedGenre,
+        perPage,
+    ],
+    () => {
+        currentPage.value = 1;
+    },
+);
+
+const paginatedCollections = computed(() => {
+    const start = (currentPage.value - 1) * perPage.value;
+    return filteredAndSortedCollections.value.slice(
+        start,
+        start + perPage.value,
+    );
 });
 </script>
 
@@ -623,178 +649,198 @@ const filteredAndSortedCollections = computed(() => {
             </div>
 
             <!-- Collections Grid -->
-            <MotionList
+            <div
                 v-if="filteredAndSortedCollections.length > 0"
-                class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                class="space-y-6"
             >
-                <Link
-                    v-for="col in filteredAndSortedCollections"
-                    :key="col.slug"
-                    :href="`/collections/${col.slug}`"
-                    class="cf-glass group border-border/80 hover:border-primary/50 relative flex cursor-pointer flex-col overflow-hidden rounded-3xl border transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl"
+                <MotionList
+                    class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
                 >
-                    <!-- Collection Backdrop / Cover -->
-                    <div
-                        class="relative aspect-video w-full overflow-hidden bg-slate-950"
+                    <Link
+                        v-for="col in paginatedCollections"
+                        :key="col.slug"
+                        :href="`/collections/${col.slug}`"
+                        class="cf-glass group border-border/80 hover:border-primary/50 relative flex cursor-pointer flex-col overflow-hidden rounded-3xl border transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl"
                     >
-                        <img
-                            v-if="col.backdrop_path || col.poster_path"
-                            :src="col.backdrop_path || col.poster_path"
-                            :alt="col.name"
-                            class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                            loading="lazy"
-                        />
+                        <!-- Collection Backdrop / Cover -->
                         <div
-                            v-else
-                            class="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-900 to-slate-950 text-slate-700"
+                            class="relative aspect-video w-full overflow-hidden bg-slate-950"
                         >
-                            <Film class="h-12 w-12" />
-                        </div>
-                        <div
-                            class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-transparent"
-                        ></div>
-
-                        <!-- Pill Badge for movie count & completion status -->
-                        <div
-                            class="absolute end-3 top-3 flex items-center gap-1.5"
-                        >
-                            <div
-                                v-if="col.is_complete"
-                                class="flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-950/85 px-3 py-1 text-xs font-black text-emerald-400 shadow-lg backdrop-blur-md"
-                            >
-                                <CheckCircle2 class="h-3.5 w-3.5" />
-                                <span>{{ isRTL ? 'مكتملة' : 'Complete' }}</span>
-                            </div>
+                            <img
+                                v-if="col.backdrop_path || col.poster_path"
+                                :src="col.backdrop_path || col.poster_path"
+                                :alt="col.name"
+                                class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                loading="lazy"
+                            />
                             <div
                                 v-else
-                                class="flex items-center gap-1.5 rounded-full border border-amber-500/35 bg-black/75 px-3 py-1 text-xs font-black text-amber-300 tabular-nums shadow-lg backdrop-blur-md"
+                                class="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-900 to-slate-950 text-slate-700"
                             >
-                                <Film class="h-3.5 w-3.5 text-amber-400" />
-                                <span
-                                    >{{ col.movies_count }} /
-                                    {{ col.total_parts || col.movies_count }}
-                                    {{
-                                        isRTL
-                                            ? col.movies_count > 10
-                                                ? 'فيلماً'
-                                                : 'أفلام'
-                                            : 'Films'
-                                    }}</span
-                                >
+                                <Film class="h-12 w-12" />
                             </div>
-                        </div>
-
-                        <!-- Year Span -->
-                        <div
-                            v-if="col.year_span"
-                            class="absolute start-3 bottom-3 flex items-center gap-1 rounded-lg border border-white/15 bg-black/70 px-2.5 py-0.5 text-xs font-semibold text-slate-200 tabular-nums backdrop-blur-md"
-                        >
-                            <Calendar class="text-primary h-3 w-3" />
-                            <span>{{ col.year_span }}</span>
-                        </div>
-
-                        <!-- Progress Bar at bottom of media -->
-                        <div
-                            v-if="
-                                col.total_parts &&
-                                col.total_parts > col.movies_count
-                            "
-                            class="absolute inset-x-0 bottom-0 h-1 overflow-hidden bg-black/60"
-                        >
                             <div
-                                class="bg-primary h-full transition-all duration-500"
-                                :style="{
-                                    width: `${col.completion_percentage}%`,
-                                }"
+                                class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-transparent"
                             ></div>
-                        </div>
-                    </div>
 
-                    <!-- Collection Details -->
-                    <div
-                        class="flex flex-1 flex-col justify-between space-y-4 p-5"
-                    >
-                        <div class="space-y-2">
-                            <div class="flex items-start justify-between gap-2">
-                                <h3
-                                    class="text-foreground group-hover:text-primary line-clamp-1 text-base font-bold transition-colors"
-                                >
-                                    {{ col.name }}
-                                </h3>
-                                <span
-                                    v-if="
-                                        col.missing_parts &&
-                                        col.missing_parts.length > 0
-                                    "
-                                    class="shrink-0 rounded-md border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-300 tabular-nums"
-                                >
-                                    {{
-                                        isRTL
-                                            ? `مفقود ${col.missing_parts.length}`
-                                            : `-${col.missing_parts.length}`
-                                    }}
-                                </span>
-                            </div>
-
-                            <!-- Movie titles preview chips -->
-                            <div class="flex flex-wrap gap-1.5 pt-1">
-                                <span
-                                    v-for="m in (
-                                        (Array.isArray(col.movies)
-                                            ? col.movies
-                                            : Object.values(
-                                                  col.movies || {},
-                                              )) as any[]
-                                    ).slice(0, 3)"
-                                    :key="(m as any).id"
-                                    class="border-border/70 bg-muted/40 text-muted-foreground max-w-[140px] truncate rounded-md border px-2 py-0.5 text-[10px] font-medium"
-                                >
-                                    {{ (m as any).title }}
-                                </span>
-                                <span
-                                    v-if="
-                                        (Array.isArray(col.movies)
-                                            ? col.movies.length
-                                            : Object.keys(col.movies || {})
-                                                  .length) > 3
-                                    "
-                                    class="border-primary/30 bg-primary/15 text-primary rounded-md border px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
-                                >
-                                    +{{
-                                        (Array.isArray(col.movies)
-                                            ? col.movies.length
-                                            : Object.keys(col.movies || {})
-                                                  .length) - 3
-                                    }}
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- Card Footer -->
-                        <div
-                            class="border-border/60 text-muted-foreground flex items-center justify-between border-t pt-2.5 text-xs"
-                        >
+                            <!-- Pill Badge for movie count & completion status -->
                             <div
-                                class="flex items-center gap-1 font-bold text-amber-400 tabular-nums"
+                                class="absolute end-3 top-3 flex items-center gap-1.5"
                             >
-                                <Star class="h-3.5 w-3.5 fill-amber-400" />
-                                <span>{{ col.avg_rating || '7.5' }}</span>
+                                <div
+                                    v-if="col.is_complete"
+                                    class="flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-950/85 px-3 py-1 text-xs font-black text-emerald-400 shadow-lg backdrop-blur-md"
+                                >
+                                    <CheckCircle2 class="h-3.5 w-3.5" />
+                                    <span>{{
+                                        isRTL ? 'مكتملة' : 'Complete'
+                                    }}</span>
+                                </div>
+                                <div
+                                    v-else
+                                    class="flex items-center gap-1.5 rounded-full border border-amber-500/35 bg-black/75 px-3 py-1 text-xs font-black text-amber-300 tabular-nums shadow-lg backdrop-blur-md"
+                                >
+                                    <Film class="h-3.5 w-3.5 text-amber-400" />
+                                    <span
+                                        >{{ col.movies_count }} /
+                                        {{
+                                            col.total_parts || col.movies_count
+                                        }}
+                                        {{
+                                            isRTL
+                                                ? col.movies_count > 10
+                                                    ? 'فيلماً'
+                                                    : 'أفلام'
+                                                : 'Films'
+                                        }}</span
+                                    >
+                                </div>
                             </div>
 
-                            <span
-                                class="text-primary inline-flex items-center gap-1 font-bold transition-transform group-hover:translate-x-1 rtl:group-hover:-translate-x-1"
+                            <!-- Year Span -->
+                            <div
+                                v-if="col.year_span"
+                                class="absolute start-3 bottom-3 flex items-center gap-1 rounded-lg border border-white/15 bg-black/70 px-2.5 py-0.5 text-xs font-semibold text-slate-200 tabular-nums backdrop-blur-md"
                             >
-                                <span>{{
-                                    isRTL ? 'عرض السلسلة' : 'Explore Saga'
-                                }}</span>
-                                <ArrowRight
-                                    class="h-3.5 w-3.5 rtl:rotate-180"
-                                />
-                            </span>
+                                <Calendar class="text-primary h-3 w-3" />
+                                <span>{{ col.year_span }}</span>
+                            </div>
+
+                            <!-- Progress Bar at bottom of media -->
+                            <div
+                                v-if="
+                                    col.total_parts &&
+                                    col.total_parts > col.movies_count
+                                "
+                                class="absolute inset-x-0 bottom-0 h-1 overflow-hidden bg-black/60"
+                            >
+                                <div
+                                    class="bg-primary h-full transition-all duration-500"
+                                    :style="{
+                                        width: `${col.completion_percentage}%`,
+                                    }"
+                                ></div>
+                            </div>
                         </div>
-                    </div>
-                </Link>
-            </MotionList>
+
+                        <!-- Collection Details -->
+                        <div
+                            class="flex flex-1 flex-col justify-between space-y-4 p-5"
+                        >
+                            <div class="space-y-2">
+                                <div
+                                    class="flex items-start justify-between gap-2"
+                                >
+                                    <h3
+                                        class="text-foreground group-hover:text-primary line-clamp-1 text-base font-bold transition-colors"
+                                    >
+                                        {{ col.name }}
+                                    </h3>
+                                    <span
+                                        v-if="
+                                            col.missing_parts &&
+                                            col.missing_parts.length > 0
+                                        "
+                                        class="shrink-0 rounded-md border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-300 tabular-nums"
+                                    >
+                                        {{
+                                            isRTL
+                                                ? `مفقود ${col.missing_parts.length}`
+                                                : `-${col.missing_parts.length}`
+                                        }}
+                                    </span>
+                                </div>
+
+                                <!-- Movie titles preview chips -->
+                                <div class="flex flex-wrap gap-1.5 pt-1">
+                                    <span
+                                        v-for="m in (
+                                            (Array.isArray(col.movies)
+                                                ? col.movies
+                                                : Object.values(
+                                                      col.movies || {},
+                                                  )) as any[]
+                                        ).slice(0, 3)"
+                                        :key="(m as any).id"
+                                        class="border-border/70 bg-muted/40 text-muted-foreground max-w-[140px] truncate rounded-md border px-2 py-0.5 text-[10px] font-medium"
+                                    >
+                                        {{ (m as any).title }}
+                                    </span>
+                                    <span
+                                        v-if="
+                                            (Array.isArray(col.movies)
+                                                ? col.movies.length
+                                                : Object.keys(col.movies || {})
+                                                      .length) > 3
+                                        "
+                                        class="border-primary/30 bg-primary/15 text-primary rounded-md border px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
+                                    >
+                                        +{{
+                                            (Array.isArray(col.movies)
+                                                ? col.movies.length
+                                                : Object.keys(col.movies || {})
+                                                      .length) - 3
+                                        }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Card Footer -->
+                            <div
+                                class="border-border/60 text-muted-foreground flex items-center justify-between border-t pt-2.5 text-xs"
+                            >
+                                <div
+                                    class="flex items-center gap-1 font-bold text-amber-400 tabular-nums"
+                                >
+                                    <Star class="h-3.5 w-3.5 fill-amber-400" />
+                                    <span>{{ col.avg_rating || '7.5' }}</span>
+                                </div>
+
+                                <span
+                                    class="text-primary inline-flex items-center gap-1 font-bold transition-transform group-hover:translate-x-1 rtl:group-hover:-translate-x-1"
+                                >
+                                    <span>{{
+                                        isRTL ? 'عرض السلسلة' : 'Explore Saga'
+                                    }}</span>
+                                    <ArrowRight
+                                        class="h-3.5 w-3.5 rtl:rotate-180"
+                                    />
+                                </span>
+                            </div>
+                        </div>
+                    </Link>
+                </MotionList>
+
+                <ClientPagination
+                    :current-page="currentPage"
+                    :total-items="filteredAndSortedCollections.length"
+                    :per-page="perPage"
+                    :per-page-options="[12, 24, 48]"
+                    :scroll-to-top="true"
+                    @update:current-page="currentPage = $event"
+                    @update:per-page="perPage = $event"
+                />
+            </div>
 
             <!-- Empty Filter State -->
             <div
