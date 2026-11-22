@@ -44,15 +44,15 @@
 - [x] **Mobile Bottom Navigation & Drawer:** Floating mobile bottom navigation dock + RTL-aware sliding menu drawer (`MobileMenuDrawer.vue`) with backdrop blur, accordion nav sections, and ESC/swipe dismiss.
 - [x] **AppLayout Shell:** Modern two-column desktop shell (full-height sticky sidebar + content column with floating navbar, main slot wrapped in `MotionPage`, and aligned footer) with `overflow-x-clip`, SSR-safe persisted sidebar collapse, and ambient backdrop.
 
-### [/] Phase 4: Shared CreativeFlow UI Primitives
-- [ ] **Page Header & Banner:** `PageBanner.vue` with breadcrumbs, title, badge indicators, and action slots.
-- [ ] **Filter Controls:** `FilterPills.vue` with smooth scroll and active accent badges.
-- [ ] **Base Modal:** `BaseModal.vue` built on `reka-ui` Dialog with backdrop blur, keyboard trap, and responsive sheets on mobile.
-- [ ] **Action Buttons & Badges:** `ActionButton.vue` and semantic status badges with consistent variants.
-- [ ] **Cards & Data Tables:** `DataTableCard.vue` and `.cf-table` styling for list/grid layouts.
-- [ ] **RTL Shimmer Skeletons:** Animated loading placeholders with `.cf-shimmer`.
+### [x] Phase 4: Shared CreativeFlow UI Primitives
+- [x] **Page Header & Banner:** `PageBanner.vue` with hero `.cf-glass rounded-3xl` container, `-end-16 -top-16` glow orb, icon badge, title, pill badge indicators, description, and `#actions` slot.
+- [x] **Filter Controls:** `FilterPills.vue` with scrollable `role="tablist"` strip, `min-h-10` WCAG touch targets, locale-formatted `Intl.NumberFormat` count chips (`tabular-nums`), and active primary accent pill.
+- [x] **Base & Confirm Modals:** `BaseModal.vue` built on `reka-ui` Dialog (`sm`–`4xl`, icon badge header, scrollable `max-h-[90dvh]` body, `#header`/`#footer` slots) and `ConfirmModal.vue` migrated from raw overlay div to accessible `reka-ui` Dialog (`sm` size, semantic `danger`/`warning`/`info` rings, 100% backward-compatible props/events/slots).
+- [x] **Action Buttons, Spinner & State Machine:** `ActionButton.vue` (4-state animated presets: `save`, `download`, `generate`, `upload`, `send`, `delete`, `default` with `aria-busy`, `aria-live="polite"`, and progress percentage), `ui/spinner/Spinner.vue`, and `useActionState.ts` (`idle -> loading -> success | error -> idle` + `downloadWithProgress`).
+- [x] **Cards, View Toggle, Data Tables & Pagination:** `ViewModeToggle.vue` (persisted `table` | `cards` switch), `DataTableCard.vue` (dual-view/single-card responsive container with `.cf-table-wrapper`), and `Pagination.vue` upgraded to `.cf-glass`, active primary tokens, and `tabular-nums`.
+- [x] **RTL Shimmer Skeletons & Floating Glass Sidebar Polish:** `CinemaSkeleton.vue` upgraded to GPU-composited RTL-aware `.cf-shimmer` (`MediaCardSkeleton`, `HeroBannerSkeleton`, `TableRowSkeleton`, `ScoutFranchiseSkeleton`, `ScoutMetricSkeleton` aligned to `.cf-glass` and logical `end-2.5`); desktop `Sidebar.vue` converted to a floating rounded glass card (`rounded-3xl .cf-glass-elevated`); `AppLogo.vue` English subtitle truncation overflow fixed.
 
-### [ ] Phase 5: Cinema Catalog & Discovery Pages
+### [/] Phase 5: Cinema Catalog & Discovery Pages
 - [ ] **Dashboard (`Dashboard/Index.vue`):** Hero spotlight carousel, continue watching shelf, recent additions, and quick media stats.
 - [ ] **Movies (`Movies/Index.vue`):** High-density poster grid, advanced genre/year/rating filters, sort dropdown, and batch selection.
 - [ ] **Series (`Series/Index.vue` & `Series/Show.vue`):** Show catalog and season/episode inspector with episode preview cards and missing episode markers.

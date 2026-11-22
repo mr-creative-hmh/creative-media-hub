@@ -14,21 +14,9 @@ withDefaults(
 <template>
     <div
         :class="[
-            'relative overflow-hidden border border-white/[0.05] bg-white/[0.04]',
+            'cf-shimmer border-border/40 bg-muted/55 relative overflow-hidden border',
             rounded,
             className,
         ]"
-    >
-        <div
-            class="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/[0.07] to-transparent"
-        />
-    </div>
+    />
 </template>
-
-<style scoped>
-@keyframes shimmer {
-    100% {
-        transform: translateX(100%);
-    }
-}
-</style>

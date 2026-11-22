@@ -7,7 +7,7 @@ import CinemaSkeleton from './CinemaSkeleton.vue';
         <div
             v-for="i in 4"
             :key="i"
-            class="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-black/40 p-5 backdrop-blur-md"
+            class="cf-glass border-border/60 relative overflow-hidden rounded-2xl border p-5 backdrop-blur-md"
         >
             <div class="mb-4 flex items-center justify-between">
                 <CinemaSkeleton className="w-24 h-4" />

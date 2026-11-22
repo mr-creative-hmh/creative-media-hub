@@ -2,12 +2,7 @@
 import { computed } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
-import {
-    ChevronLeft,
-    ChevronRight,
-    ChevronsLeft,
-    ChevronsRight,
-} from '@lucide/vue';
+import { ChevronLeft, ChevronRight } from '@lucide/vue';
 
 const props = defineProps<{
     links: Array<{
@@ -39,12 +34,12 @@ const nextLink = computed(
 <template>
     <div
         v-if="links && links.length > 3"
-        class="flex flex-col items-center justify-between gap-4 border-t border-slate-200 pt-6 pb-2 sm:flex-row dark:border-white/10"
+        class="border-border/70 flex flex-col items-center justify-between gap-4 border-t pt-6 pb-2 sm:flex-row"
     >
         <!-- Info Counter -->
         <div
             v-if="total && from && to"
-            class="text-xs font-medium text-slate-500 dark:text-slate-400"
+            class="text-muted-foreground text-xs font-medium tabular-nums"
         >
             <span>{{
                 isRTL
@@ -62,7 +57,7 @@ const nextLink = computed(
                 :href="prevLink"
                 preserve-scroll
                 preserve-state
-                class="flex cursor-pointer items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+                class="cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground focus-visible:ring-primary/30 flex min-h-10 cursor-pointer items-center gap-1 rounded-xl border px-3 py-2 text-xs font-bold shadow-sm transition-all focus-visible:ring-2 focus-visible:outline-none active:scale-95"
                 :title="t('common.previous')"
             >
                 <component
@@ -73,7 +68,7 @@ const nextLink = computed(
             </Link>
             <span
                 v-else
-                class="flex cursor-not-allowed items-center gap-1 rounded-xl border border-slate-200/50 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-400 opacity-50 select-none dark:border-white/5 dark:bg-white/[0.02] dark:text-slate-600"
+                class="border-border/40 bg-muted/20 text-muted-foreground/40 flex min-h-10 cursor-not-allowed items-center gap-1 rounded-xl border px-3 py-2 text-xs font-bold opacity-50 select-none"
             >
                 <component
                     :is="isRTL ? ChevronRight : ChevronLeft"
@@ -89,18 +84,18 @@ const nextLink = computed(
                     :href="link.url"
                     preserve-scroll
                     preserve-state
-                    class="flex h-9 min-w-9 cursor-pointer items-center justify-center rounded-xl px-2.5 text-xs font-extrabold transition-all"
+                    class="focus-visible:ring-primary/30 flex size-9 min-w-9 cursor-pointer items-center justify-center rounded-xl text-xs tabular-nums transition-all focus-visible:ring-2 focus-visible:outline-none active:scale-95"
                     :class="
                         link.active
-                            ? 'bg-cyan-500 font-black text-slate-950 shadow-md shadow-cyan-500/30'
-                            : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10'
+                            ? 'bg-primary text-primary-foreground shadow-primary/25 font-bold shadow-sm'
+                            : 'cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground border'
                     "
                 >
                     {{ link.label }}
                 </Link>
                 <span
                     v-else
-                    class="flex h-9 min-w-8 items-center justify-center text-xs font-bold text-slate-400 select-none dark:text-slate-600"
+                    class="text-muted-foreground/40 flex size-9 min-w-8 items-center justify-center text-xs font-bold tabular-nums select-none"
                 >
                     {{ link.label }}
                 </span>
@@ -112,7 +107,7 @@ const nextLink = computed(
                 :href="nextLink"
                 preserve-scroll
                 preserve-state
-                class="flex cursor-pointer items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+                class="cf-glass border-border/80 text-muted-foreground hover:border-primary/40 hover:text-foreground focus-visible:ring-primary/30 flex min-h-10 cursor-pointer items-center gap-1 rounded-xl border px-3 py-2 text-xs font-bold shadow-sm transition-all focus-visible:ring-2 focus-visible:outline-none active:scale-95"
                 :title="t('common.next')"
             >
                 <span class="hidden sm:inline">{{ t('common.next') }}</span>
@@ -123,7 +118,7 @@ const nextLink = computed(
             </Link>
             <span
                 v-else
-                class="flex cursor-not-allowed items-center gap-1 rounded-xl border border-slate-200/50 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-400 opacity-50 select-none dark:border-white/5 dark:bg-white/[0.02] dark:text-slate-600"
+                class="border-border/40 bg-muted/20 text-muted-foreground/40 flex min-h-10 cursor-not-allowed items-center gap-1 rounded-xl border px-3 py-2 text-xs font-bold opacity-50 select-none"
             >
                 <span class="hidden sm:inline">{{ t('common.next') }}</span>
                 <component

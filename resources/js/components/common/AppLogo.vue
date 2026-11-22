@@ -19,7 +19,7 @@ const { t, isRTL } = useI18n();
 
 <template>
     <div
-        class="group inline-flex cursor-pointer items-center gap-3 select-none"
+        class="group inline-flex max-w-full min-w-0 cursor-pointer items-center gap-3 select-none"
     >
         <!-- CMH Cinema Marquee Vector Mark (Creative Media Hub) -->
         <div
@@ -263,7 +263,7 @@ const { t, isRTL } = useI18n();
         <!-- Typography Branding using centralized translations -->
         <div
             v-if="showText"
-            class="flex flex-col items-start leading-none select-none"
+            class="flex min-w-0 flex-1 flex-col items-start overflow-hidden leading-none select-none"
         >
             <span
                 dir="ltr"
@@ -291,8 +291,8 @@ const { t, isRTL } = useI18n();
                 </span>
             </span>
             <span
-                class="mt-1 max-w-[280px] truncate leading-none font-semibold tracking-wider text-zinc-400 uppercase"
-                :class="size === 'sm' ? 'text-[9px]' : 'text-[10px]'"
+                class="text-muted-foreground mt-1 block w-full max-w-full truncate leading-tight font-semibold tracking-normal uppercase"
+                :class="size === 'sm' ? 'text-[8.5px]' : 'text-[9.5px]'"
             >
                 {{ t('app_tagline') }}
             </span>

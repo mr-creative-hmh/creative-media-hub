@@ -15,7 +15,7 @@ withDefaults(
     <div
         v-for="i in count"
         :key="i"
-        class="group relative flex flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-black/40 p-2.5 backdrop-blur-sm"
+        class="cf-glass group border-border/60 relative flex flex-col overflow-hidden rounded-2xl border p-2.5 backdrop-blur-sm"
     >
         <!-- Poster Aspect 2/3 -->
         <div
@@ -23,7 +23,7 @@ withDefaults(
         >
             <CinemaSkeleton className="w-full h-full" rounded="rounded-xl" />
             <!-- Simulated floating badge in top corner -->
-            <div class="absolute top-2.5 right-2.5">
+            <div class="absolute end-2.5 top-2.5">
                 <CinemaSkeleton className="w-12 h-5" rounded="rounded-md" />
             </div>
         </div>

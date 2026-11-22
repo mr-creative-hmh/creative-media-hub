@@ -18,7 +18,7 @@ withDefaults(
         <div
             v-for="r in rows"
             :key="r"
-            class="flex items-center gap-4 rounded-xl border border-white/[0.04] bg-white/[0.02] p-4"
+            class="cf-glass border-border/60 flex items-center gap-4 rounded-xl border p-4"
         >
             <div class="w-6 shrink-0">
                 <CinemaSkeleton className="w-5 h-5" rounded="rounded" />

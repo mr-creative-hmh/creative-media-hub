@@ -239,178 +239,229 @@ const handleLogout = () => {
 
 <template>
     <aside
-        class="border-border/80 bg-sidebar/90 sticky top-0 z-30 hidden h-screen shrink-0 flex-col border-e backdrop-blur-2xl transition-[width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] lg:flex"
-        :class="isCollapsed ? 'w-[4.5rem]' : 'w-64'"
+        class="sticky top-0 z-30 hidden h-screen shrink-0 p-3 pe-0 transition-[width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] lg:flex"
+        :class="isCollapsed ? 'w-[5.25rem]' : 'w-[17rem]'"
     >
-        <!-- Top Anchored Brand Header in Sidebar -->
         <div
-            class="border-border/60 flex shrink-0 items-center border-b px-3.5 py-3.5"
-            :class="isCollapsed ? 'justify-center' : 'justify-start'"
+            class="cf-glass-elevated border-border/80 flex h-full w-full flex-col overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-2xl"
         >
-            <Link :href="home.url()" prefetch class="flex items-center">
-                <AppLogo size="md" :show-text="!isCollapsed" />
-            </Link>
-        </div>
-
-        <!-- Grouped Navigation Links (Middle Scroll Area) -->
-        <div
-            class="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto px-3 py-3 pe-1"
-        >
+            <!-- Top Anchored Brand Header in Sidebar -->
             <div
-                v-for="(section, sIdx) in navSections"
-                :key="section.id"
-                v-show="!section.adminOnly || isAdmin"
-                :class="
-                    sIdx > 0 && !isCollapsed
-                        ? 'border-border/60 border-t pt-2.5'
-                        : ''
-                "
+                class="border-border/60 flex shrink-0 items-center border-b px-3.5 py-3.5"
+                :class="isCollapsed ? 'justify-center' : 'justify-start'"
             >
-                <!-- Section Header (Expanded Mode) -->
-                <button
-                    v-if="!isCollapsed"
-                    type="button"
-                    class="text-muted-foreground/80 hover:text-foreground mb-1 flex w-full cursor-pointer items-center justify-between rounded-lg px-2 py-1 text-start text-[10px] font-black tracking-wider uppercase transition-colors"
-                    :aria-expanded="isSectionOpen(section)"
-                    @click="toggleSection(section)"
+                <Link
+                    :href="home.url()"
+                    prefetch
+                    class="flex max-w-full min-w-0 items-center overflow-hidden"
                 >
-                    <span>{{ t(section.labelKey) }}</span>
-                    <ChevronDown
-                        class="size-3.5 transition-transform duration-150"
-                        :class="
-                            isSectionOpen(section)
-                                ? 'rotate-0'
-                                : '-rotate-90 rtl:rotate-90'
-                        "
-                        aria-hidden="true"
-                    />
-                </button>
+                    <AppLogo size="md" :show-text="!isCollapsed" />
+                </Link>
+            </div>
 
-                <!-- Section Links -->
-                <nav
-                    v-show="isCollapsed || isSectionOpen(section)"
-                    class="space-y-1"
+            <!-- Grouped Navigation Links (Middle Scroll Area) -->
+            <div
+                class="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto px-3 py-3 pe-1"
+            >
+                <div
+                    v-for="(section, sIdx) in navSections"
+                    :key="section.id"
+                    v-show="!section.adminOnly || isAdmin"
+                    :class="
+                        sIdx > 0 && !isCollapsed
+                            ? 'border-border/60 border-t pt-2.5'
+                            : ''
+                    "
                 >
-                    <template v-for="item in section.items" :key="item.nameKey">
-                        <template v-if="!item.adminOnly || isAdmin">
-                            <!-- Collapsed Icon Rail Link with Tooltip -->
-                            <Tooltip v-if="isCollapsed">
-                                <TooltipTrigger as-child>
-                                    <Link
-                                        :href="item.href"
-                                        prefetch
-                                        class="group relative flex size-11 w-full cursor-pointer items-center justify-center rounded-2xl transition-all"
-                                        :class="
-                                            isCurrentUrl(item.pattern)
-                                                ? 'bg-primary/15 text-primary border-primary/30 border font-bold shadow-xs'
-                                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border border-transparent'
-                                        "
+                    <!-- Section Header (Expanded Mode) -->
+                    <button
+                        v-if="!isCollapsed"
+                        type="button"
+                        class="text-muted-foreground/80 hover:text-foreground mb-1 flex w-full cursor-pointer items-center justify-between rounded-lg px-2 py-1 text-start text-[10px] font-black tracking-wider uppercase transition-colors"
+                        :aria-expanded="isSectionOpen(section)"
+                        @click="toggleSection(section)"
+                    >
+                        <span>{{ t(section.labelKey) }}</span>
+                        <ChevronDown
+                            class="size-3.5 transition-transform duration-150"
+                            :class="
+                                isSectionOpen(section)
+                                    ? 'rotate-0'
+                                    : '-rotate-90 rtl:rotate-90'
+                            "
+                            aria-hidden="true"
+                        />
+                    </button>
+
+                    <!-- Section Links -->
+                    <nav
+                        v-show="isCollapsed || isSectionOpen(section)"
+                        class="space-y-1"
+                    >
+                        <template
+                            v-for="item in section.items"
+                            :key="item.nameKey"
+                        >
+                            <template v-if="!item.adminOnly || isAdmin">
+                                <!-- Collapsed Icon Rail Link with Tooltip -->
+                                <Tooltip v-if="isCollapsed">
+                                    <TooltipTrigger as-child>
+                                        <Link
+                                            :href="item.href"
+                                            prefetch
+                                            class="group relative flex size-11 w-full cursor-pointer items-center justify-center rounded-2xl transition-all"
+                                            :class="
+                                                isCurrentUrl(item.pattern)
+                                                    ? 'bg-primary/15 text-primary border-primary/30 border font-bold shadow-xs'
+                                                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border border-transparent'
+                                            "
+                                        >
+                                            <component
+                                                :is="item.icon"
+                                                class="size-5 transition-transform group-hover:scale-110"
+                                                :class="
+                                                    isCurrentUrl(item.pattern)
+                                                        ? 'text-primary'
+                                                        : 'text-muted-foreground'
+                                                "
+                                            />
+                                            <span
+                                                v-if="
+                                                    item.href ===
+                                                        downloadsRoute.url() &&
+                                                    activeDownloadsCount > 0
+                                                "
+                                                class="bg-primary text-primary-foreground absolute -end-1 -top-1 flex size-4 items-center justify-center rounded-full font-mono text-[9px] font-bold"
+                                            >
+                                                {{ activeDownloadsCount }}
+                                            </span>
+                                        </Link>
+                                    </TooltipTrigger>
+                                    <TooltipContent
+                                        :side="isRTL ? 'left' : 'right'"
                                     >
+                                        <span>{{ t(item.nameKey) }}</span>
+                                    </TooltipContent>
+                                </Tooltip>
+
+                                <!-- Expanded Nav Link -->
+                                <Link
+                                    v-else
+                                    :href="item.href"
+                                    prefetch
+                                    class="group flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all"
+                                    :class="
+                                        isCurrentUrl(item.pattern)
+                                            ? 'border-primary/35 bg-primary/15 text-primary border font-bold shadow-xs'
+                                            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border border-transparent'
+                                    "
+                                >
+                                    <div class="flex items-center gap-3">
                                         <component
                                             :is="item.icon"
-                                            class="size-5 transition-transform group-hover:scale-110"
+                                            class="size-4.5 transition-transform group-hover:scale-110"
                                             :class="
                                                 isCurrentUrl(item.pattern)
                                                     ? 'text-primary'
-                                                    : 'text-muted-foreground'
+                                                    : 'text-muted-foreground group-hover:text-foreground'
                                             "
                                         />
-                                        <span
-                                            v-if="
-                                                item.href ===
-                                                    downloadsRoute.url() &&
-                                                activeDownloadsCount > 0
-                                            "
-                                            class="bg-primary text-primary-foreground absolute -end-1 -top-1 flex size-4 items-center justify-center rounded-full font-mono text-[9px] font-bold"
-                                        >
-                                            {{ activeDownloadsCount }}
-                                        </span>
-                                    </Link>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                    :side="isRTL ? 'left' : 'right'"
-                                >
-                                    <span>{{ t(item.nameKey) }}</span>
-                                </TooltipContent>
-                            </Tooltip>
+                                        <span class="truncate">{{
+                                            t(item.nameKey)
+                                        }}</span>
+                                    </div>
 
-                            <!-- Expanded Nav Link -->
-                            <Link
-                                v-else
-                                :href="item.href"
-                                prefetch
-                                class="group flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all"
-                                :class="
-                                    isCurrentUrl(item.pattern)
-                                        ? 'border-primary/35 bg-primary/15 text-primary border font-bold shadow-xs'
-                                        : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border border-transparent'
-                                "
-                            >
-                                <div class="flex items-center gap-3">
-                                    <component
-                                        :is="item.icon"
-                                        class="size-4.5 transition-transform group-hover:scale-110"
-                                        :class="
-                                            isCurrentUrl(item.pattern)
-                                                ? 'text-primary'
-                                                : 'text-muted-foreground group-hover:text-foreground'
+                                    <span
+                                        v-if="
+                                            item.href ===
+                                                downloadsRoute.url() &&
+                                            activeDownloadsCount > 0
                                         "
-                                    />
-                                    <span class="truncate">{{
-                                        t(item.nameKey)
-                                    }}</span>
-                                </div>
-
-                                <span
-                                    v-if="
-                                        item.href === downloadsRoute.url() &&
-                                        activeDownloadsCount > 0
-                                    "
-                                    class="bg-primary text-primary-foreground animate-pulse rounded-full px-2 py-0.5 font-mono text-[10px] font-black"
-                                >
-                                    {{ activeDownloadsCount }}
-                                </span>
-                            </Link>
+                                        class="bg-primary text-primary-foreground animate-pulse rounded-full px-2 py-0.5 font-mono text-[10px] font-black"
+                                    >
+                                        {{ activeDownloadsCount }}
+                                    </span>
+                                </Link>
+                            </template>
                         </template>
-                    </template>
-                </nav>
+                    </nav>
+                </div>
             </div>
-        </div>
 
-        <!-- Sidebar Footer: Pinned Bottom User Profile Badge & Activity Trigger -->
-        <div
-            class="border-border/70 bg-sidebar/95 shrink-0 space-y-2 border-t p-3"
-        >
-            <!-- Universal Job Center Card (Admin Only) -->
-            <div v-if="isAdmin && !isCollapsed">
-                <button
-                    type="button"
-                    @click="openActivityCenter()"
-                    class="border-primary/25 bg-primary/5 hover:bg-primary/10 flex w-full cursor-pointer items-center justify-between rounded-xl border p-2 text-xs transition-colors"
-                >
-                    <div class="text-primary flex items-center gap-2 font-bold">
-                        <Activity class="size-3.5" />
-                        <span>{{
-                            t('jobs.universal_job_center') || 'Job Center'
-                        }}</span>
-                    </div>
-                    <span
-                        class="bg-primary/20 py-0.2 text-primary rounded-md px-1.5 font-mono text-[10px] font-bold"
+            <!-- Sidebar Footer: Pinned Bottom User Profile Badge & Activity Trigger -->
+            <div
+                class="border-border/60 bg-card/45 shrink-0 space-y-2 border-t p-3 backdrop-blur-xl"
+            >
+                <!-- Universal Job Center Card (Admin Only) -->
+                <div v-if="isAdmin && !isCollapsed">
+                    <button
+                        type="button"
+                        @click="openActivityCenter()"
+                        class="border-primary/25 bg-primary/5 hover:bg-primary/10 flex w-full cursor-pointer items-center justify-between rounded-xl border p-2 text-xs transition-colors"
                     >
-                        {{ activeJobsCount }}
-                    </span>
-                </button>
-            </div>
+                        <div
+                            class="text-primary flex items-center gap-2 font-bold"
+                        >
+                            <Activity class="size-3.5" />
+                            <span>{{
+                                t('jobs.universal_job_center') || 'Job Center'
+                            }}</span>
+                        </div>
+                        <span
+                            class="bg-primary/20 py-0.2 text-primary rounded-md px-1.5 font-mono text-[10px] font-bold"
+                        >
+                            {{ activeJobsCount }}
+                        </span>
+                    </button>
+                </div>
 
-            <!-- Active User Profile Bento Card -->
-            <div v-if="user">
-                <!-- Collapsed Profile Button -->
-                <Tooltip v-if="isCollapsed">
-                    <TooltipTrigger as-child>
-                        <button
-                            type="button"
-                            @click="handleLogout"
-                            class="border-border/80 bg-card/60 hover:bg-muted mx-auto flex size-10.5 cursor-pointer items-center justify-center rounded-2xl border text-xl shadow-xs transition-all"
+                <!-- Active User Profile Bento Card -->
+                <div v-if="user">
+                    <!-- Collapsed Profile Button -->
+                    <Tooltip v-if="isCollapsed">
+                        <TooltipTrigger as-child>
+                            <button
+                                type="button"
+                                @click="handleLogout"
+                                class="border-border/80 bg-card/60 hover:bg-muted mx-auto flex size-10.5 cursor-pointer items-center justify-center rounded-2xl border text-xl shadow-xs transition-all"
+                            >
+                                <span>
+                                    {{
+                                        user.avatar === 'director'
+                                            ? '🎬'
+                                            : user.avatar === 'robot'
+                                              ? '🤖'
+                                              : user.avatar === 'clapper'
+                                                ? '🎞️'
+                                                : user.avatar === 'star'
+                                                  ? '⭐'
+                                                  : user.avatar === 'reel'
+                                                    ? '🎥'
+                                                    : '🍿'
+                                    }}
+                                </span>
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent :side="isRTL ? 'left' : 'right'">
+                            <div>
+                                <p class="font-bold">{{ user.name }}</p>
+                                <p class="text-muted-foreground text-[10px]">
+                                    {{
+                                        t('auth.switch_profile') ||
+                                        'Switch Profile'
+                                    }}
+                                </p>
+                            </div>
+                        </TooltipContent>
+                    </Tooltip>
+
+                    <!-- Expanded Profile Card -->
+                    <div
+                        v-else
+                        class="cf-glass border-border/80 flex items-center gap-2.5 rounded-2xl border p-2.5"
+                    >
+                        <div
+                            class="from-primary/25 to-card border-primary/30 relative flex size-10 shrink-0 items-center justify-center rounded-xl border bg-gradient-to-br text-xl shadow-xs"
                         >
                             <span>
                                 {{
@@ -427,104 +478,70 @@ const handleLogout = () => {
                                                 : '🍿'
                                 }}
                             </span>
-                        </button>
-                    </TooltipTrigger>
-                    <TooltipContent :side="isRTL ? 'left' : 'right'">
-                        <div>
-                            <p class="font-bold">{{ user.name }}</p>
-                            <p class="text-muted-foreground text-[10px]">
-                                {{
+                        </div>
+                        <div class="min-w-0 flex-1 leading-tight">
+                            <div
+                                class="text-foreground truncate text-xs font-bold"
+                            >
+                                {{ user.name }}
+                            </div>
+                            <div class="mt-0.5 flex items-center gap-1.5">
+                                <span
+                                    class="border-primary/25 bg-primary/15 py-0.2 text-primary rounded-full border px-1.5 font-mono text-[9px] font-extrabold uppercase"
+                                >
+                                    {{
+                                        isAdmin
+                                            ? t('auth.admin_badge') || 'Admin'
+                                            : t('users.viewer') || 'Viewer'
+                                    }}
+                                </span>
+                                <span
+                                    v-if="user.is_kids"
+                                    class="py-0.2 rounded-full border border-amber-500/25 bg-amber-500/15 px-1.5 font-mono text-[9px] font-extrabold text-amber-400 uppercase"
+                                >
+                                    {{ t('auth.kids_badge') || 'Kids' }}
+                                </span>
+                            </div>
+                        </div>
+                        <Tooltip>
+                            <TooltipTrigger as-child>
+                                <button
+                                    type="button"
+                                    @click="handleLogout"
+                                    class="text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer rounded-lg p-1.5 transition-colors"
+                                >
+                                    <LogOut class="size-4" />
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent :side="isRTL ? 'left' : 'right'">
+                                <span>{{
                                     t('auth.switch_profile') || 'Switch Profile'
-                                }}
-                            </p>
-                        </div>
-                    </TooltipContent>
-                </Tooltip>
-
-                <!-- Expanded Profile Card -->
-                <div
-                    v-else
-                    class="cf-glass border-border/80 flex items-center gap-2.5 rounded-2xl border p-2.5"
-                >
-                    <div
-                        class="from-primary/25 to-card border-primary/30 relative flex size-10 shrink-0 items-center justify-center rounded-xl border bg-gradient-to-br text-xl shadow-xs"
-                    >
-                        <span>
-                            {{
-                                user.avatar === 'director'
-                                    ? '🎬'
-                                    : user.avatar === 'robot'
-                                      ? '🤖'
-                                      : user.avatar === 'clapper'
-                                        ? '🎞️'
-                                        : user.avatar === 'star'
-                                          ? '⭐'
-                                          : user.avatar === 'reel'
-                                            ? '🎥'
-                                            : '🍿'
-                            }}
-                        </span>
+                                }}</span>
+                            </TooltipContent>
+                        </Tooltip>
                     </div>
-                    <div class="min-w-0 flex-1 leading-tight">
-                        <div class="text-foreground truncate text-xs font-bold">
-                            {{ user.name }}
-                        </div>
-                        <div class="mt-0.5 flex items-center gap-1.5">
-                            <span
-                                class="border-primary/25 bg-primary/15 py-0.2 text-primary rounded-full border px-1.5 font-mono text-[9px] font-extrabold uppercase"
-                            >
-                                {{
-                                    isAdmin
-                                        ? t('auth.admin_badge') || 'Admin'
-                                        : t('users.viewer') || 'Viewer'
-                                }}
-                            </span>
-                            <span
-                                v-if="user.is_kids"
-                                class="py-0.2 rounded-full border border-amber-500/25 bg-amber-500/15 px-1.5 font-mono text-[9px] font-extrabold text-amber-400 uppercase"
-                            >
-                                {{ t('auth.kids_badge') || 'Kids' }}
-                            </span>
-                        </div>
-                    </div>
-                    <Tooltip>
-                        <TooltipTrigger as-child>
-                            <button
-                                type="button"
-                                @click="handleLogout"
-                                class="text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer rounded-lg p-1.5 transition-colors"
-                            >
-                                <LogOut class="size-4" />
-                            </button>
-                        </TooltipTrigger>
-                        <TooltipContent :side="isRTL ? 'left' : 'right'">
-                            <span>{{
-                                t('auth.switch_profile') || 'Switch Profile'
-                            }}</span>
-                        </TooltipContent>
-                    </Tooltip>
                 </div>
-            </div>
 
-            <!-- Collapse Toggle Button at bottom of sidebar -->
-            <button
-                type="button"
-                @click="emit('toggle-collapse')"
-                class="text-muted-foreground hover:bg-muted/60 hover:text-foreground hidden w-full cursor-pointer items-center justify-center gap-2 rounded-xl py-1.5 text-xs font-semibold transition-colors lg:flex"
-                :title="
-                    isCollapsed
-                        ? t('nav.expand_sidebar') || 'Expand Sidebar'
-                        : t('nav.collapse_sidebar') || 'Collapse Sidebar'
-                "
-            >
-                <component
-                    :is="isCollapsed ? PanelLeftOpen : PanelLeftClose"
-                    class="size-4 rtl:rotate-180"
-                />
-                <span v-if="!isCollapsed" class="text-[11px]">
-                    {{ t('nav.collapse_sidebar') || 'Collapse' }}
-                </span>
-            </button>
+                <!-- Collapse Toggle Button at bottom of sidebar -->
+                <button
+                    type="button"
+                    @click="emit('toggle-collapse')"
+                    class="text-muted-foreground hover:bg-muted/60 hover:text-foreground hidden w-full cursor-pointer items-center justify-center gap-2 rounded-xl py-1.5 text-xs font-semibold transition-colors lg:flex"
+                    :title="
+                        isCollapsed
+                            ? t('nav.expand_sidebar') || 'Expand Sidebar'
+                            : t('nav.collapse_sidebar') || 'Collapse Sidebar'
+                    "
+                >
+                    <component
+                        :is="isCollapsed ? PanelLeftOpen : PanelLeftClose"
+                        class="size-4 rtl:rotate-180"
+                    />
+                    <span v-if="!isCollapsed" class="text-[11px]">
+                        {{ t('nav.collapse_sidebar') || 'Collapse' }}
+                    </span>
+                </button>
+            </div>
         </div>
     </aside>
 </template>

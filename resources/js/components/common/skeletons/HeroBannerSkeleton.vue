@@ -4,7 +4,7 @@ import CinemaSkeleton from './CinemaSkeleton.vue';
 
 <template>
     <div
-        class="relative flex h-[380px] w-full flex-col justify-end overflow-hidden rounded-3xl border border-white/[0.06] bg-black/50 p-8 backdrop-blur-md md:h-[480px] md:p-12"
+        class="cf-glass-elevated border-border/70 relative flex h-[380px] w-full flex-col justify-end overflow-hidden rounded-3xl border p-8 backdrop-blur-md md:h-[480px] md:p-12"
     >
         <CinemaSkeleton
             className="absolute inset-0 w-full h-full"

@@ -16,7 +16,7 @@ withDefaults(
         <div
             v-for="i in count"
             :key="i"
-            class="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-black/40 p-6 backdrop-blur-md"
+            class="cf-glass border-border/60 relative overflow-hidden rounded-2xl border p-6 backdrop-blur-md"
         >
             <div class="flex flex-col items-start gap-6 md:flex-row">
                 <!-- Collection Poster Skeleton -->
