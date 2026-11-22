@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
+import { formatBytes, formatSpeed } from '@/lib/formatters';
 
 export interface TorrentFileItem {
     index: number;
@@ -126,12 +127,9 @@ export function useDownloader() {
         ),
     );
 
-    const totalSpeedDownFormatted = computed(() => {
-        const bytes = totalSpeedBytesSec.value;
-        if (bytes <= 0) return '0.0 MB/s';
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB/s`;
-        return `${(bytes / (1024 * 1024)).toFixed(1)} MB/s`;
-    });
+    const totalSpeedDownFormatted = computed(() =>
+        formatSpeed(totalSpeedBytesSec.value),
+    );
 
     const totalUploadSpeedBytesSec = computed(() =>
         downloads.value.reduce(
@@ -143,20 +141,9 @@ export function useDownloader() {
         ),
     );
 
-    const totalSpeedUpFormatted = computed(() => {
-        const bytes = totalUploadSpeedBytesSec.value;
-        if (bytes <= 0) return '0.0 MB/s';
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB/s`;
-        return `${(bytes / (1024 * 1024)).toFixed(1)} MB/s`;
-    });
-
-    const formatBytes = (bytes: number) => {
-        if (!bytes || bytes <= 0) return '0 MB';
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-        if (bytes < 1024 * 1024 * 1024)
-            return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-        return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-    };
+    const totalSpeedUpFormatted = computed(() =>
+        formatSpeed(totalUploadSpeedBytesSec.value),
+    );
 
     const getProgressPercent = (item: DownloadItem) => {
         if (item.status === 'completed') return 100;

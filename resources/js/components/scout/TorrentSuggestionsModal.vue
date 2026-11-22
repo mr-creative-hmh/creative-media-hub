@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
@@ -26,6 +26,8 @@ import {
     Subtitles,
     Minus,
     Plus,
+    Search,
+    RefreshCw,
 } from '@lucide/vue';
 
 const props = defineProps<{
@@ -51,6 +53,7 @@ const downloadedHashes = ref<Record<string, boolean>>({});
 const errorMessage = ref<string | null>(null);
 const zeroSeedWarningTorrent = ref<any | null>(null);
 const copiedHash = ref<string | null>(null);
+const customQuery = ref<string>('');
 
 const isSeriesLike = computed(() => {
     return (
@@ -76,6 +79,16 @@ watch([() => props.isOpen, () => props.gapItem], ([newOpen, newItem]) => {
         currentSeason.value = Math.max(1, Number(newItem.season_number || 1));
         currentEpisode.value = Math.max(1, Number(newItem.episode_number || 1));
 
+        const defaultTitle =
+            newItem.original_title ||
+            newItem.original_name ||
+            newItem.title ||
+            newItem.name ||
+            newItem.movie_title ||
+            newItem.series_title ||
+            '';
+        customQuery.value = defaultTitle;
+
         if (newItem.upgrade_mode || newItem.clean_only) {
             cleanOnly.value = true;
         }
@@ -86,6 +99,7 @@ watch([() => props.isOpen, () => props.gapItem], ([newOpen, newItem]) => {
         selectedQuality.value = 'all';
         errorMessage.value = null;
         zeroSeedWarningTorrent.value = null;
+        customQuery.value = '';
     }
 });
 
@@ -134,9 +148,13 @@ const fetchTorrents = async () => {
               ? 'season'
               : props.gapItem.type || 'movie';
         const effectiveTitle =
-            props.gapItem.series_title ||
+            customQuery.value.trim() ||
+            props.gapItem.original_title ||
+            props.gapItem.original_name ||
+            props.gapItem.title ||
+            props.gapItem.name ||
             props.gapItem.movie_title ||
-            props.gapItem.title;
+            props.gapItem.series_title;
 
         const yearVal = props.gapItem.release_year || props.gapItem.year;
         const params: Record<string, any> = {
@@ -145,6 +163,12 @@ const fetchTorrents = async () => {
             imdb_id: props.gapItem.imdb_id,
             tmdb_id: props.gapItem.tmdb_id,
         };
+
+        const origTitle =
+            props.gapItem.original_title || props.gapItem.original_name;
+        if (origTitle && origTitle !== effectiveTitle) {
+            params.original_title = origTitle;
+        }
 
         if (yearVal) {
             params.year = yearVal;
@@ -180,7 +204,10 @@ const fetchTorrents = async () => {
                 headers: { Accept: 'application/json' },
             },
         );
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error(data?.message || 'Server error searching indexers');
+        }
         torrents.value = data.torrents || [];
     } catch (err: any) {
         errorMessage.value = err?.message || 'Failed to search torrents';
@@ -742,6 +769,39 @@ const startDownload = async (torrent: any) => {
                 </div>
             </div>
 
+            <!-- Manual Query Override Search Bar -->
+            <div class="relative z-10 px-6 pt-3">
+                <div
+                    class="flex items-center gap-2 rounded-2xl border border-white/10 bg-black/50 p-1.5 transition-colors focus-within:border-cyan-500/50"
+                >
+                    <Search class="ml-2.5 h-4 w-4 shrink-0 text-cyan-400" />
+                    <input
+                        v-model="customQuery"
+                        @keydown.enter.prevent="fetchTorrents"
+                        type="text"
+                        :placeholder="
+                            isRTL
+                                ? 'تعديل عنوان البحث أو إضافة كلمات مفتاحية (مثل 1080p, Remux)...'
+                                : 'Override search query or add keywords (e.g. 1080p, Remux, 2024)...'
+                        "
+                        class="flex-1 bg-transparent px-2 text-xs font-semibold text-white placeholder-slate-500 focus:outline-none"
+                    />
+                    <button
+                        type="button"
+                        @click="fetchTorrents"
+                        :disabled="loading"
+                        class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-cyan-500 px-3 py-1.5 text-xs font-black text-slate-950 shadow-md shadow-cyan-500/20 transition-all hover:bg-cyan-400 active:scale-95 disabled:opacity-50"
+                    >
+                        <RefreshCw
+                            v-if="loading"
+                            class="h-3.5 w-3.5 animate-spin"
+                        />
+                        <Search v-else class="h-3.5 w-3.5" />
+                        <span>{{ isRTL ? 'بحث' : 'Search' }}</span>
+                    </button>
+                </div>
+            </div>
+
             <!-- Controls & Options Bar -->
             <div
                 class="relative z-10 mt-3 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-slate-900/70 px-6 py-3"
@@ -827,18 +887,39 @@ const startDownload = async (torrent: any) => {
 
             <!-- Content Area / Torrent List -->
             <div class="relative z-10 flex-1 space-y-3 overflow-y-auto p-6">
-                <!-- Loading State -->
-                <div v-if="loading" class="space-y-3 py-16 text-center">
-                    <Loader2
-                        class="mx-auto h-8 w-8 animate-spin text-cyan-400"
-                    />
-                    <p class="text-xs font-medium text-slate-400">
-                        {{
-                            isRTL
-                                ? 'جارٍ فحص خوادم التورنت واستخراج المواصفات التقنية الدقيقة...'
-                                : 'Scanning indexers & extracting technical release specs...'
-                        }}
-                    </p>
+                <!-- Loading Skeletons State (5 Animated Release Cards) -->
+                <div v-if="loading" class="space-y-3">
+                    <div
+                        v-for="s in 5"
+                        :key="s"
+                        class="flex animate-pulse flex-col justify-between gap-4 rounded-2xl border border-white/[0.08] bg-slate-900/60 p-4.5 backdrop-blur-md md:flex-row md:items-center"
+                    >
+                        <!-- Title & Badges Placeholder -->
+                        <div class="flex-1 space-y-2.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <div
+                                    class="h-5 w-14 rounded-lg bg-white/10"
+                                ></div>
+                                <div
+                                    class="h-5 w-20 rounded-lg bg-white/10"
+                                ></div>
+                                <div
+                                    class="h-5 w-12 rounded-lg bg-white/5"
+                                ></div>
+                            </div>
+                            <div class="h-4 w-5/6 rounded bg-white/10"></div>
+                            <div class="h-3 w-1/2 rounded bg-white/5"></div>
+                        </div>
+
+                        <!-- Meta (Seeds/Peers/Size) & Action Button Placeholder -->
+                        <div class="flex shrink-0 items-center gap-4">
+                            <div class="space-y-1.5 text-right">
+                                <div class="h-3 w-16 rounded bg-white/10"></div>
+                                <div class="h-3 w-12 rounded bg-white/5"></div>
+                            </div>
+                            <div class="h-10 w-28 rounded-xl bg-white/10"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Error Message -->

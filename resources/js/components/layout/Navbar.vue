@@ -10,6 +10,20 @@ import { useActivityCenter } from '@/composables/useActivityCenter';
 import AppLogo from '@/components/common/AppLogo.vue';
 import AccentColorPicker from '@/components/common/AccentColorPicker.vue';
 import LiveSearchDropdown from '@/components/common/LiveSearchDropdown.vue';
+import { home } from '@/routes';
+import { index as moviesRoute } from '@/routes/movies';
+import { index as collectionsRoute } from '@/routes/collections';
+import { index as seriesRoute } from '@/routes/series';
+import { index as watchHistoryRoute } from '@/routes/watch-history';
+import { index as metadataRoute } from '@/routes/metadata';
+import { index as scannerRoute } from '@/routes/scanner';
+import { index as organizerRoute } from '@/routes/organizer';
+import { index as scoutRoute } from '@/routes/scout';
+import { index as subtitlesRoute } from '@/routes/subtitles';
+import { index as analyticsRoute } from '@/routes/analytics';
+import { index as downloadsRoute } from '@/routes/downloads';
+import { index as docsRoute } from '@/routes/docs';
+import { index as settingsRoute } from '@/routes/settings';
 import {
     Search,
     Globe,
@@ -59,7 +73,7 @@ const isMobileMenuOpen = ref(false);
 const handleSearch = (q?: string) => {
     const term = (typeof q === 'string' ? q : searchQuery.value).trim();
     if (term) {
-        router.get('/movies', { search: term });
+        router.get(moviesRoute.url(), { search: term });
     }
 };
 
@@ -68,20 +82,28 @@ const toggleLanguage = () => {
 };
 
 const mobileNavItems = [
-    { nameKey: 'nav.dashboard', href: '/', icon: LayoutDashboard },
-    { nameKey: 'nav.movies', href: '/movies', icon: Film },
-    { nameKey: 'nav.collections', href: '/collections', icon: Layers },
-    { nameKey: 'nav.series', href: '/series', icon: Tv },
-    { nameKey: 'nav.scout', href: '/scout', icon: Compass },
-    { nameKey: 'nav.watch_history', href: '/watch-history', icon: History },
-    { nameKey: 'nav.metadata', href: '/metadata', icon: Sparkles },
-    { nameKey: 'nav.scanner', href: '/scanner', icon: ScanLine },
-    { nameKey: 'nav.organizer', href: '/organizer', icon: FolderSync },
-    { nameKey: 'nav.subtitles', href: '/subtitles', icon: Subtitles },
-    { nameKey: 'nav.analytics', href: '/analytics', icon: BarChart3 },
-    { nameKey: 'nav.downloads', href: '/downloads', icon: DownloadCloud },
-    { nameKey: 'nav.docs', href: '/docs', icon: BookOpen },
-    { nameKey: 'nav.settings', href: '/settings', icon: Settings },
+    { nameKey: 'nav.dashboard', href: home.url(), icon: LayoutDashboard },
+    { nameKey: 'nav.movies', href: moviesRoute.url(), icon: Film },
+    { nameKey: 'nav.collections', href: collectionsRoute.url(), icon: Layers },
+    { nameKey: 'nav.series', href: seriesRoute.url(), icon: Tv },
+    { nameKey: 'nav.scout', href: scoutRoute.url(), icon: Compass },
+    {
+        nameKey: 'nav.watch_history',
+        href: watchHistoryRoute.url(),
+        icon: History,
+    },
+    { nameKey: 'nav.metadata', href: metadataRoute.url(), icon: Sparkles },
+    { nameKey: 'nav.scanner', href: scannerRoute.url(), icon: ScanLine },
+    { nameKey: 'nav.organizer', href: organizerRoute.url(), icon: FolderSync },
+    { nameKey: 'nav.subtitles', href: subtitlesRoute.url(), icon: Subtitles },
+    { nameKey: 'nav.analytics', href: analyticsRoute.url(), icon: BarChart3 },
+    {
+        nameKey: 'nav.downloads',
+        href: downloadsRoute.url(),
+        icon: DownloadCloud,
+    },
+    { nameKey: 'nav.docs', href: docsRoute.url(), icon: BookOpen },
+    { nameKey: 'nav.settings', href: settingsRoute.url(), icon: Settings },
 ];
 </script>
 
@@ -98,7 +120,7 @@ const mobileNavItems = [
                 <Menu v-if="!isMobileMenuOpen" class="h-5 w-5" />
                 <X v-else class="h-5 w-5" />
             </button>
-            <Link href="/" class="flex items-center">
+            <Link :href="home.url()" prefetch class="flex items-center">
                 <AppLogo size="md" :show-text="true" />
             </Link>
         </div>
@@ -119,7 +141,8 @@ const mobileNavItems = [
             <!-- Active Downloads Quick Pill -->
             <Link
                 v-if="activeDownloads.length > 0"
-                href="/downloads"
+                :href="downloadsRoute.url()"
+                prefetch
                 class="animate-fade-in flex cursor-pointer items-center gap-2 rounded-xl border border-cyan-500/40 bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 px-2.5 py-1.5 text-xs font-bold text-cyan-300 shadow-sm transition-all hover:bg-cyan-500/30 hover:shadow-cyan-500/20 active:scale-95 sm:px-3"
                 :title="isRTL ? 'التنزيلات النشطة' : 'Active Downloads'"
             >
@@ -223,6 +246,7 @@ const mobileNavItems = [
                         v-for="item in mobileNavItems"
                         :key="item.href"
                         :href="item.href"
+                        prefetch
                         @click="isMobileMenuOpen = false"
                         class="flex items-center gap-3.5 rounded-xl p-3 text-sm font-bold text-slate-300 hover:bg-white/10 hover:text-white"
                     >

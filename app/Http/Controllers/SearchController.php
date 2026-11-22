@@ -111,8 +111,8 @@ class SearchController extends Controller
                     $q->where('title', 'like', $containsTerm)
                         ->orWhere('title_ar', 'like', $containsTerm);
                 })
-                ->withCount('seasons')
                 ->select(['id', 'slug', 'title', 'title_ar', 'release_year', 'rating', 'poster_path'])
+                ->withCount('seasons')
                 ->orderByRaw('CASE WHEN title LIKE ? THEN 1 WHEN title_ar LIKE ? THEN 2 ELSE 3 END', [$prefixTerm, $prefixTerm])
                 ->orderByDesc('rating')
                 ->limit(3)

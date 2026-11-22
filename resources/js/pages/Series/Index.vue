@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -7,6 +7,7 @@ import HeroBanner from '@/components/media/HeroBanner.vue';
 import WatchHistoryBar from '@/components/layout/WatchHistoryBar.vue';
 import FilterBar from '@/components/media/FilterBar.vue';
 import Pagination from '@/components/common/Pagination.vue';
+import MediaCardSkeleton from '@/components/common/skeletons/MediaCardSkeleton.vue';
 import { Tv, Star, Layers, ScanLine, Plus, Heart } from '@lucide/vue';
 
 const props = defineProps<{
@@ -26,6 +27,24 @@ const props = defineProps<{
 }>();
 
 const { t, isRTL } = useI18n();
+
+const isNavigating = ref(false);
+let removeStartListener: (() => void) | null = null;
+let removeFinishListener: (() => void) | null = null;
+
+onMounted(() => {
+    removeStartListener = router.on('start', () => {
+        isNavigating.value = true;
+    });
+    removeFinishListener = router.on('finish', () => {
+        isNavigating.value = false;
+    });
+});
+
+onUnmounted(() => {
+    if (removeStartListener) removeStartListener();
+    if (removeFinishListener) removeFinishListener();
+});
 
 const handleDetails = (item: any) => {
     if (!item) return;
@@ -178,7 +197,16 @@ const handleToggleFavorite = async (s: any) => {
             </div>
         </div>
 
-        <div v-if="seriesList.data.length > 0" class="space-y-8">
+        <!-- Series Skeleton or Grid -->
+        <div v-if="isNavigating" class="space-y-8">
+            <div
+                class="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-6 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+            >
+                <MediaCardSkeleton :count="12" />
+            </div>
+        </div>
+
+        <div v-else-if="seriesList.data.length > 0" class="space-y-8">
             <div
                 class="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-6 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
             >

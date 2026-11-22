@@ -5,6 +5,7 @@ namespace App\Services\Database;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Number;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -660,12 +661,6 @@ class DatabaseBackupService
 
     protected function formatBytes(int $bytes): string
     {
-        if ($bytes <= 0) {
-            return '0 B';
-        }
-        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        $i = (int) floor(log($bytes, 1024));
-
-        return round($bytes / pow(1024, $i), 2).' '.$units[$i];
+        return Number::fileSize($bytes, precision: 2);
     }
 }

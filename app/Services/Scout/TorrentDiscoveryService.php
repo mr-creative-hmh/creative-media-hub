@@ -3,17 +3,22 @@
 namespace App\Services\Scout;
 
 use App\Models\AppSetting;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Number;
 
 class TorrentDiscoveryService
 {
     protected const TORRENTIO_URL = 'https://torrentio.strem.fun';
 
-    protected const EZTV_URL = 'https://eztv.re/api/get-torrents';
+    protected const EZTV_URL = 'https://eztvx.to/api/get-torrents';
 
-    protected const YTS_URL = 'https://yts.lt/api/v2/list_movies.json';
+    protected const YTS_URL = 'https://yts.pw/api/v2/list_movies.json';
+
+    protected const YTS_BACKUP_URL = 'https://movies-api.accel.li/api/v2/list_movies.json';
 
     protected const APIBAY_URL = 'https://apibay.org/q.php';
 
@@ -29,37 +34,83 @@ class TorrentDiscoveryService
     ];
 
     /**
+     * Resolve search query title, preferring clean ASCII English title if primary title contains non-ASCII characters.
+     */
+    protected function resolveSearchTitle(string $title, ?string $originalTitle = null): string
+    {
+        $hasNonAscii = (bool) preg_match('/[^\x20-\x7E]/', $title);
+        if ($hasNonAscii && ! empty($originalTitle)) {
+            return trim($originalTitle);
+        }
+
+        return trim($title);
+    }
+
+    /**
      * Search torrents for a movie.
      */
-    public function searchMovieTorrents(string $title, ?int $year = null, ?string $imdbId = null, ?int $tmdbId = null, bool $isAnimated = false, bool $cleanOnly = false): array
+    public function searchMovieTorrents(string $title, ?int $year = null, ?string $imdbId = null, ?int $tmdbId = null, bool $isAnimated = false, bool $cleanOnly = false, ?string $originalTitle = null): array
     {
-        $cacheKey = 'scout_torrents_movie_'.md5("{$title}_{$year}_{$imdbId}_{$tmdbId}_{$isAnimated}_{$cleanOnly}");
+        $searchTitle = $this->resolveSearchTitle($title, $originalTitle);
+        $cacheKey = 'scout_torrents_movie_'.md5("{$title}_{$searchTitle}_{$year}_{$imdbId}_{$tmdbId}_{$isAnimated}_{$cleanOnly}");
 
-        return Cache::remember($cacheKey, 1800, function () use ($title, $year, $imdbId, $tmdbId, $cleanOnly) {
-            $results = [];
-
-            // 1. Resolve IMDB ID if missing
+        return Cache::remember($cacheKey, 1800, function () use ($title, $searchTitle, $year, $imdbId, $tmdbId, $cleanOnly) {
             $cleanImdb = $this->ensureImdbId($imdbId, $tmdbId, 'movie');
 
-            // 2. Try Torrentio if IMDB ID available
-            if (! empty($cleanImdb)) {
-                $torrentioResults = $this->fetchFromTorrentio("stream/movie/{$cleanImdb}.json", $title);
-                if (! empty($torrentioResults)) {
-                    $results = array_merge($results, $torrentioResults);
+            $responses = Http::pool(function (Pool $pool) use ($cleanImdb, $searchTitle, $year) {
+                $requests = [];
+
+                if (! empty($cleanImdb)) {
+                    $requests['torrentio'] = $pool->as('torrentio')
+                        ->timeout(4)
+                        ->withOptions(['verify' => false])
+                        ->get(self::TORRENTIO_URL."/stream/movie/{$cleanImdb}.json");
                 }
+
+                $requests['yts'] = $pool->as('yts')
+                    ->timeout(4)
+                    ->withOptions(['verify' => false])
+                    ->get(self::YTS_URL, [
+                        'query_term' => $searchTitle,
+                        'limit' => 5,
+                    ]);
+
+                $requests['yts_backup'] = $pool->as('yts_backup')
+                    ->timeout(4)
+                    ->withOptions(['verify' => false])
+                    ->get(self::YTS_BACKUP_URL, [
+                        'query_term' => $searchTitle,
+                        'limit' => 5,
+                    ]);
+
+                $query = $year ? "{$searchTitle} {$year}" : $searchTitle;
+                $requests['apibay'] = $pool->as('apibay')
+                    ->timeout(4)
+                    ->withOptions(['verify' => false])
+                    ->get(self::APIBAY_URL, [
+                        'q' => $query,
+                        'cat' => '201,207',
+                    ]);
+
+                return $requests;
+            });
+
+            $results = [];
+
+            if (isset($responses['torrentio'])) {
+                $results = array_merge($results, $this->parseTorrentioResponse($responses['torrentio'], $title));
             }
 
-            // 3. Try YTS Mirror
-            $ytsResults = $this->fetchFromYts($title, $year);
+            $ytsResults = isset($responses['yts']) ? $this->parseYtsResponse($responses['yts'], $year) : [];
+            if (empty($ytsResults) && isset($responses['yts_backup'])) {
+                $ytsResults = $this->parseYtsResponse($responses['yts_backup'], $year);
+            }
             if (! empty($ytsResults)) {
                 $results = array_merge($results, $ytsResults);
             }
 
-            // 4. Try Apibay strictly with Movies categories (201, 207)
-            $query = $year ? "{$title} {$year}" : $title;
-            $apibayResults = $this->fetchFromApibay($query, '201,207');
-            if (! empty($apibayResults)) {
-                $results = array_merge($results, $apibayResults);
+            if (isset($responses['apibay'])) {
+                $results = array_merge($results, $this->parseApibayResponse($responses['apibay']));
             }
 
             // STRICT FILTERING FOR MOVIES:
@@ -159,55 +210,85 @@ class TorrentDiscoveryService
     /**
      * Search torrents for a specific episode.
      */
-    public function searchEpisodeTorrents(string $seriesTitle, int $season, int $episode, ?string $imdbId = null, ?int $tmdbId = null, ?int $year = null, bool $isAnimated = false, bool $cleanOnly = false): array
-    {
+    public function searchEpisodeTorrents(
+        string $seriesTitle,
+        int $season,
+        int $episode,
+        ?string $imdbId = null,
+        ?int $tmdbId = null,
+        ?int $year = null,
+        bool $isAnimated = false,
+        bool $cleanOnly = false,
+        ?string $originalTitle = null
+    ): array {
+        $searchTitle = $this->resolveSearchTitle($seriesTitle, $originalTitle);
         $epCode = sprintf('S%02dE%02d', $season, $episode);
-        $cacheKey = 'scout_torrents_ep_'.md5("{$seriesTitle}_{$epCode}_{$imdbId}_{$tmdbId}_{$year}_{$isAnimated}_{$cleanOnly}");
+        $cacheKey = 'scout_torrents_ep_'.md5("{$seriesTitle}_{$searchTitle}_{$epCode}_{$imdbId}_{$tmdbId}_{$year}_{$isAnimated}_{$cleanOnly}");
 
-        return Cache::remember($cacheKey, 1800, function () use ($seriesTitle, $season, $episode, $epCode, $imdbId, $tmdbId, $year, $cleanOnly) {
-            $results = [];
-
-            // 1. Resolve IMDB ID if missing
+        return Cache::remember($cacheKey, 1800, function () use ($seriesTitle, $searchTitle, $season, $episode, $epCode, $imdbId, $tmdbId, $year, $cleanOnly) {
             $cleanImdb = $this->ensureImdbId($imdbId, $tmdbId, 'series');
 
-            // 2. Try Torrentio
-            if (! empty($cleanImdb)) {
-                $endpoint = "stream/series/{$cleanImdb}:{$season}:{$episode}.json";
-                $torrentioResults = $this->fetchFromTorrentio($endpoint, "{$seriesTitle} {$epCode}");
-                if (! empty($torrentioResults)) {
-                    $results = array_merge($results, $torrentioResults);
+            $responses = Http::pool(function (Pool $pool) use ($cleanImdb, $searchTitle, $season, $episode, $epCode, $year) {
+                $requests = [];
+
+                if (! empty($cleanImdb)) {
+                    $requests['torrentio'] = $pool->as('torrentio')
+                        ->timeout(4)
+                        ->withOptions(['verify' => false])
+                        ->get(self::TORRENTIO_URL."/stream/series/{$cleanImdb}:{$season}:{$episode}.json");
+
+                    $numericImdb = preg_replace('/[^0-9]/', '', $cleanImdb);
+                    if (! empty($numericImdb)) {
+                        $paddedImdb = str_pad($numericImdb, 7, '0', STR_PAD_LEFT);
+                        $requests['eztv'] = $pool->as('eztv')
+                            ->timeout(4)
+                            ->withOptions(['verify' => false])
+                            ->get(self::EZTV_URL, [
+                                'imdb_id' => $paddedImdb,
+                                'limit' => 30,
+                            ]);
+                    }
                 }
+
+                $requests['apibay_ep'] = $pool->as('apibay_ep')
+                    ->timeout(4)
+                    ->withOptions(['verify' => false])
+                    ->get(self::APIBAY_URL, [
+                        'q' => "{$searchTitle} {$epCode}",
+                        'cat' => '205,208',
+                    ]);
+
+                if ($year) {
+                    $requests['apibay_year'] = $pool->as('apibay_year')
+                        ->timeout(4)
+                        ->withOptions(['verify' => false])
+                        ->get(self::APIBAY_URL, [
+                            'q' => "{$searchTitle} {$year} {$epCode}",
+                            'cat' => '205,208',
+                        ]);
+                }
+
+                return $requests;
+            });
+
+            $results = [];
+
+            if (isset($responses['torrentio'])) {
+                $results = array_merge($results, $this->parseTorrentioResponse($responses['torrentio'], "{$seriesTitle} {$epCode}"));
             }
 
-            // 3. Try EZTV if IMDB ID available
-            if (! empty($cleanImdb)) {
-                $numericImdb = preg_replace('/[^0-9]/', '', $cleanImdb);
-                $eztvResults = $this->fetchFromEztv($numericImdb, $season, $episode);
-                if (! empty($eztvResults)) {
-                    $results = array_merge($results, $eztvResults);
-                }
+            if (isset($responses['eztv'])) {
+                $results = array_merge($results, $this->parseEztvResponse($responses['eztv'], $season, $episode));
             }
 
-            // 4. Try Apibay strictly with TV categories (205, 208)
-            $queries = [];
-            if ($year) {
-                $queries[] = "{$seriesTitle} {$year} {$epCode}";
+            if (isset($responses['apibay_ep'])) {
+                $results = array_merge($results, $this->parseApibayResponse($responses['apibay_ep']));
             }
-            $queries[] = "{$seriesTitle} {$epCode}";
-            $queries[] = "{$seriesTitle} ".sprintf('%dx%02d', $season, $episode);
-            $queries[] = "{$seriesTitle} ".sprintf('S%dE%02d', $season, $episode);
-
-            foreach ($queries as $q) {
-                $apibayResults = $this->fetchFromApibay($q, '205,208');
-                if (! empty($apibayResults)) {
-                    $results = array_merge($results, $apibayResults);
-                }
-                if (count($results) >= 15) {
-                    break;
-                }
+            if (isset($responses['apibay_year'])) {
+                $results = array_merge($results, $this->parseApibayResponse($responses['apibay_year']));
             }
 
-            // 5. STRICT FILTERING: Keep only torrents that match episode and release year
+            // STRICT FILTERING: Keep only torrents that match episode and release year
             $filtered = array_filter($results, function ($item) use ($season, $episode, $year, $cleanOnly) {
                 $tTitle = $item['title'] ?? '';
 
@@ -238,32 +319,84 @@ class TorrentDiscoveryService
     /**
      * Search torrents for an entire season pack.
      */
-    public function searchSeasonTorrents(string $seriesTitle, int $season, ?string $imdbId = null, ?int $tmdbId = null, ?int $year = null, bool $isAnimated = false, bool $cleanOnly = false): array
-    {
-        $seasonCode = sprintf('Season %02d', $season);
-        $cacheKey = 'scout_torrents_season_'.md5("{$seriesTitle}_{$season}_{$imdbId}_{$tmdbId}_{$year}_{$isAnimated}_{$cleanOnly}");
+    public function searchSeasonTorrents(
+        string $seriesTitle,
+        int $season,
+        ?string $imdbId = null,
+        ?int $tmdbId = null,
+        ?int $year = null,
+        bool $isAnimated = false,
+        bool $cleanOnly = false,
+        ?string $originalTitle = null
+    ): array {
+        $searchTitle = $this->resolveSearchTitle($seriesTitle, $originalTitle);
+        $sPadded = sprintf('%02d', $season);
+        $cacheKey = 'scout_torrents_season_'.md5("{$seriesTitle}_{$searchTitle}_{$season}_{$imdbId}_{$tmdbId}_{$year}_{$isAnimated}_{$cleanOnly}");
 
-        return Cache::remember($cacheKey, 1800, function () use ($seriesTitle, $season, $year, $cleanOnly) {
-            $results = [];
-            $sPadded = sprintf('%02d', $season);
+        return Cache::remember($cacheKey, 1800, function () use ($searchTitle, $season, $sPadded, $imdbId, $tmdbId, $year, $cleanOnly) {
+            $cleanImdb = $this->ensureImdbId($imdbId, $tmdbId, 'series');
 
-            $queries = [];
-            if ($year) {
-                $queries[] = "{$seriesTitle} {$year} S{$sPadded} Complete";
-                $queries[] = "{$seriesTitle} {$year} Season {$season}";
-            }
-            $queries[] = "{$seriesTitle} S{$sPadded} Complete";
-            $queries[] = "{$seriesTitle} Season {$season} Complete";
-            $queries[] = "{$seriesTitle} Season {$season}";
-            $queries[] = "{$seriesTitle} S{$sPadded}";
+            $responses = Http::pool(function (Pool $pool) use ($cleanImdb, $searchTitle, $season, $sPadded) {
+                $requests = [];
 
-            foreach ($queries as $q) {
-                $apibayResults = $this->fetchFromApibay($q, '205,208');
-                if (! empty($apibayResults)) {
-                    $results = array_merge($results, $apibayResults);
+                if (! empty($cleanImdb)) {
+                    $numericImdb = preg_replace('/[^0-9]/', '', $cleanImdb);
+                    if (! empty($numericImdb)) {
+                        $paddedImdb = str_pad($numericImdb, 7, '0', STR_PAD_LEFT);
+                        $requests['eztv'] = $pool->as('eztv')
+                            ->timeout(4)
+                            ->withOptions(['verify' => false])
+                            ->get(self::EZTV_URL, [
+                                'imdb_id' => $paddedImdb,
+                                'limit' => 50,
+                            ]);
+                    }
                 }
-                if (count($results) >= 20) {
-                    break;
+
+                $requests['apibay_complete'] = $pool->as('apibay_complete')
+                    ->timeout(4)
+                    ->withOptions(['verify' => false])
+                    ->get(self::APIBAY_URL, [
+                        'q' => "{$searchTitle} S{$sPadded} Complete",
+                        'cat' => '205,208',
+                    ]);
+
+                $requests['apibay_season_complete'] = $pool->as('apibay_season_complete')
+                    ->timeout(4)
+                    ->withOptions(['verify' => false])
+                    ->get(self::APIBAY_URL, [
+                        'q' => "{$searchTitle} Season {$season} Complete",
+                        'cat' => '205,208',
+                    ]);
+
+                $requests['apibay_season'] = $pool->as('apibay_season')
+                    ->timeout(4)
+                    ->withOptions(['verify' => false])
+                    ->get(self::APIBAY_URL, [
+                        'q' => "{$searchTitle} Season {$season}",
+                        'cat' => '205,208',
+                    ]);
+
+                $requests['apibay_spadded'] = $pool->as('apibay_spadded')
+                    ->timeout(4)
+                    ->withOptions(['verify' => false])
+                    ->get(self::APIBAY_URL, [
+                        'q' => "{$searchTitle} S{$sPadded}",
+                        'cat' => '205,208',
+                    ]);
+
+                return $requests;
+            });
+
+            $results = [];
+
+            if (isset($responses['eztv'])) {
+                $results = array_merge($results, $this->parseEztvResponse($responses['eztv'], $season));
+            }
+
+            foreach (['apibay_complete', 'apibay_season_complete', 'apibay_season', 'apibay_spadded'] as $key) {
+                if (isset($responses[$key])) {
+                    $results = array_merge($results, $this->parseApibayResponse($responses[$key]));
                 }
             }
 
@@ -296,68 +429,233 @@ class TorrentDiscoveryService
     }
 
     /**
+     * Parse streams from Torrentio response.
+     */
+    protected function parseTorrentioResponse($res, string $fallbackTitle): array
+    {
+        if (! ($res instanceof Response) || ! $res->successful()) {
+            return [];
+        }
+
+        $streams = $res->json('streams') ?? [];
+        if (! is_array($streams)) {
+            return [];
+        }
+
+        $results = [];
+
+        foreach ($streams as $stream) {
+            $rawTitle = $stream['title'] ?? ($stream['name'] ?? $fallbackTitle);
+            $infoHash = $stream['infoHash'] ?? null;
+
+            if (empty($infoHash)) {
+                continue;
+            }
+
+            $lines = explode("\n", (string) $rawTitle);
+            $releaseName = trim($lines[0] ?? $fallbackTitle);
+
+            $seeds = 0;
+            $sizeHuman = 'Unknown';
+            $source = 'Torrentio';
+
+            foreach ($lines as $line) {
+                if (preg_match('/👤\s*(\d+)/u', $line, $m)) {
+                    $seeds = (int) $m[1];
+                }
+                if (preg_match('/💾\s*([\d\.]+\s*(?:GB|MB|KB|B))/iu', $line, $m)) {
+                    $sizeHuman = trim($m[1]);
+                }
+                if (preg_match('/⚙️\s*([^\n\r]+)/u', $line, $m)) {
+                    $source = trim($m[1]);
+                }
+            }
+
+            $specs = $this->extractTechnicalSpecs($releaseName, $rawTitle.' '.($stream['name'] ?? ''));
+            $magnet = $this->buildMagnetUri($infoHash, $releaseName);
+
+            $results[] = $this->formatTorrentItem(
+                title: $releaseName,
+                resolution: $specs['resolution'],
+                qualityTag: $specs['quality_tag'],
+                sizeHuman: $sizeHuman,
+                seeders: $seeds,
+                source: $source,
+                infoHash: $infoHash,
+                magnetUrl: $magnet,
+                technicalSpecs: $specs
+            );
+        }
+
+        return $results;
+    }
+
+    /**
+     * Parse EZTV response.
+     */
+    protected function parseEztvResponse($res, int $season, ?int $episode = null): array
+    {
+        if (! ($res instanceof Response) || ! $res->successful()) {
+            return [];
+        }
+
+        $torrents = $res->json('torrents') ?? [];
+        if (! is_array($torrents)) {
+            return [];
+        }
+
+        $results = [];
+
+        foreach ($torrents as $t) {
+            $tSeason = (int) ($t['season'] ?? 0);
+            $tEp = (int) ($t['episode'] ?? 0);
+
+            if ($tSeason !== $season) {
+                continue;
+            }
+
+            if ($episode !== null && $tEp !== $episode) {
+                continue;
+            }
+
+            $title = $t['title'] ?? 'EZTV Release';
+            $seeds = (int) ($t['seeds'] ?? 0);
+            $sizeBytes = (int) ($t['size_bytes'] ?? 0);
+            $sizeHuman = $this->formatBytes($sizeBytes);
+            $hash = $t['hash'] ?? null;
+            $magnet = $t['magnet_url'] ?? ($hash ? $this->buildMagnetUri($hash, $title) : null);
+
+            if (empty($magnet)) {
+                continue;
+            }
+
+            $quality = $this->extractQualityTag($title);
+
+            $results[] = $this->formatTorrentItem(
+                title: $title,
+                resolution: $quality['resolution'],
+                qualityTag: $quality['tag'],
+                sizeHuman: $sizeHuman,
+                seeders: $seeds,
+                source: 'EZTV',
+                infoHash: $hash,
+                magnetUrl: $magnet
+            );
+        }
+
+        return $results;
+    }
+
+    /**
+     * Parse YTS response.
+     */
+    protected function parseYtsResponse($res, ?int $year): array
+    {
+        if (! ($res instanceof Response) || ! $res->successful() || $res->json('status') !== 'ok') {
+            return [];
+        }
+
+        $movies = $res->json('data.movies') ?? [];
+        if (! is_array($movies)) {
+            return [];
+        }
+
+        $results = [];
+
+        foreach ($movies as $movie) {
+            $mYear = (int) ($movie['year'] ?? 0);
+            if ($year && abs($mYear - $year) > 1) {
+                continue;
+            }
+
+            foreach ($movie['torrents'] ?? [] as $t) {
+                $quality = $t['quality'] ?? '1080p';
+                $type = $t['type'] ?? 'BluRay';
+                $hash = $t['hash'] ?? '';
+                $seeds = (int) ($t['seeds'] ?? 0);
+                $size = $t['size'] ?? 'Unknown';
+
+                if (empty($hash)) {
+                    continue;
+                }
+
+                $movieTitle = $movie['title_long'] ?? ($movie['title'] ?? 'Movie');
+                $relTitle = "{$movieTitle} [{$quality}] [{$type}] [YTS]";
+                $magnet = $this->buildMagnetUri($hash, $relTitle);
+
+                $results[] = $this->formatTorrentItem(
+                    title: $relTitle,
+                    resolution: $quality,
+                    qualityTag: "{$quality} {$type}",
+                    sizeHuman: $size,
+                    seeders: $seeds,
+                    source: 'YTS',
+                    infoHash: $hash,
+                    magnetUrl: $magnet
+                );
+            }
+        }
+
+        return $results;
+    }
+
+    /**
+     * Parse Apibay response.
+     */
+    protected function parseApibayResponse($res): array
+    {
+        if (! ($res instanceof Response) || ! $res->successful()) {
+            return [];
+        }
+
+        $torrents = $res->json() ?? [];
+        if (! is_array($torrents)) {
+            return [];
+        }
+
+        $results = [];
+        foreach ($torrents as $t) {
+            $name = $t['name'] ?? '';
+            if (empty($name) || $name === 'No results returned') {
+                continue;
+            }
+
+            $hash = $t['info_hash'] ?? null;
+            if (empty($hash)) {
+                continue;
+            }
+
+            $seeds = (int) ($t['seeders'] ?? 0);
+            $sizeBytes = (int) ($t['size'] ?? 0);
+            $sizeHuman = $this->formatBytes($sizeBytes);
+            $quality = $this->extractQualityTag($name);
+            $magnet = $this->buildMagnetUri($hash, $name);
+
+            $results[] = $this->formatTorrentItem(
+                title: $name,
+                resolution: $quality['resolution'],
+                qualityTag: $quality['tag'],
+                sizeHuman: $sizeHuman,
+                seeders: $seeds,
+                source: 'TPB',
+                infoHash: $hash,
+                magnetUrl: $magnet
+            );
+        }
+
+        return $results;
+    }
+
+    /**
      * Fetch streams from Torrentio.
      */
     protected function fetchFromTorrentio(string $path, string $fallbackTitle): array
     {
         try {
             $url = self::TORRENTIO_URL."/{$path}";
-            $res = Http::timeout(8)->withOptions(['verify' => false])->get($url);
+            $res = Http::timeout(4)->withOptions(['verify' => false])->get($url);
 
-            if (! $res->successful()) {
-                return [];
-            }
-
-            $streams = $res->json('streams') ?? [];
-            $results = [];
-
-            foreach ($streams as $stream) {
-                $rawTitle = $stream['title'] ?? ($stream['name'] ?? $fallbackTitle);
-                $infoHash = $stream['infoHash'] ?? null;
-
-                if (empty($infoHash)) {
-                    continue;
-                }
-
-                // Parse details from Torrentio format:
-                // title line 1: release name
-                // line 2: 👤 seeds 💾 size ⚙️ source
-                $lines = explode("\n", $rawTitle);
-                $releaseName = trim($lines[0] ?? $fallbackTitle);
-
-                $seeds = 0;
-                $sizeHuman = 'Unknown';
-                $source = 'Torrentio';
-
-                foreach ($lines as $line) {
-                    if (preg_match('/👤\s*(\d+)/u', $line, $m)) {
-                        $seeds = (int) $m[1];
-                    }
-                    if (preg_match('/💾\s*([\d\.]+\s*(?:GB|MB|KB|B))/iu', $line, $m)) {
-                        $sizeHuman = trim($m[1]);
-                    }
-                    if (preg_match('/⚙️\s*([^\n\r]+)/u', $line, $m)) {
-                        $source = trim($m[1]);
-                    }
-                }
-
-                $specs = $this->extractTechnicalSpecs($releaseName, $rawTitle.' '.($stream['name'] ?? ''));
-                $magnet = $this->buildMagnetUri($infoHash, $releaseName);
-
-                $results[] = $this->formatTorrentItem(
-                    title: $releaseName,
-                    resolution: $specs['resolution'],
-                    qualityTag: $specs['quality_tag'],
-                    sizeHuman: $sizeHuman,
-                    seeders: $seeds,
-                    source: $source,
-                    infoHash: $infoHash,
-                    magnetUrl: $magnet,
-                    technicalSpecs: $specs
-                );
-            }
-
-            return $results;
+            return $this->parseTorrentioResponse($res, $fallbackTitle);
         } catch (\Throwable $e) {
             Log::warning('Torrentio search failed: '.$e->getMessage());
 
@@ -372,52 +670,12 @@ class TorrentDiscoveryService
     {
         try {
             $paddedImdb = str_pad($numericImdb, 7, '0', STR_PAD_LEFT);
-            $res = Http::timeout(8)->withOptions(['verify' => false])->get(self::EZTV_URL, [
+            $res = Http::timeout(4)->withOptions(['verify' => false])->get(self::EZTV_URL, [
                 'imdb_id' => $paddedImdb,
                 'limit' => 30,
             ]);
 
-            if (! $res->successful()) {
-                return [];
-            }
-
-            $torrents = $res->json('torrents') ?? [];
-            $results = [];
-
-            foreach ($torrents as $t) {
-                $tSeason = (int) ($t['season'] ?? 0);
-                $tEp = (int) ($t['episode'] ?? 0);
-
-                if ($tSeason !== $season || $tEp !== $episode) {
-                    continue;
-                }
-
-                $title = $t['title'] ?? 'EZTV Release';
-                $seeds = (int) ($t['seeds'] ?? 0);
-                $sizeBytes = (int) ($t['size_bytes'] ?? 0);
-                $sizeHuman = $this->formatBytes($sizeBytes);
-                $hash = $t['hash'] ?? null;
-                $magnet = $t['magnet_url'] ?? ($hash ? $this->buildMagnetUri($hash, $title) : null);
-
-                if (empty($magnet)) {
-                    continue;
-                }
-
-                $quality = $this->extractQualityTag($title);
-
-                $results[] = $this->formatTorrentItem(
-                    title: $title,
-                    resolution: $quality['resolution'],
-                    qualityTag: $quality['tag'],
-                    sizeHuman: $sizeHuman,
-                    seeders: $seeds,
-                    source: 'EZTV',
-                    infoHash: $hash,
-                    magnetUrl: $magnet
-                );
-            }
-
-            return $results;
+            return $this->parseEztvResponse($res, $season, $episode);
         } catch (\Throwable $e) {
             Log::warning('EZTV search failed: '.$e->getMessage());
 
@@ -431,54 +689,22 @@ class TorrentDiscoveryService
     protected function fetchFromYts(string $title, ?int $year): array
     {
         try {
-            $query = $title;
-            $res = Http::timeout(8)->withOptions(['verify' => false])->get(self::YTS_URL, [
-                'query_term' => $query,
+            $res = Http::timeout(4)->withOptions(['verify' => false])->get(self::YTS_URL, [
+                'query_term' => $title,
                 'limit' => 5,
             ]);
 
-            if (! $res->successful() || $res->json('status') !== 'ok') {
-                return [];
+            $results = $this->parseYtsResponse($res, $year);
+            if (! empty($results)) {
+                return $results;
             }
 
-            $movies = $res->json('data.movies') ?? [];
-            $results = [];
+            $resBackup = Http::timeout(4)->withOptions(['verify' => false])->get(self::YTS_BACKUP_URL, [
+                'query_term' => $title,
+                'limit' => 5,
+            ]);
 
-            foreach ($movies as $movie) {
-                // If year is provided, match within 1 year
-                $mYear = (int) ($movie['year'] ?? 0);
-                if ($year && abs($mYear - $year) > 1) {
-                    continue;
-                }
-
-                foreach ($movie['torrents'] ?? [] as $t) {
-                    $quality = $t['quality'] ?? '1080p';
-                    $type = $t['type'] ?? 'BluRay';
-                    $hash = $t['hash'] ?? '';
-                    $seeds = (int) ($t['seeds'] ?? 0);
-                    $size = $t['size'] ?? 'Unknown';
-
-                    if (empty($hash)) {
-                        continue;
-                    }
-
-                    $relTitle = "{$movie['title_long']} [{$quality}] [{$type}] [YTS]";
-                    $magnet = $this->buildMagnetUri($hash, $relTitle);
-
-                    $results[] = $this->formatTorrentItem(
-                        title: $relTitle,
-                        resolution: $quality,
-                        qualityTag: "{$quality} {$type}",
-                        sizeHuman: $size,
-                        seeders: $seeds,
-                        source: 'YTS',
-                        infoHash: $hash,
-                        magnetUrl: $magnet
-                    );
-                }
-            }
-
-            return $results;
+            return $this->parseYtsResponse($resBackup, $year);
         } catch (\Throwable $e) {
             Log::warning('YTS search failed: '.$e->getMessage());
 
@@ -497,48 +723,9 @@ class TorrentDiscoveryService
                 $params['cat'] = $category;
             }
 
-            $res = Http::timeout(8)->withOptions(['verify' => false])->get(self::APIBAY_URL, $params);
+            $res = Http::timeout(4)->withOptions(['verify' => false])->get(self::APIBAY_URL, $params);
 
-            if (! $res->successful()) {
-                return [];
-            }
-
-            $torrents = $res->json() ?? [];
-            if (! is_array($torrents)) {
-                return [];
-            }
-
-            $results = [];
-            foreach ($torrents as $t) {
-                $name = $t['name'] ?? '';
-                if (empty($name) || $name === 'No results returned') {
-                    continue;
-                }
-
-                $hash = $t['info_hash'] ?? null;
-                if (empty($hash)) {
-                    continue;
-                }
-
-                $seeds = (int) ($t['seeders'] ?? 0);
-                $sizeBytes = (int) ($t['size'] ?? 0);
-                $sizeHuman = $this->formatBytes($sizeBytes);
-                $quality = $this->extractQualityTag($name);
-                $magnet = $this->buildMagnetUri($hash, $name);
-
-                $results[] = $this->formatTorrentItem(
-                    title: $name,
-                    resolution: $quality['resolution'],
-                    qualityTag: $quality['tag'],
-                    sizeHuman: $sizeHuman,
-                    seeders: $seeds,
-                    source: 'TPB',
-                    infoHash: $hash,
-                    magnetUrl: $magnet
-                );
-            }
-
-            return $results;
+            return $this->parseApibayResponse($res);
         } catch (\Throwable $e) {
             Log::warning('Apibay search failed: '.$e->getMessage());
 
@@ -910,14 +1097,6 @@ class TorrentDiscoveryService
 
     protected function formatBytes(int $bytes): string
     {
-        if ($bytes >= 1073741824) {
-            return number_format($bytes / 1073741824, 2).' GB';
-        } elseif ($bytes >= 1048576) {
-            return number_format($bytes / 1048576, 1).' MB';
-        } elseif ($bytes >= 1024) {
-            return number_format($bytes / 1024, 1).' KB';
-        }
-
-        return $bytes.' B';
+        return Number::fileSize($bytes, precision: 1);
     }
 }

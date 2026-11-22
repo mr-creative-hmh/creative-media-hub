@@ -229,8 +229,11 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
     - Prevents movies from mixing with TV series across all discovery, inspector, and torrent queries.
   - **Interactive Style & Type Filters**: Instant toggles between `All Media`, `🎬 Movies`, `📺 TV Shows` and `All Styles`, `🎨 Animated`, `🎭 Live-Action` with distinct visual badges and explicit release years on every card.
   - **Series Seasons Inspector**: Deep inspect any discovered TV show to review all seasons, episode counts, air dates, and local library ownership status before downloading.
-- **High-Fidelity Technical Specs Parser (1337x, YTS, TorrentGalaxy Standard)**:
-  - `TorrentDiscoveryService` queries verified P2P sources with strict category isolation (`cat=201,207` for Movies; `cat=205,208` for TV Shows) and parses technical specifications matching top torrent sites:
+- **Concurrent High-Speed P2P Discovery Engine (`Http::pool()`)**:
+  - `TorrentDiscoveryService` queries verified P2P indexers concurrently with tight 4s timeouts, dropping multi-indexer search latencies from ~35s down to under 2s:
+    - **Active Mirrors**: Connects to active endpoints including `https://torrentio.strem.fun`, `https://yts.pw/api/v2/list_movies.json` (with `https://movies-api.accel.li/api/v2/` backup), `https://eztvx.to/api/get-torrents`, and `https://apibay.org/q.php`.
+    - **Intelligent Query & Title Sanitization**: Automatically normalizes localized/Arabic titles with English `original_title` / `original_name` fallbacks to ensure compatibility with English P2P indexers.
+  - Strict category isolation (`cat=201,207` for Movies; `cat=205,208` for TV Shows) and parsing of technical specifications matching top torrent sites:
     - **Resolution**: `2160p 4K`, `1080p FHD`, `720p HD`.
     - **Source Type**: `REMUX`, `BluRay`, `WEB-DL`, `WEBRip`, `HDTV`.
     - **Video Codec**: `HEVC / x265 (10-bit)`, `AVC / x264`, `AV1 (10-bit)`.
@@ -240,6 +243,10 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
     - **Subtitles**: `Multi-Subs`, `Arabic Subs`, `English Subs`.
     - **Release Group**: `PSA`, `QxR`, `YTS`, `GalaxyRG`, `FLUX`, `Framestor`, etc.
     - **Seed Health & Speed Tier**: `excellent` (15+ seeds), `good` (5-14 seeds), `fair` (2-4 seeds), with 0-seed stall warnings.
+  - **Universal Skeletons & Manual Query Bar**:
+    - Animated 5-item release skeleton cards in `TorrentSuggestionsModal` while indexers are scanned.
+    - Interactive search override bar in the modal header allowing users to view, customize, and re-query release keywords on the fly.
+    - 6-poster skeleton grid in Discover search and season row skeletons in Series Inspector.
 - **1-Click Auto-Organization & Physical Routing**:
   - Target Drive: `H:\Entertainment` with automatic folder and file structuring:
     - Movies: `H:\Entertainment\Movies\{Title} ({Year})\{Title} ({Year}) [{Quality}].ext`

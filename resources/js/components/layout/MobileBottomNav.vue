@@ -1,6 +1,12 @@
 ﻿<script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
+import { home } from '@/routes';
+import { index as moviesRoute } from '@/routes/movies';
+import { index as seriesRoute } from '@/routes/series';
+import { index as collectionsRoute } from '@/routes/collections';
+import { index as scoutRoute } from '@/routes/scout';
+import { index as watchHistoryRoute } from '@/routes/watch-history';
 import {
     LayoutDashboard,
     Film,
@@ -15,22 +21,37 @@ const { t, isRTL } = useI18n();
 const navItems = [
     {
         nameKey: 'nav.dashboard',
-        href: '/',
+        href: home.url(),
         icon: LayoutDashboard,
         pattern: '^/$|^/dashboard',
     },
-    { nameKey: 'nav.movies', href: '/movies', icon: Film, pattern: '^/movies' },
-    { nameKey: 'nav.series', href: '/series', icon: Tv, pattern: '^/series' },
+    {
+        nameKey: 'nav.movies',
+        href: moviesRoute.url(),
+        icon: Film,
+        pattern: '^/movies',
+    },
+    {
+        nameKey: 'nav.series',
+        href: seriesRoute.url(),
+        icon: Tv,
+        pattern: '^/series',
+    },
     {
         nameKey: 'nav.collections',
-        href: '/collections',
+        href: collectionsRoute.url(),
         icon: Layers,
         pattern: '^/collections',
     },
-    { nameKey: 'nav.scout', href: '/scout', icon: Compass, pattern: '^/scout' },
+    {
+        nameKey: 'nav.scout',
+        href: scoutRoute.url(),
+        icon: Compass,
+        pattern: '^/scout',
+    },
     {
         nameKey: 'nav.watch_history',
-        href: '/watch-history',
+        href: watchHistoryRoute.url(),
         icon: History,
         pattern: '^/watch-history',
     },
@@ -54,6 +75,7 @@ const isActive = (pattern: string) => {
                 v-for="item in navItems"
                 :key="item.href"
                 :href="item.href"
+                prefetch
                 class="group relative flex cursor-pointer flex-col items-center justify-center rounded-2xl px-1.5 py-1 transition-all duration-200"
                 :class="
                     isActive(item.pattern)

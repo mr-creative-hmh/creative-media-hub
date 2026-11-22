@@ -774,7 +774,7 @@ class PhysicalOrganizerService
                         'path' => $m->file_path,
                         'filename' => basename($m->file_path),
                         'size_bytes' => $m->file_size_bytes,
-                        'size_formatted' => $m->file_size_bytes ? round($m->file_size_bytes / (1024 * 1024 * 1024), 2).' GB' : '1.4 GB',
+                        'size_formatted' => $m->file_size_bytes ? ByteFormatter::format($m->file_size_bytes) : '1.4 GB',
                         'collection_name' => $m->collection_name,
                         'parsed' => [
                             'type' => 'movie',
@@ -794,7 +794,7 @@ class PhysicalOrganizerService
                         'path' => $ep->file_path,
                         'filename' => basename($ep->file_path),
                         'size_bytes' => $ep->file_size_bytes,
-                        'size_formatted' => $ep->file_size_bytes ? round($ep->file_size_bytes / (1024 * 1024), 1).' MB' : '450 MB',
+                        'size_formatted' => $ep->file_size_bytes ? ByteFormatter::format($ep->file_size_bytes, 1) : '450 MB',
                         'parsed' => [
                             'type' => 'series',
                             'series_title' => $ep->season?->series?->title ?? 'TV Show',

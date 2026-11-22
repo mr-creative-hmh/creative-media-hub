@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Number;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -234,16 +235,6 @@ class SettingsController extends Controller
 
     private function formatBytes(int $bytes): string
     {
-        if ($bytes >= 1073741824) {
-            return round($bytes / 1073741824, 2).' GB';
-        }
-        if ($bytes >= 1048576) {
-            return round($bytes / 1048576, 1).' MB';
-        }
-        if ($bytes >= 1024) {
-            return round($bytes / 1024, 1).' KB';
-        }
-
-        return $bytes.' B';
+        return Number::fileSize($bytes, precision: 1);
     }
 }

@@ -5,6 +5,7 @@ import { Head } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useToast } from '@/composables/useToast';
+import { formatBytes } from '@/lib/formatters';
 
 const SubtitlePickerModal = defineAsyncComponent(
     () => import('@/components/subtitles/SubtitlePickerModal.vue'),
@@ -1006,12 +1007,7 @@ onMounted(() => {
                                     >
                                         <div>{{ item.cue_count }} cues</div>
                                         <div class="text-[10px] text-slate-500">
-                                            {{
-                                                Math.round(
-                                                    item.file_size / 1024,
-                                                )
-                                            }}
-                                            KB
+                                            {{ formatBytes(item.file_size) }}
                                         </div>
                                     </td>
 

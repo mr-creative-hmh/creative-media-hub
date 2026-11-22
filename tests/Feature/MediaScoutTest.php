@@ -41,8 +41,11 @@ class MediaScoutTest extends TestCase
             ], 200),
             'torrentio.strem.fun/*' => Http::response(['streams' => []], 200),
             'yts.lt/*' => Http::response(['data' => ['movies' => []]], 200),
+            'yts.pw/*' => Http::response(['data' => ['movies' => []]], 200),
+            'movies-api.accel.li/*' => Http::response(['data' => ['movies' => []]], 200),
             'apibay.org/*' => Http::response([], 200),
             'eztv.re/*' => Http::response(['torrents' => []], 200),
+            'eztvx.to/*' => Http::response(['torrents' => []], 200),
         ]);
     }
 
@@ -115,6 +118,14 @@ class MediaScoutTest extends TestCase
         $validResponse = $this->getJson('/api/scout/torrents?type=movie&title=Bad+Boys&year=1995');
         $validResponse->assertStatus(200);
         $validResponse->assertJsonStructure([
+            'torrents',
+            'count',
+        ]);
+
+        // Fallback to original_title / name when title is missing
+        $fallbackResponse = $this->getJson('/api/scout/torrents?type=movie&original_title=Bad+Boys&year=1995');
+        $fallbackResponse->assertStatus(200);
+        $fallbackResponse->assertJsonStructure([
             'torrents',
             'count',
         ]);

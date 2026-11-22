@@ -3,6 +3,7 @@ import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
+import { formatSpeed } from '@/lib/formatters';
 import {
     useDownloader,
     DownloadItem,
@@ -1053,13 +1054,7 @@ const handleSaveSettings = async () => {
                                         class="font-bold text-cyan-300"
                                     >
                                         ⚡ ⬇
-                                        {{
-                                            (
-                                                item.speed_bytes_sec /
-                                                (1024 * 1024)
-                                            ).toFixed(1)
-                                        }}
-                                        MB/s
+                                        {{ formatSpeed(item.speed_bytes_sec) }}
                                     </span>
                                     <span
                                         v-if="
@@ -1071,13 +1066,11 @@ const handleSaveSettings = async () => {
                                     >
                                         ⬆
                                         {{
-                                            (
-                                                (item.upload_speed_bytes_sec ||
-                                                    0) /
-                                                (1024 * 1024)
-                                            ).toFixed(1)
+                                            formatSpeed(
+                                                item.upload_speed_bytes_sec ||
+                                                    0,
+                                            )
                                         }}
-                                        MB/s
                                     </span>
                                     <span
                                         v-if="item.status === 'downloading'"

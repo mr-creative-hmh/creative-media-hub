@@ -1,12 +1,13 @@
 ﻿<script setup lang="ts">
-import { ref, watch, defineAsyncComponent } from 'vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { ref, watch, onMounted, onUnmounted, defineAsyncComponent } from 'vue';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import HeroBanner from '@/components/media/HeroBanner.vue';
 import WatchHistoryBar from '@/components/layout/WatchHistoryBar.vue';
 import FilterBar from '@/components/media/FilterBar.vue';
 import MediaCard from '@/components/media/MediaCard.vue';
+import MediaCardSkeleton from '@/components/common/skeletons/MediaCardSkeleton.vue';
 import Pagination from '@/components/common/Pagination.vue';
 import { Film, ScanLine, Plus } from '@lucide/vue';
 
@@ -44,6 +45,24 @@ const localHeroItems = ref<any[]>(
 const localHeroItem = ref<any | null>(
     props.heroItem ? { ...props.heroItem } : null,
 );
+
+const isNavigating = ref(false);
+let removeStartListener: (() => void) | null = null;
+let removeFinishListener: (() => void) | null = null;
+
+onMounted(() => {
+    removeStartListener = router.on('start', () => {
+        isNavigating.value = true;
+    });
+    removeFinishListener = router.on('finish', () => {
+        isNavigating.value = false;
+    });
+});
+
+onUnmounted(() => {
+    if (removeStartListener) removeStartListener();
+    if (removeFinishListener) removeFinishListener();
+});
 
 watch(
     () => props.movies.data,
@@ -201,8 +220,16 @@ const handleMediaUpdated = (updatedItem: any) => {
             </div>
         </div>
 
-        <!-- Movies Grid -->
-        <div v-if="movieList.length > 0" class="space-y-8">
+        <!-- Movies Skeleton or Grid -->
+        <div v-if="isNavigating" class="space-y-8">
+            <div
+                class="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-6 md:grid-cols-4 lg:grid-cols-6"
+            >
+                <MediaCardSkeleton :count="12" />
+            </div>
+        </div>
+
+        <div v-else-if="movieList.length > 0" class="space-y-8">
             <div
                 class="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-6 md:grid-cols-4 lg:grid-cols-6"
             >

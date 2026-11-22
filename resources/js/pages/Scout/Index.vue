@@ -3,6 +3,8 @@ import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useI18n } from '@/i18n/useI18n';
+import { formatBytes } from '@/lib/formatters';
+import ScoutFranchiseSkeleton from '@/components/common/skeletons/ScoutFranchiseSkeleton.vue';
 
 const TorrentSuggestionsModal = defineAsyncComponent(
     () => import('@/components/scout/TorrentSuggestionsModal.vue'),
@@ -496,15 +498,7 @@ const openSeriesUpgradeTorrentModal = (group: any) => {
     openTorrentModal(gapPayload);
 };
 
-const formatBytesShort = (bytes: number): string => {
-    if (!bytes || bytes <= 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.min(
-        Math.floor(Math.log(bytes) / Math.log(1024)),
-        units.length - 1,
-    );
-    return `${(bytes / Math.pow(1024, i)).toFixed(i >= 3 ? 2 : 1)} ${units[i]}`;
-};
+const formatBytesShort = (bytes: number): string => formatBytes(bytes);
 
 const fetchUpgrades = async (forceRefresh = false) => {
     upgradesLoading.value = true;
@@ -1466,9 +1460,32 @@ onMounted(() => {
                     </div>
                 </div>
 
+                <!-- Discover Skeletons Grid (6 items) -->
+                <div
+                    v-if="discoverLoading"
+                    class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+                >
+                    <div
+                        v-for="s in 6"
+                        :key="s"
+                        class="flex animate-pulse flex-col justify-between overflow-hidden rounded-3xl border border-white/10 bg-slate-900/50 p-2"
+                    >
+                        <div
+                            class="relative aspect-[2/3] w-full overflow-hidden rounded-2xl bg-white/10"
+                        ></div>
+                        <div class="space-y-2 p-3">
+                            <div class="h-4 w-4/5 rounded bg-white/10"></div>
+                            <div class="flex items-center justify-between">
+                                <div class="h-3 w-1/3 rounded bg-white/5"></div>
+                                <div class="h-3 w-1/4 rounded bg-white/5"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Discover Results Grid -->
                 <div
-                    v-if="filteredDiscoverResults.length > 0"
+                    v-else-if="filteredDiscoverResults.length > 0"
                     class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
                 >
                     <div
@@ -2074,9 +2091,14 @@ onMounted(() => {
                         </span>
                     </div>
 
+                    <!-- Collections Skeletons State -->
+                    <div v-if="loading">
+                        <ScoutFranchiseSkeleton :count="2" />
+                    </div>
+
                     <!-- Collections Grid -->
                     <div
-                        v-if="collectionGaps.length > 0"
+                        v-else-if="collectionGaps.length > 0"
                         class="grid grid-cols-1 gap-6 lg:grid-cols-2"
                     >
                         <div
@@ -3668,10 +3690,32 @@ onMounted(() => {
 
                 <!-- Inspector Seasons List -->
                 <div class="flex-1 space-y-3 overflow-y-auto p-6">
-                    <div v-if="inspectingLoading" class="py-12 text-center">
-                        <Loader2
-                            class="mx-auto h-7 w-7 animate-spin text-cyan-400"
-                        />
+                    <!-- Season Row Skeletons (4 items) -->
+                    <div v-if="inspectingLoading" class="space-y-3">
+                        <div
+                            v-for="s in 4"
+                            :key="s"
+                            class="flex animate-pulse items-center justify-between gap-4 rounded-2xl border border-white/5 bg-slate-950/40 p-4"
+                        >
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="h-10 w-10 rounded-xl bg-white/10"
+                                ></div>
+                                <div class="space-y-2">
+                                    <div
+                                        class="h-3.5 w-32 rounded bg-white/10"
+                                    ></div>
+                                    <div
+                                        class="h-2.5 w-20 rounded bg-white/5"
+                                    ></div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div
+                                    class="h-7 w-20 rounded-xl bg-white/10"
+                                ></div>
+                            </div>
+                        </div>
                     </div>
 
                     <div

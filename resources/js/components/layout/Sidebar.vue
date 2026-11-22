@@ -5,6 +5,20 @@ import { useI18n } from '@/i18n/useI18n';
 import { useScanner } from '@/composables/useScanner';
 import { useDownloader } from '@/composables/useDownloader';
 import { useActivityCenter } from '@/composables/useActivityCenter';
+import { home } from '@/routes';
+import { index as moviesRoute } from '@/routes/movies';
+import { index as collectionsRoute } from '@/routes/collections';
+import { index as seriesRoute } from '@/routes/series';
+import { index as watchHistoryRoute } from '@/routes/watch-history';
+import { index as metadataRoute } from '@/routes/metadata';
+import { index as scannerRoute } from '@/routes/scanner';
+import { index as organizerRoute } from '@/routes/organizer';
+import { index as scoutRoute } from '@/routes/scout';
+import { index as subtitlesRoute } from '@/routes/subtitles';
+import { index as analyticsRoute } from '@/routes/analytics';
+import { index as downloadsRoute } from '@/routes/downloads';
+import { index as docsRoute } from '@/routes/docs';
+import { index as settingsRoute } from '@/routes/settings';
 import {
     LayoutDashboard,
     Film,
@@ -38,70 +52,85 @@ const activeDownloadsCount = computed(() => activeDownloads.value.length);
 const navItems = [
     {
         nameKey: 'nav.dashboard',
-        href: '/',
+        href: home.url(),
         icon: LayoutDashboard,
         pattern: '^/$|^/dashboard',
     },
-    { nameKey: 'nav.movies', href: '/movies', icon: Film, pattern: '^/movies' },
+    {
+        nameKey: 'nav.movies',
+        href: moviesRoute.url(),
+        icon: Film,
+        pattern: '^/movies',
+    },
     {
         nameKey: 'nav.collections',
-        href: '/collections',
+        href: collectionsRoute.url(),
         icon: Layers,
         pattern: '^/collections',
     },
-    { nameKey: 'nav.series', href: '/series', icon: Tv, pattern: '^/series' },
+    {
+        nameKey: 'nav.series',
+        href: seriesRoute.url(),
+        icon: Tv,
+        pattern: '^/series',
+    },
     {
         nameKey: 'nav.watch_history',
-        href: '/watch-history',
+        href: watchHistoryRoute.url(),
         icon: History,
         pattern: '^/watch-history',
     },
     {
         nameKey: 'nav.metadata',
-        href: '/metadata',
+        href: metadataRoute.url(),
         icon: Sparkles,
         pattern: '^/metadata',
     },
     {
         nameKey: 'nav.scanner',
-        href: '/scanner',
+        href: scannerRoute.url(),
         icon: ScanLine,
         pattern: '^/scanner',
     },
     {
         nameKey: 'nav.organizer',
-        href: '/organizer',
+        href: organizerRoute.url(),
         icon: FolderSync,
         pattern: '^/organizer',
     },
-    { nameKey: 'nav.scout', href: '/scout', icon: Compass, pattern: '^/scout' },
+    {
+        nameKey: 'nav.scout',
+        href: scoutRoute.url(),
+        icon: Compass,
+        pattern: '^/scout',
+    },
     {
         nameKey: 'nav.subtitles',
-        href: '/subtitles',
+        href: subtitlesRoute.url(),
         icon: Subtitles,
         pattern: '^/subtitles',
     },
     {
         nameKey: 'nav.analytics',
-        href: '/analytics',
+        href: analyticsRoute.url(),
         icon: BarChart3,
         pattern: '^/analytics',
     },
     {
         nameKey: 'nav.downloads',
-        href: '/downloads',
+        href: downloadsRoute.url(),
         icon: DownloadCloud,
         pattern: '^/downloads',
     },
     {
         nameKey: 'nav.docs',
-        href: '/docs',
+        href: docsRoute.url(),
         icon: BookOpen,
         pattern: '^/docs|^/guide',
     },
     {
         nameKey: 'nav.settings',
-        href: '/settings',
+        href: settingsRoute.url(),
         icon: Settings,
         pattern: '^/settings',
     },
@@ -152,6 +181,7 @@ const isActive = (pattern: string) => {
                 v-for="item in navItems"
                 :key="item.href"
                 :href="item.href"
+                prefetch
                 class="group flex cursor-pointer items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-all"
                 :class="
                     isActive(item.pattern)
@@ -174,7 +204,8 @@ const isActive = (pattern: string) => {
 
                 <span
                     v-if="
-                        item.href === '/downloads' && activeDownloadsCount > 0
+                        item.href === downloadsRoute.url() &&
+                        activeDownloadsCount > 0
                     "
                     class="animate-pulse rounded-full bg-cyan-500 px-2 py-0.5 text-[10px] font-black text-slate-950"
                 >

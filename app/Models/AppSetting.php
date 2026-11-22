@@ -2,11 +2,22 @@
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property int $id
+ * @property string $key
+ * @property ?string $value
+ * @property string $type
+ * @property ?CarbonImmutable $created_at
+ * @property ?CarbonImmutable $updated_at
+ */
 class AppSetting extends Model
 {
+    /** @use HasFactory<Factory<self>> */
     use HasFactory;
 
     protected $guarded = [];
@@ -37,7 +48,7 @@ class AppSetting extends Model
         static::$memo = [];
     }
 
-    public static function get(string $key, $default = null)
+    public static function get(string $key, mixed $default = null): mixed
     {
         if (! array_key_exists($key, static::$memo)) {
             $setting = static::where('key', $key)->first(['value', 'type']);
@@ -59,7 +70,7 @@ class AppSetting extends Model
         };
     }
 
-    public static function set(string $key, $value, string $type = 'string'): void
+    public static function set(string $key, mixed $value, string $type = 'string'): void
     {
         $storedValue = is_array($value) ? json_encode($value) : (string) $value;
         static::updateOrCreate(
@@ -69,6 +80,17 @@ class AppSetting extends Model
         static::$memo[$key] = [
             'value' => (string) $storedValue,
             'type' => $type,
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'value' => 'string',
+            'type' => 'string',
         ];
     }
 }

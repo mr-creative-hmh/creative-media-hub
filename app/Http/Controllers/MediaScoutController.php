@@ -286,13 +286,26 @@ class MediaScoutController extends Controller
      */
     public function getTorrents(Request $request): JsonResponse
     {
+        $title = $request->input('title')
+            ?: $request->input('name')
+            ?: $request->input('original_title')
+            ?: $request->input('original_name');
+
+        $originalTitle = $request->input('original_title')
+            ?: $request->input('original_name');
+
+        if (empty($title)) {
+            return response()->json([
+                'message' => 'The title field is required.',
+                'errors' => ['title' => ['The title field is required.']],
+            ], 422);
+        }
+
         $request->validate([
             'type' => 'required|in:movie,collection_movie,episode,season,series,season_pack',
-            'title' => 'required|string',
         ]);
 
         $type = $request->input('type');
-        $title = $request->input('title');
         $year = $request->filled('year') ? (int) $request->input('year') : ($request->filled('release_year') ? (int) $request->input('release_year') : null);
         $imdbId = $request->input('imdb_id');
         $tmdbId = $request->filled('tmdb_id') ? (int) $request->input('tmdb_id') : null;
@@ -304,17 +317,17 @@ class MediaScoutController extends Controller
         $torrents = [];
 
         if ($type === 'episode') {
-            $torrents = $this->torrentService->searchEpisodeTorrents($title, $season, $episode, $imdbId, $tmdbId, $year, $isAnimated, $cleanOnly);
+            $torrents = $this->torrentService->searchEpisodeTorrents($title, $season, $episode, $imdbId, $tmdbId, $year, $isAnimated, $cleanOnly, $originalTitle);
         } elseif ($type === 'season' || $type === 'season_pack') {
-            $torrents = $this->torrentService->searchSeasonTorrents($title, $season, $imdbId, $tmdbId, $year, $isAnimated, $cleanOnly);
+            $torrents = $this->torrentService->searchSeasonTorrents($title, $season, $imdbId, $tmdbId, $year, $isAnimated, $cleanOnly, $originalTitle);
         } elseif ($type === 'series') {
             if ($request->filled('episode')) {
-                $torrents = $this->torrentService->searchEpisodeTorrents($title, $season, $episode, $imdbId, $tmdbId, $year, $isAnimated, $cleanOnly);
+                $torrents = $this->torrentService->searchEpisodeTorrents($title, $season, $episode, $imdbId, $tmdbId, $year, $isAnimated, $cleanOnly, $originalTitle);
             } else {
-                $torrents = $this->torrentService->searchSeasonTorrents($title, $season, $imdbId, $tmdbId, $year, $isAnimated, $cleanOnly);
+                $torrents = $this->torrentService->searchSeasonTorrents($title, $season, $imdbId, $tmdbId, $year, $isAnimated, $cleanOnly, $originalTitle);
             }
         } else {
-            $torrents = $this->torrentService->searchMovieTorrents($title, $year, $imdbId, $tmdbId, $isAnimated, $cleanOnly);
+            $torrents = $this->torrentService->searchMovieTorrents($title, $year, $imdbId, $tmdbId, $isAnimated, $cleanOnly, $originalTitle);
         }
 
         return response()->json([

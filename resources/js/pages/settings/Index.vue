@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
+import { formatBytes } from '@/lib/formatters';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useThemeAccent } from '@/composables/useThemeAccent';
 import {
@@ -1724,7 +1725,7 @@ const promptDeleteBackup = (backup: any) => {
                                     <span class="text-[10px] text-slate-500">
                                         {{
                                             selectedFile
-                                                ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB`
+                                                ? formatBytes(selectedFile.size)
                                                 : isRTL
                                                   ? 'انقر لاختيار ملف من جهازك'
                                                   : 'Click to browse files'

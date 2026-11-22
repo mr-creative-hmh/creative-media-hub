@@ -1,5 +1,6 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed } from 'vue';
+import { formatBytes } from '@/lib/formatters';
 import { TorrentTreeNode } from '@/composables/useDownloader';
 import {
     ChevronDown,
@@ -42,15 +43,6 @@ const isOpen = ref(true);
 
 const toggleOpen = () => {
     isOpen.value = !isOpen.value;
-};
-
-const formatBytes = (bytes: number) => {
-    if (!bytes || bytes <= 0) return '0 B';
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    if (bytes < 1024 * 1024 * 1024)
-        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
 };
 
 const fileIndexes = computed<number[]>(() => {

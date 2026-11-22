@@ -191,10 +191,12 @@ Creative Media Hub is powered by 14 interconnected pipelines designed for maximu
      - Users can search any movie or TV series globally on TMDb, or explore weekly trending releases directly from the Discover tab.
      - Live library enrichment correlates TMDb items against local database records with strict year discrimination (`abs(release_year - year) <= 1`).
      - **Strict Animated vs Live-Action Discrimination**: Evaluates TMDb genre ID 16 ("Animation") to classify media as `🎨 Animated` vs `🎭 Live-Action`. This eliminates false ownership matches between original animated works and live-action remakes (such as *One Piece* 1999 Anime vs 2023 Netflix Live-Action, or *The Lion King* 1994 vs 2019).
-  3. **Strictly-Scoped P2P Torrent Discovery**:
-     - `TorrentDiscoveryService` queries verified P2P sources (Apibay/TPB, YTS, TorrentGalaxy) with strict category scoping (`cat=201,207` for Movies; `cat=205,208` for TV Shows).
+  3. **Concurrent P2P Torrent Discovery (`Http::pool()`)**:
+     - `TorrentDiscoveryService` queries verified P2P sources (Torrentio, YTS `yts.pw`/`movies-api.accel.li`, EZTV `eztvx.to`, Apibay/TPB) concurrently with 4s timeouts via `Http::pool()`, completing multi-indexer searches in under 2 seconds.
+     - **Query & Title Sanitization**: Resolves English `original_title`/`original_name` alongside localized Arabic titles to ensure compatibility with English P2P indexers.
      - TV show patterns (`S01`, `Season 1`, `Episode 1`) are strictly purged from movie results, and explicit mismatched release years (e.g. 1999 torrents when searching for a 2023 release) are excluded.
-  4. **High-Fidelity Technical Specs Parser**:
+  4. **High-Fidelity Technical Specs Parser & Universal Skeletons**:
+     - Interactive modal features an animated 5-item release skeleton while indexers are scanned and an editable query override bar for manual adjustments.
      - Extracts top torrent site specifications (matching 1337x, YTS, and TorrentGalaxy standards):
        - **Resolution**: `2160p 4K`, `1080p FHD`, `720p HD`.
        - **Source Type**: `REMUX`, `BluRay`, `WEB-DL`, `WEBRip`, `HDTV`.

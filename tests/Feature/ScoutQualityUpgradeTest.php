@@ -45,8 +45,11 @@ class ScoutQualityUpgradeTest extends TestCase
                 ],
             ], 200),
             'yts.lt/*' => Http::response(['data' => ['movies' => []]], 200),
+            'yts.pw/*' => Http::response(['data' => ['movies' => []]], 200),
+            'movies-api.accel.li/*' => Http::response(['data' => ['movies' => []]], 200),
             'apibay.org/*' => Http::response([], 200),
             'eztv.re/*' => Http::response(['torrents' => []], 200),
+            'eztvx.to/*' => Http::response(['torrents' => []], 200),
         ]);
     }
 

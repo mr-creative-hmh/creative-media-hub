@@ -3,6 +3,7 @@ import { ref, computed, watch, defineAsyncComponent } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
 import { useToast } from '@/composables/useToast';
+import { formatBytes } from '@/lib/formatters';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ConfirmModal from '@/components/common/ConfirmModal.vue';
 
@@ -219,7 +220,7 @@ const autoRelinkCard = async (item: any, newPath: string) => {
                 checking: false,
                 exists: true,
                 size_formatted: data.item?.size
-                    ? (data.item.size / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+                    ? formatBytes(data.item.size)
                     : undefined,
             };
         } else {
