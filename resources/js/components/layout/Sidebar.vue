@@ -2,7 +2,6 @@
 import { computed, reactive } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n/useI18n';
-import { useScanner } from '@/composables/useScanner';
 import { useDownloader } from '@/composables/useDownloader';
 import { useActivityCenter } from '@/composables/useActivityCenter';
 import AppLogo from '@/components/common/AppLogo.vue';
@@ -43,9 +42,6 @@ import {
     BarChart3,
     BookOpen,
     Settings,
-    RefreshCw,
-    Pause,
-    HardDrive,
     Activity,
     LogOut,
     ChevronDown,
@@ -68,7 +64,6 @@ const emit = defineEmits<{
 
 const page = usePage();
 const { t, isRTL } = useI18n();
-const { scanStatus, isScanning, isPaused, openScanModal } = useScanner();
 const { activeDownloads } = useDownloader();
 const { isAnyRunning, isAnyPaused, activeJobsCount, openActivityCenter } =
     useActivityCenter();
@@ -255,61 +250,6 @@ const handleLogout = () => {
             <Link :href="home.url()" prefetch class="flex items-center">
                 <AppLogo size="md" :show-text="!isCollapsed" />
             </Link>
-        </div>
-
-        <!-- Fast Scan Action Trigger (Admin Only) -->
-        <div v-if="isAdmin" class="shrink-0 px-3 pt-3">
-            <Tooltip v-if="isCollapsed">
-                <TooltipTrigger as-child>
-                    <button
-                        type="button"
-                        @click="openScanModal"
-                        class="from-primary to-primary/80 text-primary-foreground shadow-primary/25 flex size-11 w-full cursor-pointer items-center justify-center rounded-2xl bg-gradient-to-r shadow-sm transition-all hover:brightness-105 active:scale-95"
-                    >
-                        <RefreshCw
-                            v-if="isScanning && !isPaused"
-                            class="size-5 animate-spin"
-                        />
-                        <Pause
-                            v-else-if="isPaused"
-                            class="size-5 fill-current"
-                        />
-                        <HardDrive v-else class="size-5" />
-                    </button>
-                </TooltipTrigger>
-                <TooltipContent :side="isRTL ? 'left' : 'right'">
-                    <span>{{
-                        isScanning
-                            ? isPaused
-                                ? t('sidebar.scan_paused')
-                                : `${t('sidebar.scanning')} ${scanStatus.progress_percent || 0}%`
-                            : t('sidebar.scan_media_library')
-                    }}</span>
-                </TooltipContent>
-            </Tooltip>
-
-            <button
-                v-else
-                type="button"
-                @click="openScanModal"
-                class="from-primary via-primary to-primary/85 text-primary-foreground shadow-primary/30 flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-gradient-to-r px-4 py-2.5 text-xs font-black shadow-sm transition-all hover:brightness-105 active:scale-[0.98]"
-            >
-                <RefreshCw
-                    v-if="isScanning && !isPaused"
-                    class="size-4 animate-spin"
-                />
-                <Pause v-else-if="isPaused" class="size-4 fill-current" />
-                <HardDrive v-else class="size-4" />
-                <span class="truncate">
-                    {{
-                        isScanning
-                            ? isPaused
-                                ? t('sidebar.scan_paused')
-                                : `${t('sidebar.scanning')} ${scanStatus.progress_percent || 0}%`
-                            : t('sidebar.scan_media_library')
-                    }}
-                </span>
-            </button>
         </div>
 
         <!-- Grouped Navigation Links (Middle Scroll Area) -->

@@ -8,9 +8,11 @@ import { useI18n } from '@/i18n/useI18n';
 withDefaults(
     defineProps<{
         compact?: boolean;
+        placement?: 'bottom' | 'top';
     }>(),
     {
         compact: false,
+        placement: 'bottom',
     },
 );
 
@@ -70,12 +72,17 @@ const selectPalette = (key: AccentColor) => {
         >
             <div
                 v-if="isOpen"
-                class="border-border/80 cf-glass-popover absolute z-50 mt-2 w-64 rounded-2xl border p-2 text-start text-xs shadow-2xl shadow-black/80 backdrop-blur-2xl"
-                :class="
-                    isRTL
-                        ? 'left-0 origin-top-left'
-                        : 'right-0 origin-top-right'
-                "
+                class="border-border/80 cf-glass-popover absolute z-50 w-64 rounded-2xl border p-2 text-start text-xs shadow-2xl shadow-black/80 backdrop-blur-2xl"
+                :class="[
+                    placement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2',
+                    placement === 'top'
+                        ? isRTL
+                            ? 'left-0 origin-bottom-left'
+                            : 'right-0 origin-bottom-right'
+                        : isRTL
+                          ? 'left-0 origin-top-left'
+                          : 'right-0 origin-top-right',
+                ]"
             >
                 <!-- Menu Header -->
                 <div

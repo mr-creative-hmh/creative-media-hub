@@ -439,7 +439,7 @@ onUnmounted(() => {
 
                     <!-- Drawer Footer: Accent Picker, Language & Logout -->
                     <div
-                        class="border-border/80 bg-card/80 shrink-0 space-y-3 border-t p-4 backdrop-blur-md"
+                        class="border-border/80 bg-card/80 relative z-30 shrink-0 space-y-3 border-t p-4 backdrop-blur-md"
                     >
                         <div class="flex items-center justify-between px-1">
                             <span
@@ -447,7 +447,10 @@ onUnmounted(() => {
                             >
                                 {{ isRtl ? 'لون السمة:' : 'Brand Accent:' }}
                             </span>
-                            <AccentColorPicker :compact="true" />
+                            <AccentColorPicker
+                                :compact="true"
+                                placement="top"
+                            />
                         </div>
 
                         <div class="grid grid-cols-2 gap-2">
