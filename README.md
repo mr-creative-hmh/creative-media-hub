@@ -244,7 +244,7 @@ For deep architectural specifications, internal pipeline lifecycles, directory l
     - **Release Group**: `PSA`, `QxR`, `YTS`, `GalaxyRG`, `FLUX`, `Framestor`, etc.
     - **Seed Health & Speed Tier**: `excellent` (15+ seeds), `good` (5-14 seeds), `fair` (2-4 seeds), with 0-seed stall warnings.
   - **Universal Skeletons & Manual Query Bar**:
-    - Animated 5-item release skeleton cards in `TorrentSuggestionsModal` while indexers are scanned.
+    - Animated 5-item release skeleton cards in `TorrentSuggestionsModal` while indexers are scanned, with guaranteed immediate on-mount lifecycle queries and zero blank states.
     - Interactive search override bar in the modal header allowing users to view, customize, and re-query release keywords on the fly.
     - 6-poster skeleton grid in Discover search and season row skeletons in Series Inspector.
 - **1-Click Auto-Organization & Physical Routing**:

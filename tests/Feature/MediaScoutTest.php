@@ -129,6 +129,14 @@ class MediaScoutTest extends TestCase
             'torrents',
             'count',
         ]);
+
+        // Support 'tv' type mapping to 'series' and title from name
+        $tvResponse = $this->getJson('/api/scout/torrents?type=tv&name=Breaking+Bad');
+        $tvResponse->assertStatus(200);
+        $tvResponse->assertJsonStructure([
+            'torrents',
+            'count',
+        ]);
     }
 
     /**

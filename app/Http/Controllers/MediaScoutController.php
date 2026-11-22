@@ -288,6 +288,8 @@ class MediaScoutController extends Controller
     {
         $title = $request->input('title')
             ?: $request->input('name')
+            ?: $request->input('series_title')
+            ?: $request->input('movie_title')
             ?: $request->input('original_title')
             ?: $request->input('original_name');
 
@@ -302,10 +304,13 @@ class MediaScoutController extends Controller
         }
 
         $request->validate([
-            'type' => 'required|in:movie,collection_movie,episode,season,series,season_pack',
+            'type' => 'required|in:movie,collection_movie,episode,season,series,season_pack,tv',
         ]);
 
         $type = $request->input('type');
+        if ($type === 'tv') {
+            $type = 'series';
+        }
         $year = $request->filled('year') ? (int) $request->input('year') : ($request->filled('release_year') ? (int) $request->input('release_year') : null);
         $imdbId = $request->input('imdb_id');
         $tmdbId = $request->filled('tmdb_id') ? (int) $request->input('tmdb_id') : null;

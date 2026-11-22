@@ -146,6 +146,11 @@
     - `Scout/Index.vue`: Add 6-card poster skeleton grid during TMDb Discover search (`discoverLoading`) so users don't see an empty state while results load.
     - `Scout/Index.vue` Series Inspector: Add season card skeletons while season and episode metadata is retrieved.
     - Mount `ScoutFranchiseSkeleton.vue` during collection gap audits and integrate `MediaCardSkeleton.vue` during catalog filtering in Movies & Series pages.
-- **Phase 4D: Verification, Docs & README Updates:**
+- **Phase 4D: Verification, Docs & README Updates (COMPLETED):**
   - Run full verification: Pint, PHPUnit (all 186+ tests), vue-tsc, Vite+ check, and production build.
   - Update `README.md` and `docs/PROCESSES.md` documenting the overhauled concurrent Torrent Discovery Engine and responsive skeleton design patterns.
+- **Phase 4 Hotfix (Torrent Modal Mount Initialization & TV Show Mapping — RESOLVED):**
+  - **Root Cause Analysis**: `TorrentSuggestionsModal.vue` was conditionally mounted with `v-if="isTorrentModalOpen"` in `Scout/Index.vue`. Its prop watcher `watch([() => props.isOpen, () => props.gapItem], ...)` lacked `{ immediate: true }` and an `onMounted` lifecycle call. When the modal opened, the watcher never fired on initial mount, leaving `loading = false`, `torrents = []`, and query input uninitialized, preventing skeletons or results from rendering.
+  - **TV Show Media Type Mapping**: TMDb items pass `type: 'tv'`. Extended `MediaScoutController::getTorrents` validation to accept `tv` and map to `series`. Updated `TorrentSuggestionsModal.vue` to map `effectiveType === 'tv'` to `'series'`.
+  - **Title Normalization**: Fallback to `gapItem?.name`, `original_title`, and `original_name` for TV shows in modal header to eliminate blank titles.
+  - **Verification**: 0 TypeScript errors (`vue-tsc`), 0 Oxlint/Oxfmt warnings (`vp check`), clean Pint formatting, 100% passing tests in `MediaScoutTest` and `ScoutQualityUpgradeTest`, and successful Vite production build.

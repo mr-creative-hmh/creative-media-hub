@@ -397,22 +397,39 @@ const openDiscoverTorrentModal = (item: any, seasonNum?: number) => {
     const isSeries =
         item.media_type === 'series' ||
         item.media_type === 'tv' ||
-        item.first_air_date;
-    const yearVal = item.release_year || item.year;
+        Boolean(item.first_air_date) ||
+        Boolean(item.name && !item.movie_title);
+    const titleVal =
+        item.title ||
+        item.name ||
+        item.original_title ||
+        item.original_name ||
+        '';
+    const yearVal =
+        item.release_year ||
+        item.year ||
+        (item.first_air_date
+            ? new Date(item.first_air_date).getFullYear()
+            : item.release_date
+              ? new Date(item.release_date).getFullYear()
+              : undefined);
     const gapPayload = {
-        id: `discover_${item.tmdb_id}_${seasonNum || 1}`,
+        id: `discover_${item.tmdb_id || item.id}_${seasonNum || 1}`,
         type: isSeries ? (seasonNum ? 'season' : 'series') : 'movie',
-        title: item.title,
-        movie_title: !isSeries ? item.title : undefined,
-        series_title: isSeries ? item.title : undefined,
+        title: titleVal,
+        name: item.name,
+        original_title: item.original_title,
+        original_name: item.original_name,
+        movie_title: !isSeries ? titleVal : undefined,
+        series_title: isSeries ? titleVal : undefined,
         release_year: yearVal,
         year: yearVal,
-        air_date: item.first_air_date,
+        air_date: item.first_air_date || item.release_date,
         season_number: seasonNum || 1,
         poster_path: item.poster_path,
-        still_path: null,
+        still_path: item.still_path || null,
         backdrop_path: item.backdrop_path,
-        tmdb_id: item.tmdb_id,
+        tmdb_id: item.tmdb_id || item.id,
         imdb_id: item.imdb_id || null,
         is_animated: Boolean(item.is_animated),
     };
@@ -429,7 +446,21 @@ const openTorrentModal = (item: any) => {
             cloned.type = 'season';
         } else if (cloned.movie_title) {
             cloned.type = 'movie';
+        } else if (cloned.series_title) {
+            cloned.type = 'series';
         }
+    }
+    if (cloned.type === 'tv') {
+        cloned.type = 'series';
+    }
+    if (!cloned.title) {
+        cloned.title =
+            cloned.movie_title ||
+            cloned.series_title ||
+            cloned.name ||
+            cloned.original_title ||
+            cloned.original_name ||
+            '';
     }
     selectedGap.value = cloned;
     isTorrentModalOpen.value = true;

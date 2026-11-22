@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useI18n } from '@/i18n/useI18n';
 import {
     X,
@@ -59,7 +59,8 @@ const isSeriesLike = computed(() => {
     return (
         props.gapItem?.type === 'episode' ||
         props.gapItem?.type === 'season' ||
-        props.gapItem?.type === 'series'
+        props.gapItem?.type === 'series' ||
+        props.gapItem?.type === 'tv'
     );
 });
 
@@ -67,41 +68,63 @@ const searchMode = ref<'episode' | 'season'>('episode');
 const currentSeason = ref<number>(1);
 const currentEpisode = ref<number>(1);
 
-watch([() => props.isOpen, () => props.gapItem], ([newOpen, newItem]) => {
-    if (newOpen && newItem) {
-        if (newItem.type === 'season') {
-            searchMode.value = 'season';
-        } else if (newItem.type === 'episode') {
-            searchMode.value = 'episode';
-        } else if (newItem.type === 'series') {
-            searchMode.value = 'season';
-        }
-        currentSeason.value = Math.max(1, Number(newItem.season_number || 1));
-        currentEpisode.value = Math.max(1, Number(newItem.episode_number || 1));
+const initModal = (item: any) => {
+    if (!item) return;
 
-        const defaultTitle =
-            newItem.original_title ||
-            newItem.original_name ||
-            newItem.title ||
-            newItem.name ||
-            newItem.movie_title ||
-            newItem.series_title ||
-            '';
-        customQuery.value = defaultTitle;
-
-        if (newItem.upgrade_mode || newItem.clean_only) {
-            cleanOnly.value = true;
-        }
-
-        fetchTorrents();
+    if (
+        item.type === 'season' ||
+        (item.season_number && !item.episode_number)
+    ) {
+        searchMode.value = 'season';
+    } else if (item.type === 'episode' || item.episode_number) {
+        searchMode.value = 'episode';
+    } else if (item.type === 'series' || item.type === 'tv') {
+        searchMode.value = 'season';
     } else {
-        torrents.value = [];
-        selectedQuality.value = 'all';
-        errorMessage.value = null;
-        zeroSeedWarningTorrent.value = null;
-        customQuery.value = '';
+        searchMode.value = 'episode';
+    }
+
+    currentSeason.value = Math.max(1, Number(item.season_number || 1));
+    currentEpisode.value = Math.max(1, Number(item.episode_number || 1));
+
+    const defaultTitle =
+        item.original_title ||
+        item.original_name ||
+        item.title ||
+        item.name ||
+        item.movie_title ||
+        item.series_title ||
+        '';
+    customQuery.value = defaultTitle;
+
+    if (item.upgrade_mode || item.clean_only) {
+        cleanOnly.value = true;
+    }
+
+    fetchTorrents();
+};
+
+onMounted(() => {
+    if (props.isOpen && props.gapItem) {
+        initModal(props.gapItem);
     }
 });
+
+watch(
+    [() => props.isOpen, () => props.gapItem],
+    ([newOpen, newItem]) => {
+        if (newOpen && newItem) {
+            initModal(newItem);
+        } else if (!newOpen) {
+            torrents.value = [];
+            selectedQuality.value = 'all';
+            errorMessage.value = null;
+            zeroSeedWarningTorrent.value = null;
+            customQuery.value = '';
+        }
+    },
+    { immediate: true },
+);
 
 const copyMagnet = async (torrent: any) => {
     if (!torrent.magnet_url) return;
@@ -142,11 +165,14 @@ const fetchTorrents = async () => {
         const isEp = isSeriesLike.value && searchMode.value === 'episode';
         const isSeas = isSeriesLike.value && searchMode.value === 'season';
 
-        const effectiveType = isEp
+        let effectiveType = isEp
             ? 'episode'
             : isSeas
               ? 'season'
               : props.gapItem.type || 'movie';
+        if (effectiveType === 'tv') {
+            effectiveType = 'series';
+        }
         const effectiveTitle =
             customQuery.value.trim() ||
             props.gapItem.original_title ||
@@ -466,7 +492,10 @@ const startDownload = async (torrent: any) => {
                             {{
                                 gapItem?.series_title ||
                                 gapItem?.movie_title ||
-                                gapItem?.title
+                                gapItem?.title ||
+                                gapItem?.name ||
+                                gapItem?.original_title ||
+                                gapItem?.original_name
                             }}
                         </h2>
 
